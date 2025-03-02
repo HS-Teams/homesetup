@@ -25,11 +25,11 @@ on:
           - linux/arm64
       container:
         description: 'Docker container (Operating Systems)'
-        default: 'fedora'
+        default: 'fedora,ubuntu,centos,alpine'
         required: true
         type: choice
         options:
-          - all
+          - fedora,ubuntu,centos,alpine
           - alpine
           - ubuntu
           - fedora
@@ -73,6 +73,7 @@ jobs:
           platforms="${{ github.event.inputs.platforms }}"
           archs=$(echo '["'${platforms//,/\",\"}'"]')
           echo "arch-matrix=$archs" >> "$GITHUB_OUTPUT"
+          echo "Platforms: ${archs}" >> $GITHUB_STEP_SUMMARY
 
   set-os-matrix:
     runs-on: ubuntu-latest
@@ -84,8 +85,9 @@ jobs:
         shell: bash
         run: |
           os="${{ github.event.inputs.container }}"
-          container=$(echo '["'${os//,/\",\"}'"]')
-          echo "os-matrix=$container" >> "$GITHUB_OUTPUT"
+          images=$(echo '["'${os//,/\",\"}'"]')
+          echo "os-matrix=$images" >> "$GITHUB_OUTPUT"
+          echo "   Images: ${images}" >> $GITHUB_STEP_SUMMARY
 
   build-docker-images:
     needs:
