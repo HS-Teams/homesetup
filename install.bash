@@ -130,6 +130,12 @@ usage: $APP_NAME [OPTIONS] <args>
   # Pip executable
   PIP3="${PIP3:-${PYTHON3} -m pip}"
 
+  # Virtual environment Python
+  VENV_PYTHON3=
+
+  # Virtual environment Pip
+  VENV_PIP3=
+
   # HSPyLib python modules to install
   PYTHON_MODULES=(
     'hspylib'
@@ -820,11 +826,15 @@ usage: $APP_NAME [OPTIONS] <args>
 
   # Configure python and HomeSetup python library
   configure_python() {
+
+    echo -en "\n${WHITE}Configuring Python... "
+
     [[ -z "${PYTHON3}" || -z "${PIP3}" ]] \
-      && quit 2 "Python and Pip >= 3.10 <= 3.11 are required to use HomeSetup. None has been found!"
+      && quit 2 "Python and Pip >= 3.10 <= 3.11 are required to use HomeSetup. <None> has been found!"
     python_version=$("${PYTHON3}" --version 2>&1 | awk '{print $2}')
     [[ ! "${python_version}" =~ ^3\.1[01] ]] \
       && quit 2 "Python and Pip >= 3.10 <= 3.11 are required to use HomeSetup! Found: ${python_version}"
+
     echo -e "${GREEN}OK${NC}"
     create_venv
     install_hspylib
@@ -832,10 +842,10 @@ usage: $APP_NAME [OPTIONS] <args>
 
   # Create HomeSetup virtual environment
   create_venv() {
+
     python3_str="${BLUE}[$(basename "${PYTHON3}")]"
     if [[ ! -d "${HHS_VENV_PATH}" ]]; then
       echo -en "\n${python3_str} ${WHITE}Creating virtual environment... "
-
       if \
         ${PIP3} install --upgrade --break-system-packages "virtualenv" >>"${INSTALL_LOG}" 2>&1 && \
         ${PYTHON3} -m virtualenv "${HHS_VENV_PATH}" >> "${INSTALL_LOG}" 2>&1; then
@@ -846,7 +856,7 @@ usage: $APP_NAME [OPTIONS] <args>
         quit 2 "Unable to create virtual environment!"
       fi
     else
-      echo -e "\n${python3_str} ${YELLOW}Virtual environment already exists at '${HHS_VENV_PATH}'."
+      echo -e "\n${python3_str} ${WHITE}Virtual environment already exists -> ${CYAN} '${HHS_VENV_PATH}'."
     fi
 
     # Activate the virtual environment
@@ -854,9 +864,9 @@ usage: $APP_NAME [OPTIONS] <args>
     if source "${HHS_VENV_PATH}"/bin/activate; then
       echo -e "${GREEN}OK${NC}"
       # Python executable from venv
-      PYTHON3="${PYTHON3:-$(command -v python3)}"
+      VENV_PYTHON3="${PYTHON3:-$(command -v python3)}"
       # Pip executable from venv
-      PIP3="${PIP3:-${PYTHON3} -m pip}"
+      VENV_PIP3="${PIP3:-${PYTHON3} -m pip}"
     else
       echo -e "${RED}FAILED${NC}"
       quit 2 "Unable to activate virtual environment!"
@@ -866,22 +876,22 @@ usage: $APP_NAME [OPTIONS] <args>
   # Install HomeSetup python libraries
   install_hspylib() {
 
-    python3_str="${BLUE}[$(basename "${PYTHON3}")]"
-    python_version="$(${PYTHON3} -V)"
-    pip_version="$(${PIP3} -V | \cut -d ' ' -f1,2)"
-    echo -e "\n${python3_str} ${WHITE}Using ${YELLOW}v${python_version}${WHITE} and ${YELLOW}v${pip_version} from ${BLUE}\"${PYTHON3}\" ${NC}"
+    python3_str="${BLUE}[$(basename "${VENV_PYTHON3}")]"
+    python_version="$(${VENV_PYTHON3} -V)"
+    pip_version="$(${VENV_PIP3} -V | \cut -d ' ' -f1,2)"
+    echo -e "\n${python3_str} ${WHITE}Using ${YELLOW}v${python_version}${WHITE} and ${YELLOW}v${pip_version} from ${BLUE}\"${VENV_PYTHON3}\" ${NC}"
     echo -e "\n${python3_str} ${WHITE}Installing HSPyLib packages... \n"
     pkgs=$(mktemp)
     printf "%s\n" "${PYTHON_MODULES[@]}" >"${pkgs}"
     printf "${python3_str} ${WHITE}Module: ${YELLOW}%s${NC}\n" "${PYTHON_MODULES[@]}"
     if \
-      ${PIP3} install --upgrade --break-system-packages -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1 ||
-      ${PIP3} install --upgrade -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1; then
+      ${VENV_PIP3} install --upgrade --break-system-packages --ignore-installed -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1 ||
+      ${VENV_PIP3} install --upgrade --ignore-installed -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1; then
       \rm -f  "$(mktemp)"
       echo "Installed HSPyLib python modules:" >>"${INSTALL_LOG}"
-      ${PIP3} freeze | grep hspylib >>"${INSTALL_LOG}"
+      ${VENV_PIP3} freeze | grep hspylib >>"${INSTALL_LOG}"
       echo -e "\n${python3_str} Installed ${BLUE}HSPyLib${NC} python modules:"
-      ${PIP3} freeze | grep hspylib | sed 's/^/  |-/'
+      ${VENV_PIP3} freeze | grep hspylib | sed 's/^/  |-/'
     else
         quit 2 "${RED}FAILED${NC} Unable to install PyPi packages!"
     fi
@@ -890,6 +900,7 @@ usage: $APP_NAME [OPTIONS] <args>
   # Configure AskAI HomeSetup/RAG documents
   configure_askai_rag() {
 
+    python3_str="${BLUE}[$(basename "${VENV_PYTHON3}")]"
     if [[ -n "${INSTALL_AI}" ]]; then
       # Copy HomeSetup AskAI prompts into place.
       echo -en "\n${python3_str} ${WHITE}Copying HomeSetup RAG docs... "
@@ -904,11 +915,13 @@ usage: $APP_NAME [OPTIONS] <args>
       export GOOGLE_API_KEY="${GOOGLE_API_KEY:-your google api key}"
       export DEEPL_API_KEY="${DEEPL_API_KEY:-your deepl api key}"
       # Dedent the python code above, 6 spaces for now
-      if ${PYTHON3} -c "${copy_code//      /}" >>"${INSTALL_LOG}" 2>&1; then
+      if ${VENV_PYTHON3} -c "${copy_code//      /}" >>"${INSTALL_LOG}" 2>&1; then
         echo -e "${GREEN}OK${NC}"
         echo -en "\n${WHITE}Checking AI capabilities... ${CYAN}"
-        ${PYTHON3} -m askai -r rag  "What is HomeSetup?" 2>&1
-        echo -e "${NC}"
+        # TODO: Uncomment when device checks are implemented
+        # ${VENV_PYTHON3} -m askai -r rag  "What is HomeSetup?" 2>&1
+        ${VENV_PYTHON3} -m askai -v
+        echo -e "${GREEN}OK${NC}"
       else
         quit 2 "Unable to copy HomeSetup docs into AskAI RAG directory !"
       fi

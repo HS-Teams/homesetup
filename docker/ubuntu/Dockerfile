@@ -18,7 +18,7 @@ RUN gem install colorls
 RUN locale-gen "en_US.UTF-8"
 RUN curl -O https://bootstrap.pypa.io/get-pip.py
 RUN $(which python3.11) get-pip.py
-RUN $(which python3.11) -m pip install pip setuptools wheel
+RUN $(which python3.11) -m pip install --ignore-installed setuptools wheel
 
 WORKDIR "${HOME}"
 
