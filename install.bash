@@ -31,7 +31,6 @@ usage: $APP_NAME [OPTIONS] <args>
   -q | --quiet          : Non-interactive mode using all defaults.
 "
 
-
   # Installation log file
   INSTALL_LOG="${HOME}/install-hhs.log"
 
@@ -46,7 +45,6 @@ usage: $APP_NAME [OPTIONS] <args>
     [[ -n "${GITHUB_ACTIONS}" ]] && SUDO=sudo
   fi
 
-
   [[ -z "${USER}" || -z "${HOME}" ]] && quit 1 "Unable to determine USER/HOME -> ${USER}/${HOME}"
 
   # Functions to be unset after quit
@@ -57,13 +55,12 @@ usage: $APP_NAME [OPTIONS] <args>
     install_tools query_askai_install create_destination_dirs configure_askai_rag configure_blesh create_venv
   )
 
-
   # Awesome icons
-  STAR_ICN='\xef\x80\x85'  # 
-  HAND_PEACE_ICN='\xef\x89\x9b'  # 
-  POINTER_ICN='\xef\x90\xb2'  # 
-  SUCCESS_ICN='\xef\x98\xab'  # 
-  FAIL_ICN='\xef\x91\xa7'  # 
+  STAR_ICN='\xef\x80\x85'       # 
+  HAND_PEACE_ICN='\xef\x89\x9b' # 
+  POINTER_ICN='\xef\x90\xb2'    # 
+  SUCCESS_ICN='\xef\x98\xab'    # 
+  FAIL_ICN='\xef\x91\xa7'       # 
 
   # VT-100 Terminal colors
   ORANGE='\033[38;5;202m'
@@ -199,7 +196,7 @@ usage: $APP_NAME [OPTIONS] <args>
   # @function: Check if a command exists
   # @param $1 [Req] : The command to check
   has() {
-    type "${1}" &>/dev/null
+    type "${1}" >>"${INSTALL_LOG}" 2>&1
   }
 
   # @function: Create a directory and check for write permissions
@@ -214,8 +211,8 @@ usage: $APP_NAME [OPTIONS] <args>
       echo -e "${GREEN}OK${NC}"
     else
       # Trying to write at the created directory to validate write permissions.
-      \touch "${dir}/tmpfile" &>/dev/null || quit 2 "Not enough permissions to write to \"${dir}\" directory!"
-      \rm -f "${dir:?}/tmpfile" &>/dev/null
+      \touch "${dir}/tmpfile" >>"${INSTALL_LOG}" 2>&1 || quit 2 "Not enough permissions to write to \"${dir}\" directory!"
+      \rm -f "${dir:?}/tmpfile" >>"${INSTALL_LOG}" 2>&1
     fi
   }
 
@@ -224,21 +221,17 @@ usage: $APP_NAME [OPTIONS] <args>
   # @Param $2 [Req] : The destination file/dir.
   copy_file() {
 
-    local src_file dest_file
-
-    src_file="${1}"
-    dest_file="${2}"
+    local src_file="${1}" dest_file="${2}"
 
     echo ''
     if [[ -f "${dest_file}" || -d "${dest_file}" ]]; then
-      echo -e "${WHITE}Skipping: ${YELLOW}${dest_file} file/dir was not copied because it already exists. ${NC}"
-    else
-      echo -en "${WHITE}Copying: ${BLUE} ${src_file} -> ${dest_file}... "
-      \rsync --archive "${src_file}" "${dest_file}"
-      \chown "${USER}":"${GROUP}" "${dest_file}" &>/dev/null
-      [[ -f "${dest_file}" ]] && echo -e "${GREEN}OK${NC}"
-      [[ -f "${dest_file}" ]] || echo -e "${RED}FAILED${NC}"
+      echo -e "${WHITE}Skipping: ${YELLOW}${dest_file} file/dir was not copied because destination exists. ${NC}"
     fi
+    echo -en "${WHITE}Copying: ${BLUE} ${src_file} -> ${dest_file}... "
+    \rsync --archive "${src_file}" "${dest_file}" >>"${INSTALL_LOG}" 2>&1
+    \chown "${USER}":"${GROUP}" "${dest_file}" >>"${INSTALL_LOG}" 2>&1
+    [[ -f "${dest_file}" ]] && echo -e "${GREEN}OK${NC}"
+    [[ -f "${dest_file}" ]] || quit 1 " ${RED}FAILED${NC}"
   }
 
   # @function: Link file from source to destination.
@@ -246,14 +239,13 @@ usage: $APP_NAME [OPTIONS] <args>
   # @Param $2 [Req] : The destination file/dir.
   link_file() {
 
-    local src_file dest_file
+    local src_file="${1}" dest_file="${2}"
 
-    src_file="${1}"
-    dest_file="${2}"
-
-    # Backup existing dest_file into ${HHS_BACKUP_DIR}.
-    [[ -s "${dest_file}" && ! -L "${dest_file}" ]] && \mv "${dest_file}" "${HHS_BACKUP_DIR}/$(basename "${dest_file}".orig)"
     echo ''
+    if [[ -s "${dest_file}" && ! -L "${dest_file}" ]]; then
+      echo -e "${WHITE}Backing up: ${YELLOW}${dest_file} file/dir was not copied because destination exists. ${NC}"
+      \mv "${dest_file}" "${HHS_BACKUP_DIR}/$(basename "${dest_file}".orig)"
+    fi
     echo -en "${WHITE}Linking: ${BLUE}"
     echo -en "$(\ln -sfv "${src_file}" "${dest_file}")...${NC}"
     [[ -L "${dest_file}" ]] && echo -e " ${GREEN}OK${NC}"
@@ -276,35 +268,35 @@ usage: $APP_NAME [OPTIONS] <args>
     # Loop through the command line options
     while test -n "$1"; do
       case "$1" in
-        -l | --local)
-          METHOD='local'
-          ;;
-        -r | --repair)
-          METHOD='repair'
-          ;;
-        -i | --interactively)
-          OPT=''
-          ;;
-        -p | --prefix)
-          PREFIX="${2}"
-          shift
-          ;;
-        -b | --homebrew)
-          HOMEBREW_INSTALLING=1
-          ;;
-        -q | --quiet)
-          QUIET=1
-          ;;
-        *)
-          quit 2 "Invalid option: \"$1\""
-          ;;
+      -l | --local)
+        METHOD='local'
+        ;;
+      -r | --repair)
+        METHOD='repair'
+        ;;
+      -i | --interactively)
+        OPT=''
+        ;;
+      -p | --prefix)
+        PREFIX="${2}"
+        shift
+        ;;
+      -b | --homebrew)
+        HOMEBREW_INSTALLING=1
+        ;;
+      -q | --quiet)
+        QUIET=1
+        ;;
+      *)
+        quit 2 "Invalid option: \"$1\""
+        ;;
       esac
       shift
     done
 
     # Installation prefix
-    PREFIX="${PREFIX:-$([[ -s "${PREFIX_FILE}" ]] && \grep . "${PREFIX_FILE}")}"
     [[ -d "${PREFIX}" ]] || unset PREFIX
+    PREFIX="${PREFIX:-$([[ -s "${PREFIX_FILE}" ]] && \grep . "${PREFIX_FILE}")}"
 
     # Installation destination
     INSTALL_DIR="${PREFIX:-${HOME}/HomeSetup}"
@@ -377,7 +369,7 @@ usage: $APP_NAME [OPTIONS] <args>
         METHOD='local'
       elif [[ -n "${STREAMED}" ]]; then
         METHOD='remote'
-      elif [[ ! -f "${PREFIX_FILE}" &&  ! -d "${HHS_DIR}" && ! -d "${INSTALL_DIR}" ]]; then
+      elif [[ ! -f "${PREFIX_FILE}" && ! -d "${HHS_DIR}" && ! -d "${INSTALL_DIR}" ]]; then
         METHOD='fresh'
       else
         METHOD='repair'
@@ -387,7 +379,7 @@ usage: $APP_NAME [OPTIONS] <args>
 
   # Prompt the user for AskAI installation
   query_askai_install() {
-    if ${PIP3} show hspylib-askai &>/dev/null; then
+    if ${PIP3} show hspylib-askai >>"${INSTALL_LOG}" 2>&1; then
       INSTALL_AI='Yes'
     elif [[ -z "${INSTALL_AI}" && -z "${STREAMED}" && -z "${GITHUB_ACTIONS}" && -z "${HOMEBREW_INSTALLING}" ]]; then
       echo -e "${ORANGE}"
@@ -455,7 +447,7 @@ usage: $APP_NAME [OPTIONS] <args>
       OS_TYPE='Alpine'
       OS_APP_MAN='apk'
       DEPENDENCIES+=('file' 'python3' 'pip3')
-      unset INSTALL_AI  # AskAI is not tested on Alpine
+      unset INSTALL_AI # AskAI is not tested on Alpine
       install="apk add --no-cache"
       check_pkg="apk list | grep"
     # ArchLinux
@@ -463,7 +455,7 @@ usage: $APP_NAME [OPTIONS] <args>
       OS_TYPE='ArchLinux'
       OS_APP_MAN='pacman'
       DEPENDENCIES+=('sudo' 'file' 'python3' 'python3-pip')
-      unset INSTALL_AI  # AskAI is not tested on ArchLinux
+      unset INSTALL_AI # AskAI is not tested on ArchLinux
       install="${SUDO} pacman -Sy"
       check_pkg="pacman -Q | grep"
     else
@@ -481,7 +473,7 @@ usage: $APP_NAME [OPTIONS] <args>
       for tool_name in "${DEPENDENCIES[@]}"; do
         echo -en "${BLUE}[${OS_TYPE}] ${WHITE}Checking: ${YELLOW}${tool_name} ...${NC}"
         printf '%*.*s' 0 $((pad_len - ${#tool_name})) "${pad}"
-        if has "${tool_name}" || ${check_pkg} "${tool_name}" &>/dev/null; then
+        if has "${tool_name}" || ${check_pkg} "${tool_name}" >>"${INSTALL_LOG}" 2>&1; then
           echo -e " ${GREEN}${SUCCESS_ICN} INSTALLED${NC}"
         else
           echo -e " ${RED}${FAIL_ICN} NOT INSTALLED${NC}"
@@ -548,7 +540,7 @@ usage: $APP_NAME [OPTIONS] <args>
         echo -e "${BLUE}[${OS_TYPE}] ${WHITE}HomeBrew is already installed -> ${GREEN}$(brew --prefix) ${NC}"
       fi
     elif [[ ${OS_TYPE} =~ Debian|RedHat ]]; then
-     echo -e "${BLUE}[${OS_TYPE}] ${YELLOW}Skipping brew installation (not enforced)."
+      echo -e "${BLUE}[${OS_TYPE}] ${YELLOW}Skipping brew installation (not enforced)."
     else
       echo -e "${BLUE}[${OS_TYPE}] ${YELLOW}Skipping brew installation (not supported OS)."
     fi
@@ -558,7 +550,7 @@ usage: $APP_NAME [OPTIONS] <args>
   install_brew() {
 
     echo -e "${BLUE}[${OS_TYPE}] Attempting to install HomeBrew [${OS_TYPE}]... "
-    if ${SUDO} curl -fsSL https://raw.githubusercontent.com/HomeBrew/install/HEAD/install.sh | bash  >>"${INSTALL_LOG}" 2>&1; then
+    if ${SUDO} curl -fsSL https://raw.githubusercontent.com/HomeBrew/install/HEAD/install.sh | bash >>"${INSTALL_LOG}" 2>&1; then
       echo -e "${GREEN}OK${NC}"
       if [[ "${MY_OS}" == "Linux" ]]; then
         [[ -d ~/.linuxbrew ]] && eval "$(~/.linuxbrew/bin/brew shellenv)"
@@ -566,7 +558,7 @@ usage: $APP_NAME [OPTIONS] <args>
         ${SUDO} eval "$("$(brew --prefix)"/bin/brew shellenv)"
       fi
       BREW="$(brew --prefix)/bin/brew"
-      if command -v brew &>/dev/null; then
+      if command -v brew >>"${INSTALL_LOG}" 2>&1; then
         echo -e "\n${GREEN}@@@ Successfully installed HomeBrew -> ${BREW}${NC}"
       else
         quit 2 "### Could not find HomeBrew installation !"
@@ -586,27 +578,27 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Select the installation method and call the underlying functions
     case "${METHOD}" in
-      remote|repair|fresh)
-        query_askai_install
-        check_required_tools
-        create_destination_dirs
-        clone_repository
-        install_dotfiles
-        compatibility_check
-        configure_python
-        configure_starship
-        configure_gtrash
-        configure_blesh
-        configure_askai_rag
-        ;;
-      local)
-        create_destination_dirs
-        install_dotfiles
-        configure_askai_rag
-        ;;
-      *)
-        quit 2 "Installation method \"${METHOD}\" is not valid!"
-        ;;
+    remote | repair | fresh)
+      query_askai_install
+      check_required_tools
+      create_destination_dirs
+      clone_repository
+      install_dotfiles
+      compatibility_check
+      configure_python
+      configure_starship
+      configure_gtrash
+      configure_blesh
+      configure_askai_rag
+      ;;
+    local)
+      create_destination_dirs
+      install_dotfiles
+      configure_askai_rag
+      ;;
+    *)
+      quit 2 "Installation method \"${METHOD}\" is not valid!"
+      ;;
     esac
 
     # Finish installation and activate HomeSetup.
@@ -662,13 +654,13 @@ usage: $APP_NAME [OPTIONS] <args>
       fi
       echo -e "${NC}" && [[ -n "${ANS}" ]] && echo ''
       if [[ ! "${ANS}" =~ ^[yY]$ ]]; then
-        echo "Installation aborted!" >>"${INSTALL_LOG}"  2>&1
+        echo "Installation aborted!" >>"${INSTALL_LOG}" 2>&1
         echo ">> ANS=${ANS}  QUIET=${QUIET}  METHOD=${METHOD}  STREAM=${STREAMED}" >>"${INSTALL_LOG}"
         quit 1 "Installation aborted!"
       fi
-      echo -e "${BLUE}[${METHOD}]${WHITE}Installing HomeSetup... ${NC}"
+      echo -e "${BLUE}[${METHOD}]${WHITE} Installing HomeSetup... ${NC}"
     else
-      echo -e "${BLUE}[${METHOD}]${WHITE}Installing HomeSetup quietly... ${NC}"
+      echo -e "${BLUE}[${METHOD}]${WHITE} Installing HomeSetup quietly... ${NC}"
     fi
 
     # Create user dotfiles files.
@@ -690,19 +682,24 @@ usage: $APP_NAME [OPTIONS] <args>
     copy_file "${INSTALL_DIR}/dotfiles/glow.yml" "${HHS_DIR}/.glow.yml"
     copy_file "${INSTALL_DIR}/dotfiles/inputrc" "${HOME}/.inputrc"
 
-    # NeoVim integration configs
-    [[ -d "${HHS_DIR}/nvim" ]] || \mkdir -p "${HHS_DIR}/nvim"
-    copy_file "${INSTALL_DIR}/dotfiles/nvim-init" "${HHS_DIR}/nvim/init.vim"
-
     # HomeSetup key bindings
     copy_file "${INSTALL_DIR}/dotfiles/hhs-bindings" "${HHS_DIR}/.hhs-bindings"
+
+    # NeoVim integration configs
+    echo -en "\nCopying NeoVim integration configs and plugins... "
+    if create_directory "${HHS_DIR}/nvim" &&
+      \cp -Rf "${INSTALL_DIR}/assets/nvim/" "${HHS_DIR}/nvim"; then
+      echo -e "${GREEN}OK${NC}"
+    else
+      echo -e "${YELLOW}SKIPPED${NC}"
+    fi
 
     # Find all dotfiles used by HomeSetup according to the current shell type
     while read -r dotfile; do
       ALL_DOTFILES+=("${dotfile}")
     done < <(find "${DOTFILES_SRC}" -maxdepth 1 -type f -name "*.${SHELL_TYPE}" -exec basename {} \;)
 
-    pushd "${DOTFILES_SRC}" &>/dev/null || quit 1 "Unable to enter dotfiles directory \"${DOTFILES_SRC}\" !"
+    pushd "${DOTFILES_SRC}" >>"${INSTALL_LOG}" 2>&1 || quit 1 "Unable to enter dotfiles directory \"${DOTFILES_SRC}\" !"
 
     echo ">>> Linked dotfiles:" >>"${INSTALL_LOG}"
     # If `all' option is used, copy all files
@@ -779,7 +776,7 @@ usage: $APP_NAME [OPTIONS] <args>
     if find "${INSTALL_DIR}"/assets/fonts -maxdepth 1 -type f \( -iname "*.otf" -o -iname "*.ttf" \) \
       -print \
       -exec rsync --archive {} "${FONTS_DIR}" \; \
-      -exec chown "${USER}":"${GROUP}" {} \; >>"${INSTALL_LOG}"  2>&1; then
+      -exec chown "${USER}":"${GROUP}" {} \; >>"${INSTALL_LOG}" 2>&1; then
       echo -e "${GREEN}OK${NC}"
     else
       quit 2 "Unable to copy HHS fonts into fonts (${FONTS_DIR}) directory !"
@@ -801,17 +798,17 @@ usage: $APP_NAME [OPTIONS] <args>
     # -----------------------------------------------------------------------------------
     # Set default HomeSetup terminal options
     case "${SHELL_TYPE}" in
-      bash)
-        # Creating the shell-opts file
-        echo -en "\n${WHITE}Creating the Shell Options file ${BLUE}${HHS_SHOPTS_FILE}... "
-        \shopt | awk '{print $1" = "$2}' >"${HHS_SHOPTS_FILE}"  || quit 2 "Unable to create the Shell Options file !"
-        echo -e "${GREEN}OK${NC}"
-        ;;
+    bash)
+      # Creating the shell-opts file
+      echo -en "\n${WHITE}Creating the Shell Options file ${BLUE}${HHS_SHOPTS_FILE}... "
+      \shopt | awk '{print $1" = "$2}' >"${HHS_SHOPTS_FILE}" || quit 2 "Unable to create the Shell Options file !"
+      echo -e "${GREEN}OK${NC}"
+      ;;
     esac
 
     # Copy MOTDs file into place
     [[ -d "${HHS_MOTD_DIR}" ]] || create_directory "${HHS_MOTD_DIR}"
-    \cp "${INSTALL_DIR}"/.MOTD "${HHS_MOTD_DIR}"/000-hhs-motd &>/dev/null
+    \cp "${INSTALL_DIR}"/.MOTD "${HHS_MOTD_DIR}"/000-hhs-motd >>"${INSTALL_LOG}" 2>&1
 
     # Cleanup old files (older than 30 days)
     echo -en "\n${WHITE}Cleaning up old cache and log files... "
@@ -821,7 +818,7 @@ usage: $APP_NAME [OPTIONS] <args>
       echo -e "${YELLOW}SKIPPED${NC}"
     fi
 
-    \popd &>/dev/null || quit 1 "Unable to leave dotfiles directory !"
+    \popd >>"${INSTALL_LOG}" 2>&1 || quit 1 "Unable to leave dotfiles directory !"
   }
 
   # Configure python and HomeSetup python library
@@ -829,11 +826,11 @@ usage: $APP_NAME [OPTIONS] <args>
 
     echo -en "\n${WHITE}Configuring Python... "
 
-    [[ -z "${PYTHON3}" || -z "${PIP3}" ]] \
-      && quit 2 "Python and Pip >= 3.10 <= 3.11 are required to use HomeSetup. <None> has been found!"
+    [[ -z "${PYTHON3}" || -z "${PIP3}" ]] &&
+      quit 2 "Python and Pip >= 3.10 <= 3.11 are required to use HomeSetup. <None> has been found!"
     python_version=$("${PYTHON3}" --version 2>&1 | awk '{print $2}')
-    [[ ! "${python_version}" =~ ^3\.1[01] ]] \
-      && quit 2 "Python and Pip >= 3.10 <= 3.11 are required to use HomeSetup! Found: ${python_version}"
+    [[ ! "${python_version}" =~ ^3\.1[01] ]] &&
+      quit 2 "Python and Pip >= 3.10 <= 3.11 are required to use HomeSetup! Found: ${python_version}"
 
     echo -e "${GREEN}OK${NC}"
     create_venv
@@ -846,9 +843,10 @@ usage: $APP_NAME [OPTIONS] <args>
     python3_str="${BLUE}[$(basename "${PYTHON3}")]"
     if [[ ! -d "${HHS_VENV_PATH}" ]]; then
       echo -en "\n${python3_str} ${WHITE}Creating virtual environment... "
-      if \
-        ${PIP3} install --upgrade --break-system-packages "virtualenv" >>"${INSTALL_LOG}" 2>&1 && \
-        ${PYTHON3} -m virtualenv "${HHS_VENV_PATH}" >> "${INSTALL_LOG}" 2>&1; then
+      if
+        ${PIP3} install --upgrade --break-system-packages "virtualenv" >>"${INSTALL_LOG}" 2>&1 &&
+          ${PYTHON3} -m virtualenv "${HHS_VENV_PATH}" >>"${INSTALL_LOG}" 2>&1
+      then
         echo -e "${GREEN}OK${NC}"
         echo -e "\n${python3_str} ${WHITE}Virtual environment created -> ${CYAN}'${HHS_VENV_PATH}'."
       else
@@ -884,16 +882,17 @@ usage: $APP_NAME [OPTIONS] <args>
     pkgs=$(mktemp)
     printf "%s\n" "${PYTHON_MODULES[@]}" >"${pkgs}"
     printf "${python3_str} ${WHITE}Module: ${YELLOW}%s${NC}\n" "${PYTHON_MODULES[@]}"
-    if \
+    if
       ${VENV_PIP3} install --upgrade --break-system-packages --ignore-installed -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1 ||
-      ${VENV_PIP3} install --upgrade --ignore-installed -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1; then
-      \rm -f  "$(mktemp)"
+        ${VENV_PIP3} install --upgrade --ignore-installed -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1
+    then
+      \rm -f "$(mktemp)"
       echo "Installed HSPyLib python modules:" >>"${INSTALL_LOG}"
       ${VENV_PIP3} freeze | grep hspylib >>"${INSTALL_LOG}"
       echo -e "\n${python3_str} Installed ${BLUE}HSPyLib${NC} python modules:"
       ${VENV_PIP3} freeze | grep hspylib | sed 's/^/  |-/'
     else
-        quit 2 "${RED}FAILED${NC} Unable to install PyPi packages!"
+      quit 2 "${RED}FAILED${NC} Unable to install PyPi packages!"
     fi
   }
 
@@ -964,13 +963,13 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Removing the old ${HOME}/bin folder
     if [[ -L "${HOME}/bin" ]]; then
-      \rm -f "${HOME:?}/bin"
+      \rm -rfv "${HOME:?}/bin"
       echo -e "\n${YELLOW}Your old ${HOME}/bin link had to be removed. ${NC}"
     fi
 
     # .bash_aliasdef was renamed to .aliasdef and it is only copied if it does not exist. #9c592e0
     if [[ -L "${HOME}/.bash_aliasdef" ]]; then
-      \rm -f "${HOME}/.bash_aliasdef"
+      \rm -f "${HOME:?}/.bash_aliasdef"
       echo -e "\n${YELLOW}Your old ${HOME}/.bash_aliasdef link had to be removed. ${NC}"
     fi
 
@@ -1014,11 +1013,11 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Removing the old python lib directories and links
     [[ -d "${INSTALL_DIR}/bin/apps/bash/hhs-app/lib" ]] &&
-      \rm -rf "${INSTALL_DIR}/bin/apps/bash/hhs-app/lib"
-    [[ -L "${INSTALL_DIR}/bin/apps/bash/hhs-app/plugins/firebase/lib" ]] &&
-      \rm -rf "${INSTALL_DIR}/bin/apps/bash/hhs-app/plugins/firebase/lib"
+      \rm -rfv "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/lib"
+    [[ -L "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/plugins/firebase/lib" ]] &&
+      \rm -rfv "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/plugins/firebase/lib"
     [[ -L "${INSTALL_DIR}/bin/apps/bash/hhs-app/plugins/vault/lib" ]] &&
-      \rm -rf "${INSTALL_DIR}/bin/apps/bash/hhs-app/plugins/vault/lib"
+      \rm -rfv "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/plugins/vault/lib"
 
     # Moving orig and bak files to backup folder
     find "${HHS_DIR}" -maxdepth 1 \
@@ -1039,21 +1038,21 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Old hhs-init file changed to homesetup.toml
     if [[ -f "${HHS_DIR}/.hhs-init" ]]; then
-      \rm -f "${HHS_DIR}/.hhs-init"
+      \rm -f "${HHS_DIR:?}/.hhs-init"
       echo -e "\n${YELLOW}Your old .hhs-init renamed to .homesetup.toml and the old file was deleted.${NC}"
     fi
 
     # Init submodules case it's not there yet
     if [[ ! -s "${INSTALL_DIR}/tests/bats/bats-core/bin/bats" ]]; then
-      pushd "${INSTALL_DIR}" &>/dev/null || quit 1 "Unable to enter homesetup directory \"${INSTALL_DIR}\" !"
+      pushd "${INSTALL_DIR}" >>"${INSTALL_LOG}" 2>&1 || quit 1 "Unable to enter homesetup directory \"${INSTALL_DIR}\" !"
       echo -en "\n${WHITE}Pulling ${GREEN}bats ${WHITE} submodules... "
-      if git submodule update --init &>/dev/null; then
+      if git submodule update --init >>"${INSTALL_LOG}" 2>&1; then
         echo -e "${GREEN}OK${NC}"
       else
         echo -e "${RED}FAILED${NC}"
         echo -e "${YELLOW}Bats test will not be available${NC}"
       fi
-      popd &>/dev/null || quit 1 "Unable to leave homesetup directory \"${INSTALL_DIR}\" !"
+      popd >>"${INSTALL_LOG}" 2>&1 || quit 1 "Unable to leave homesetup directory \"${INSTALL_DIR}\" !"
     fi
 
     # From HomeSetup 1.7+, we changed the HomeSetup config dir from $HOME/.hhs to $HOME/.config/hhs to match
@@ -1061,7 +1060,7 @@ usage: $APP_NAME [OPTIONS] <args>
     if [[ -d "${HOME}/.config" ]]; then
       if [[ -d "${HOME}/.hhs" ]] && \rsync --archive "${HOME}/.hhs" "${HOME}/.config"; then
         echo -e "\n${YELLOW}Your old ~/.hhs folder was moved to ~/.config/hhs !${NC}"
-        \rm -rf "${HOME}/.hhs" &>/dev/null || echo -e \
+        \rm -rf "${HOME:?}/.hhs" >>"${INSTALL_LOG}" 2>&1 || echo -e \
           "${RED}Unable to delete the old .hhs directory. It was moved to ~/.config. Feel free to wipe it out!${NC}"
       fi
     fi
@@ -1069,33 +1068,34 @@ usage: $APP_NAME [OPTIONS] <args>
 
   # Install Starship prompt
   configure_starship() {
-    if ! command -v starship &>/dev/null; then
+    if ! command -v starship >>"${INSTALL_LOG}" 2>&1; then
       echo -en "\n${WHITE}Installing Starship prompt... "
-      if \curl -sSL "https://starship.rs/install.sh" 1>"${HHS_DIR}/install_starship.sh" \
-        && \chmod a+x "${HHS_DIR}"/install_starship.sh \
-        && "${HHS_DIR}"/install_starship.sh -y -b "${HHS_BIN_DIR}" &>/dev/null; then
-          echo -e "${GREEN}OK${NC}"
+      if \curl -sSL "https://starship.rs/install.sh" 1>"${HHS_DIR}/install_starship.sh" &&
+        \chmod a+x "${HHS_DIR}"/install_starship.sh &&
+        "${HHS_DIR}"/install_starship.sh -y -b "${HHS_BIN_DIR}" >>"${INSTALL_LOG}" 2>&1; then
+        echo -e "${GREEN}OK${NC}"
       else
-          echo -e "${RED}FAILED${NC}"
-          echo -e "${YELLOW}Starship prompt will not be available${NC}"
+        echo -e "${RED}FAILED${NC}"
+        echo -e "${YELLOW}Starship prompt will not be available${NC}"
       fi
     fi
   }
 
   # Install GTrash application
   configure_gtrash() {
-    if ! command -v gtrash &>/dev/null; then
+    if ! command -v gtrash >>"${INSTALL_LOG}" 2>&1; then
       arch=$(uname -m)
       arch="${arch//aarch64/arm64}"
       echo -en "\n${WHITE}Installing ${BLUE}GTrash${NC} app... "
-      if \
-        curl -sSL "https://github.com/umlx5h/gtrash/releases/latest/download/gtrash_$(uname -s)_${arch}.tar.gz" | tar xz \
-        && chmod a+x ./gtrash \
-        && \mv ./gtrash "${HHS_DIR}/bin/gtrash"; then
-          echo -e "${GREEN}OK${NC}"
+      if
+        curl -sSL "https://github.com/umlx5h/gtrash/releases/latest/download/gtrash_$(uname -s)_${arch}.tar.gz" | tar xz &&
+          chmod a+x ./gtrash &&
+          \mv ./gtrash "${HHS_DIR}/bin/gtrash"
+      then
+        echo -e "${GREEN}OK${NC}"
       else
-          echo -e "${RED}FAILED${NC}"
-          echo -e "${YELLOW}GTrash will not be available${NC}"
+        echo -e "${RED}FAILED${NC}"
+        echo -e "${YELLOW}GTrash will not be available${NC}"
       fi
     fi
   }
@@ -1105,14 +1105,15 @@ usage: $APP_NAME [OPTIONS] <args>
 
     ble_repo="https://github.com/akinomyoga/ble.sh.git"
     echo -en "\n${WHITE}Installing ${BLUE}Blesh${NC} plug-in... "
-    [[ -d "${HHS_BLESH_DIR}" ]] && \rm -rfv "${HHS_BLESH_DIR:?}" &>/dev/null
-    if \
-      git clone --recursive --depth 1 --shallow-submodules "${ble_repo}" "${HHS_BLESH_DIR}" >> "${INSTALL_LOG}" 2>&1 \
-      && make -C "${HHS_BLESH_DIR}" >> "${INSTALL_LOG}" 2>&1; then
-        echo -e "${GREEN}OK${NC}"
+    [[ -d "${HHS_BLESH_DIR}" ]] && \rm -rfv "${HHS_BLESH_DIR:?}" >>"${INSTALL_LOG}" 2>&1
+    if
+      git clone --recursive --depth 1 --shallow-submodules "${ble_repo}" "${HHS_BLESH_DIR}" >>"${INSTALL_LOG}" 2>&1 &&
+        make -C "${HHS_BLESH_DIR}" >>"${INSTALL_LOG}" 2>&1
+    then
+      echo -e "${GREEN}OK${NC}"
     else
-        echo -e "${RED}FAILED${NC}"
-        echo -e "${YELLOW}Ble-sh will not be available${NC}"
+      echo -e "${RED}FAILED${NC}"
+      echo -e "${YELLOW}Ble-sh will not be available${NC}"
     fi
   }
 
@@ -1132,13 +1133,12 @@ usage: $APP_NAME [OPTIONS] <args>
     if [[ "${OS_TYPE}" == "macOS" ]]; then
       \date -v+7d '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
     elif [[ "${OS_TYPE}" == "Alpine" ]]; then
-      \date -d "@$(($( \date +%s) - 3 * 24 * 60 * 60))" '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
+      \date -d "@$(($(\date +%s) - 3 * 24 * 60 * 60))" '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
     elif [[ "${OS_TYPE}" =~ Debian|RedHat ]]; then
       \date -d '+7 days' '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
     else
       \date '+%s' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
     fi
-
 
     echo ''
     echo -e "${GREEN}${POINTER_ICN} Done installing HomeSetup v$(cat "${INSTALL_DIR}/.VERSION") !"
@@ -1171,7 +1171,7 @@ usage: $APP_NAME [OPTIONS] <args>
   # shellcheck disable=SC2317
   abort_install() {
     echo ''
-    echo "Installation aborted:  ANS=${ANS}  QUIET=${QUIET}  METHOD=${METHOD}" >>"${INSTALL_LOG}"  2>&1
+    echo "Installation aborted:  ANS=${ANS}  QUIET=${QUIET}  METHOD=${METHOD}" >>"${INSTALL_LOG}" 2>&1
     quit 2 'Installation aborted !'
   }
 

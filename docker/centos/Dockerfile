@@ -19,7 +19,7 @@ RUN tar -xzf Python-3.11.11.tgz
 WORKDIR "Python-3.11.11"
 
 RUN ./configure --enable-optimizations --enable-loadable-sqlite-extensions
-RUN make
+RUN make install
 
 RUN wget https://files.portaudio.com/archives/pa_stable_v190700_20210406.tgz
 RUN tar -xzf pa_stable_v190700_20210406.tgz
