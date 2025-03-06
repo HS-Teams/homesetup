@@ -11,7 +11,7 @@ RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
 RUN sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
 RUN yum update -y
 RUN yum install -y sudo curl vim wget procps-ng glibc-common libpq-devel file cmake git openssl-devel bzip2-devel
-RUN yum install -y libffi-devel rsync sqlite-devel alsa-lib-devel
+RUN yum install -y libffi-devel rsync sqlite-devel alsa-lib-devel ffmpeg
 RUN yum groupinstall -y "Development Tools"
 RUN wget https://www.python.org/ftp/python/3.11.11/Python-3.11.11.tgz
 RUN tar -xzf Python-3.11.11.tgz

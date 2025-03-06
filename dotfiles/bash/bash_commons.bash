@@ -16,6 +16,12 @@
 
 export HHS_ACTIVE_DOTFILES="${HHS_ACTIVE_DOTFILES} bash_commons"
 
+# @function: Private function that issues a HomeSetup restart.
+function __hhs_restart__() {
+
+  JOB_NAME='HomeSetup restart!' source "${HOME}/.bashrc"
+}
+
 # @function: Echo an error message, using red color, into stderr.
 # @param $1 [Req] : The application or function name.
 # @param $2..$N [Req] : The message to be echoed.

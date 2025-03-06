@@ -35,6 +35,8 @@ unalias -a
 # The Internal Field Separator (IFS). The default value is <space><tab><newline>
 export OLDIFS="${IFS}"
 
+export PYTHON3="${PYTHON3:-python3}"
+
 # The following variables are not inside the bash_env because we need them in the early load process.
 export HHS_MY_OS="${HHS_MY_OS:-$(uname -s)}"
 export HHS_MY_SHELL="${SHELL##*/}"
@@ -51,25 +53,21 @@ fi
 
 # Defined by the installation.
 export HHS_HOME="${HHS_PREFIX:-${HOME}/HomeSetup}"
-if [[ -d "${HOME}/.config/hhs" ]]; then
-  export HHS_DIR="${HOME}/.config/hhs"
-else
-  export HHS_DIR="${HOME}/.hhs"
-fi
+export HHS_DIR="${HOME}"/.config/hhs
 export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}"/.VERSION)"
-export HHS_SHOPTS_FILE="${HHS_DIR}/shell-opts.toml"
-export HHS_BACKUP_DIR="${HHS_DIR}/backup"
-export HHS_CACHE_DIR="${HHS_DIR}/cache"
-export HHS_LOG_DIR="${HHS_DIR}/log"
-export HHS_LOG_FILE="${HHS_LOG_DIR}/hhsrc.log"
-export HHS_MOTD_DIR="${HHS_DIR}/motd"
-export HHS_PROMPTS_DIR="${HHS_DIR}/askai/prompts"
-export HHS_SETUP_FILE="${HHS_DIR}/.homesetup.toml"
-export HHS_BLESH_DIR="${HHS_DIR}/ble-sh"
-export HHS_VENV_PATH="${HHS_VENV_PATH:-${HHS_DIR}/venv}"
-export HHS_KEY_BINDINGS="${HHS_KEY_BINDINGS:-${HHS_DIR}/.hhs-bindings}"
-export HHS_INPUTRC="${HHS_INPUTRC:-${HOME}/.inputrc}"
-export HHS_ALIASDEF="${HHS_ALIASDEF:-"${HHS_DIR}"/.aliasdef}"
+export HHS_SHOPTS_FILE="${HHS_DIR}"/shell-opts.toml
+export HHS_BACKUP_DIR="${HHS_DIR}"/backup
+export HHS_CACHE_DIR="${HHS_DIR}"/cache
+export HHS_LOG_DIR="${HHS_DIR}"/log
+export HHS_LOG_FILE="${HHS_LOG_DIR}"/hhsrc.log
+export HHS_MOTD_DIR="${HHS_DIR}"/motd
+export HHS_PROMPTS_DIR="${HHS_DIR}"/askai/prompts
+export HHS_SETUP_FILE="${HHS_DIR}"/.homesetup.toml
+export HHS_BLESH_DIR="${HHS_DIR}"/ble-sh
+export HHS_VENV_PATH="${HHS_DIR}"/venv
+export HHS_KEY_BINDINGS="${HHS_DIR}"/.hhs-bindings
+export HHS_INPUTRC="${HOME}"/.inputrc
+export HHS_ALIASDEF="${HHS_DIR}"/.aliasdef
 
 # if the log directory is not found, we have to create it.
 [[ -d "${HHS_LOG_DIR}" ]] || mkdir -p "${HHS_LOG_DIR}"
@@ -122,7 +120,7 @@ CUSTOM_DOTFILES=(
 source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"
 
 # Re-create the HomeSetup log file.
-started="$(python3 -c 'import time; print(int(time.time() * 1000))')"
+started="$(${PYTHON3} -c 'import time; print(int(time.time() * 1000))')"
 echo -e "HomeSetup is starting: $(date)\n" >"${HHS_LOG_FILE}"
 
 # Initialization setup.
@@ -167,7 +165,7 @@ if ! [[ -s "${HHS_KEY_BINDINGS}" ]]; then
   \cp "${HHS_HOME}/dotfiles/hhs-bindings" "${HHS_KEY_BINDINGS}"
 fi
 
-if bind -f "${HHS_KEY_BINDINGS}"; then
+if bind -f "${HHS_KEY_BINDINGS}" &>/dev/null; then
   __hhs_log "INFO" "Key bindings loaded: ${HHS_KEY_BINDINGS}"
 else
   __hhs_log "WARN" "Key bindings failed to load: ${HHS_KEY_BINDINGS}"
@@ -274,7 +272,7 @@ if [[ ${HHS_EXPORT_SETTINGS} -eq 1 ]] && __hhs_is_venv; then
   # Update the settings configuration.
   echo "hhs.setman.database = ${HHS_SETMAN_DB_FILE}" >"${HHS_SETMAN_CONFIG_FILE}"
   tmp_file="$(mktemp)"
-  if python3 -m setman source -n hhs -f "${tmp_file}" && source "${tmp_file}"; then
+  if ${PYTHON3} -m setman source -n hhs -f "${tmp_file}" && source "${tmp_file}"; then
     __hhs_log "INFO" "System settings loaded !"
   else
     __hhs_log "ERROR" "Failed to load system settings !"
@@ -371,7 +369,7 @@ if [[ -d "${HHS_MOTD_DIR}" ]]; then
   done
 fi
 
-finished="$(python3 -c 'import time; print(int(time.time() * 1000))')"
+finished="$(${PYTHON3} -c 'import time; print(int(time.time() * 1000))')"
 diff_time=$((finished - started))
 diff_time_sec=$((diff_time/1000))
 diff_time_ms=$((diff_time-(diff_time_sec*1000)))

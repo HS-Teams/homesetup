@@ -1,5 +1,5 @@
 [bumpver]
-current_version = "1.8.22"
+current_version = "1.8.25"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "++version {old_version} -> {new_version}"
 commit = false
@@ -11,4 +11,4 @@ push = false
 "gradle.properties" = ["app_version = '{version}'"]
 ".VERSION" = ["{version}"]
 "README.md" = ["release/v{version}/gray"]
-"install.bash" = ["VERSION=\"1.8.22\""]
+"install.bash" = ["VERSION=\"{version}\""]

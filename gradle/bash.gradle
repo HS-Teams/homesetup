@@ -107,15 +107,12 @@ task publish(type: Task) {
     def commit_logs = out.toString()
     def prefix = commit_logs?.trim() ? commit_logs?.split('\n').size() + ' commits' : ' No commits'
     def commitMsg = "New HomeSetup revision: v'${version}' >> ${prefix}"
-    def tag = project.hasProperty("tag") ? Boolean.valueOf(project.getProperty("tag")) : false;
-    println("Revision commits: ${commitMsg}  Tag?= ${tag}")
-    if (tag) {
-      exec {
-        commandLine 'git', 'tag', '-a', "v${version}", '-m', "New HomeSetup revision version ${version}"
-      }
-      exec {
-        commandLine 'git', 'push', 'origin', "v${version}"
-      }
+    println("Revision commits: ${commitMsg}  Tag: v${version}")
+    exec {
+      commandLine 'git', 'tag', '-a', "v${version}", '-m', "New HomeSetup release v${version}"
+    }
+    exec {
+      commandLine 'git', 'push', 'origin', "v${version}"
     }
     exec {
       commandLine 'git', 'add', '-A', ':/'

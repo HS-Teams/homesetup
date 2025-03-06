@@ -254,7 +254,6 @@ function __hhs_venv() {
   active="$(__hhs_is_venv && echo -e "${GREEN}Active")"
   active="${active:-${RED}Inactive}"
 
-
   [[ -z "${enable}" ]] && { echo -e "${WHITE}Virtual environment is ${active} ${YELLOW}[$(python3 -V)] -> $(command -v python3)."; return 0; }
 
   if [[ "${enable}" =~ -d|-t ]] && declare -F deactivate &> /dev/null; then
@@ -270,6 +269,15 @@ function __hhs_venv() {
   echo -e "${NC}"
   # shellcheck disable=SC2155
   export HHS_PYTHON_VENV_ACTIVE="$(__hhs_is_venv && echo '1')"
+  setting="hhs_python_venv_enabled"
+  [[ ${HHS_PYTHON_VENV_ACTIVE} -eq 1 ]] && value='true' || value='false'
+
+  if ! __hhs_toml_set "${HHS_SETUP_FILE}" "${setting}=${value}" "setup"; then
+    __hhs_errcho "${FUNCNAME[0]}" "Unable to change setting: ${setting}!"
+    return 1
+  fi
+
+  __hhs_restart__
 
   return $ret_val
 }

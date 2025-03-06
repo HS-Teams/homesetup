@@ -16,8 +16,8 @@
   # This script name
   APP_NAME="${0##*/}"
 
-  # HomeSetup Version
-  VERSION="1.8.22"
+  # HomeSetup Installation version
+  VERSION="1.8.25"
 
   # Help message to be displayed by the script
   USAGE="
@@ -61,6 +61,7 @@ usage: $APP_NAME [OPTIONS] <args>
   POINTER_ICN='\xef\x90\xb2'    # 
   SUCCESS_ICN='\xef\x98\xab'    # 
   FAIL_ICN='\xef\x91\xa7'       # 
+  AI_ICN='\xef\x89\xa0'         # 
 
   # VT-100 Terminal colors
   ORANGE='\033[38;5;202m'
@@ -70,6 +71,7 @@ usage: $APP_NAME [OPTIONS] <args>
   GREEN='\033[32m'
   YELLOW='\033[33m'
   RED='\033[31m'
+  MAGENTA='\033[35m'
   NC='\033[m'
 
   touch "${INSTALL_LOG}"
@@ -119,7 +121,7 @@ usage: $APP_NAME [OPTIONS] <args>
   SUPP_SHELL_TYPES=('bash')
 
   # Timestamp used to backup files
-  TIMESTAMP=$(\date "+%s%S")
+  TIMESTAMP=$(date "+%s%S")
 
   # Python executable
   PYTHON3="${PYTHON3:-$(command -v python3.11)}"
@@ -205,14 +207,22 @@ usage: $APP_NAME [OPTIONS] <args>
 
     local dir="${1}"
 
+    # If directory is not there yet, create it.
     if [[ ! -d "${dir}" && ! -L "${dir}" ]]; then
       echo -en "\n${WHITE}Creating: ${BLUE}\"${dir}\"${WHITE} directory... "
-      \mkdir -p "${dir}" || quit 2 "Unable to create directory ${dir}!"
-      echo -e "${GREEN}OK${NC}"
+      if mkdir -p "${dir}"; then
+        echo -e "${GREEN}OK${NC}"
+      else
+        echo -e " ${RED}FAILED${NC}"
+        quit 2 "Unable to create directory ${dir}!"
+      fi
     else
-      # Trying to write at the created directory to validate write permissions.
-      \touch "${dir}/tmpfile" >>"${INSTALL_LOG}" 2>&1 || quit 2 "Not enough permissions to write to \"${dir}\" directory!"
-      \rm -f "${dir:?}/tmpfile" >>"${INSTALL_LOG}" 2>&1
+      echo -en "\n${WHITE}Skipping: ${YELLOW}\"${dir}\"${WHITE} was not created because destination exists. ${NC}"
+    fi
+    # Trying to write at the created directory to validate write permissions.
+    if ! touch "${dir}/tmpfile" >>"${INSTALL_LOG}" 2>&1 \
+      || ! rm -f "${dir:?}/tmpfile" >>"${INSTALL_LOG}" 2>&1; then
+        quit 2 "Not enough permissions to write to \"${dir}\" directory!"
     fi
   }
 
@@ -226,12 +236,13 @@ usage: $APP_NAME [OPTIONS] <args>
     echo ''
     if [[ -f "${dest_file}" || -d "${dest_file}" ]]; then
       echo -e "${WHITE}Skipping: ${YELLOW}${dest_file} file/dir was not copied because destination exists. ${NC}"
+    else
+      echo -en "${WHITE}Copying: ${BLUE} ${src_file} -> ${dest_file}... "
+      \rsync --archive "${src_file}" "${dest_file}" >>"${INSTALL_LOG}" 2>&1
+      \chown "${USER}":"${GROUP}" "${dest_file}" >>"${INSTALL_LOG}" 2>&1
+      [[ -f "${dest_file}" ]] && echo -e "${GREEN}OK${NC}"
+      [[ -f "${dest_file}" ]] || quit 1 " ${RED}FAILED${NC}"
     fi
-    echo -en "${WHITE}Copying: ${BLUE} ${src_file} -> ${dest_file}... "
-    \rsync --archive "${src_file}" "${dest_file}" >>"${INSTALL_LOG}" 2>&1
-    \chown "${USER}":"${GROUP}" "${dest_file}" >>"${INSTALL_LOG}" 2>&1
-    [[ -f "${dest_file}" ]] && echo -e "${GREEN}OK${NC}"
-    [[ -f "${dest_file}" ]] || quit 1 " ${RED}FAILED${NC}"
   }
 
   # @function: Link file from source to destination.
@@ -244,7 +255,7 @@ usage: $APP_NAME [OPTIONS] <args>
     echo ''
     if [[ -s "${dest_file}" && ! -L "${dest_file}" ]]; then
       echo -e "${WHITE}Backing up: ${YELLOW}${dest_file} file/dir was not copied because destination exists. ${NC}"
-      \mv "${dest_file}" "${HHS_BACKUP_DIR}/$(basename "${dest_file}".orig)"
+      mv "${dest_file}" "${HHS_BACKUP_DIR}/$(basename "${dest_file}".orig)"
     fi
     echo -en "${WHITE}Linking: ${BLUE}"
     echo -en "$(\ln -sfv "${src_file}" "${dest_file}")...${NC}"
@@ -306,11 +317,7 @@ usage: $APP_NAME [OPTIONS] <args>
     README="${INSTALL_DIR}/README.MD"
 
     # Configuration files location
-    if [[ -d "${HOME}/.config" ]]; then
-      HHS_DIR="${HOME}/.config/hhs"
-    else
-      HHS_DIR="${HOME}/.hhs"
-    fi
+    HHS_DIR="${HOME}/.config/hhs"
 
     # Binaries location
     HHS_BIN_DIR="${HHS_DIR}/bin"
@@ -327,14 +334,17 @@ usage: $APP_NAME [OPTIONS] <args>
     # Shell options file
     HHS_SHOPTS_FILE="${HHS_DIR}/shell-opts.toml"
 
-    # Ble Bash plug installation in location
+    # Ble Bash plug installation path.
     HHS_BLESH_DIR="${HHS_DIR}/ble-sh"
 
     # HomeSetup virtual environment path.
     HHS_VENV_PATH="${HHS_DIR}/venv"
 
-    # Hunspell dictionary location.
+    # Hunspell dictionaries location.
     HUNSPELL_DIR="${HHS_DIR}/hunspell-dicts"
+
+    # NeoVim configuration files location.
+    NEOVIM_DIR="${HHS_DIR}/nvim"
 
     # Fonts destination location
     if [[ "Darwin" == "${MY_OS}" ]]; then
@@ -357,11 +367,11 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Check if the user passed help or version options
     [[ "$1" == '-h' || "$1" == '--help' ]] && quit 0 "${USAGE}"
-    [[ "$1" == '-v' || "$1" == '--version' ]] && quit 0 "HomeSetup v$(\grep . "${INSTALL_VERSION}")"
+    [[ "$1" == '-v' || "$1" == '--version' ]] && quit 0 "HomeSetup v$(\grep . "${VERSION}")"
     [[ -z "${USER}" || -z "${GROUP}" ]] && quit 1 "Unable to detect USER:GROUP => [${USER}:${GROUP}]"
     [[ -z "${HOME}" || -z "${SHELL}" ]] && quit 1 "Unable to detect HOME/SHELL => [${HOME}:${SHELL}]"
 
-    echo -e "\n${GREEN}HomeSetup© ${VERSION} installation ${NC}"
+    echo -e "\n${GREEN}HomeSetup© v${VERSION} installation ${NC}"
 
     # Check the installation method
     if [[ -z "${METHOD}" ]]; then
@@ -408,6 +418,8 @@ usage: $APP_NAME [OPTIONS] <args>
     create_directory "${FONTS_DIR}"
     # Create hunspell dictionaries destination directory
     create_directory "${HUNSPELL_DIR}"
+    # Create neovim configurations files destination directory
+    create_directory "${NEOVIM_DIR}"
   }
 
   # Check HomeSetup required tools
@@ -585,15 +597,17 @@ usage: $APP_NAME [OPTIONS] <args>
       clone_repository
       install_dotfiles
       compatibility_check
-      configure_python
       configure_starship
       configure_gtrash
       configure_blesh
+      configure_python
+      install_hspylib
       configure_askai_rag
       ;;
     local)
       create_destination_dirs
       install_dotfiles
+      compatibility_check
       configure_askai_rag
       ;;
     *)
@@ -664,17 +678,15 @@ usage: $APP_NAME [OPTIONS] <args>
     fi
 
     # Create user dotfiles files.
-    [[ -s "${HHS_DIR}/.aliases" ]] || \touch "${HHS_DIR}/.aliases"
-    [[ -s "${HHS_DIR}/.colors" ]] || \touch "${HHS_DIR}/.colors"
-    [[ -s "${HHS_DIR}/.env" ]] || \touch "${HHS_DIR}/.env"
-    [[ -s "${HHS_DIR}/.functions" ]] || \touch "${HHS_DIR}/.functions"
-    [[ -s "${HHS_DIR}/.profile" ]] || \touch "${HHS_DIR}/.profile"
-    [[ -s "${HHS_DIR}/.prompt" ]] || \touch "${HHS_DIR}/.prompt"
-
-    # Create __hhs function files.
-    [[ -s "${HHS_DIR}/.cmd_file" ]] || \touch "${HHS_DIR}/.cmd_file"
-    [[ -s "${HHS_DIR}/.path" ]] || \touch "${HHS_DIR}/.path"
-    [[ -s "${HHS_DIR}/.saved_dirs" ]] || \touch "${HHS_DIR}/.saved_dirs"
+    [[ -s "${HHS_DIR}/.aliases" ]] || touch "${HHS_DIR}/.aliases"
+    [[ -s "${HHS_DIR}/.colors" ]] || touch "${HHS_DIR}/.colors"
+    [[ -s "${HHS_DIR}/.env" ]] || touch "${HHS_DIR}/.env"
+    [[ -s "${HHS_DIR}/.functions" ]] || touch "${HHS_DIR}/.functions"
+    [[ -s "${HHS_DIR}/.profile" ]] || touch "${HHS_DIR}/.profile"
+    [[ -s "${HHS_DIR}/.prompt" ]] || touch "${HHS_DIR}/.prompt"
+    [[ -s "${HHS_DIR}/.cmd_file" ]] || touch "${HHS_DIR}/.cmd_file"
+    [[ -s "${HHS_DIR}/.path" ]] || touch "${HHS_DIR}/.path"
+    [[ -s "${HHS_DIR}/.saved_dirs" ]] || touch "${HHS_DIR}/.saved_dirs"
 
     # Create aliasdef, inputrc, glow.yml, and homesetup.toml
     copy_file "${INSTALL_DIR}/dotfiles/aliasdef" "${HHS_DIR}/.aliasdef"
@@ -685,21 +697,12 @@ usage: $APP_NAME [OPTIONS] <args>
     # HomeSetup key bindings
     copy_file "${INSTALL_DIR}/dotfiles/hhs-bindings" "${HHS_DIR}/.hhs-bindings"
 
-    # NeoVim integration configs
-    echo -en "\nCopying NeoVim integration configs and plugins... "
-    if create_directory "${HHS_DIR}/nvim" &&
-      \cp -Rf "${INSTALL_DIR}/assets/nvim/" "${HHS_DIR}/nvim"; then
-      echo -e "${GREEN}OK${NC}"
-    else
-      echo -e "${YELLOW}SKIPPED${NC}"
-    fi
-
     # Find all dotfiles used by HomeSetup according to the current shell type
     while read -r dotfile; do
       ALL_DOTFILES+=("${dotfile}")
     done < <(find "${DOTFILES_SRC}" -maxdepth 1 -type f -name "*.${SHELL_TYPE}" -exec basename {} \;)
 
-    pushd "${DOTFILES_SRC}" >>"${INSTALL_LOG}" 2>&1 || quit 1 "Unable to enter dotfiles directory \"${DOTFILES_SRC}\" !"
+    pushd "${DOTFILES_SRC}" >>"${INSTALL_LOG}" 2>&1 || quit 1 "Unable to enter dotfiles directory: \"${DOTFILES_SRC}\" !"
 
     echo ">>> Linked dotfiles:" >>"${INSTALL_LOG}"
     # If `all' option is used, copy all files
@@ -783,7 +786,7 @@ usage: $APP_NAME [OPTIONS] <args>
     fi
 
     # Copy hunspell dictionaries
-    echo -en "\n${WHITE}Copying Hunspell dictionaries into ${BLUE}${HUNSPELL_DIR}... "
+    echo -en "\n${WHITE}Copying Hunspell dictionaries into ${BLUE}\"${HUNSPELL_DIR}\"... "
     echo ">>> Copied Hunspell dictionaries" >>"${INSTALL_LOG}"
     [[ -d "${HUNSPELL_DIR}" ]] || quit 2 "Unable to locate hunspell (${HUNSPELL_DIR}) directory !"
     if find "${INSTALL_DIR}"/assets/hunspell-dicts -maxdepth 1 -type f \( -iname "*.aff" -o -iname "*.dic" \) \
@@ -793,6 +796,14 @@ usage: $APP_NAME [OPTIONS] <args>
       echo -e "${GREEN}OK${NC}"
     else
       quit 2 "Unable to extract Hunspell files into dictionaries(${HUNSPELL_DIR}) directory !"
+    fi
+
+    # Copy NeoVim integration configs
+    echo -en "\n${WHITE}Copying NeoVim integration configs and plugins into ${BLUE}\"${NEOVIM_DIR}\"... "
+    if cp -Rf "${INSTALL_DIR}"/assets/nvim "${NEOVIM_DIR}"; then
+      echo -e "${GREEN}OK${NC}"
+    else
+      quit 2 "Unable to copy NeoVim configuration files into (${NEOVIM_DIR}) directory !"
     fi
 
     # -----------------------------------------------------------------------------------
@@ -808,7 +819,7 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Copy MOTDs file into place
     [[ -d "${HHS_MOTD_DIR}" ]] || create_directory "${HHS_MOTD_DIR}"
-    \cp "${INSTALL_DIR}"/.MOTD "${HHS_MOTD_DIR}"/000-hhs-motd >>"${INSTALL_LOG}" 2>&1
+    cp "${INSTALL_DIR}"/.MOTD "${HHS_MOTD_DIR}"/000-hhs-motd >>"${INSTALL_LOG}" 2>&1
 
     # Cleanup old files (older than 30 days)
     echo -en "\n${WHITE}Cleaning up old cache and log files... "
@@ -834,7 +845,6 @@ usage: $APP_NAME [OPTIONS] <args>
 
     echo -e "${GREEN}OK${NC}"
     create_venv
-    install_hspylib
   }
 
   # Create HomeSetup virtual environment
@@ -859,16 +869,18 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Activate the virtual environment
     echo -en "\n${python3_str} ${WHITE}Activating virtual environment... ${NC}"
-    if source "${HHS_VENV_PATH}"/bin/activate; then
+    if source "${HHS_VENV_PATH}"/bin/activate && [[ -n "${VIRTUAL_ENV}" ]]; then
       echo -e "${GREEN}OK${NC}"
-      # Python executable from venv
-      VENV_PYTHON3="${PYTHON3:-$(command -v python3)}"
-      # Pip executable from venv
-      VENV_PIP3="${PIP3:-${PYTHON3} -m pip}"
+      echo -e "\n${python3_str} ${WHITE}Virtual environment activated: ${CYAN}${VENV_PYTHON3}${NC}"
     else
       echo -e "${RED}FAILED${NC}"
       quit 2 "Unable to activate virtual environment!"
     fi
+
+    # Python executable from venv
+    VENV_PYTHON3="${VIRTUAL_ENV}/bin/$(basename "${PYTHON3}")"
+    # Pip executable from venv
+    VENV_PIP3="${VENV_PYTHON3} -m pip"
   }
 
   # Install HomeSetup python libraries
@@ -877,7 +889,7 @@ usage: $APP_NAME [OPTIONS] <args>
     python3_str="${BLUE}[$(basename "${VENV_PYTHON3}")]"
     python_version="$(${VENV_PYTHON3} -V)"
     pip_version="$(${VENV_PIP3} -V | \cut -d ' ' -f1,2)"
-    echo -e "\n${python3_str} ${WHITE}Using ${YELLOW}v${python_version}${WHITE} and ${YELLOW}v${pip_version} from ${BLUE}\"${VENV_PYTHON3}\" ${NC}"
+    echo -e "\n${python3_str} ${WHITE}Using ${YELLOW}${python_version}${WHITE} and ${YELLOW}P${pip_version:1} ${WHITE}from ${BLUE}\"${VIRTUAL_ENV}\" ${NC}"
     echo -e "\n${python3_str} ${WHITE}Installing HSPyLib packages... \n"
     pkgs=$(mktemp)
     printf "%s\n" "${PYTHON_MODULES[@]}" >"${pkgs}"
@@ -886,7 +898,7 @@ usage: $APP_NAME [OPTIONS] <args>
       ${VENV_PIP3} install --upgrade --break-system-packages --ignore-installed -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1 ||
         ${VENV_PIP3} install --upgrade --ignore-installed -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1
     then
-      \rm -f "$(mktemp)"
+      rm -f "$(mktemp)"
       echo "Installed HSPyLib python modules:" >>"${INSTALL_LOG}"
       ${VENV_PIP3} freeze | grep hspylib >>"${INSTALL_LOG}"
       echo -e "\n${python3_str} Installed ${BLUE}HSPyLib${NC} python modules:"
@@ -919,7 +931,6 @@ usage: $APP_NAME [OPTIONS] <args>
         echo -en "\n${WHITE}Checking AI capabilities... ${CYAN}"
         # TODO: Uncomment when device checks are implemented
         # ${VENV_PYTHON3} -m askai -r rag  "What is HomeSetup?" 2>&1
-        ${VENV_PYTHON3} -m askai -v
         echo -e "${GREEN}OK${NC}"
       else
         quit 2 "Unable to copy HomeSetup docs into AskAI RAG directory !"
@@ -937,7 +948,7 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # .profile Needs to be renamed, so, we guarantee that no dead lock occurs
     if [[ -f "${HOME}/.profile" ]]; then
-      \mv -f "${HOME}/.profile" "${HHS_BACKUP_DIR}/profile.orig"
+      mv -f "${HOME}/.profile" "${HHS_BACKUP_DIR}/profile.orig"
       echo ''
       echo -e "\n${YELLOW}Your old ${HOME}/.profile had to be renamed to ${HHS_BACKUP_DIR}/profile.orig "
       echo -e "This is to avoid invoking dotfiles multiple times. If you are sure that your .profile don't source either"
@@ -947,42 +958,42 @@ usage: $APP_NAME [OPTIONS] <args>
     fi
 
     # Moving old hhs files into the proper directory
-    [[ -f "${HOME}/.cmd_file" ]] && \mv -f "${HOME}/.cmd_file" "${HHS_DIR}/.cmd_file"
-    [[ -f "${HOME}/.saved_dir" ]] && \mv -f "${HOME}/.saved_dir" "${HHS_DIR}/.saved_dirs"
-    [[ -f "${HOME}/.punches" ]] && \mv -f "${HOME}/.punches" "${HHS_DIR}/.punches"
-    [[ -f "${HOME}/.firebase" ]] && \mv -f "${HOME}/.firebase" "${HHS_DIR}/.firebase"
+    [[ -f "${HOME}/.cmd_file" ]] && mv -f "${HOME}/.cmd_file" "${HHS_DIR}/.cmd_file"
+    [[ -f "${HOME}/.saved_dir" ]] && mv -f "${HOME}/.saved_dir" "${HHS_DIR}/.saved_dirs"
+    [[ -f "${HOME}/.punches" ]] && mv -f "${HOME}/.punches" "${HHS_DIR}/.punches"
+    [[ -f "${HOME}/.firebase" ]] && mv -f "${HOME}/.firebase" "${HHS_DIR}/.firebase"
 
     # From hspylib integration on
-    [[ -f "${HOME}/.aliases" ]] && \mv -f "${HOME}/.aliases" "${HHS_DIR}/.aliases"
-    [[ -f "${HOME}/.aliasdef" ]] && \mv -f "${HOME}/.aliasdef" "${HHS_DIR}/.aliasdef"
-    [[ -f "${HOME}/.colors" ]] && \mv -f "${HOME}/.colors" "${HHS_DIR}/.colors"
-    [[ -f "${HOME}/.env" ]] && \mv -f "${HOME}/.env" "${HHS_DIR}/.env"
-    [[ -f "${HOME}/.functions" ]] && \mv -f "${HOME}/.functions" "${HHS_DIR}/.functions"
-    [[ -f "${HOME}/.profile" ]] && \mv -f "${HOME}/.profile" "${HHS_DIR}/.profile"
-    [[ -f "${HOME}/.prompt" ]] && \mv -f "${HOME}/.prompt" "${HHS_DIR}/.prompt"
+    [[ -f "${HOME}/.aliases" ]] && mv -f "${HOME}/.aliases" "${HHS_DIR}/.aliases"
+    [[ -f "${HOME}/.aliasdef" ]] && mv -f "${HOME}/.aliasdef" "${HHS_DIR}/.aliasdef"
+    [[ -f "${HOME}/.colors" ]] && mv -f "${HOME}/.colors" "${HHS_DIR}/.colors"
+    [[ -f "${HOME}/.env" ]] && mv -f "${HOME}/.env" "${HHS_DIR}/.env"
+    [[ -f "${HOME}/.functions" ]] && mv -f "${HOME}/.functions" "${HHS_DIR}/.functions"
+    [[ -f "${HOME}/.profile" ]] && mv -f "${HOME}/.profile" "${HHS_DIR}/.profile"
+    [[ -f "${HOME}/.prompt" ]] && mv -f "${HOME}/.prompt" "${HHS_DIR}/.prompt"
 
     # Removing the old ${HOME}/bin folder
     if [[ -L "${HOME}/bin" ]]; then
-      \rm -rfv "${HOME:?}/bin"
+      rm -rfv "${HOME:?}/bin"
       echo -e "\n${YELLOW}Your old ${HOME}/bin link had to be removed. ${NC}"
     fi
 
     # .bash_aliasdef was renamed to .aliasdef and it is only copied if it does not exist. #9c592e0
     if [[ -L "${HOME}/.bash_aliasdef" ]]; then
-      \rm -f "${HOME:?}/.bash_aliasdef"
+      rm -f "${HOME:?}/.bash_aliasdef"
       echo -e "\n${YELLOW}Your old ${HOME}/.bash_aliasdef link had to be removed. ${NC}"
     fi
 
     # .inputrc Needs to be updated, so, we need to replace it
     if [[ -f "${HOME}/.inputrc" ]]; then
-      \mv -f "${HOME}/.inputrc" "${HHS_BACKUP_DIR}/inputrc-${TIMESTAMP}.bak"
+      mv -f "${HOME}/.inputrc" "${HHS_BACKUP_DIR}/inputrc-${TIMESTAMP}.bak"
       copy_file "${INSTALL_DIR}/dotfiles/inputrc" "${HOME}/.inputrc"
       echo -e "\n${YELLOW}Your old ${HOME}/.inputrc had to be replaced by a newer version. Your old file it located at ${HHS_BACKUP_DIR}/inputrc-${TIMESTAMP}.bak ${NC}"
     fi
 
     # .aliasdef Needs to be updated, so, we need to replace it
     if [[ -f "${HOME}/.aliasdef" ]]; then
-      \mv -f "${HOME}/.aliasdef" "${HHS_BACKUP_DIR}/aliasdef-${TIMESTAMP}.bak"
+      mv -f "${HOME}/.aliasdef" "${HHS_BACKUP_DIR}/aliasdef-${TIMESTAMP}.bak"
       copy_file "${INSTALL_DIR}/dotfiles/aliasdef" "${HHS_DIR}/.aliasdef"
       echo -e "\n${YELLOW}Your old .aliasdef had to be replaced by a newer version. Your old file it located at ${HHS_BACKUP_DIR}/aliasdef-${TIMESTAMP}.bak ${NC}"
     fi
@@ -994,7 +1005,7 @@ usage: $APP_NAME [OPTIONS] <args>
       user_num=$(echo "${user_version}" | awk -F. '{ printf "%d%02d%03d", $1, $2, $3 }')
       hhs_num=$(echo "${hhs_version}" | awk -F. '{ printf "%d%02d%03d", $1, $2, $3 }')
       if [[ "${hhs_num}" -gt "${user_num}" ]]; then
-        \mv -f "$HHS_DIR/.homesetup.toml" "${HHS_BACKUP_DIR}/homesetup-${TIMESTAMP}.toml.bak"
+        mv -f "$HHS_DIR/.homesetup.toml" "${HHS_BACKUP_DIR}/homesetup-${TIMESTAMP}.toml.bak"
         copy_file "${INSTALL_DIR}/dotfiles/homesetup.toml" "${HHS_DIR}/.homesetup.toml"
         echo -e "\n${YELLOW}Your old .homesetup.toml had to be replaced by a newer version. Your old file it located at ${HHS_BACKUP_DIR}/homesetup-${TIMESTAMP}.toml.bak ${NC}"
       fi
@@ -1002,22 +1013,22 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Moving .path file to .hhs
     if [[ -f "${HOME}/.path" ]]; then
-      \mv -f "${HOME}/.path" "${HHS_DIR}/.path"
+      mv -f "${HOME}/.path" "${HHS_DIR}/.path"
       echo -e "\n${YELLOW}Moved file ${HOME}/.path into ${HHS_DIR}/.path"
     fi
 
     # .bash_completions was renamed to .bash_completion. #e6ce231
-    [[ -L "${HOME}/.bash_completions" ]] && \rm -f "${HOME}/.bash_completions"
+    [[ -L "${HOME}/.bash_completions" ]] && rm -f "${HOME}/.bash_completions"
     # .bash_completion was deleted.
-    [[ -L "${HOME}/.bash_completion" ]] && \rm -f "${HOME}/.bash_completion"
+    [[ -L "${HOME}/.bash_completion" ]] && rm -f "${HOME}/.bash_completion"
 
     # Removing the old python lib directories and links
     [[ -d "${INSTALL_DIR}/bin/apps/bash/hhs-app/lib" ]] &&
-      \rm -rfv "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/lib"
+      rm -rfv "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/lib"
     [[ -L "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/plugins/firebase/lib" ]] &&
-      \rm -rfv "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/plugins/firebase/lib"
+      rm -rfv "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/plugins/firebase/lib"
     [[ -L "${INSTALL_DIR}/bin/apps/bash/hhs-app/plugins/vault/lib" ]] &&
-      \rm -rfv "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/plugins/vault/lib"
+      rm -rfv "${INSTALL_DIR:?}/bin/apps/bash/hhs-app/plugins/vault/lib"
 
     # Moving orig and bak files to backup folder
     find "${HHS_DIR}" -maxdepth 1 \
@@ -1026,19 +1037,19 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # .tailor Needs to be updated, so, we need to replace it
     if [[ -f "${HHS_DIR}/.tailor" ]]; then
-      \mv -f "${HHS_DIR}/.tailor" "${HHS_BACKUP_DIR}/tailor-${TIMESTAMP}.bak"
+      mv -f "${HHS_DIR}/.tailor" "${HHS_BACKUP_DIR}/tailor-${TIMESTAMP}.bak"
       echo -e "\n${YELLOW}Your old .tailor had to be replaced by a newer version. Your old file it located at ${HHS_BACKUP_DIR}/tailor-${TIMESTAMP}.bak ${NC}"
     fi
 
     # Old $HHS_DIR/starship.toml changed to $HHS_DIR/.starship.toml
     if [[ -f "${HHS_DIR}/starship.toml" ]]; then
-      \mv -f "${HHS_DIR}/starship.toml" "${HHS_BACKUP_DIR}/starship.toml-${TIMESTAMP}.bak"
+      mv -f "${HHS_DIR}/starship.toml" "${HHS_BACKUP_DIR}/starship.toml-${TIMESTAMP}.bak"
       echo -e "\n${YELLOW}Your old starship.toml had to be replaced by a newer version. Your old file it located at ${HHS_BACKUP_DIR}/starship.toml-${TIMESTAMP}.bak ${NC}"
     fi
 
     # Old hhs-init file changed to homesetup.toml
     if [[ -f "${HHS_DIR}/.hhs-init" ]]; then
-      \rm -f "${HHS_DIR:?}/.hhs-init"
+      rm -f "${HHS_DIR:?}/.hhs-init"
       echo -e "\n${YELLOW}Your old .hhs-init renamed to .homesetup.toml and the old file was deleted.${NC}"
     fi
 
@@ -1057,12 +1068,10 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # From HomeSetup 1.7+, we changed the HomeSetup config dir from $HOME/.hhs to $HOME/.config/hhs to match
     # common the standard
-    if [[ -d "${HOME}/.config" ]]; then
-      if [[ -d "${HOME}/.hhs" ]] && \rsync --archive "${HOME}/.hhs" "${HOME}/.config"; then
-        echo -e "\n${YELLOW}Your old ~/.hhs folder was moved to ~/.config/hhs !${NC}"
-        \rm -rf "${HOME:?}/.hhs" >>"${INSTALL_LOG}" 2>&1 || echo -e \
-          "${RED}Unable to delete the old .hhs directory. It was moved to ~/.config. Feel free to wipe it out!${NC}"
-      fi
+    if [[ -d "${HOME}/.hhs" ]] && \rsync --archive "${HOME}/.hhs" "${HOME}/.config"; then
+      echo -e "\n${YELLOW}Your old ~/.hhs folder was moved to ~/.config/hhs !${NC}"
+      rm -rf "${HOME:?}/.hhs" >>"${INSTALL_LOG}" 2>&1 || echo -e \
+        "${RED}Unable to delete the old .hhs directory. It was moved to ~/.config. Feel free to wipe it out!${NC}"
     fi
   }
 
@@ -1090,7 +1099,7 @@ usage: $APP_NAME [OPTIONS] <args>
       if
         curl -sSL "https://github.com/umlx5h/gtrash/releases/latest/download/gtrash_$(uname -s)_${arch}.tar.gz" | tar xz &&
           chmod a+x ./gtrash &&
-          \mv ./gtrash "${HHS_DIR}/bin/gtrash"
+          mv ./gtrash "${HHS_DIR}/bin/gtrash"
       then
         echo -e "${GREEN}OK${NC}"
       else
@@ -1105,7 +1114,7 @@ usage: $APP_NAME [OPTIONS] <args>
 
     ble_repo="https://github.com/akinomyoga/ble.sh.git"
     echo -en "\n${WHITE}Installing ${BLUE}Blesh${NC} plug-in... "
-    [[ -d "${HHS_BLESH_DIR}" ]] && \rm -rfv "${HHS_BLESH_DIR:?}" >>"${INSTALL_LOG}" 2>&1
+    [[ -d "${HHS_BLESH_DIR}" ]] && rm -rfv "${HHS_BLESH_DIR:?}" >>"${INSTALL_LOG}" 2>&1
     if
       git clone --recursive --depth 1 --shallow-submodules "${ble_repo}" "${HHS_BLESH_DIR}" >>"${INSTALL_LOG}" 2>&1 &&
         make -C "${HHS_BLESH_DIR}" >>"${INSTALL_LOG}" 2>&1
@@ -1123,41 +1132,46 @@ usage: $APP_NAME [OPTIONS] <args>
     # Create the prefix file to be used
     [[ -n "${PREFIX}" ]] && echo "${PREFIX}" >"${PREFIX_FILE}"
     # Delete the useless prefix file
-    [[ -z "${PREFIX}" && -f "${PREFIX_FILE}" ]] && \rm -f "${PREFIX_FILE}"
+    [[ -z "${PREFIX}" && -f "${PREFIX_FILE}" ]] && rm -f "${PREFIX_FILE}"
   }
 
   # Reload the terminal and apply installed files.
   activate_dotfiles() {
 
+    JOB_NAME='HomeSetup restart!' PYTHON3="${VENV_PYTHON3}" source "${HOME}/.bashrc"
+    PYTHON3="${PYTHON3:-$(command -v python3.11)}"
+    PIP3="${PIP3:-${PYTHON3} -m pip}"
+
     # Set the auto-update timestamp.
     if [[ "${OS_TYPE}" == "macOS" ]]; then
-      \date -v+7d '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
+      date -v+7d '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
     elif [[ "${OS_TYPE}" == "Alpine" ]]; then
-      \date -d "@$(($(\date +%s) - 3 * 24 * 60 * 60))" '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
+      date -d "@$(($(date +%s) - 3 * 24 * 60 * 60))" '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
     elif [[ "${OS_TYPE}" =~ Debian|RedHat ]]; then
-      \date -d '+7 days' '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
+      date -d '+7 days' '+%s%S' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
     else
-      \date '+%s' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
+      date '+%s' 1>"${HHS_DIR}/.last_update" 2>>"${INSTALL_LOG}"
     fi
 
     echo ''
     echo -e "${GREEN}${POINTER_ICN} Done installing HomeSetup v$(cat "${INSTALL_DIR}/.VERSION") !"
     echo -e "${CYAN}"
-    echo '888       888          888                                          '
-    echo '888   o   888          888                                          '
-    echo '888  d8b  888          888                                          '
-    echo '888 d888b 888  .d88b.  888  .d8888b  .d88b.  88888b.d88b.   .d88b.  '
-    echo '888d88888b888 d8P  Y8b 888 d88P"    d88""88b 888 "888 "88b d8P  Y8b '
-    echo '88888P Y88888 88888888 888 888      888  888 888  888  888 88888888 '
-    echo '8888P   Y8888 Y8b.     888 Y88b.    Y88..88P 888  888  888 Y8b.     '
-    echo '888P     Y888  "Y8888  888  "Y8888P  "Y88P"  888  888  888  "Y8888  '
+    echo "____    __    ____  _______  __        ______   ______   .___  ___.  _______ "
+    echo "\   \  /  \  /   / |   ____||  |      /      | /  __  \  |   \/   | |   ____|"
+    echo " \   \/    \/   /  |  |__   |  |     |  ,----'|  |  |  | |  \  /  | |  |__   "
+    echo "  \            /   |   __|  |  |     |  |     |  |  |  | |  |\/|  | |   __|  "
+    echo "   \    /\    /    |  |____ |  \`----.|  \`----.|  \`--'  | |  |  |  | |  |____ "
+    echo "    \__/  \__/     |_______||_______| \______| \______/  |__|  |__| |_______|"
     echo ''
-    echo -e "${HAND_PEACE_ICN} The ultimate Terminal experience !"
+    echo -e "${MAGENTA}${HAND_PEACE_ICN} The ultimate Terminal experience !"
+    ${PIP3} show hspylib-askai >>"${INSTALL_LOG}" 2>&1 \
+      && echo -en "${AI_ICN} Empowered with ${GREEN}$(${PYTHON3} -m askai -v)"
     echo ''
-    echo -e "${YELLOW}${STAR_ICN} To activate your dotfiles type: ${WHITE}source ${HOME}/.bashrc"
-    echo -e "${YELLOW}${STAR_ICN} To check for updates type: ${WHITE}hhu update"
-    echo -e "${YELLOW}${STAR_ICN} For details about the installation type: ${WHITE}hhs logs install"
+    echo -e "${YELLOW}${STAR_ICN} To reload your dotfiles, type: ${WHITE}source ${HOME}/.bashrc"
+    echo -e "${YELLOW}${STAR_ICN} To configure your HomeSetup initialization: ${WHITE}hhs setup"
+    echo -e "${YELLOW}${STAR_ICN} To check for updates, type: ${WHITE}hhu update"
     echo -e "${YELLOW}${STAR_ICN} To learn more about your new Terminal, type: ${WHITE}cat ${README}"
+    echo -e "${YELLOW}${STAR_ICN} For details about the installation, type: ${WHITE}hhs logs install"
     echo -e "${YELLOW}${STAR_ICN} Report issues at: ${WHITE}${ISSUES_URL}"
     echo -e "${NC}"
 
@@ -1165,7 +1179,7 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Move the installation log to logs folder
     [[ -f "${INSTALL_LOG}" && -d "${HHS_LOG_DIR}" ]] &&
-      \cp -f "${INSTALL_LOG}" "${HHS_LOG_DIR}/install.log"
+      cp -f "${INSTALL_LOG}" "${HHS_LOG_DIR}/install.log"
   }
 
   # shellcheck disable=SC2317

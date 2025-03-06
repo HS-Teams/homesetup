@@ -34,7 +34,6 @@ on:
           - ubuntu
           - fedora
           - centos
-
   workflow_call:
     inputs:
       image_tag:
