@@ -12,3 +12,4 @@ push = false
 ".VERSION" = ["{version}"]
 "README.md" = ["release/v{version}/gray"]
 "install.bash" = ["VERSION=\"{version}\""]
+"Formula/homesetup.rb" = ["tag: \"v{version}\"", "HomeSetup v{version}"]
