@@ -12,8 +12,8 @@ on:
   workflow_dispatch:
     inputs:
       tag-name:
-        description: 'Release Tag name ?'
-        required: true
+        description: 'Release Tag name (default to latest)'
+        required: false
         type: string
 
 permissions:
