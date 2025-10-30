@@ -75,7 +75,7 @@ COMMONS
   for i in "${!invoked[@]}"; do
     case "${invoked[i]}" in
       -H)
-        ((header_flag_count++))
+        ((header_flag_count+=1))
         ;;
       'Header-One: foo')
         header_one_index=i
