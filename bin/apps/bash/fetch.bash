@@ -28,7 +28,7 @@ USAGE="usage: ${APP_NAME} <method> [options] <url>
         url                         : The url to make the request.
 
     Options:
-        --headers <json_headers>    : The http request headers.
+        --headers <header_list>     : Comma-separated http request headers.
         --body    <json_body>       : The http request body (payload).
         --format                    : Format the json RESPONSE.
         --silent                    : Omits all informational messages.
@@ -36,7 +36,7 @@ USAGE="usage: ${APP_NAME} <method> [options] <url>
 
 # Functions to be unset after quit.
 UNSETS=(
-  format_json fetch_with_curl parse_args do_fetch main
+  format_json trim_whitespace fetch_with_curl parse_args do_fetch main
 )
 
 # Common application functions.
@@ -48,8 +48,11 @@ REQ_TIMEOUT=3
 # Execution return code.
 RET_VAL=0
 
-# Provided request headers.
+# Provided request headers (for display).
 HEADERS=
+
+# Expanded curl header arguments.
+HEADER_ARGS=()
 
 # Provided request body.
 BODY=
@@ -63,6 +66,13 @@ RESPONSE=
 # Http status code.
 STATUS=0
 
+# @purpose: Trim leading and trailing whitespace.
+function trim_whitespace() {
+  local trimmed
+  trimmed="$(printf '%s' "${1}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  printf '%s' "${trimmed}"
+}
+
 # @purpose: Do the request according to the method
 function fetch_with_curl() {
 
@@ -72,15 +82,19 @@ function fetch_with_curl() {
     '-s' '--fail' '-L' '--output' "${aux}" '-m' "${REQ_TIMEOUT}" '--write-out' "%{http_code}"
   )
 
-  if [[ -z "${HEADERS}" && -z "${BODY}" ]]; then
-    STATUS=$(curl "${curl_opts[@]}" -X "${METHOD}" "${URL}")
-  elif [[ -z "${HEADERS}" && -n "${BODY}" ]]; then
-    STATUS=$(curl "${curl_opts[@]}" -X "${METHOD}" -d "${BODY}" "${URL}")
-  elif [[ -n "${HEADERS}" && -n "${BODY}" ]]; then
-    STATUS=$(curl "${curl_opts[@]}" -X "${METHOD}" -d "${BODY}" "${URL}")
-  elif [[ -n "${HEADERS}" && -z "${BODY}" ]]; then
-    STATUS=$(curl "${curl_opts[@]}" -X "${METHOD}" "${URL}")
+  local -a curl_cmd=("curl" "${curl_opts[@]}" '-X' "${METHOD}")
+
+  if [[ -n "${BODY}" ]]; then
+    curl_cmd+=('-d' "${BODY}")
   fi
+
+  if [[ ${#HEADER_ARGS[@]} -gt 0 ]]; then
+    curl_cmd+=("${HEADER_ARGS[@]}")
+  fi
+
+  curl_cmd+=("${URL}")
+
+  STATUS=$("${curl_cmd[@]}")
 
   if [[ -s "${aux}" ]]; then
     RESPONSE=$(grep . --color=none "${aux}")
@@ -119,7 +133,18 @@ parse_args() {
     case "$1" in
       --headers)
         shift
-        HEADERS=" -H ${1//,/ -H }"
+        HEADER_ARGS=()
+        HEADERS=""
+        if [[ -n "${1}" ]]; then
+          IFS=',' read -ra header_values <<< "${1}"
+          for next in "${header_values[@]}"; do
+            header_trimmed="$(trim_whitespace "${next}")"
+            if [[ -n "${header_trimmed}" ]]; then
+              HEADER_ARGS+=('-H' "${header_trimmed}")
+              HEADERS+=" -H ${header_trimmed}"
+            fi
+          done
+        fi
         ;;
       --body)
         shift
