@@ -28,19 +28,37 @@ USAGE="usage: ${APP_NAME} <method> [options] <url>
         url                         : The url to make the request.
 
     Options:
-        --headers <json_headers>    : The http request headers.
+        --headers <header_list>     : Comma-separated http request headers.
         --body    <json_body>       : The http request body (payload).
-        --format                    : Format the json RESPONSE.
+        --format                    : Pretty-print the JSON response when possible.
         --silent                    : Omits all informational messages.
 "
 
 # Functions to be unset after quit.
 UNSETS=(
-  format_json fetch_with_curl parse_args do_fetch main
+  format_json trim_whitespace fetch_with_curl parse_args do_fetch main
 )
 
 # Common application functions.
 [[ -s "${HHS_DIR}/bin/app-commons.bash" ]] && source "${HHS_DIR}/bin/app-commons.bash"
+
+if ! declare -f format_json >/dev/null; then
+  # @purpose: Pretty-print JSON payloads when formatting is requested.
+  function format_json() {
+    local input
+    input="$(cat)"
+
+    if command -v jq >/dev/null 2>&1; then
+      printf '%s' "${input}" | jq . 2>/dev/null || printf '%s\n' "${input}"
+    elif command -v python3 >/dev/null 2>&1; then
+      printf '%s' "${input}" | python3 -m json.tool 2>/dev/null || printf '%s\n' "${input}"
+    elif command -v python >/dev/null 2>&1; then
+      printf '%s' "${input}" | python -m json.tool 2>/dev/null || printf '%s\n' "${input}"
+    else
+      printf '%s\n' "${input}"
+    fi
+  }
+fi
 
 # Request timeout in seconds.
 REQ_TIMEOUT=3
@@ -48,8 +66,11 @@ REQ_TIMEOUT=3
 # Execution return code.
 RET_VAL=0
 
-# Provided request headers.
+# Provided request headers (for display).
 HEADERS=
+
+# Expanded curl header arguments.
+HEADER_ARGS=()
 
 # Provided request body.
 BODY=
@@ -57,11 +78,21 @@ BODY=
 # Provide a silent request/RESPONSE.
 SILENT=
 
+# Whether to format the response body as JSON.
+FORMAT=
+
 # Response body.
 RESPONSE=
 
 # Http status code.
 STATUS=0
+
+# @purpose: Trim leading and trailing whitespace.
+function trim_whitespace() {
+  local trimmed
+  trimmed="$(printf '%s' "${1}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+  printf '%s' "${trimmed}"
+}
 
 # @purpose: Do the request according to the method
 function fetch_with_curl() {
@@ -72,15 +103,19 @@ function fetch_with_curl() {
     '-s' '--fail' '-L' '--output' "${aux}" '-m' "${REQ_TIMEOUT}" '--write-out' "%{http_code}"
   )
 
-  if [[ -z "${HEADERS}" && -z "${BODY}" ]]; then
-    STATUS=$(curl "${curl_opts[@]}" -X "${METHOD}" "${URL}")
-  elif [[ -z "${HEADERS}" && -n "${BODY}" ]]; then
-    STATUS=$(curl "${curl_opts[@]}" -X "${METHOD}" -d "${BODY}" "${URL}")
-  elif [[ -n "${HEADERS}" && -n "${BODY}" ]]; then
-    STATUS=$(curl "${curl_opts[@]}" -X "${METHOD}" -d "${BODY}" "${URL}")
-  elif [[ -n "${HEADERS}" && -z "${BODY}" ]]; then
-    STATUS=$(curl "${curl_opts[@]}" -X "${METHOD}" "${URL}")
+  local -a curl_cmd=("curl" "${curl_opts[@]}" '-X' "${METHOD}")
+
+  if [[ -n "${BODY}" ]]; then
+    curl_cmd+=('-d' "${BODY}")
   fi
+
+  if [[ ${#HEADER_ARGS[@]} -gt 0 ]]; then
+    curl_cmd+=("${HEADER_ARGS[@]}")
+  fi
+
+  curl_cmd+=("${URL}")
+
+  STATUS=$("${curl_cmd[@]}")
 
   if [[ -s "${aux}" ]]; then
     RESPONSE=$(grep . --color=none "${aux}")
@@ -119,7 +154,18 @@ parse_args() {
     case "$1" in
       --headers)
         shift
-        HEADERS=" -H ${1//,/ -H }"
+        HEADER_ARGS=()
+        HEADERS=""
+        if [[ -n "${1}" ]]; then
+          IFS=',' read -ra header_values <<< "${1}"
+          for next in "${header_values[@]}"; do
+            header_trimmed="$(trim_whitespace "${next}")"
+            if [[ -n "${header_trimmed}" ]]; then
+              HEADER_ARGS+=('-H' "${header_trimmed}")
+              HEADERS+=" -H ${header_trimmed}"
+            fi
+          done
+        fi
         ;;
       --body)
         shift
@@ -163,7 +209,11 @@ main() {
   [[ -z "${SILENT}" ]] && echo -e "Fetching: ${METHOD} ${HEADERS} ${URL} ..."
 
   if do_fetch; then
-    echo "${RESPONSE}"
+    if [[ -n "${FORMAT}" ]]; then
+      printf '%s' "${RESPONSE}" | format_json
+    else
+      echo "${RESPONSE}"
+    fi
     quit 0
   else
     if [[ -z "${SILENT}" ]]; then

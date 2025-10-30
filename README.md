@@ -21,14 +21,14 @@ Wouldn't it be fantastic if we could effortlessly upload and download our config
 
 With **HomeSetup**, you can enhance your terminal experience, boost productivity, and customize your shell to suit your preferences all without the complexities often associated with other frameworks. HomeSetup was specifically developed to enhance the command line experience for users. Its primary objective is to provide useful and user-friendly features that expedite daily tasks, such as time tracking, string and file searching, directory navigation, and seamless integration with popular tools like Git, Gradle, Docker, and more.
 
-> **THIS IT NOT JUST A DOTFILES FRAMEWORK**
+> **THIS IS NOT JUST A DOTFILES FRAMEWORK**
 
 <img src="https://iili.io/dbXcC6g.gif">
 
 - See the [Showcase](docs/SHOWCASE.md) page to see some HomeSetup demos.
 - For the full documentation, access the [HomeSetup usage manual](docs/USAGE.md).
 
-**🔥 HOT** AI is here ! **HomesSetup** has integrated AI with RAG capabilities.
+**🔥 HOT** AI is here ! **HomeSetup** has integrated AI with RAG capabilities.
 
 <img src="https://iili.io/dy2Ga6u.gif">
 
