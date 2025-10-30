@@ -94,6 +94,9 @@ teardown() {
 # TC - 8
 @test "when-invoking-with-with-correct-options-then-toml-set-should-set-it" {
   run __hhs_toml_set "${test_file}" "test.key.1=new updated value" "tests"
+  assert_success
+  assert_output ""
+
   run __hhs_toml_get "${test_file}" "test.key.1" "tests"
   assert_success
   assert_output "test.key.1=new updated value"
