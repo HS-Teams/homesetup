@@ -347,11 +347,12 @@ if [[ ${HHS_NO_AUTO_UPDATE} -ne 1 ]]; then
   if [[ ! -s "${HHS_DIR}/.last_update" || $(date "+%s%S") -ge $(grep . "${HHS_DIR}/.last_update") ]]; then
     echo
     echo -e "${BLUE}Checking for updates ...${NC}"
-    if __hhs_is_reachable 'github.com'; then
+    if __hhs_is_reachable 'https://github.com/'; then
       __hhs updater execute check
     else
       __hhs_errcho 'hhsrc' "HomeSetup GitHub website is unreachable !"
     fi
+    sleep 1
   else
     echo -en "\033[1J\033[H"
   fi
