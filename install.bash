@@ -17,7 +17,7 @@
   APP_NAME="${0##*/}"
 
   # HomeSetup Installation version
-  VERSION="1.8.25"
+  VERSION="1.8.28"
 
   # Help message to be displayed by the script
   USAGE="
@@ -143,6 +143,7 @@ usage: $APP_NAME [OPTIONS] <args>
     'hspylib-setman'
     'hspylib-vault'
     'hspylib-firebase'
+    'bumpver'
   )
 
   # User's operating system
@@ -889,7 +890,6 @@ usage: $APP_NAME [OPTIONS] <args>
 
   # Install HomeSetup python libraries
   install_hspylib() {
-
     python3_str="${BLUE}[$(basename "${VENV_PYTHON3}")]"
     python_version="$(${VENV_PYTHON3} -V)"
     pip_version="$(${VENV_PIP3} -V | \cut -d ' ' -f1,2)"

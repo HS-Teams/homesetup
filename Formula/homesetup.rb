@@ -2,7 +2,7 @@ class Homesetup < Formula
   desc "HomeSetup - The ultimate Terminal experience"
   homepage "https://github.com/HS-Teams/homebrew-homesetup"
   url "https://github.com/HS-Teams/homebrew-homesetup.git",
-      tag: "v1.8.25"
+      tag: "v1.8.28"
   license "MIT"
 
   depends_on xcode: ["12.0", :build]
@@ -57,6 +57,6 @@ class Homesetup < Formula
 
   test do
     output = shell_output("#{prefix}/bin/apps/bash/hhs-app/hhs.bash --version")
-    assert_match "hhs v1.1.0 built on HomeSetup v1.8.25", output
+    assert_match "hhs v1.1.0 built on HomeSetup v1.8.28", output
   end
 end
