@@ -182,11 +182,15 @@ usage: $APP_NAME [OPTIONS] <args>
     log_count=15
     unset -f "${UNSETS[*]}"
     exit_code=${1:-0}
-    last_log_lines="  Last ${log_count} log lines:\n$(tail -n ${log_count} "${INSTALL_LOG}" | sed '/^[[:space:]]*$/d; s/^/  => /' | nl)"
+    last_log_lines="  Last (${log_count}) log lines:\n$(tail -n ${log_count} "${INSTALL_LOG}" |
+      sed '/^[[:space:]]*$/d; s/^/  => /' | nl)"
     shift
     [[ ${exit_code} -ne 0 && ${#} -ge 1 ]] && echo -en "${RED}${APP_NAME}: " 1>&2
     [[ ${#} -ge 1 ]] && echo -e "${*} \n${last_log_lines}${NC}" 1>&2
     [[ ${#} -gt 0 ]] && echo ''
+    # Move the installation log to logs folder
+    [[ -f "${INSTALL_LOG}" && -d "${HHS_LOG_DIR}" ]] &&
+      cp -f "${INSTALL_LOG}" "${HHS_LOG_DIR}/install.log"
     exit "${exit_code}"
   }
 
@@ -220,9 +224,9 @@ usage: $APP_NAME [OPTIONS] <args>
       echo -en "\n${WHITE}Skipping: ${YELLOW}\"${dir}\"${WHITE} was not created because destination exists. ${NC}"
     fi
     # Trying to write at the created directory to validate write permissions.
-    if ! touch "${dir}/tmpfile" >>"${INSTALL_LOG}" 2>&1 \
-      || ! rm -f "${dir:?}/tmpfile" >>"${INSTALL_LOG}" 2>&1; then
-        quit 2 "Not enough permissions to write to \"${dir}\" directory!"
+    if ! touch "${dir}/tmpfile" >>"${INSTALL_LOG}" 2>&1 ||
+      ! rm -f "${dir:?}/tmpfile" >>"${INSTALL_LOG}" 2>&1; then
+      quit 2 "Not enough permissions to write to \"${dir}\" directory!"
     fi
   }
 
@@ -838,10 +842,10 @@ usage: $APP_NAME [OPTIONS] <args>
     echo -en "\n${WHITE}Configuring Python... "
 
     [[ -z "${PYTHON3}" || -z "${PIP3}" ]] &&
-      quit 2 "Python and Pip >= 3.10 <= 3.11 are required to use HomeSetup. <None> has been found!"
+      quit 2 "Python and Pip >= 3.10 <= 3.12 are required to use HomeSetup. <None> has been found!"
     python_version=$("${PYTHON3}" --version 2>&1 | awk '{print $2}')
-    [[ ! "${python_version}" =~ ^3\.1[01] ]] &&
-      quit 2 "Python and Pip >= 3.10 <= 3.11 are required to use HomeSetup! Found: ${python_version}"
+    [[ ! "${python_version}" =~ ^3\.1[012] ]] &&
+      quit 2 "Python and Pip >= 3.10 <= 3.12 are required to use HomeSetup! Found: ${python_version}"
 
     echo -e "${GREEN}OK${NC}"
     create_venv
@@ -1164,8 +1168,8 @@ usage: $APP_NAME [OPTIONS] <args>
     echo "    \__/  \__/     |_______||_______| \______| \______/  |__|  |__| |_______|"
     echo ''
     echo -e "${MAGENTA}${HAND_PEACE_ICN} The ultimate Terminal experience !"
-    ${PIP3} show hspylib-askai >>"${INSTALL_LOG}" 2>&1 \
-      && echo -en "${AI_ICN} Empowered with ${GREEN}$(${PYTHON3} -m askai -v)"
+    ${PIP3} show hspylib-askai >>"${INSTALL_LOG}" 2>&1 &&
+      echo -en "${AI_ICN} Empowered with ${GREEN}$(${PYTHON3} -m askai -v)"
     echo ''
     echo -e "${YELLOW}${STAR_ICN} To reload your dotfiles, type: ${WHITE}source ${HOME}/.bashrc"
     echo -e "${YELLOW}${STAR_ICN} To configure your HomeSetup initialization: ${WHITE}hhs setup"
@@ -1176,10 +1180,6 @@ usage: $APP_NAME [OPTIONS] <args>
     echo -e "${NC}"
 
     echo -e "HomeSetup installation finished: $(date)" >>"${INSTALL_LOG}"
-
-    # Move the installation log to logs folder
-    [[ -f "${INSTALL_LOG}" && -d "${HHS_LOG_DIR}" ]] &&
-      cp -f "${INSTALL_LOG}" "${HHS_LOG_DIR}/install.log"
   }
 
   # shellcheck disable=SC2317

@@ -104,15 +104,17 @@ task publish(type: Task) {
       commandLine 'git', 'log', '--pretty=format:%s', 'origin/master..HEAD'
       standardOutput = out
     }
+    def tag = "v${project.ext.app_version}"
     def commit_logs = out.toString()
     def prefix = commit_logs?.trim() ? commit_logs?.split('\n').size() + ' commits' : ' No commits'
-    def commitMsg = "New HomeSetup revision: v'${version}' >> ${prefix}"
-    println("Revision commits: ${commitMsg}  Tag: v${version}")
+    def commitMsg = "New ${project.app_name} revision: '${tag}' >> ${prefix}"
+    println("Publishing ${project.app_name}...")
+    println("Revision commits: ${commitMsg}  Tag: ${tag}")
     exec {
-      commandLine 'git', 'tag', '-a', "v${version}", '-m', "New HomeSetup release v${version}"
+      commandLine 'git', 'tag', '-a', "${tag}", '-m', "New ${project.app_name} revision ${tag}"
     }
     exec {
-      commandLine 'git', 'push', 'origin', "v${version}"
+      commandLine 'git', 'push', 'origin', "${tag}"
     }
     exec {
       commandLine 'git', 'add', '-A', ':/'

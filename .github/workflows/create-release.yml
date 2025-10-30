@@ -12,8 +12,8 @@ on:
   workflow_dispatch:
     inputs:
       tag-name:
-        description: 'Release Tag name ?'
-        required: true
+        description: 'Release Tag name (default to latest)'
+        required: false
         type: string
 
 permissions:
@@ -23,8 +23,6 @@ jobs:
   details:
     runs-on: ubuntu-latest
     outputs:
-      new_version: ${{ steps.release.outputs.new_version }}
-      suffix: ${{ steps.release.outputs.suffix }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
@@ -35,18 +33,9 @@ jobs:
             TAG_NAME="${GITHUB_REF#refs/tags/}"
           elif [[ -n "${{ inputs.tag-name }}" ]]; then
             TAG_NAME="${{ inputs.tag-name }}"
-          else
-            echo "No tags found!"
-            exit 1
           fi
-          NEW_VERSION=$(echo $TAG_NAME | awk -F'-' '{print $1}')
-          SUFFIX=$(echo $TAG_NAME | grep -oP '[a-z]+[0-9]+' || echo "")
-          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-          echo "suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
-          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
-          echo "New Version is $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
-          echo "Suffix is $SUFFIX" >> $GITHUB_STEP_SUMMARY
-          echo "Tag name is $TAG_NAME" >> $GITHUB_STEP_SUMMARY
+          echo "TAG_NAME: ${TAG_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "tag_name=$(echo "${TAG_NAME}")" >> "$GITHUB_OUTPUT"
 
   github_release:
     name: Create GitHub Release
@@ -59,11 +48,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ needs.details.outputs.tag_name }}
       - name: Create Changelog
         id: change-log
         uses: yorevs/hspylib/.github/actions/changelog@master
         with:
-          tag-name: ${{ needs.details.outputs.new_version }}
+          tag-name: ${{ needs.details.outputs.tag_name }}
       - name: Create GitHub Release
         id: create_release
         env:
