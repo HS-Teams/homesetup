@@ -30,7 +30,7 @@ USAGE="usage: ${APP_NAME} <method> [options] <url>
     Options:
         --headers <header_list>     : Comma-separated http request headers.
         --body    <json_body>       : The http request body (payload).
-        --format                    : Format the json RESPONSE.
+        --format                    : Pretty-print the JSON response when possible.
         --silent                    : Omits all informational messages.
 "
 
@@ -41,6 +41,24 @@ UNSETS=(
 
 # Common application functions.
 [[ -s "${HHS_DIR}/bin/app-commons.bash" ]] && source "${HHS_DIR}/bin/app-commons.bash"
+
+if ! declare -f format_json >/dev/null; then
+  # @purpose: Pretty-print JSON payloads when formatting is requested.
+  function format_json() {
+    local input
+    input="$(cat)"
+
+    if command -v jq >/dev/null 2>&1; then
+      printf '%s' "${input}" | jq . 2>/dev/null || printf '%s\n' "${input}"
+    elif command -v python3 >/dev/null 2>&1; then
+      printf '%s' "${input}" | python3 -m json.tool 2>/dev/null || printf '%s\n' "${input}"
+    elif command -v python >/dev/null 2>&1; then
+      printf '%s' "${input}" | python -m json.tool 2>/dev/null || printf '%s\n' "${input}"
+    else
+      printf '%s\n' "${input}"
+    fi
+  }
+fi
 
 # Request timeout in seconds.
 REQ_TIMEOUT=3
@@ -59,6 +77,9 @@ BODY=
 
 # Provide a silent request/RESPONSE.
 SILENT=
+
+# Whether to format the response body as JSON.
+FORMAT=
 
 # Response body.
 RESPONSE=
@@ -188,7 +209,11 @@ main() {
   [[ -z "${SILENT}" ]] && echo -e "Fetching: ${METHOD} ${HEADERS} ${URL} ..."
 
   if do_fetch; then
-    echo "${RESPONSE}"
+    if [[ -n "${FORMAT}" ]]; then
+      printf '%s' "${RESPONSE}" | format_json
+    else
+      echo "${RESPONSE}"
+    fi
     quit 0
   else
     if [[ -z "${SILENT}" ]]; then
