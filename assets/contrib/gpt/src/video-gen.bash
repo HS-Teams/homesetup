@@ -6,13 +6,17 @@
 #          and provides detailed summaries.
 # Created Date: Oct 26, 2025
 # Author: yorevs
-# Required Packages: ffmpeg, ffprobe, unzip, awk, stat
+# Required Packages: ffmpeg, ffprobe, unzip, awk, stat, bc
 # Powered by: https://github.com/yorevs/homesetup
 # GPT: https://chatgpt.com/g/g-ra0RVB9Jo-homesetup-script-generator
 #
 
+# ------------------------------------------------------------------------------
+# GLOBAL VARIABLES
+# ------------------------------------------------------------------------------
+
 # https://semver.org/ ; major.minor.patch
-VERSION="0.3.4"
+VERSION="0.3.5"
 
 # The default crossfade duration in seconds
 CROSSFADE_DURATION=0.3
@@ -29,28 +33,55 @@ FORCE=
 # Whether to recreate videos.txt
 RECREATE=false
 
-# Array of spinner frames for progress indication
-SPINNER_FRAMES=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
-
-# Control flags for spinner:Stop
-SPINNER_STOP=false
-
-# Control flags for spinner:Pause
-SPINNER_PAUSED=false
-
 # Offset from the end of the video to extract the last frame (in seconds)
 LAST_FRAME_OFFSET=-0.05
 
+# Array of spinner frames for progress indication
+SPINNER_FRAMES=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+
+# Control flag to stop the spinner animation
+SPINNER_STOP=false
+
+# Control flag to pause the spinner temporarily
+SPINNER_PAUSED=false
+
+# The working directory where videos are located or extracted
+WORKDIR=""
+
+# The error log file path
+LOG_FILE=""
+
+# The list file used by ffmpeg to concatenate videos
+VIDEOS_TXT=""
+
+# The full path to the final output video file
+OUTFILE_PATH=""
+
+
+# ------------------------------------------------------------------------------
 # @purpose: Show script usage information.
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-s <source>] [-o <output>] [-f] [-r] [-x [seconds]] [-h] [-v]
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  -s, --source <path>       Source directory or zip file. Default: current dir
+  -o, --outfile <name>      Output video filename. Default: output.mp4
+  -f, --force-overwrite     Overwrite existing output
+  -r, --recreate            Recreate videos.txt from scratch
+  -x, --cross-fade <sec>    Apply crossfade between videos (float sec)
+  -h, --help                Show this help message
+  -v, --version             Show version information
+
+Examples:
+  $(basename "$0") -s ./clips -o final.mp4 -x 0.5
+  $(basename "$0") --source video.zip --force-overwrite
 EOF
 }
 
 # @purpose: Display script version number.
 version() {
-  echo "$(basename "$0") version ${VERSION}";
+  echo "$(basename "$0") version ${VERSION}"
 }
 
 # @purpose: Handle cleanup on interrupt signals.
@@ -62,138 +93,59 @@ cleanup() {
 trap cleanup SIGINT SIGABRT
 
 # @purpose: Parse CLI arguments for the script.
-# @param $1..$N [Opt]: Command-line options and their values.
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
     -s | --source)
-      SOURCE="${2:-.}"
-      shift 2
-      ;;
+      SOURCE="${2:-.}"; shift 2 ;;
     -o | --outfile)
-      OUTFILE="${2:-output.mp4}"
-      shift 2
-      ;;
+      OUTFILE="${2:-output.mp4}"; shift 2 ;;
     -f | --force-overwrite)
-      FORCE='-y'
-      shift
-      ;;
+      FORCE='-y'; shift ;;
     -r | --recreate)
-      RECREATE=true
-      shift
-      ;;
+      RECREATE=true; shift ;;
     -x | --cross-fade)
       if [[ "$2" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-        CROSSFADE_DURATION="$2"
-        shift 2
+        CROSSFADE_DURATION="$2"; shift 2
       else
-        CROSSFADE_DURATION=0.3
-        shift
+        CROSSFADE_DURATION=0.3; shift
       fi
       ;;
     -h | --help)
-      usage
-      exit 0
-      ;;
+      usage; exit 0 ;;
     -v | --version)
-      version
-      exit 0
-      ;;
+      version; exit 0 ;;
     *)
       echo -e "\033[31m[ERROR]\033[m Unknown option: $1"
-      exit 2
-      ;;
+      usage; exit 2 ;;
     esac
   done
 }
 
 # @purpose: Ensure required tools are installed.
 require_tools() {
-  for cmd in ffmpeg ffprobe unzip; do
+  for cmd in ffmpeg ffprobe unzip bc; do
     command -v "$cmd" >/dev/null 2>&1 || {
-      echo -e "\033[31m[ERROR]\033[m Missing $cmd"
+      echo -e "\033[31m[ERROR]\033[m Missing required tool: $cmd"
       exit 1
     }
   done
 }
 
-# @purpose: Retrieve the duration (in seconds) of a video.
-# @param $1 [Req]: Path to the video file.
-get_duration() {
-  ffprobe -v error -show_entries format=duration -of csv=p=0 "$1" 2>/dev/null;
-}
-
-# @purpose: Convert seconds into HH:MM:SS format.
-# @param $1 [Req]: Duration in seconds.
-format_time() {
-  local d
-  d=$(printf "%.0f" "$1")
-  printf "%02d:%02d:%02d" $((d / 3600)) $((d % 3600 / 60)) $((d % 60))
-}
-
-# @purpose: Preserve file timestamps (both access and modify) in a portable way.
-# @param $1 [Req]: Source file path.
-# @param $2 [Req]: Destination file path.
-preserve_timestamps() {
-  local src="$1" dst="$2"
-  [[ -e "$src" && -e "$dst" ]] || return 0
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    local atime mtime
-    atime=$(stat -f "%a" "$src")
-    mtime=$(stat -f "%m" "$src")
-    touch -a -t "$(date -r "$atime" +"%Y%m%d%H%M.%S")" "$dst"
-    touch -m -t "$(date -r "$mtime" +"%Y%m%d%H%M.%S")" "$dst"
-  else touch -amr "$src" "$dst" 2>/dev/null || true; fi
-}
-
-# @purpose: Sanitize leftover last-frame images, keeping only the most recent by name, then timestamp.
-sanitize_last_frames() {
-  local best_frame="" best_score=-1
-  mapfile -t last_frames < <(find "${WORKDIR}" -maxdepth 1 -type f \( -iname "*-last.jpg" -o -iname "*-last.jpeg" \))
-
-  [[ ${#last_frames[@]} -le 1 ]] && return 0
-
-  for img in "${last_frames[@]}"; do
-    # Extract numeric value from name (e.g., part-003-last.jpg → 3)
-    filename=$(basename "$img")
-    num=$(echo "$filename" | grep -oE '[0-9]+' | tail -1)
-    [[ -z "$num" ]] && num=0
-
-    # Get modification time in epoch
-    mod_time=$(stat -c %Y "$img" 2>/dev/null || stat -f %m "$img")
-
-    # Calculate a score: 1000000 * name-based-num + mod_time
-    score=$((10#$num * 1000000 + mod_time))
-
-    if (( score > best_score )); then
-      best_score=$score
-      best_frame="$img"
-    fi
-  done
-
-  for img in "${last_frames[@]}"; do
-    [[ "$img" == "$best_frame" ]] && continue
-    rm -f "$img" 2>/dev/null
-  done
-
-  log_message INFO "Sanitized last-frame images — kept: $(basename "$best_frame")"
-}
-
 # @purpose: Unified logging function with colored labels.
-# @param $1 [Req]: Log level (INFO, ERROR, SUCCESS, etc.).
-# @param $2..$N [Req]: Message text to log.
 log_message() {
   local level="$1"
   shift
   local msg="$*"
   SPINNER_PAUSED=true
   echo -ne "\033[2K\r"
-  case "$level" in
-  INFO | SUCCESS | ADD) color="\033[34m[INFO]\033[m" ;;
-  SKIPPED) color="\033[33m[SKIPPED]\033[m" ;;
-  ERROR) color="\033[31m[ERROR]\033[m" ;;
-  SUMMARY) color="\033[36m[SUMMARY]\033[m" ;;
-  *) color="\033[36m[$(echo "$level" | tr '[:lower:]' '[:upper:]')]\033[m" ;;
+  case "${level}" in
+    INFO) color="\033[34m[INFO]\033[m" ;;
+    SUCCESS) color="\033[32m[SUCCESS]\033[m" ;;
+    SKIPPED) color="\033[33m[SKIPPED]\033[m" ;;
+    ERROR) color="\033[31m[ERROR]\033[m" ;;
+    SUMMARY) color="\033[36m[SUMMARY]\033[m" ;;
+    *) color="\033[99m[$(echo "$level" | tr '[:lower:]' '[:upper:]')]\033[m" ;;
   esac
   echo -e "${color} ${msg}"
   SPINNER_PAUSED=false
@@ -212,27 +164,97 @@ spinner_progress() {
   done
 }
 
-# @purpose: Prepare the working directory or extract a zip file.
+# @purpose: Convert seconds into HH:MM:SS format.
+format_time() {
+  local d
+  d=$(printf "%.0f" "$1")
+  printf "%02d:%02d:%02d" $((d / 3600)) $((d % 3600 / 60)) $((d % 60))
+}
+
+# @purpose: Get duration of a video using ffprobe.
+get_duration() {
+  ffprobe -v error -show_entries format=duration -of csv=p=0 "$1" 2>/dev/null
+}
+
+# @purpose: Preserve timestamps (macOS/Linux).
+preserve_timestamps() {
+  local src="$1" dst="$2"
+  [[ -e "$src" && -e "$dst" ]] || return 0
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    local atime mtime
+    atime=$(stat -f "%a" "$src")
+    mtime=$(stat -f "%m" "$src")
+    touch -a -t "$(date -r "$atime" +"%Y%m%d%H%M.%S")" "$dst" 2>>"${LOG_FILE}" || true
+    touch -m -t "$(date -r "$mtime" +"%Y%m%d%H%M.%S")" "$dst" 2>>"${LOG_FILE}" || true
+  else
+    touch -amr "$src" "$dst" 2>>"${LOG_FILE}" || true
+  fi
+}
+
+# @purpose: Determine working directory and extract zip if needed.
 prepare_source() {
   if [[ "${SOURCE}" == *.zip ]]; then
     WORKDIR="${SOURCE%.zip}"; LOG_FILE="${WORKDIR}/video-gen-err.log"
-    mkdir -p "${WORKDIR}"
+    mkdir -p "${WORKDIR}" || { echo "Failed to create workdir"; exit 1; }
     log_message INFO "Extracting zip '${SOURCE}' → '${WORKDIR}'..."
     unzip -jo "${SOURCE}" -x "*/.*" -d "${WORKDIR}" >>"${LOG_FILE}" 2>&1
     log_message INFO "Extracted contents to ${WORKDIR}"
   else
     WORKDIR="${SOURCE}"; LOG_FILE="${WORKDIR}/video-gen-err.log"
   fi
+  VIDEOS_TXT="${WORKDIR}/videos.txt"
+  OUTFILE_PATH="${WORKDIR}/${OUTFILE}"
 }
 
-# @purpose: Determine the next available numeric sequence for part files.
+# @purpose: Safely kill spinner with wait fallback.
+stop_spinner() {
+  SPINNER_STOP=true
+  sleep 0.2
+  kill "${spinner_pid}" >/dev/null 2>&1 || true
+  wait "${spinner_pid}" 2>/dev/null || true
+}
+
+# @purpose: Sanitize leftover last-frame images
+sanitize_last_frames() {
+  local best_frame="" best_score=-1
+  mapfile -t last_frames < <(find "${WORKDIR}" -maxdepth 1 -type f \( -iname "*-last.jpg" -o -iname "*-last.jpeg" \))
+  [[ ${#last_frames[@]} -le 1 ]] && return 0
+  for img in "${last_frames[@]}"; do
+    filename=$(basename "$img")
+    num=$(echo "$filename" | grep -oE '[0-9]+' | tail -1)
+    [[ -z "$num" ]] && num=0
+    mod_time=$(stat -c %Y "$img" 2>/dev/null || stat -f %m "$img")
+    score=$((10#$num * 1000000 + mod_time))
+    if (( score > best_score )); then
+      best_score=$score
+      best_frame="$img"
+    fi
+  done
+  for img in "${last_frames[@]}"; do
+    [[ "$img" == "$best_frame" ]] && continue
+    rm -f "$img" 2>>"${LOG_FILE}" || true
+  done
+  log_message INFO "Sanitized last-frame images — kept: $(basename "$best_frame")"
+}
+
+# @purpose: Remove duplicate video entries from videos.txt before renaming.
+remove_video_duplicates() {
+  if [[ -f "${VIDEOS_TXT}" ]]; then
+    local tmpfile="${VIDEOS_TXT}.tmp"
+    grep -v "file '${base}'" "${VIDEOS_TXT}" >"${tmpfile}" 2>>"${LOG_FILE}" || true
+    mv -f "${tmpfile}" "${VIDEOS_TXT}" 2>>"${LOG_FILE}" || true
+  fi
+}
+
+# @purpose: Determine the next numeric index for part files.
 get_next_part_number() {
   local last_part
-  last_part=$(find "${WORKDIR}" -maxdepth 1 -type f -name "part-[0-9]*.mp4" | sed -E 's/.*part-(0*([0-9]+)-{0,1})+\.mp4/\1/' | sort -n | tail -1)
+  last_part=$(find "${WORKDIR}" -maxdepth 1 -type f -name "part-[0-9]*.mp4" |
+    sed -E 's/.*part-0*([0-9]+)\.mp4/\1/' | sort -n | tail -1)
   [[ -z "$last_part" ]] && echo "1" || echo $((10#$last_part + 1))
 }
 
-# @purpose: Perform crossfade by preprocessing each part with fade-in/out, then chaining with xfade.
+# @purpose: Perform crossfade processing or fallback concat if disabled.
 cross_fade() {
   if (($(echo "$CROSSFADE_DURATION <= 0" | bc -l))); then
     log_message INFO "Crossfading disabled (CROSSFADE_DURATION=${CROSSFADE_DURATION})"
@@ -247,7 +269,6 @@ cross_fade() {
   fi
 
   log_message INFO "Preprocessing videos with fade-in/out..."
-
   mapfile -t files < <(grep "^file '" "${VIDEOS_TXT}" | sed -E "s/file '(.+)'/\1/")
 
   local count=${#files[@]}
@@ -289,7 +310,6 @@ cross_fade() {
 
   log_message INFO "Building crossfade filter chain..."
 
-  # Build input and filter_complex
   local inputs=()
   for f in "${fade_files[@]}"; do inputs+=("-i" "$f"); done
 
@@ -325,58 +345,50 @@ cross_fade() {
     log_message ERROR "Crossfade generation failed"
   fi
 
-  # Clean up temp fades
-  for f in "${fade_files[@]}"; do rm -f "$f"; done
+  for f in "${fade_files[@]}"; do rm -f "$f" 2>>"${LOG_FILE}" || true; done
 }
 
-# @purpose: Remove duplicate video entries from videos.txt.
-remove_video_duplicates() {
-  # Remove old entry from videos.txt before rename
-  # --- Safe removal of old entry from videos.txt before rename ---
-  if [[ -f "${VIDEOS_TXT}" ]]; then
-    tmpfile="${VIDEOS_TXT}.tmp"
-    grep -v "file '${base}'" "${VIDEOS_TXT}" >"${tmpfile}" 2>/dev/null || true
-    mv -f "${tmpfile}" "${VIDEOS_TXT}" 2>/dev/null || true
-  fi
-}
-
-# @purpose: Main program entry point.
-# @param $1..$N [Opt]: Command-line arguments.
+# @purpose: Main entry point
 main() {
   local added_count=0 skipped_count=0 total_duration_sec=0 total_videos width
+
   parse_args "$@"
   require_tools
   prepare_source
-  # Recreate error log file.
+
   : >"${LOG_FILE}"
-  VIDEOS_TXT="${WORKDIR}/videos.txt"
-  OUTFILE_PATH="${WORKDIR}/${OUTFILE}"
+
   [[ -f "$OUTFILE_PATH" && -z "${FORCE}" ]] && {
     echo -e "\033[33m⚠️ Output exists.\033[m"
     read -rp $'\033[36mOverwrite? [y/N]: \033[m' ans
     [[ "$ans" =~ ^[yY]$ ]] || exit 1
   }
+
   [[ "${RECREATE}" == true ]] && {
     log_message INFO "Recreating videos.txt"
-    rm -f "${VIDEOS_TXT}"
+    rm -f "${VIDEOS_TXT}" 2>>"${LOG_FILE}" || true
   }
-  [[ -f "${VIDEOS_TXT}" ]] || touch "${VIDEOS_TXT}"
+
+  [[ -f "${VIDEOS_TXT}" ]] || touch "${VIDEOS_TXT}" 2>>"${LOG_FILE}" || true
+  log_message INFO "Curdir: $(PWD)"
   log_message INFO "Source: ${WORKDIR}"
   log_message INFO "Output: ${OUTFILE_PATH}"
+
   mapfile -t all_videos < <(find "${WORKDIR}" -maxdepth 1 -type f -name "*.mp4" ! -name "$(basename "${OUTFILE}")" ! -name "*_fade.mp4" | sort)
   total_videos=${#all_videos[@]}
   width=${#total_videos}
+
   log_message INFO "Found ${total_videos} videos. Padding width=${width}"
+
   spinner_progress &
   spinner_pid=$!
+
   [[ $total_videos -eq 0 ]] && {
-    SPINNER_STOP=true
-    sleep 0.2
-    kill "${spinner_pid}" >/dev/null 2>&1 || true
-    echo -e '\n' 1>&2
+    stop_spinner
     log_message SUMMARY "No videos found in source."
     exit 0
   }
+
   for v in "${all_videos[@]}"; do
     [[ ! -f "$v" ]] && continue
     base=$(basename "$v")
@@ -391,22 +403,21 @@ main() {
       new="part-${padded}.mp4"
       if [[ "$base" != "$new" ]]; then
         remove_video_duplicates
-        mv "${WORKDIR}/${base}" "${WORKDIR}/${new}" 2>>"${LOG_FILE}"
+        mv "${WORKDIR}/${base}" "${WORKDIR}/${new}" 2>>"${LOG_FILE}" || continue
         preserve_timestamps "${WORKDIR}/${new}" "${WORKDIR}/${new}"
-        rm -f "${WORKDIR}/${base}" 2>/dev/null
+        rm -f "${WORKDIR}/${base}" 2>>"${LOG_FILE}" || true
         base="$new"
         v="${WORKDIR}/${new}"
         log_message INFO "Normalized → ${base}"
       fi
     else
       seq=$(get_next_part_number)
-      seq=$((10#$seq))
       printf -v seq "%0${width}d" "$seq"
       new="part-${seq}.mp4"
       remove_video_duplicates
-      mv "$v" "${WORKDIR}/${new}" 2>>"${LOG_FILE}"
+      mv "$v" "${WORKDIR}/${new}" 2>>"${LOG_FILE}" || continue
       preserve_timestamps "$v" "${WORKDIR}/${new}"
-      rm -f "$v" 2>/dev/null
+      rm -f "$v" 2>>"${LOG_FILE}" || true
       base="$new"
       v="${WORKDIR}/${new}"
       log_message INFO "Renamed → ${base}"
@@ -428,23 +439,25 @@ main() {
     fi
   done
 
-  sort -u "${VIDEOS_TXT}" -o "${VIDEOS_TXT}"
+  sort -u "${VIDEOS_TXT}" -o "${VIDEOS_TXT}" 2>>"${LOG_FILE}" || true
   [[ $(tail -c1 "${VIDEOS_TXT}") ]] && echo "" >>"${VIDEOS_TXT}"
-  SPINNER_STOP=true
-  sleep 0.2
-  kill "${spinner_pid}" >/dev/null 2>&1 || true
+
+  stop_spinner
   cross_fade
+
   total_dur_fmt=$(format_time "$total_duration_sec")
   total_videos=$(grep -c "^file" "${VIDEOS_TXT}")
+
   echo -e "\n--------------------------------------------------------------------------------"
   log_message SUMMARY "  Added videos: ${added_count}"
   log_message SUMMARY "Skipped videos: ${skipped_count}"
   log_message SUMMARY "  Total videos: ${total_videos}"
   log_message SUMMARY "Total duration: ${total_dur_fmt}"
-  echo -e "--------------------------------------------------------------------------------"
-  [[ -s "${LOG_FILE}" ]] && log_message INFO "Error logs saved to: ${WORKDIR}/video-gen-err.log"
-  echo -e "\033[32m✅ DONE — All videos processed successfully!\033[0m"
+  echo -e "--------------------------------------------------------------------------------\n"
+
+  [[ -s "${LOG_FILE}" ]] && log_message INFO "Error logs saved to: ${LOG_FILE}"
   sanitize_last_frames
+  log_message SUCCESS "DONE — All videos processed successfully!"
 }
 
 main "$@"
