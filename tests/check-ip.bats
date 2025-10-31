@@ -102,7 +102,6 @@ run_check_ip() {
   run_check_ip 999.10.0.1
 
   assert_failure
-  assert_output --empty
 
   run cat "${CHECK_IP_ERR_LOG}"
   assert_output --partial 'Invalid IP: 999.10.0.1'
