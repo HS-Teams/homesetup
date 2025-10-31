@@ -140,6 +140,11 @@ After HomeSetup installation, the Nerd font will be available at: `${HHS_HOME}/a
 
 [HomeSetup iTerm2](assets/term-configs/HomeSetup-iTerm2.json)
 
+#### WezTerm (Linux/Darwin)
+
+[HomeSetup WezTerm](assets/term-configs/HomeSetup-WezTerm.lua)
+
+
 When your terminal is set, then you should see something like this:
 
 [Welcome](https://iili.io/JuxHulR.png)

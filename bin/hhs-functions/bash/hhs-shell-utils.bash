@@ -96,11 +96,11 @@ function __hhs_where_am_i() {
   os="$(uname)"
 
   if [[ -n "$1" ]] && __hhs_has "$1"; then
-    __hhs_has 'tldr' && {
+    __hhs_has 'tldr' && tldr --list | grep -w "$1" && {
       tldr "$1"
-      return $?
     }
-    __hhs help "$1" && return $?
+    __hhs help "$1" 2>/dev/null || __hhs_about "$1"
+    return $?
   fi
 
   echo " "
