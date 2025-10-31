@@ -30,7 +30,7 @@
 ## HomeSetup application
 
 ```bash
-usage:  [option] {function <args> | plugin [task <args>]}
+usage: hhs [option] {function | plugin {task} <command>} [args...]
 
  _   _                      ____       _
 | | | | ___  _ __ ___   ___/ ___|  ___| |_ _   _ _ __
@@ -39,7 +39,7 @@ usage:  [option] {function <args> | plugin [task <args>]}
 |_| |_|\___/|_| |_| |_|\___|____/ \___|\__|\__,_| .__/
                                                 |_|
 
-  HomeSetup Application Manager v1.0.0.
+  HomeSetup Application Manager v1.1.0 (built on HomeSetup v${HHS_VERSION}).
 
     Arguments:
       args              : Plugin/Function arguments will depend on the plugin/functions and may be required or not.
@@ -65,8 +65,25 @@ usage:  [option] {function <args> | plugin [task <args>]}
 
 ## Functions
 
-TODO
+Detailed documentation for the HHS application helper functions is available in the following sections:
+
+- [Built-Ins](hhs-app/functions/built-ins.md)
+- [Misc](hhs-app/functions/misc.md)
+- [Tests](hhs-app/functions/tests.md)
+- [Web](hhs-app/functions/web.md)
+
+Each page lists the callable helper signatures together with usage notes.
 
 ## Plug-ins
 
-TODO
+HomeSetup ships with several first-party plug-ins. Refer to the dedicated pages for command signatures, task descriptions, and examples:
+
+- [Ask](hhs-app/plugins/ask.md)
+- [Firebase](hhs-app/plugins/firebase.md)
+- [HSPM](hhs-app/plugins/hspm.md)
+- [Settings](hhs-app/plugins/settings.md)
+- [Setup](hhs-app/plugins/setup.md)
+- [Starship](hhs-app/plugins/starship.md)
+- [Updater](hhs-app/plugins/updater.md)
+
+Each plug-in page mirrors the output produced by `__hhs <plugin> help` and highlights noteworthy behaviors.
