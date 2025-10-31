@@ -45,7 +45,15 @@ HHS_HOME=${HHS_PREFIX:-${HOME}/HomeSetup}
 HHS_DIR="${HOME}/.hhs"
 
 # HSPyLib python modules to uninstall
-PYTHON_MODULES=('hspylib' 'hspylib-clitt' 'hspylib-setman' 'hspylib-vault' 'hspylib-firebase')
+PYTHON_MODULES=(
+  'hspylib'
+  'hspylib-clitt'
+  'hspylib-setman'
+  'hspylib-vault'
+  'hspylib-firebase'
+  'hspylib-datasource'
+  'hspylib-askai'
+)
 
 # Shell type
 SHELL_TYPE="${SHELL##*/}"
@@ -191,6 +199,10 @@ uninstall_dotfiles() {
     echo -e "\n${BLUE}Removing HomeSetup Datasource${NC}"
     ${PIP} uninstall -y hspylib-datasource &> /dev/null \
       || echo -e "${RED}# Unable to uninstall HomeSetup datasource !\n${NC}"
+    # HsPyLib-Setman
+    echo -e "\n${BLUE}Removing HomeSetup HsPyLib-Setman${NC}"
+    ${PIP} uninstall -y hspylib-setman &> /dev/null \
+      || echo -e "${RED}# Unable to uninstall HomeSetup HsPyLib-Setman !\n${NC}"
     # HsPyLib-AskAi
     echo -e "\n${BLUE}Removing HomeSetup HsPyLib-AskAi${NC}"
     ${PIP} uninstall -y hspylib-askai &> /dev/null \
