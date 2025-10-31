@@ -289,7 +289,7 @@ usage: $APP_NAME [OPTIONS] <args>
       -r | --repair)
         METHOD='repair'
         ;;
-      -i | --interactively)
+      -i | --interactive)
         OPT=''
         ;;
       -p | --prefix)
@@ -371,7 +371,7 @@ usage: $APP_NAME [OPTIONS] <args>
 
     # Check if the user passed help or version options
     [[ "$1" == '-h' || "$1" == '--help' ]] && quit 0 "${USAGE}"
-    [[ "$1" == '-v' || "$1" == '--version' ]] && quit 0 "HomeSetup v$(\grep . "${VERSION}")"
+    [[ "$1" == '-v' || "$1" == '--version' ]] && quit 0 "HomeSetup v${VERSION}"
     [[ -z "${USER}" || -z "${GROUP}" ]] && quit 1 "Unable to detect USER:GROUP => [${USER}:${GROUP}]"
     [[ -z "${HOME}" || -z "${SHELL}" ]] && quit 1 "Unable to detect HOME/SHELL => [${HOME}:${SHELL}]"
 
