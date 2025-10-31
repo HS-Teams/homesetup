@@ -28,13 +28,16 @@
 
 <!-- tocstop -->
 
-## Updater
+## Ask
+
+The Ask plug-in integrates the HomeSetup AskAI assistant. It requires the HomeSetup Python virtual environment (`__hhs_is_venv`)
+and the AskAI package to be installed locally. HomeSetup AI integration.
 
 ### "help"
 
 #### **Purpose**
 
-HomeSetup AI integration.
+Display the Ask plug-in usage banner and argument description. HomeSetup AI integration.
 
 #### **Returns**
 
@@ -42,7 +45,61 @@ HomeSetup AI integration.
 
 #### **Parameters**
 
-- $1..$N _Required_ : The question about HomeSetup.
+N/A
+
+#### **Examples**
+
+`__hhs ask help`
+
+**Output**
+
+```bash
+usage: hhs <question>
+
+    _        _
+   / \   ___| | __
+  / _ \ / __| |/ /
+ / ___ \__ \   <
+/_/   \_\___/_|\_\
+
+  HomeSetup AI integration <version>.
+
+    arguments:
+      question    : the question to make to the AI about HomeSetup.
+```
+
+### "version"
+
+#### **Purpose**
+
+Print the installed Ask plug-in version.
+
+#### **Returns**
+
+**0** if the command was successfully executed; **non-zero** otherwise.
+
+#### **Parameters**
+
+N/A
+
+#### **Examples**
+
+`__hhs ask version`
+
+### "execute"
+
+#### **Purpose**
+
+Forward the provided question to the AskAI engine using Retrieval Augmented Generation (`python3 -m askai -r rag`).
+
+#### **Returns**
+
+**0** if the command was successfully executed; **non-zero** otherwise.
+
+#### **Parameters**
+
+- $1..$N _Required_ : The natural-language question about HomeSetup (options beginning with `-` are treated as flags and stripped
+  before being sent to AskAI).
 
 #### **Examples**
 
@@ -72,5 +129,11 @@ HomeSetup AI integration.
     __hhs starship restore
 
 
-For more detailed information, you can refer to the HomeSetup Developer Handbook, specifically the section on Starship. You can also visit the Starship website at [starship.rs]( https://starship.rs/).
+For more detailed information, you can refer to the HomeSetup Developer Handbook, specifically the section on Starship. You can
+also visit the Starship website at [starship.rs]( https://starship.rs/).
 ```
+
+#### **Notes**
+
+- The Ask plug-in is available only when the HomeSetup Python virtual environment is active.
+- If AskAI is not installed locally, the command exits with an error directing you to `${HHS_ASKAI_URL}` for installation instructions.
