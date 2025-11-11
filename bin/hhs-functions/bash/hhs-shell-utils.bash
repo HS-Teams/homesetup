@@ -29,63 +29,81 @@ function __hhs_history() {
   return $?
 }
 
-# inspiRED by https://superuser.com/questions/250227/how-do-i-see-what-my-most-used-linux-command-are
-# @function: Display statistics about commands in history.
+# @function: Display statistics about commands in history (robust date/time filtering)
 # @param $1 [Opt] : Limit to the top N commands.
 function __hhs_hist_stats() {
-
-  local top_n=${1:-10} width=${2:-30} i=1 cmd_name cmd_qty hist_output bar_len bar columns pad_len pad
+  local top_n=${1:-10} width=${2:-30} i=1
+  local cmd_name cmd_qty hist_output bar_len bar columns pad_len pad max_size
 
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} [top_N]"
-    return 1
+    return 0
   fi
 
-  hist_output="$(history | tr -s ' ' | cut -d ' ' -f6 | sort | uniq -c | sort -nr)"
+  # Generic parser: remove metadata, extract first non-date token as command
+  hist_output="$(
+    history |
+      sed -E 's/^\[[^]]*\][[:space:]]*//' |             # remove [user,date,...]
+      sed -E 's/^[[:space:]]*[0-9]+\**[[:space:]]*//' | # remove numeric ids
+      awk '{
+        for (i=1; i<=NF; i++) {
+          token=$i
+          # Skip timestamps and dates (e.g., 2025-11-05, 23:47:12, etc.)
+          if (token ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) continue
+          if (token ~ /^[0-9]{2}:[0-9]{2}:[0-9]{2}$/) continue
+          if (token ~ /^([0-9]{4}-[0-9]{2}-[0-9]{2})[T ]([0-9]{2}:[0-9]{2}:[0-9]{2})$/) continue
+          if (token ~ /^[0-9]{1,4}$/) continue
+          if (token ~ /^[[:punct:]]+$/) continue
+          if (token ~ /^[[:alnum:]_.\/:+-]+$/) { CMD[token]++; break }
+        }
+      }
+      END { for (c in CMD) print CMD[c], c }' |
+      sort -nr
+  )"
 
-  columns=$(tput cols)
-  pad=$(printf '%0.1s' "."{1..41})
-  pad_len=41
+  [[ -z "${hist_output}" ]] && {
+    __hhs_errcho "${FUNCNAME[0]}" "No valid command tokens found in history."
+    return 1
+  }
+
+  columns=$(tput cols 2>/dev/null || echo 80)
+  pad_len=$((columns / 2))
+  pad=$(printf '%0.1s' "."{1..120})
+
   max_size=$(echo "${hist_output}" | head -n 1 | awk '{print $1}')
+  [[ -z "${max_size}" || "${max_size}" -le 0 ]] && max_size=1
 
-  echo ' '
-  echo "${YELLOW}Top ${top_n} used commands in history:"
-  echo ' '
+  echo ''
+  echo "${YELLOW}Top ${top_n} used commands in history:${NC}"
+  echo ''
 
-  hist_output="$(echo "${hist_output}" | head -n "${top_n}")"
+  while read -r cmd_qty cmd_name; do
+    [[ -z "${cmd_qty}" || -z "${cmd_name}" ]] && continue
 
-  echo "${hist_output}" | while read -r line; do
-    if [[ "${line}" =~ ^[[:space:]]*([0-9]+)[[:space:]]*([a-zA-Z0-9]+)$ ]]; then
+    bar_len=$(((cmd_qty * width) / max_size))
+    ((bar_len < 1)) && bar_len=1
 
-      cmd_qty="${BASH_REMATCH[1]}"
-      cmd_name="${BASH_REMATCH[2]}"
-      cmd_name="${cmd_name:0:$columns}"
-
-      bar_len=$(((cmd_qty * width) / max_size))
-      [[ $bar_len -gt 0 && $bar_len -lt 2 ]] && bar_len=2
-
-      if __hhs_has seq; then
-        bar=$(printf '▄%.0s' $(seq 1 "${bar_len}"))
-      elif __hhs_has jot; then
-        bar=$(printf '▄%.0s' "$(jot - 1 "${bar_len}")")
-      else
-        __hhs_errcho "${FUNCNAME[0]}" "Neither seq nor jot is available."
-        return 1
-      fi
-
-      printf "${WHITE}%3d: ${HHS_HIGHLIGHT_COLOR} " "${i}"
-      printf "%s " "${cmd_name}"
-      [[ "${#cmd_name}" -ge "${columns}" ]] && echo -en "${NC}" || echo -en "${NC}"
-      printf '%*.*s' 0 $((pad_len - ${#cmd_name})) "${pad}"
-      printf "${GREEN}%3d ${ORANGE}|%s\n" "${cmd_qty}" "${bar}"
-      ((i += 1))
+    if __hhs_has seq; then
+      bar=$(printf '▄%.0s' $(seq 1 "${bar_len}"))
+    elif __hhs_has jot; then
+      bar=$(printf '▄%.0s' "$(jot - 1 "${bar_len}")")
+    else
+      __hhs_errcho "${FUNCNAME[0]}" "Neither seq nor jot is available."
+      return 1
     fi
-  done
 
-  IFS="${OLDIFS}"
+    [[ ${#cmd_name} -gt $((columns - 20)) ]] && cmd_name="${cmd_name:0:$((columns - 20))}…"
+
+    printf "${WHITE}%3d: ${HHS_HIGHLIGHT_COLOR} " "${i}"
+    printf "%s" "${cmd_name}"
+    printf '%*.*s' 0 $((pad_len - ${#cmd_name})) "${pad}"
+    printf "${GREEN}%4d ${ORANGE}|%s${NC}\n" "${cmd_qty}" "${bar}"
+
+    ((i += 1))
+  done < <(echo "${hist_output}" | head -n "${top_n}")
+
+  echo ''
   echo "${NC}"
-
-  return 0
 }
 
 # @function: Display the current dir (pwd) and remote repo url, if it applies.
@@ -235,15 +253,20 @@ function __hhs_shopt() {
   return 1
 }
 
-# @function: Display 'du' output formatted as a horizontal bar chart.
+# @function: Display 'du' output formatted as a horizontal bar chart (auto unit scaling).
 # @param $1 [Opt] : Directory path (default: current directory)
 # @param $2 [Opt] : Number of top entries to display (default: 10)
+# @param $3 [Opt] : Chart bar width scaling factor (default: 30)
 function __hhs_du() {
-  local dir="${1:-.}" i=1 top_n=${2:-10} width=${3:-30} max_size du_output columns pad_len pad bar_len bar path
+  local dir="${1:-.}"
+  local top_n=${2:-10}
+  local width=${3:-30}
+  local i=1 du_output term_w pad_len pad max_val bar_len bar path entry_count
+  local size_human size_kib
 
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    echo "usage: ${FUNCNAME[0]} [path] [top_N]"
-    return 1
+    echo "usage: ${FUNCNAME[0]} [path] [top_N] [width]"
+    return 0
   fi
 
   [[ ! -d "${dir}" ]] && {
@@ -251,59 +274,94 @@ function __hhs_du() {
     return 1
   }
 
+  # Collect du output (human readable)
   if [[ "$(uname -s)" == "Darwin" ]]; then
-    du_output="$(\du -hkd 1 "${dir}" 2>/dev/null | sort -rn | head -n "$((top_n + 1))")"
+    du_output="$(\du -hd 1 "${dir}" 2>/dev/null | grep -v 'total' | sort -hr)"
   else
-    du_output="$(\du -hk --max-depth=1 "${dir}" 2>/dev/null | sort -rn | head -n "$((top_n + 1))")"
+    du_output="$(\du -h --max-depth=1 "${dir}" 2>/dev/null | grep -v 'total' | sort -hr)"
   fi
 
-  columns=$(tput cols)
-  pad_len=60
-  pad=$(printf '%0.1s' "."{1..60})
-  max_size=$(echo "${du_output}" | awk '{print $1}' | sort -n | awk '{
-  a[NR]=$1
-  } END {
-    idx = int(NR * 0.9)
-    if (idx < 1) idx = 1
-    print a[idx]
-  }')
+  entry_count=$(echo "${du_output}" | wc -l | tr -d '[:space:]')
+  [[ "${entry_count}" -eq 0 ]] && {
+    __hhs_errcho "${FUNCNAME[0]}" "No usable entries found in: \"${dir}\""
+    return 1
+  }
 
-  echo ' '
-  echo "${YELLOW}Top ${top_n} disk usage at: ${BLUE}\"${dir//\./$(pwd)}\""
-  echo ' '
+  du_output=$(echo "${du_output}" | head -n "${top_n}")
 
-  while read -r size path; do
-    size=$(echo "${size}" | tr -d '[:space:]')
-    [[ -z "${size}" || -z "${path}" || "${path}" == '.' || "${path}" == 'total' ]] && continue
-    bar_len=$(((size * width) / max_size))
-    [[ $bar_len -gt 0 && $bar_len -lt 2 ]] && bar_len=2
+  term_w=$(tput cols 2>/dev/null || echo 80)
+  ((term_w < 40)) && term_w=80
+  pad_len=$((term_w / 2))
+  pad=$(printf '%0.1s' "."{1..120})
 
-    if [[ $bar_len -gt 0 ]]; then
-      if __hhs_has seq; then
-        bar=$(printf '▄%.0s' $(seq 1 "${bar_len}"))
-      elif __hhs_has jot; then
-        bar=$(printf '▄%.0s' "$(jot - 1 "${bar_len}")")
-      else
-        __hhs_errcho "${FUNCNAME[0]}" "Neither seq nor jot is available."
-        return 1
-      fi
+  # Compute max size in KiB for bar scaling
+  max_val=$(echo "${du_output}" | awk '
+  function to_kib(v) {
+    unit=tolower(substr(v, length(v)))
+    val=substr(v, 1, length(v)-1)
+    if (unit=="g") return int(val*1024*1024)
+    if (unit=="m") return int(val*1024)
+    if (unit=="k") return int(val)
+    if (unit=="b") return int(val/1024)
+    return int(v)
+  }
+  {print to_kib($1)}' | sort -n | tail -1)
+  [[ -z "${max_val}" || "${max_val}" -le 0 ]] && max_val=1
+
+  echo ''
+  echo "${YELLOW}Top ${top_n} disk usage at: ${BLUE}\"${dir//\./$(pwd)}\"${NC}"
+  echo ''
+
+  while read -r size_human path; do
+    [[ -z "${size_human}" || -z "${path}" ]] && continue
+
+    # Convert to KiB for scaling
+    size_kib=$(awk -v v="${size_human}" '
+      function to_kib(x) {
+        unit=tolower(substr(x, length(x)))
+        val=substr(x, 1, length(x)-1)
+        if (unit=="g") return int(val*1024*1024)
+        if (unit=="m") return int(val*1024)
+        if (unit=="k") return int(val)
+        if (unit=="b") return int(val/1024)
+        return int(x)
+      }
+      BEGIN { print to_kib(v) }')
+
+    # Normalize path
+    if [[ "${path}" == '.' ]]; then
+      path="./$(basename "${dir}")"
+    else
+      path="${path//\.\//}"
+      path="${path//\/\//\/}"
     fi
 
-    path="${path//\.\//}"
-    path="${path//\/\//\/}"
-    path="${path:0:$columns}"
+    bar_len=$(((size_kib * width) / max_val))
+    ((bar_len < 1)) && bar_len=1
+
+    if __hhs_has seq; then
+      bar=$(printf '▄%.0s' $(seq 1 "${bar_len}"))
+    elif __hhs_has jot; then
+      bar=$(printf '▄%.0s' "$(jot - 1 "${bar_len}")")
+    else
+      __hhs_errcho "${FUNCNAME[0]}" "Neither seq nor jot is available."
+      return 1
+    fi
+
+    # Safe truncation for narrow terminals
+    local max_label_width=$((term_w - 30))
+    ((max_label_width < 10)) && max_label_width=10
+    [[ ${#path} -gt ${max_label_width} ]] && path="${path:0:${max_label_width}}…"
 
     printf "${WHITE}%3d: ${HHS_HIGHLIGHT_COLOR} " "${i}"
     printf "%s" "${path}"
     printf '%*.*s' 0 $((pad_len - ${#path})) "${pad}"
-    [[ "${#path}" -ge "${columns}" ]] && echo -en "${NC}" || echo -en "${NC}"
-    printf "${GREEN}%$((${#max_size} + 1))d KB ${ORANGE}|%s \n" " ${size}" "${bar}"
+    printf "${GREEN}%8s ${ORANGE}|%s${NC}\n" "${size_human}" "${bar}"
+
     ((i += 1))
   done <<<"${du_output}"
 
   echo ''
-  echo "${WHITE}Total: ${ORANGE}$(\du -hc "${dir}" | grep total | cut -f1)"
-  unset TOTAL
-
-  echo "${NC}"
+  echo "${WHITE}Total: ${ORANGE}$(\du -sh "${dir}" 2>/dev/null | awk '{print $1}')${NC}"
+  echo ''
 }
