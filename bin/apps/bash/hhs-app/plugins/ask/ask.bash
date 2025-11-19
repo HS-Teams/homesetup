@@ -21,28 +21,28 @@ UNSETS=(
 )
 
 # Usage message
-USAGE="usage: ${APP_NAME} ${PLUGIN_NAME} [options] <question>
-
-    _        _
-   / \\   ___| | __
-  / _ \\ / __| |/ /
- / ___ \\__ \\   <
-/_/   \\_\\___/_|\\_\\...Ollama
-
-  Offline ollama-AI agent integration for HomeSetup v${VERSION}.
+USAGE="$(cat <<EOF
+usage: ${APP_NAME} ${PLUGIN_NAME} [options] <question>
+    Offline Ollama AI integration for HomeSetup v${VERSION}.
+    Query local models, inspect history and manage context files.
 
     options:
-      -h, --help                        show this help message and exit
-      -v, --version                     show version and exit
-      -c, --context                     show current ollama context (history) and exit
-      -r, --reset                       reset history before executing (fresh new session) and exit
-      -m, --models                      list available ollama models and exit
-      -s, --select-model [model_name]   select the ollama model to use
-      -k, --keep                        whether to keep the response file after execution
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print plugin version information.
+      -c | --context                 : Show the saved Ollama conversation history.
+      -r | --reset                   : Clear the context before asking the question.
+      -m | --models                  : List locally available Ollama models.
+      -s | --select-model [name]     : Choose a model interactively or via argument.
+      -k | --keep                    : Preserve the response file instead of deleting it.
 
     arguments:
-      question         the question to ask Ollama
-"
+      question                       : Prompt to send to the selected Ollama model.
+
+  Notes:
+    - Input can also be piped; stdin overrides the positional question.
+    - Context history is stored under the configured HHS Ollama history file.
+EOF
+)"
 
 # Read context from ollama history file if not piped
 [[ "${IS_PIPED}" -ne 1 && -s "${HHS_OLLAMA_HISTORY_FILE}" ]] && \

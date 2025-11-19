@@ -8,6 +8,28 @@ HomeSetup offers a comprehensive [User Handbook](handbook/handbook.md) that cont
 
 The User Handbook serves as a valuable resource for understanding and making the most of HomeSetup's capabilities, while the accompanying [YouTube]() and [asciinema](https://asciinema.org/~yorevs) videos provides a visual demonstration of its usage.
 
+## Help template
+
+All HomeSetup scripts and functions now emit help messages that follow a consistent, case-sensitive template. The same layout is shipped inside `templates/txt/help.txt` and powers `install.bash`, `hhs`, the plug-ins and the standalone utilities:
+
+```
+usage: ${APP_NAME} <arg_name> [options]
+    # Optional: App. SYNOPSIS.
+    # Optional: App. DESCRIPTION.
+
+    options:
+      -A | --A_long                     : TODO: Description about the option -A
+      -B | --B_long  <ARG_1>            : TODO: Description about the option -B
+
+    arguments:
+      ARG_1   : TODO: Description about the argument
+
+  Notes:
+    - Optional: App. NOTES
+```
+
+Every CLI now documents its synopsis, options, arguments and notes using this structure, making it easier to skim command capabilities directly from the terminal.
+
 ## Table of contents
 
 <!-- toc -->
@@ -400,6 +422,19 @@ to the [Applications](handbook/pages/applications.md) section in the complete ha
 | check-ip.bash    | Validate and check information about a specified IP.                                          |
 | fetch.bash       | Fetch REST APIs data easily.                                                                  |
 | hhs.bash         | HomeSetup application.                                                                        |
+
+### CLI help reference
+
+| Command/Script | Synopsis | Highlights |
+|----------------|----------|------------|
+| `install.bash` | `usage: install.bash [options]` | `--local`, `--repair`, `--interactive`, `--prefix <path>`, `--homebrew`, `--quiet` describe every installation mode and are documented together with installer notes. |
+| `uninstall.bash` | `usage: uninstall.bash [options]` | Presents interactive prompts and documents how backups are restored plus the optional `--help/--version` flags. |
+| `hhs` | ``usage: hhs [options] {function \| plugin {task} <command>} [args...]`` | Explains the plugin/function tasks, the `--prefix` output helper and the recommended discovery commands (`hhs list`, `<plugin> help`). |
+| `fetch.bash` | `usage: fetch [options] <method> <url>` | Details HTTP verbs, payload flags (`--body`, `--headers`, `--timeout`), JSON formatting and silent execution. |
+| `docker-build.bash` | `usage: docker-build [options] <image_type...>` | Describes the multi-architecture buildx workflow plus the optional `--push` switch. |
+| `check-ip.bash` | `usage: check-ip [options] <ip_address>` | Documents `--quiet`, `--info`, and how the command returns the validation result along with IP class/scope. |
+| `hhs app plugins` | `usage: hhs <plugin> [options]` | Plugins such as `ask`, `starship`, `setup`, `taius`, `updater` and `hspm` all describe their supported tasks (e.g. `preset`, `recover`, `check/update/stamp`) plus shared `--help/--version` flags. |
+| Utilities under `assets/contrib/gpt` | `usage: <tool> [options]` | The generated scripts (`media-converter`, `temperature-converter`, `iso-to-cron`, `cron-scheduler`, etc.) now call out their required options and guarded notes inside the standardized template. |
 
 ## Alias definitions
 

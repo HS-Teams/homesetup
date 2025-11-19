@@ -19,8 +19,26 @@
 VERSION="0.0.1" # https://semver.org/ ; major.minor.patch
 
 # Usage message
-USAGE="usage: $(basename "$0") -s <script_path> -i <iso_date> [-u <user>]
-Example: $(basename "$0") -s /path/to/script.sh -i 2024-08-23T15:30:00Z -u username"
+USAGE="$(cat <<EOF
+usage: $(basename "$0") -s <script> -i <iso_date> [-u <user>] [options]
+    Schedule a script via cron using an ISO-8601 timestamp.
+    Leverages iso-to-cron.bash to convert the date into a cron expression.
+
+    options:
+      -s <script_path>               : Script to schedule (required).
+      -i <iso_date>                  : ISO-8601 timestamp (e.g. 2024-08-23T15:30:00Z).
+      -u <user>                      : Optional user to own the cron job.
+      -h                             : Display this help message and exit.
+      -v                             : Print version information and exit.
+
+    arguments:
+      (none)                         : All inputs are provided via flags.
+
+  Notes:
+    - iso-to-cron.bash must reside in the same directory as this script.
+    - The generated cron entry replaces the current crontab via 'crontab -'.
+EOF
+)"
 
 # @purpose: Display help message and exit
 usage() {

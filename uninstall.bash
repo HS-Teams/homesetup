@@ -15,9 +15,22 @@
 APP_NAME="${0##*/}"
 
 # Help message to be displayed by the script.
-USAGE="
-usage: $APP_NAME
-"
+read -r -d '' USAGE <<EOF
+usage: ${APP_NAME} [options]
+    Remove HomeSetup files, dotfiles and Python packages from this host.
+    Guides you through restoring backups before deleting managed assets.
+
+    options:
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print version information and exit.
+
+    arguments:
+      (none)                         : The uninstaller is entirely interactive.
+
+  Notes:
+    - Prompts let you decide whether to keep the repo, config folder or libs.
+    - Backups stored under ~/.hhs are restored automatically when available.
+EOF
 
 # Define the USER and HOME
 USER="${SUDO_USER:-${USER}}"

@@ -12,7 +12,21 @@
 
 JDK_SEARCH_DIR=${JDK_SEARCH_DIR:-"/Library/Java/JavaVirtualMachines"}
 
-USAGE="usage: sudo java-switch <jdk_ver>"
+read -r -d '' USAGE <<EOF
+usage: sudo java-switch <jdk_version>
+    Point /Library/Java/JavaVirtualMachines/Current to a specific JDK.
+    Requires sudo privileges and an installed JDK under ${JDK_SEARCH_DIR}.
+
+    options:
+      (none)                         : Provide the desired JDK version as the sole argument.
+
+    arguments:
+      jdk_version                    : Major version to activate (e.g. 17, 21).
+
+  Notes:
+    - The script updates the 'Current' symlink after verifying the target exists.
+    - Run with sudo to ensure permissions allow modifying the JDK directory.
+EOF
 
 RED="\033[31m"
 GREEN="\033[32m"

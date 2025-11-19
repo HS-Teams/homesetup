@@ -17,12 +17,25 @@ VERSION=2.0.0
 APP_NAME="$(basename "$0")"
 
 # Help message to be displayed by the application.
-USAGE="usage: ${APP_NAME} [Options] <ip_address>
+USAGE="$(cat <<EOF
+usage: ${APP_NAME} [options] <ip_address>
+    Validate IPv4 addresses and summarize class/scope information.
+    Optionally fetch extended metadata from public APIs.
 
-    Options:
-      -q | --quiet  : Silent mode. Do not check for IP details.
-      -i | --info   : Fetch additional information from the web.
-"
+    options:
+      -q | --quiet                   : Skip verbose breakdowns and only return validation status.
+      -i | --info                    : Query ipinfo.io for additional details about the IP.
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print version information and exit.
+
+    arguments:
+      ip_address                     : IPv4 address to inspect.
+
+  Notes:
+    - Without --info, the command performs offline classification only.
+    - Return code is 0 for valid IPv4 addresses and non-zero otherwise.
+EOF
+)"
 
 # Functions to be unset after quit
 UNSETS=(main check_class check_scope check_valid parse_args)

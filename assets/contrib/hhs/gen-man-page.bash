@@ -15,17 +15,23 @@
 VERSION="1.0.0"
 
 # Help message to be displayed by the script.
-USAGE="
-    Manual Generator for Shell Scripts.
+read -r -d '' USAGE <<EOF
+usage: $(basename "$0") [options]
+    Generate a manual page template for the provided shell script.
+    Parses header metadata to populate NAME, DESCRIPTION and more.
 
-    usage: $(basename "$0") [options] <ARGS>
+    options:
+      -h | --help                    : Show this help message and exit.
+      -v | --version                 : Print version information and exit.
+      -s | --script <path>           : Script file to parse for metadata (required).
 
-    Options:
+    arguments:
+      (none)                         : All inputs are supplied via options.
 
-        -h | --help             : Show this help message.
-        -v | --version          : Display current program version.
-        -s | --script <path>    : Parse the specified script to find out man information.
-"
+  Notes:
+    - The generated roff content is printed to stdout for use with man(1).
+    - Ensure the target script contains the expected header comments.
+EOF
 
 RED="\033[31m"
 GREEN="\033[32m"

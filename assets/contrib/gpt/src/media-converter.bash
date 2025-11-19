@@ -19,20 +19,26 @@
 VERSION="0.0.1"  # https://semver.org/ ; major.minor.patch
 
 # Usage message
-USAGE="usage: $(basename "$0") [-i input_file] [-o output_file] [-f format] [-h] [-v]
-Convert a media file to another format using ffmpeg.
+USAGE="$(cat <<EOF
+usage: $(basename "$0") -i <input> -f <format> [options]
+    Convert media files to another format via ffmpeg.
+    Automatically infers the output name when not provided.
 
-Options:
-  -i, --input     Input file path
-  -o, --output    Output file path (optional, default: input file name with new extension)
-  -f, --format    Desired output format (e.g., mp4, mp3, avi)
-  -h, --help      Display this help message and exit
-  -v, --version   Print version information and exit
+    options:
+      -i | --input <file>            : Source media file to convert (required).
+      -f | --format <ext>            : Desired output format (e.g. mp4, mp3, avi).
+      -o | --output <file>           : Optional output path; defaults to input name plus new extension.
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print version information and exit.
 
-Example:
-  $(basename "$0") -i input.mp4 -f mp3
-  $(basename "$0") -i input.wav -o output.mp3 -f mp3
-"
+    arguments:
+      (none)                         : All configuration is supplied via options.
+
+  Notes:
+    - Requires ffmpeg to be installed and available on the PATH.
+    - Existing output files are overwritten by ffmpeg unless protected externally.
+EOF
+)"
 
 # @purpose: Display the usage/help message
 usage() {

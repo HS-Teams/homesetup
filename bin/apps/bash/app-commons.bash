@@ -18,9 +18,23 @@ VERSION=${VERSION:-0.9.0}
 APP_NAME="${APP_NAME:-${0##*/}}"
 
 # Help message to be displayed by the application.
-USAGE=${USAGE:-"
-usage: ${APP_NAME} <arguments> [options]
-"}
+USAGE=${USAGE:-"$(cat <<EOF
+usage: ${APP_NAME} <arg_name> [options]
+    Common HomeSetup application wrapper.
+    Override this template inside your script to describe real behavior.
+
+    options:
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print the current ${APP_NAME} version.
+      -? | script specific options   : Provide additional switches as needed.
+
+    arguments:
+      arg_name                       : Placeholder for your primary argument.
+
+  Notes:
+    - Replace this template to document your app specific inputs.
+EOF
+)"}
 
 # Default identifiers to be unset
 UNSETS=('quit' 'usage' 'version' 'trim')

@@ -18,20 +18,26 @@
 # https://semver.org/ ; major.minor.patch
 VERSION="0.0.2"  # https://semver.org/ ; major.minor.patch
 
-USAGE="usage: $(basename "$0") -t <temperature> -f <C|F|K> -o <C|F|K>
-Convert temperatures between Celsius, Fahrenheit, and Kelvin.
+USAGE="$(cat <<EOF
+usage: $(basename "$0") -t <value> -f <C|F|K> -o <C|F|K> [options]
+    Convert temperatures between Celsius, Fahrenheit and Kelvin.
+    Uses bc for precision and formats the result with two decimals.
 
-Options:
-  -t, --temperature   Temperature value to convert
-  -f, --from          Current scale of the temperature (C, F, or K)
-  -o, --to            Desired scale to convert to (C, F, or K)
-  -h, --help          Display this help message and exit
-  -v, --version       Print version information and exit
+    options:
+      -t | --temperature <value>     : Numeric temperature to convert (required).
+      -f | --from <scale>            : Source scale (C, F or K).
+      -o | --to <scale>              : Target scale (C, F or K).
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print version information and exit.
 
-Examples:
-  $(basename "$0") -t 100 -f C -o F    # Convert 100°C to °F
-  $(basename "$0") -t 212 -f F -o K    # Convert 212°F to K
-"
+    arguments:
+      (none)                         : All input is provided through options.
+
+  Notes:
+    - Conversions that reuse the same scale simply echo the original value.
+    - bc is required; install via 'brew install bc' if missing.
+EOF
+)"
 
 # @purpose: Display help message and exit
 usage() {

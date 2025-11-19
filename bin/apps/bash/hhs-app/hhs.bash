@@ -24,39 +24,34 @@ UNSETS+=(
 VERSION="1.1.0 built on HomeSetup v${HHS_VERSION}"
 
 # Help message to be displayed by the application.
-USAGE="usage: ${APP_NAME} [option] {function | plugin {task} <command>} [args...]
+read -r -d '' USAGE <<EOF
+usage: ${APP_NAME} [options] {function | plugin {task} <command>} [args...]
+    HomeSetup application manager.
+    Execute built-in functions or delegate to installed plugins.
 
  _   _                      ____       _
 | | | | ___  _ __ ___   ___/ ___|  ___| |_ _   _ _ __
-| |_| |/ _ \\| '_ \` _ \\ / _ \\___ \\ / _ \ __| | | | '_ \\
+| |_| |/ _ \\| '_ \` _ \\ / _ \\___ \\ / _ \ __| | | | '_ \\ 
 |  _  | (_) | | | | | |  __/___) |  __/ |_| |_| | |_) |
 |_| |_|\\___/|_| |_| |_|\\___|____/ \\___|\\__|\\__,_| .__/
                                                 |_|
 
-  HomeSetup Application Manager v${VERSION}.
+    options:
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print the HHS application version.
+      -p | --prefix                  : Output the HomeSetup installation prefix.
 
-    Arguments:
-      args              : Plugin command arguments will depend on the plugin. May be mandatory
-                          or not.
-
-    Options:
-      -v  |  --version  : Display current program version.
-      -h  |     --help  : Display this help message.
-      -p  |   --prefix  : Display the HomeSetup installation directory.
-
-    Tasks:
-      help              : Display a help about the plugin.
-      version           : Display current plugin version.
-      execute           : Execute a plugin command.
-
-    Exit Status:
-      (0) Success.
-      (1) Failure due to missing/wrong client input or similar issues.
-      (2) Failure due to program/plugin execution failures.
+    arguments:
+      function                       : Invoke an internal __hhs_* function by name.
+      plugin                         : Target a registered plugin (e.g. ask, updater).
+      task                           : Plugin task such as help, version or execute.
+      command                        : Command payload passed through to the plugin.
+      args                           : Additional arguments consumed by the chosen task.
 
   Notes:
-    - To discover which plugins and functions are available type: ${APP_NAME} list.
-"
+    - Run '${APP_NAME} list' to discover available functions, plugins and commands.
+    - Use '${APP_NAME} <plugin> help' for plugin-specific tasks built on this template.
+EOF
 
 # Directory containing all HHS plug-ins.
 PLUGINS_DIR="$(dirname "${0//${HHS_DIR}/$HHS_HOME}")/apps/${HHS_MY_SHELL}/hhs-app/plugins"

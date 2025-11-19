@@ -19,19 +19,26 @@
 # https://semver.org/ ; major.minor.patch
 VERSION="0.0.12"
 
-USAGE="Usage: ./detect-api-calls.bash [OPTIONS]
+USAGE="$(cat <<EOF
+usage: ./detect-api-calls.bash [options]
+    Recursively scan Gradle/Java projects for external API usage patterns.
+    Detects common libraries (WebClient, Retrofit, Feign, etc.) and highlights matches.
 
-Options:
-  -h, --help             Display help message and exit
-  -s, --source <path>    Source directory to scan (default: src/main/java)
-  -p, --pattern <regex>  Add custom pattern to scan for (can be used multiple times)
-  -v, --version          Print version information and exit
-  -f, --force-scan       Force Java scan even if no Gradle libraries are found
+    options:
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print version information and exit.
+      -s | --source <path>           : Source directory to scan (default: src/main/java).
+      -p | --pattern <regex>         : Additional custom regex to search for (repeatable).
+      -f | --force-scan              : Run the Java scan even when no Gradle hints are found.
 
-Examples:
-  ./detect-api-calls.bash
-  ./detect-api-calls.bash -s app/core -p ExternalService -p \"CustomClientImpl\" -f
-"
+    arguments:
+      (none)                         : Provide all configuration via options.
+
+  Notes:
+    - When ripgrep is available the script uses it for faster searches.
+    - Multiple --pattern flags can be supplied to broaden the scan heuristics.
+EOF
+)"
 
 SOURCE_DIR="src/main/java"
 declare -a CUSTOM_PATTERNS=()

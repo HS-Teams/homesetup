@@ -19,16 +19,26 @@
   VERSION="1.9.4"
 
   # Help message to be displayed by the script
-  USAGE="
-usage: $APP_NAME [OPTIONS] <args>
+  read -r -d '' USAGE <<EOF
+usage: ${APP_NAME} [options]
+    Install and configure HomeSetup on the current machine.
+    Choose between guided, repair and non-interactive installation flows.
 
-  -l | --local          : Local installation (default). Replaces existing dotfiles.
-  -r | --repair         : Repair the current installation.
-  -i | --interactive    : Interactive installation of all scripts in the user HomeSetup directory.
-  -p | --prefix         : HomeSetup installation prefix. Defaults to user's HOME directory '~/HomeSetup'.
-  -b | --homebrew       : Homebrew-based installation. Skips dependency checks.
-  -q | --quiet          : Non-interactive mode using all defaults.
-"
+    options:
+      -l | --local                   : Perform a fresh local install (default mode).
+      -r | --repair                  : Repair an existing installation in place.
+      -i | --interactive             : Ask before executing each installation step.
+      -p | --prefix <path>           : Override the installation prefix (default: ~/HomeSetup).
+      -b | --homebrew                : Use the Homebrew formula and skip dependency checks.
+      -q | --quiet                   : Non-interactive mode that accepts every default.
+
+    arguments:
+      (none)                         : All behavior is controlled through options.
+
+  Notes:
+    - Combine --interactive with --prefix to preview a custom destination.
+    - The installer honors the HHS_PREFIX environment variable when present.
+EOF
 
   # Installation log file
   INSTALL_LOG="${HOME}/install-hhs.log"

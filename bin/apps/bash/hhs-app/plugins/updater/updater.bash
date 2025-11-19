@@ -18,8 +18,10 @@ VERSION=0.9.0
 PLUGIN_NAME="updater"
 
 # Usage message
-USAGE="
-usage: ${PLUGIN_NAME} ${PLUGIN_NAME} [option] {check,update,stamp}
+USAGE="$(cat <<EOF
+usage: ${APP_NAME} ${PLUGIN_NAME} [options] {check|update|stamp}
+    HomeSetup update manager.
+    Inspect, trigger or schedule updates for your installation.
 
  _   _           _       _
 | | | |_ __   __| | __ _| |_ ___ _ __
@@ -28,13 +30,20 @@ usage: ${PLUGIN_NAME} ${PLUGIN_NAME} [option] {check,update,stamp}
  \___/| .__/ \__,_|\__,_|\__\___|_|
       |_|
 
-  HomeSetup update manager.
+    options:
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print the updater plugin version.
 
     arguments:
-      check             : Fetch the last_update timestamp and check if HomeSetup needs to be updated.
-      update            : Check for HomeSetup updates.
-      stamp             : Stamp the next auto-update check for 7 days ahead.
-"
+      check                          : Compare installed and remote versions, prompting on updates.
+      update                         : Force a git pull plus installer repair run.
+      stamp                          : Stamp the automatic update check seven days ahead.
+
+  Notes:
+    - Successful updates refresh ~/.hhs/.last_update to postpone reminders.
+    - Commands inherit the same template as other ${APP_NAME} plugins.
+EOF
+)"
 
 UNSETS=(
   help version cleanup execute update_hhs stamp_next_update is_updated update_check do_update

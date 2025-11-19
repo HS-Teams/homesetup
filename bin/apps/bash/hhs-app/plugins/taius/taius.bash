@@ -21,19 +21,23 @@ UNSETS=(
 )
 
 # Usage message
-USAGE="usage: ${APP_NAME} <question>
+USAGE="$(cat <<EOF
+usage: ${APP_NAME} ${PLUGIN_NAME} [options] <question>
+    Ask Taius (HomeSetup AskAI) anything about your environment.
+    Requires the HomeSetup virtual environment and AskAI package.
 
- _____     _
-|_   _|_ _(_)_   _ ___
-  | |/ _\` | | | | / __|
-  | | (_| | | |_| \\__ \\
-  |_|\\__,_|_|\\__,_|___/...AskAI
-
-  HomeSetup AskAI integration v${VERSION}.
+    options:
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print the Taius plugin version.
 
     arguments:
-      question    : the question to make to Taius about HomeSetup.
-"
+      question                       : Prompt to forward to the AskAI engine.
+
+  Notes:
+    - AskAI must be installed and the HomeSetup python venv activated.
+    - Additional flags are forwarded directly to 'python3 -m askai'.
+EOF
+)"
 
 [[ -s "${HHS_DIR}/bin/app-commons.bash" ]] && source "${HHS_DIR}/bin/app-commons.bash"
 

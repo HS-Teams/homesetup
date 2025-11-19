@@ -18,29 +18,29 @@ VERSION="1.1.0"
 APP_NAME="$(basename "$0")"
 
 # Help message to be displayed by the application.
-USAGE="usage: ${APP_NAME} [options] <method> <url>
+USAGE="$(cat <<EOF
+usage: ${APP_NAME} [options] <method> <url>
+    Fetch a URL resource using curl with sensible defaults.
+    Supports headers, payloads, JSON formatting and request timeouts.
 
-  Fetch URL resource using the most commons ways.
+    options:
+      -b | --body <json_body>       : Provide a JSON body for POST/PUT/PATCH requests.
+      -f | --format                 : Pretty-print JSON responses when possible.
+      -H | --headers <headers>      : Comma separated headers (e.g. 'Accept: application/json').
+      -s | --silent                 : Suppress informational output and show only the response.
+      -t | --timeout <seconds>      : Override the curl timeout (default: 3 seconds).
+      -h | --help                   : Display this help message and exit.
+      -v | --version                : Print version information and exit.
 
-    Arguments:
+    arguments:
+      method                        : HTTP verb to use (GET, HEAD, POST, PUT, PATCH, DELETE).
+      url                           : Destination URL to call.
 
-        method                      : The http method to be used [ GET, HEAD, POST, PUT, PATCH, DELETE ].
-        url                         : The url to make the request.
-
-    Options:
-        -b, --body <json_body>      : The http request body (payload).
-        -f, --format                : Pretty-print the JSON response when possible.
-        -H, --headers <headers>     : Comma-separated http request headers.
-        -s, --silent                : Omits all informational messages.
-        -t, --timeout <seconds>     : Request timeout (default: 3).
-        -h, --help                  : Display help message and quit.
-        -v, --version               : Print version information and quit.
-
-  Examples:
-    ${APP_NAME} -s -f GET https://example.com
-    ${APP_NAME} --headers \"Accept: application/json\" POST --body '{\"x\":1}' https://api.site.com
-
-"
+  Notes:
+    - Additional headers can be repeated by supplying multiple --headers entries.
+    - Request and response metadata are colored unless --silent is supplied.
+EOF
+)"
 
 # Functions to be unset after quit.
 UNSETS=(

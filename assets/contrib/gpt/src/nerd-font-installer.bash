@@ -20,20 +20,25 @@
   VERSION="0.0.3"
 
   # Usage message
-  USAGE="usage: $(basename "$0") [-h|--help] [-v|--version] [-f|--font <font_name>]
+  USAGE="$(cat <<EOF
+usage: $(basename "$0") [options]
+    Download and install Nerd Fonts from the official releases.
+    Supports HomeSetup curated fonts and manual selection.
 
-  This script allows you to download and install a Nerd Font of your choice.
+    options:
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print version information and exit.
+      -f | --font <name>             : Install the first font whose name matches the given text.
+      -d | --droid                   : Install the HomeSetup provided Droid Nerd font bundle.
 
-  Options:
-    -h, --help            Display this help message and exit
-    -v, --version         Print version information and exit
-    -f, --font <name>     Install the first matching font by name (partial match)
-    -d, --droid           Install HomeSetup provided nerd font
+    arguments:
+      (none)                         : All configuration is provided through options.
 
-  Examples:
-    $(basename "$0")
-    $(basename "$0") -f 'Droid'
-  "
+  Notes:
+    - When no font is specified an interactive preset picker is shown.
+    - Fonts are cached under /tmp before being extracted into ~/.fonts.
+EOF
+)"
 
   # Nerd font version
   NF_VERSION="v3.2.1"

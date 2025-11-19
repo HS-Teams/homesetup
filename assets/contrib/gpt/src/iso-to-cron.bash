@@ -19,18 +19,25 @@
 VERSION="0.0.3" # https://semver.org/ ; major.minor.patch
 
 # Usage message
-USAGE="usage: $(basename "$0") [options]
+USAGE="$(cat <<EOF
+usage: $(basename "$0") [options]
+    Convert between ISO-8601 timestamps and cron expressions.
+    Useful helper for cron-scheduler.bash and other scheduling scripts.
 
-Options:
-  -h, --help          Display this help message and exit
-  -v, --version       Print version information and exit
-  -i, --iso-to-cron   Convert ISO date to cron expression
-  -c, --cron-to-iso   Convert cron expression to ISO date
+    options:
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print version information and exit.
+      -i | --iso-to-cron <iso>       : Convert an ISO timestamp to cron format.
+      -c | --cron-to-iso <expr>      : Convert a cron expression back to ISO.
 
-Examples:
-  $(basename "$0") -i \"2024-08-23T15:30:00\"
-  $(basename "$0") -c \"30 15 23 8 *\"
-"
+    arguments:
+      (none)                         : Provide the ISO or cron string via options.
+
+  Notes:
+    - ISO timestamps must follow YYYY-MM-DDTHH:MM:SS (UTC suffix optional).
+    - Cron expressions output minutes, hours, day-of-month and month components.
+EOF
+)"
 
 # @purpose: Display usage message
 usage() {

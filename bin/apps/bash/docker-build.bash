@@ -21,15 +21,23 @@ IFS=$'\n'
 read -r -d '' -a images < <(find "${HHS_HOME}/docker" -mindepth 1 -type d -exec basename {} \;)
 IFS="${OLDIFS}"
 
-USAGE="
-usage: usage: ${APP_NAME} [Options] <image_type..>
+USAGE="$(cat <<EOF
+usage: ${APP_NAME} [options] <image_type...>
+    Build the curated HomeSetup docker images using buildx.
+    Can optionally push multi-arch tags after a successful build.
 
-  Options
-    -p | --push   : Push the image after a successful build
+    options:
+      -p | --push                   : Push the freshly built images to the registry.
+      -h | --help                   : Display this help message and exit.
 
-  Arguments
-    - image_type  : The images to be installed. One or more of [${images[*]}]
-"
+    arguments:
+      image_type                    : One or more image folders from [${images[*]}].
+
+  Notes:
+    - Images are built for linux/arm64 and linux/amd64 via buildx.
+    - Use --push to publish both tags (amd64/arm64) after building locally.
+EOF
+)"
 
 declare -a platforms
 

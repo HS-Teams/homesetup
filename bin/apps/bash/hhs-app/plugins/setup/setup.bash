@@ -22,20 +22,24 @@ UNSETS=(
 VERSION="1.0.13"
 
 # Usage message
-USAGE="usage: ${APP_NAME} ${PLUGIN_NAME} [-restore]
-
- ____       _
-/ ___|  ___| |_ _   _ _ __
-\___ \ / _ \ __| | | | '_ \\
- ___) |  __/ |_| |_| | |_) |
-|____/ \___|\__|\__,_| .__/
-                     |_|
-
-  HomeSetup initialization setup v${VERSION}.
+USAGE="$(cat <<EOF
+usage: ${APP_NAME} ${PLUGIN_NAME} [options]
+    Configure or restore HomeSetup initialization settings (v${VERSION}).
+    Presents a multi-select menu for toggling startup features.
 
     options:
-      -restore    : Restore HomeSetup defaults.
-"
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print the setup plugin version.
+      -restore                       : Restore the default homesetup.toml file.
+
+    arguments:
+      (none)                         : Selections are made interactively via menus.
+
+  Notes:
+    - When invoked without options a picker lets you toggle each startup feature.
+    - Restoring overwrites the existing homesetup.toml with the template version.
+EOF
+)"
 
 # Regex to match a setting.
 RE_PROPERTY="^([a-zA-Z0-9_.]+) *= *(.*)"

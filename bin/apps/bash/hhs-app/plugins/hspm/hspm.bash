@@ -18,31 +18,28 @@ VERSION=0.9.2
 PLUGIN_NAME="hspm"
 
 # Usage message
-USAGE="
-usage: $PLUGIN_NAME [option] {install,uninstall,list,recover}
-
- _   _ ____  ____  __  __
-| | | / ___||  _ \|  \/  |
-| |_| \___ \| |_) | |\/| |
-|  _  |___) |  __/| |  | |
-|_| |_|____/|_|   |_|  |_|
-
-  HomeSetup package manager
+USAGE="$(cat <<EOF
+usage: ${APP_NAME} ${PLUGIN_NAME} [options] {install|uninstall|list|recover}
+    HomeSetup package manager for repeatable tool provisioning.
+    Executes recipe files tailored to your operating system/package manager.
 
     options:
-      -v  |   --version     : Display current program version.
-      -h  |      --help     : Display this help message.
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print the hspm plugin version.
 
     arguments:
-      list                  : List all available, OS based, installation recipes.
-      install   <package>   : Install packages using a matching installation recipe.
-      uninstall <package>   : Uninstall packages using a matching uninstallation recipe.
-      recover [-i,-t,-e]    : Install or list all packages previously installed by hspm. If -i is provided, then hspm
-                              will attempt to install all packages, otherwise the list is displayed. If -t is provided
-                              hspm will check \${HHS_DEV_TOOLS} instead of previously installed packages. If -e is
-                              provided, then the default editor will open the recovery file.
+      list                           : Show all detected installation recipes for the current OS.
+      install <package...>           : Install one or more recipes by name.
+      uninstall <package...>         : Remove one or more recipes by name.
+      recover [-i|-t|-e]             : Inspect the breadcrumb file (default), install all (-i),
+                                       use HHS_DEV_TOOLS as the source (-t) or open the file in the
+                                       default editor (-e).
 
-"
+  Notes:
+    - hspm tracks installs in ~/.hhs/.hspm to support recovery workflows.
+    - Unknown commands fall back to this template to keep help consistent.
+EOF
+)"
 
 UNSETS=(
   help version cleanup execute cleanup_recipes

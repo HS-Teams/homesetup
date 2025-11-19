@@ -19,17 +19,25 @@
 VERSION="0.0.1"
 
 # Usage message
-USAGE="usage: $(basename "$0") -d directory [-n days] [-h] [-v]
+USAGE="$(cat <<EOF
+usage: $(basename "$0") -d <directory> [-n <days>] [options]
+    Find files older than N days and archive them with a timestamp.
+    Provides safeguards for critical directories and optional JSON logging.
 
-  Options:
-    -d, --directory   Specify the directory to search (mandatory).
-    -n, --days        Specify the number of days old the files should be (default: 30 days).
-    -h, --help        Display help message and exit.
-    -v, --version     Print version information and exit.
+    options:
+      -d | --directory <path>        : Directory to scan (required).
+      -n | --days <count>            : Minimum age in days before archiving (default: 30).
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print version information and exit.
 
-  Example:
-    $(basename "$0") -d /path/to/directory -n 60
-"
+    arguments:
+      (none)                         : All inputs are provided via options.
+
+  Notes:
+    - Protected system directories such as /, /etc and /usr are skipped.
+    - Archives are created alongside each file using the creation timestamp.
+EOF
+)"
 
 # List of guarded directories
 PROTECTED_DIRS="/ /bin /boot /dev /etc /lib /lib64 /proc /root /sbin /sys /usr /var"

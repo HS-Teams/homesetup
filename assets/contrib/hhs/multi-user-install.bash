@@ -23,7 +23,22 @@ INSTALL_DIR="${1:-/var/lib/homesetup}"
 
 HHS_USERS=("${@:2}")
 
-USAGE="usage: multi-user-install <install_dir> <username...>"
+read -r -d '' USAGE <<EOF
+usage: multi-user-install <install_dir> <username...>
+    Install HomeSetup under a shared directory for multiple users.
+    Creates a common group and adjusts permissions for collaborators.
+
+    options:
+      (none)                         : Script behavior is fully driven by arguments.
+
+    arguments:
+      install_dir                    : Destination for the shared HomeSetup checkout.
+      username...                    : One or more system accounts to enroll in the group.
+
+  Notes:
+    - Must be executed as root so the group and permissions can be updated.
+    - Uses the HHS_GROUP environment variable when provided (defaults to 'homesetup').
+EOF
 
 if [[ $# -le 1 || ${#HHS_USERS[@]} -eq 0 ]]; then
     echo "${USAGE}" && exit 1

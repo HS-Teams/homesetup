@@ -20,18 +20,24 @@
 # https://semver.org/; major.minor.patch
 VERSION="1.0.0"
 
-USAGE="
-Usage: $(basename "$0") <image> [OPTIONS]
+USAGE="$(cat <<EOF
+usage: $(basename "$0") <image> [options]
+    Extract and display EXIF/IPTC/XMP metadata using exiftool and jq.
+    Optionally export the parsed metadata to a JSON file for later review.
 
-Options:
-  -o, --output <file>    Export metadata to JSON file
-  -h, --help             Display this help message
-  -v, --version          Display version information
+    options:
+      -o | --output <file>           : Write metadata to a JSON file after printing.
+      -h | --help                    : Display this help message and exit.
+      -v | --version                 : Print version information and exit.
 
-Examples:
-  $(basename "$0") photo.jpg
-  $(basename "$0") photo.jpg -o metadata.json
-"
+    arguments:
+      image                          : Image file to inspect.
+
+  Notes:
+    - exiftool and jq must be installed (brew install exiftool jq).
+    - When --output is omitted the metadata is only displayed on stdout.
+EOF
+)"
 
 # @purpose: Show help message
 usage() {
