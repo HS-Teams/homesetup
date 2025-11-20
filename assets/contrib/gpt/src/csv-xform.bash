@@ -2,7 +2,7 @@
 # csv-xform.bash
 # Purpose: Transform an N-column CSV into an X by Y matrix, supporting piped input or file input
 
-VERSION="0.0.3" # https://semver.org/ ; major.minor.patch
+VERSION="1.0.0" # https://semver.org/ ; major.minor.patch
 
 # Display usage information
 usage() {

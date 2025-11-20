@@ -10,7 +10,7 @@
 # License: Please refer to <https://opensource.org/licenses/MIT>
 
 # Current application version.
-VERSION=${VERSION:-0.0.1}
+VERSION=${VERSION:-1.0.0}
 
 # This application name.
 APP_NAME="${APP_NAME:-${0##*/}}"

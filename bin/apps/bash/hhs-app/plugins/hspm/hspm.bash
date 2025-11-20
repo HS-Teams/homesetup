@@ -15,7 +15,7 @@
 PLUGIN_NAME="hspm"
 
 # Current script version.
-VERSION=0.9.2
+VERSION=1.0.0
 
 # Namespace cleanup
 UNSETS=(

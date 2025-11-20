@@ -12,7 +12,7 @@
 # Copyright (c) 2025, HomeSetup team
 
 # Current application version.
-VERSION=${VERSION:-0.9.0}
+VERSION=${VERSION:-1.0.0}
 
 # This application name.
 APP_NAME="${APP_NAME:-${0##*/}}"

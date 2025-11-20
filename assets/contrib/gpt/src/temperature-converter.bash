@@ -16,7 +16,7 @@
 # +------------------------------------------------------------------------------+
 
 # https://semver.org/ ; major.minor.patch
-VERSION="0.0.2"  # https://semver.org/ ; major.minor.patch
+VERSION="1.0.0"  # https://semver.org/ ; major.minor.patch
 
 USAGE="usage: $(basename "$0") -t <temperature> -f <C|F|K> -o <C|F|K>
 Convert temperatures between Celsius, Fahrenheit, and Kelvin.

@@ -16,7 +16,7 @@
 # +------------------------------------------------------------------------------+
 
 # https://semver.org/ ; major.minor.patch
-VERSION="0.0.1"
+VERSION="1.0.0"
 
 # Usage message
 USAGE="usage: $(basename "$0") -d directory [-n days] [-h] [-v]
