@@ -1,0 +1,55 @@
+.TH ${SCRIPT_NAME} 1 "2025-04-01" "${SCRIPT_NAME} 0.9.0" "User Commands"
+.SH NAME
+${SCRIPT_NAME} \- script template to start any good shell script.
+.SH SYNOPSIS
+.B ${SCRIPT_NAME}
+.RI "[-hv] [-o" file "] [--timelog] [--ignorelock] args ..."
+.SH DESCRIPTION
+This manual page documents a reusable shell script template. Update the
+placeholders (such as ${SCRIPT_NAME}) to fit the target script before
+shipping.
+.SH OPTIONS
+.TP
+.B -o [file], --output=[file]
+Set log file (default = /dev/null). Use the DEFAULT keyword to autoname the
+file. The default value is /dev/null.
+.TP
+.B -t, --timelog
+Add timestamp to the log in the format "+%y/%m/%d@%H:%M:%S".
+.TP
+.B -x, --ignorelock
+Ignore the presence of a lock file.
+.TP
+.B -h, --help
+Print this help and exit.
+.TP
+.B -v, --version
+Print script information.
+.SH EXAMPLES
+${SCRIPT_NAME} -o DEFAULT arg1 arg2
+.SH IMPLEMENTATION
+.TP
+.B version
+${SCRIPT_NAME} (www.example.com) 0.9.0
+.TP
+.B author
+Hugo Saporetti Junior
+.TP
+.B copyright
+Copyright (c) Hugo Saporetti Junior
+.TP
+.B license
+MIT <https://opensource.org/licenses/MIT>
+.SH HISTORY
+.TP
+.B 2025/03/01
+username: Script creation
+.TP
+.B 2025/04/01
+username: Add long options and improvements
+.SH DEBUGGING
+Uncomment one of the following lines to debug:
+.IP \[bu] 2
+set -n  \fR# Check syntax without execution.
+.IP \[bu] 2
+set -x  \fR# Trace execution for debugging.
