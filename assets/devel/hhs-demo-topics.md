@@ -24,3 +24,7 @@
 22. FZF Integration: Cover the integration of the modern fuzzy-finder with HomeSetup, including key bindings and auto-completions.
 23. Ble-sh: TODO
 24. Atuin: TODO
+25. Delta: TODO
+26. Zoxide: TODO
+27. TLDR: TODO
+28. Ollama: TODO
