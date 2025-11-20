@@ -89,7 +89,7 @@ function execute() {
     [[ ! "$arg" =~ ^-[a-zA-Z] ]] && args+=("$arg")
   done
 
-  python3 -m askai -r rag "${args[@]}" 2>&1 || quit 0
+  python3 -m askai -r rag "${args[@]}" 2>&1 || quit 2
 
-  quit 1 "Failed to execute AskAI"
+  quit 0
 }

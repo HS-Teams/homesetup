@@ -222,14 +222,15 @@ function register_functions() {
 # @param $2..$N [Req] : The plug-in arguments.
 function invoke_plugin() {
 
-  local plg_cmd="${1}" ret
+  local plg_cmd="${1}" ret found=0
 
   has_plugin "${plg_cmd}" || command_hint "Plugin/Function/Command not found: \"${STRIKE}${plg_cmd}${NC}\"" "${@}"
   shift
 
   for idx in "${!PLUGINS[@]}"; do
     if [[ "${PLUGINS[idx]}" == "${plg_cmd}" ]]; then
-      [[ -s "${PLUGINS_LIST[idx]}" ]] || quit 1
+      found=1
+      [[ -s "${PLUGINS_LIST[idx]}" ]] || quit 2
       source "${PLUGINS_LIST[idx]}"
       plg_cmd="${1:-execute}"
       has_command "${plg_cmd}" || command_hint  "Command not available: \"${STRIKE}${plg_cmd}${NC}\"" "${@}"
@@ -238,13 +239,10 @@ function invoke_plugin() {
       ret=${?}
       cleanup
       exit ${ret}
-    else
-      [[ $((idx + 1)) -eq ${#PLUGINS[@]} ]] && quit 255
     fi
   done
 
-  ret=${?}
-  [[ ${ret} -eq 255 ]] && command_hint "Plugin/Function/Command not found: \"${STRIKE}${plg_cmd}${NC}\"" "${@}"
+  [[ ${found} -eq 0 ]] && { command_hint "Plugin/Function/Command not found: \"${STRIKE}${plg_cmd}${NC}\"" "${@}"; return 1; }
 
   return ${ret}
 }
@@ -453,7 +451,7 @@ function cleanup_plugins() {
 # @purpose: Program entry point.
 function main() {
 
-  local fn_name="${1}"
+  local fn_name="${1}" ret_val
 
   # enable history in a non-interactive shell.
   history -r "${HISTFILE}"
@@ -475,15 +473,19 @@ function main() {
   if has_function "${fn_name}"; then
     shift
     ${fn_name} "${@}"  # Invoke internal hhs-function
-    quit $?
+    [[ $? -eq 0 ]] && quit 0 || quit 2
   fi
 
   [[ ${#INVALID[@]} -gt 0 ]] && quit 1 "Invalid plugins found: [${INVALID[*]}]"
 
   fn_name="${fn_name//help/list}"
-  invoke_plugin "${@}" || quit 2
-
-  quit 255 "Failed to invoke hhs command: ${*}"
+  if invoke_plugin "${@}"; then
+    quit 0
+  else
+    ret_val=$?
+    [[ ${ret_val} -eq 1 ]] && quit 1
+    quit 2 "Failed to invoke hhs command: ${*}"
+  fi
 }
 
 if [[ -t 0 ]]; then
@@ -493,4 +495,4 @@ else
 fi
 
 main "${@}"
-quit 1
+quit 2

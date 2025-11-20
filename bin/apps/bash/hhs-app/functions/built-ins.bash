@@ -106,7 +106,7 @@ function funcs() {
 # @param $2 [opt] : The log level to retrieve.
 function logs() {
 
-  local level logfile logs usage tail_opts
+  local level logfile logs usage tail_opts ret_val
   local all_levels="ALL_LEVELS CRITICAL DEBUG ERROR FATAL FINE INFO OUT TRACE WARNING WARN SEVERE"
 
   usage="usage: __hhs ${FUNCNAME[0]} [-F] [hhs-log-file] [level]"
@@ -164,7 +164,9 @@ function logs() {
     __hhs_tailor "${tail_opts}" "${logfile}" | grep -i "${level}"
   fi
 
-  quit $?
+  ret_val=$?
+
+  [[ ${ret_val} -eq 0 ]] && quit 0 || quit 2
 }
 
 # @purpose: Display logs for a specified process over the last specified number of days.
@@ -192,14 +194,13 @@ function man() {
 
   if [[ $# -ne 1 || -z "${cmd}" ]]; then
     echo "usage: __hhs ${FUNCNAME[0]} <bash_command>"
-  else
-    echo -e "${ORANGE}Opening SS64 man page for '${cmd}': ${ss63_url}"
-    sleep 2
-    __hhs_open "${ss63_url}" && quit 0 ''
-    quit 1 "Failed to open url: \"${ss63_url}\" !"
+    quit 1
   fi
 
-  quit 0
+  echo -e "${ORANGE}Opening SS64 man page for '${cmd}': ${ss63_url}"
+  sleep 2
+  __hhs_open "${ss63_url}" && quit 0 ''
+  quit 2 "Failed to open url: \"${ss63_url}\" !"
 }
 
 # @purpose: Attempt to display the help for the given command.

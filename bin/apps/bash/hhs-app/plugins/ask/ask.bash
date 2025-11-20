@@ -142,7 +142,7 @@ function ensure_ollama() {
         start_ollama &> /dev/null
       else
         echo -e "${RED}FAILED${NC}"
-        quit 1 "Offline Ollama failed to install."
+        quit 2 "Offline Ollama failed to install."
       fi
     else
       quit 1 "Offline Ollama is required to use this feature."
@@ -297,7 +297,7 @@ function execute() {
       hint="brew services start ollama"; else hint="nohup ollama serve >"${HHS_LOG_DIR}/ollama.log" 2>&1 &"; fi
     echo -e "${RED}Ollama service is not running!\n"
     echo -e "${YELLOW}${TIP_ICON} Tip: Type \"${hint}\"${NC}"
-    quit 1
+    quit 2
   }
 
   # Prepare question from arguments
@@ -306,7 +306,7 @@ function execute() {
 
   # Question & Answer
   start_ollama &> /dev/null
-  resp="$(mktemp /tmp/hhs-"${OLLAMA_MODEL}"-response.XXXXXX)" || quit 1 "Failed to create temporary file."
+  resp="$(mktemp /tmp/hhs-"${OLLAMA_MODEL}"-response.XXXXXX)" || quit 2 "Failed to create temporary file."
   grep -q '^### Started:' "${HHS_OLLAMA_HISTORY_FILE}" || echo "### Started: $(date +%F)" >> "${HHS_OLLAMA_HISTORY_FILE}"
   echo -e "## [$(date '+%H:%M')] User: \n${query}" >> "${HHS_OLLAMA_HISTORY_FILE}"
   echo -e "✨ ${GREEN}${OLLAMA_MODEL}[${ctx}K]:\n"
@@ -330,5 +330,5 @@ function execute() {
   # Cleanup
   [[ -z "${KEEP}" && -f "${resp}" ]] && rm -f "${resp}" &> /dev/null
 
-  quit "${ret_val}"
+  [[ ${ret_val} -eq 0 ]] && quit 0 || quit 2
 }

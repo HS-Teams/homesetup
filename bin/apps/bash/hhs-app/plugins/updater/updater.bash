@@ -147,7 +147,7 @@ update_hhs() {
         read -r -n 1 -sp "${YELLOW}Do you want to install the updates now (y/[n])? " ANS
         [[ -n "$ANS" ]] && echo "${ANS}${NC}"
         if [[ "${ANS}" =~ ^[yY]$ ]]; then
-          pushd "${HHS_HOME}" &>/dev/null || quit 1
+          pushd "${HHS_HOME}" &>/dev/null || quit 2
           ai_enabled=$(python3 -m pip show hspylib-askai &>/dev/null && echo '1')
           export GITHUB_ACTIONS="${ai_enabled:-0}"
           if do_update && "${HHS_HOME}/install.bash" -q -r; then
@@ -156,14 +156,14 @@ update_hhs() {
             echo -e "${YELLOW}${POINTER_ICN}  The updated version will activate after restarting your terminal!${NC}"
             quit 0
           else
-            quit 1 "${PLUGIN_NAME}: Failed to update HomeSetup !${NC}"
+            quit 2 "${PLUGIN_NAME}: Failed to update HomeSetup !${NC}"
           fi
-          popd &>/dev/null || quit 1
+          popd &>/dev/null || quit 2
         fi
       fi
       stamp_next_update &>/dev/null
     else
-      quit 1 "${PLUGIN_NAME}: Unable to fetch '.VERSION' ! ${repo_ver:-nada}"
+      quit 2 "${PLUGIN_NAME}: Unable to fetch '.VERSION' ! ${repo_ver:-nada}"
     fi
   else
     quit 1 "${PLUGIN_NAME}: HHS_VERSION is undefined. HomeSetup installation is incomplete!"

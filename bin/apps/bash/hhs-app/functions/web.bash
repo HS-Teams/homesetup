@@ -19,7 +19,7 @@ function github() {
   echo -e "${BLUE}${GLOBE_ICN} Opening HomeSetup github page from: ${page_url}${ELLIPSIS_ICN}${NC}"
   __hhs_open "${page_url}" && sleep 2 && quit 0
 
-  quit 1 "Failed to open url: \"${page_url}\" !"
+  quit 2 "Failed to open url: \"${page_url}\" !"
 }
 
 # @purpose: Open the HomeSetup GitHub project board.
@@ -30,7 +30,7 @@ function board() {
   echo -e "${BLUE}${GLOBE_ICN} Opening HomeSetup board from: ${page_url}${ELLIPSIS_ICN}${NC}"
   __hhs_open "${page_url}" && sleep 2 && quit 0
 
-  quit 1 "Failed to open url: \"${page_url}\" !"
+  quit 2 "Failed to open url: \"${page_url}\" !"
 }
 
 # @purpose: Open the HomeSetup GitHub sponsors page.
@@ -41,7 +41,7 @@ function sponsor() {
   echo -e "${BLUE}${GLOBE_ICN} Opening HomeSetup sponsors page from: ${page_url}${ELLIPSIS_ICN}${NC}"
   __hhs_open "${page_url}" && sleep 2 && quit 0
 
-  quit 1 "Failed to open url: \"${page_url}\" !"
+  quit 2 "Failed to open url: \"${page_url}\" !"
 }
 
 # @purpose: Open GitHub docs of the HomeSetup.
@@ -52,5 +52,5 @@ function docs() {
   echo -e "${BLUE}${GLOBE_ICN} Opening HomeSetup docs from: ${page_url}${ELLIPSIS_ICN}${NC}"
   __hhs_open "${page_url}" && sleep 2 && quit 0
 
-  quit 1 "Failed to open url: \"${page_url}\" !"
+  quit 2 "Failed to open url: \"${page_url}\" !"
 }

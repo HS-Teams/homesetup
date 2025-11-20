@@ -250,4 +250,4 @@ main() {
 }
 
 main "${@}"
-quit ${IP_VALID}
+[[ ${IP_VALID} -eq 0 ]] && quit 0 || quit 1

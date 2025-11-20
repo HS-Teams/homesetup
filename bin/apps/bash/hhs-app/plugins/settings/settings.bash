@@ -83,14 +83,14 @@ function execute() {
         fi
       fi
     else
-      quit 1 "Settings command failed: ${*}"
+      quit 2 "Settings command failed: ${*}"
     fi
   # Execute the setman python app normally
   else
     python3 -m setman "${@}"
   fi
-  ret_val=$?
-  echo -e "${NC}"
+    ret_val=$?
+    echo -e "${NC}"
 
-  quit ${ret_val}
-}
+    [[ ${ret_val} -eq 0 ]] && quit 0 || quit 2
+  }

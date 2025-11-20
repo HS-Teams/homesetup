@@ -60,7 +60,7 @@ function execute() {
   [[ ${#dotfiles[@]} -eq 0 ]] && quit 2 "Unable to find any dotfile to upload!"
 
   echo ''
-  pushd "${HHS_DIR}" &>/dev/null || quit 1
+  pushd "${HHS_DIR}" &>/dev/null || quit 2
 
   if [[ 'upload' == "${action}" ]]; then
     python3 -m firebase upload dotfiles."${db_alias}" "${dotfiles[@]}"
@@ -73,8 +73,8 @@ function execute() {
   fi
   ret_val=$?
 
-  popd &>/dev/null || quit 1
+  popd &>/dev/null || quit 2
   echo -e "${NC}"
 
-  quit ${ret_val}
-}
+    [[ ${ret_val} -eq 0 ]] && quit 0 || quit 2
+  }

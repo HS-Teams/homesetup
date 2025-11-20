@@ -192,7 +192,7 @@ function execute() {
       echo -en "${YELLOW}${operation^} service \"${service}\"...${NC} "
       manage_service "${operation}" "${service}" && quit 0 "${GREEN}OK${NC}"
       echo -e "${RED}FAILED${NC}"
-      quit 1
+      quit 2
       ;;
     status)
       echo -e "${YELLOW}Fetching services statuses...${NC}\n"

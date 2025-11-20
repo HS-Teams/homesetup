@@ -214,12 +214,12 @@ fetch_with_curl() {
   RESPONSE="${response:: -3}"                # all but last 3 = body
   STATUS="${http_status}"
 
-  case "${status}" in
-    28) __hhs_errcho "${APP_NAME}" "Request timed out after ${REQ_TIMEOUT}s." && quit 2 ;;
-    52) __hhs_errcho "${APP_NAME}" "Server responded with no data." && quit 2 ;;
-    0)  [[ ${STATUS} -ge 200 && ${STATUS} -lt 400 ]] && ret_val=0;;
-    *)  ret_val=1 ;;
-  esac
+    case "${status}" in
+      28) __hhs_errcho "${APP_NAME}" "Request timed out after ${REQ_TIMEOUT}s." && quit 2 ;;
+      52) __hhs_errcho "${APP_NAME}" "Server responded with no data." && quit 2 ;;
+      0)  [[ ${STATUS} -ge 200 && ${STATUS} -lt 400 ]] && ret_val=0;;
+      *)  ret_val=2 ;;
+    esac
 
   return $ret_val
 }
@@ -251,16 +251,16 @@ main() {
     else
       [[ -n "${RESPONSE}" ]] && echo "${RESPONSE}"
     fi
-    quit 0
-  else
-    if [[ -z "${SILENT}" ]]; then
-      quit 1 "1 Failed to process request: (Status=${STATUS}) => [resp:${RESPONSE:-<empty>}]"
+      quit 0
     else
-      echo "${RET_VAL}" 1>&2
+      if [[ -z "${SILENT}" ]]; then
+        quit 2 "Failed to process request: (Status=${STATUS}) => [resp:${RESPONSE:-<empty>}]"
+      else
+        echo "${RET_VAL}" 1>&2
+      fi
+      quit 2 "${APP_NAME} Failed to execute the \"${METHOD}\" request to \"${URL}\"."
     fi
-    quit 1 "${APP_NAME} 2 Failed to execute the \"${METHOD}\" request to \"${URL}\"."
-  fi
-}
+  }
 
-main "$@"
-quit 1 "${APP_NAME} 3 Failed to execute the \"${METHOD}\" request to \"${URL}\"."
+  main "$@"
+  quit 2 "${APP_NAME} Failed to execute the \"${METHOD}\" request to \"${URL}\"."
