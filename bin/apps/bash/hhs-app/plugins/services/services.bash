@@ -159,21 +159,21 @@ function list_services_status() {
     [[ ${#service} -gt ${longest} ]] && longest=${#service}
   done
 
-  printf -v dash_pad '%*s' $((width + 2 + longest + 10)) ''
+  printf -v dash_pad '  %*s  ' $((width + 2 + longest + 10)) ''
   dash_pad=${dash_pad// /-}
-  printf "%b\n%b\n" "${WHITE}Service$(printf '%*s' 13 ' ')Status${NC}" "${dash_pad}"
+  printf "  %b\n%b\n" "${WHITE}Service$(printf '%*s' 13 ' ')Status${NC}" "${dash_pad}"
 
   i=1
   for line in "${raw_services[@]}"; do
     service="${line%%:*}"
     status="${line##*:}"
     [[ -n "${filter}" && ! "${service,,}" =~ ${filter,,} ]] && continue
-    printf -v service_entry "%${width}d. %s" "${i}" "${service}"
+    printf -v service_entry "%${width}d: %s" "${i}" "${service}"
     while [[ ${#service_entry} -lt $((width + 2 + longest + 3)) ]]; do service_entry+="."; done
     ((i++))
     [[ "${status}" =~ ^(started|running|enabled|active)$ ]] &&
-      { printf "%b %b\n" "${HHS_HIGHLIGHT_COLOR}${service_entry}${NC}" "${GREEN} Up${NC}"; continue; }
-    printf "%b %b\n" "${HHS_HIGHLIGHT_COLOR}${service_entry}${NC}" "${RED} Down${NC}"
+      { printf "  %b %b\n" "${HHS_HIGHLIGHT_COLOR}${service_entry}${NC}" "${GREEN} Up${NC}"; continue; }
+    printf "  %b %b\n" "${HHS_HIGHLIGHT_COLOR}${service_entry}${NC}" "${RED} Down${NC}"
   done
 }
 

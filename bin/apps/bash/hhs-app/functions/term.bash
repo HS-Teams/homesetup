@@ -127,3 +127,52 @@ function sheets() {
 
   return 1
 }
+
+# @purpose: Create symbolic links of HomeSetup scripts into HHS_DIR/bin folder.
+# @param $1..$N : Source files/dirs to be linked.
+function link() {
+  local -a src bash_sources=() next dest
+
+  read -r -a src <<< "${*}"
+
+  [[ "${#src[@]}" -eq 0 || -z "${HHS_DIR}" || $1 =~ -h|--help ]] &&
+    quit 1 "usage: ${FUNCNAME[0]} <files/dirs...>"
+
+  echo -e "${BLUE}Creating symbolic links of HomeSetup scripts into '${HHS_DIR}/bin' folder...${NC}"
+
+  while read -r next; do
+    if [[ -d "${next}" ]]; then
+      echo -e "${BLUE} Processing directory: '${next}'...${NC}"
+      while IFS= read -r f; do
+        bash_sources+=("$(pwd)/$f")
+      done < <(find "${next}" -type f \( -name '*.sh' -o -name '*.bash' -o -name '*.zsh' \))
+      continue
+    elif [[ ! -f "${next}" ]]; then
+      echo -e "${YELLOW} Warning: '${next}' is not a valid file or directory. Skipping...${NC}"
+      continue
+    fi
+    echo -e "${BLUE} Processing file: '${next}'...${NC}"
+    bash_sources+=("$(pwd)/${next}")
+  done < <(printf '%s\n' "${src[@]}")
+
+  echo -e "${BLUE}Total files to be linked: ${#bash_sources[@]}\n"
+
+  for next in "${bash_sources[@]}"; do
+    dest="${HHS_DIR}/bin/$(basename "${next}")"
+
+    if [[ -e "${dest}" || -L "${dest}" ]]; then
+      echo -e "${YELLOW} Warning: '${dest}' already exists. It will be replaced.${NC}"
+      \rm -f "${dest}" || quit 4 "Failed to remove '${dest}'"
+    elif [[ -f "${dest}" ]]; then
+      quit 2 "Destination '${dest}' already exists and is not a symlink!"
+    fi
+
+    if \ln -sf "${next}" "${HHS_DIR}/bin"; then
+      echo -e "${GREEN}Symlink created: '${next}'  '${dest}'${NC}"
+    else
+      quit 2 "Failed to symlink '${next}'"
+    fi
+  done
+
+  quit 0
+}

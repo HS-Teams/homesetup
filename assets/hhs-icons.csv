@@ -25,3 +25,10 @@ Icon,Hex,Oct,Name,Bash
 ,F07B,\xef\x81\xbb,Folder Closed,No
 ,F1FA,\xef\x87\xba,At,No
 ,F415,\xef\x90\x95,User,No
+,F071,\xef\x81\xb1,Warning,No
+,F114,\xef\x84\x94,Folder-o,No
+,F482,\xef\x92\x82,Link,No
+,F482,\xef\x92\x82,Folder-Link,No
+,F29C,\xef\x8a\x9c,Unknown,No
+,F176,\xef\x85\xb6,Status-Up,No
+,F175,\xef\x85\xb5,Status-Down,No

@@ -43,5 +43,9 @@ else
   STAR_ICN="\xef\x80\x85"  # 
   SUCCESS_ICN="\xef\x98\xab"  # 
   TIP_ICON="\xef\x90\x80"  # 
-
+  WARN_ICON="\xef\x81\xb1"  # 
+  FOLDER_ICON="\xef\x84\x94"  # 
+  UNKNOWN_ICON="\xef\x8a\x9c" # 
+  LINK_ICON="\xef\x92\x82"  # 
+  FOLDER_LINK_ICON="\xef\x92\x82"  # 
 fi

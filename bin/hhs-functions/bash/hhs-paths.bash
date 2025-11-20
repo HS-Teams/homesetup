@@ -153,11 +153,9 @@ function __hhs_paths() {
 
     # Determine prefix icon
     if [[ -L "${path_raw}" ]]; then
-      type_prefix=" "
+      type_prefix=" "
     elif [[ -d "${path_raw}" ]]; then
       type_prefix=" "
-    elif [[ -f "${path_raw}" ]]; then
-      type_prefix=" "
     else
       type_prefix=" "
     fi
