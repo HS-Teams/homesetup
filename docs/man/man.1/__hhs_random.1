@@ -1,21 +1,26 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_random" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_random \-
-Generate a random number int the range <min> <max> (all limits included).
+__hhs_random - Generate a random number int the range <min> <max> (all limits included).
 .SH SYNOPSIS
 .nf
-__hhs_random [options]
+usage: __hhs_random <min> <max>
 .fi
 .SH DESCRIPTION
 Generate a random number int the range <min> <max> (all limits included).
-.SH OPTIONS
-Use "__hhs_random -h" or "__hhs_random --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_random --help
+$1 (Req)
+The minimum range of the number.
+.TP
+$2 (Req)
+The maximum range of the number.
+.SH DETAILS
+.nf
+No additional details captured from --help.
+.fi
 .SH VERSION
-__hhs_random (HomeSetup) 1.0.0
+__hhs_random (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

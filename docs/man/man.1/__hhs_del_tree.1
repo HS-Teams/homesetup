@@ -1,21 +1,29 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_del_tree" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_del_tree \-
-Move files recursively to the Trash.
+__hhs_del_tree - Move files recursively to the Trash.
 .SH SYNOPSIS
 .nf
-__hhs_del_tree [options]
+usage: __hhs_del_tree [-n|-f|-i] <search_path> <glob_expr>
 .fi
 .SH DESCRIPTION
 Move files recursively to the Trash.
-.SH OPTIONS
-Use "__hhs_del_tree -h" or "__hhs_del_tree --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_del_tree --help
+$1 (Req)
+The GLOB expression of the file/directory search.
+.SH DETAILS
+.nf
+
+  Options:
+    -n | --dry-run      : Just show what would be deleted instead of removing it.
+    -f | --force        : Actually delete all files/directories it finds.
+    -i | --interactive  : Interactive deleting files/directories.
+  Notes:
+    - If no option is specified, dry-run is default.
+.fi
 .SH VERSION
-__hhs_del_tree (HomeSetup) 1.0.0
+__hhs_del_tree (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

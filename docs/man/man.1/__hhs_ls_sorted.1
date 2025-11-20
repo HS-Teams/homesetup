@@ -1,21 +1,32 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_ls_sorted" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_ls_sorted \-
-List files sorted by the specified column.
+__hhs_ls_sorted - List files sorted by the specified column.
 .SH SYNOPSIS
 .nf
-__hhs_ls_sorted [options]
+__hhs_ls_sorted --help
 .fi
 .SH DESCRIPTION
 List files sorted by the specified column.
-.SH OPTIONS
-Use "__hhs_ls_sorted -h" or "__hhs_ls_sorted --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_ls_sorted --help
+$1 (Opt)
+The column to sort; 9 (filename) by default
+.SH DETAILS
+.nf
+/opt/homebrew/Cellar/ruby/3.4.7/lib/ruby/3.4.0/rubygems/specification.rb:1421:in 'block in Gem::Specification#activate_dependencies': Could not find 'addressable' (~> 2.7) among 88 total gem(s) (Gem::MissingSpecError)
+Checked in 'GEM_PATH=/Users/hjunior/HomeSetup/docs/man/man.1/.hhs_tmp_home/.local/share/gem/ruby/3.4.0:/opt/homebrew/lib/ruby/gems/3.4.0:/opt/homebrew/Cellar/ruby/3.4.7/lib/ruby/gems/3.4.0' at: /opt/homebrew/lib/ruby/gems/3.4.0/specifications/colorls-1.5.0.gemspec, execute `gem env` for more information
+	from /opt/homebrew/Cellar/ruby/3.4.7/lib/ruby/3.4.0/rubygems/specification.rb:1407:in 'Array#each'
+	from /opt/homebrew/Cellar/ruby/3.4.7/lib/ruby/3.4.0/rubygems/specification.rb:1407:in 'Gem::Specification#activate_dependencies'
+	from /opt/homebrew/Cellar/ruby/3.4.7/lib/ruby/3.4.0/rubygems/specification.rb:1389:in 'Gem::Specification#activate'
+	from /opt/homebrew/Cellar/ruby/3.4.7/lib/ruby/3.4.0/rubygems.rb:255:in 'block in Gem.find_and_activate_spec_for_exe'
+	from /opt/homebrew/Cellar/ruby/3.4.7/lib/ruby/3.4.0/rubygems.rb:254:in 'Thread::Mutex#synchronize'
+	from /opt/homebrew/Cellar/ruby/3.4.7/lib/ruby/3.4.0/rubygems.rb:254:in 'Gem.find_and_activate_spec_for_exe'
+	from /opt/homebrew/Cellar/ruby/3.4.7/lib/ruby/3.4.0/rubygems.rb:334:in 'Gem.activate_bin_path'
+	from /Users/hjunior/.local/share/gem/ruby/3.4.0/bin/colorls:25:in '<main>'
+.fi
 .SH VERSION
-__hhs_ls_sorted (HomeSetup) 1.0.0
+__hhs_ls_sorted (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

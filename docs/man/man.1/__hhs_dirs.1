@@ -1,21 +1,30 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_dirs" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_dirs \-
-Display the list of currently remembered directories or select one to switch into.
+__hhs_dirs - Display the list of currently remembered directories or select one to switch into.
 .SH SYNOPSIS
 .nf
-__hhs_dirs [options]
+usage: __hhs_dirs [OPTION]
 .fi
 .SH DESCRIPTION
 Display the list of currently remembered directories or select one to switch into.
-.SH OPTIONS
-Use "__hhs_dirs -h" or "__hhs_dirs --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_dirs --help
+$1..$N (Opt)
+Optional flags or arguments passed to the builtin 'dirs' command.
+.SH DETAILS
+.nf
+
+Options:
+         -c : Clear the directory stack
+         -s : List the directory stack (space separated and absolute paths)
+         -l : List all remembered directories (stack + dirs file) (decorated absolute paths)
+         -p : Print each directory on a new line
+         -v : Print the directory stack with variable index notation
+    +N / -N : Display or rotate to the Nth entry in the directory stack
+.fi
 .SH VERSION
-__hhs_dirs (HomeSetup) 1.0.0
+__hhs_dirs (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

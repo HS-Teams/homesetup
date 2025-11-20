@@ -1,21 +1,29 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_du" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_du \-
-Display 'du' output formatted as a horizontal bar chart (auto unit scaling).
+__hhs_du - Display 'du' output formatted as a horizontal bar chart (auto unit scaling).
 .SH SYNOPSIS
 .nf
-__hhs_du [options]
+usage: __hhs_du [path] [top_N] [width]
 .fi
 .SH DESCRIPTION
 Display 'du' output formatted as a horizontal bar chart (auto unit scaling).
-.SH OPTIONS
-Use "__hhs_du -h" or "__hhs_du --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_du --help
+$1 (Opt)
+Directory path (default: current directory)
+.TP
+$2 (Opt)
+Number of top entries to display (default: 10)
+.TP
+$3 (Opt)
+Chart bar width scaling factor (default: 30)
+.SH DETAILS
+.nf
+No additional details captured from --help.
+.fi
 .SH VERSION
-__hhs_du (HomeSetup) 1.0.0
+__hhs_du (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

@@ -1,21 +1,47 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_mchoose" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_mchoose \-
-Choose options from a list using a navigable menu.
+__hhs_mchoose - Choose options from a list using a navigable menu.
 .SH SYNOPSIS
 .nf
-__hhs_mchoose [options]
+usage: __hhs_mchoose [options] <output_file> <title> <items...>
 .fi
 .SH DESCRIPTION
 Choose options from a list using a navigable menu.
-.SH OPTIONS
-Use "__hhs_mchoose -h" or "__hhs_mchoose --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_mchoose --help
+$1 (Req)
+The response file.
+.TP
+$2 (Req)
+The render title.
+.TP
+$3 (Req)
+The array of items.
+.SH DETAILS
+.nf
+
+    Options:
+      -c  : All options are initially checked instead of unchecked.
+
+    Arguments:
+      output_file : The output file where the result will be stored.
+            title : The text to be displayed before rendering the items.
+            items : The items to be displayed for selecting.
+
+    Examples:
+      Choose numbers from 1 to 20 (start with all options checked):
+        => __hhs_mchoose /tmp/out.txt 'Mark the desired options' {1..20} && cat /tmp/out.txt
+      Choose numbers from 1 to 20 (start with all options unchecked):
+        => __hhs_mchoose -c /tmp/out.txt 'Mark the desired options' {1..20} && cat /tmp/out.txt
+
+  Notes:
+    - A temporary file is suggested to used with this command: $ mktemp.
+    - The outfile must not exist or it be an empty file.
+    - To initialize items individually, provide items on form: name=[True|False].
+.fi
 .SH VERSION
-__hhs_mchoose (HomeSetup) 1.0.0
+__hhs_mchoose (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

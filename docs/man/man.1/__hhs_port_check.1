@@ -1,21 +1,30 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_port_check" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_port_check \-
-Check the state of local port(s).
+__hhs_port_check - Check the state of local port(s).
 .SH SYNOPSIS
 .nf
-__hhs_port_check [options]
+usage: __hhs_port_check <port_number> [port_state] [protocol]
 .fi
 .SH DESCRIPTION
 Check the state of local port(s).
-.SH OPTIONS
-Use "__hhs_port_check -h" or "__hhs_port_check --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_port_check --help
+$1 (Req)
+The port number regex.
+.TP
+$2 (Opt)
+The port state to match.
+.SH DETAILS
+.nf
+
+  Notes:
+    - Protocol: One of [tcp udp]
+    - States: One of [CLOSED|LISTEN|SYN_SENT|SYN_RCVD|ESTABLISHED|CLOSE_WAIT|LAST_ACK|FIN_WAIT_1|FIN_WAIT_2|CLOSING|TIME_WAIT]
+    - Wildcards: Use dots (.) as a wildcard. E.g: 80.. will match 80[0-9][0-9]
+.fi
 .SH VERSION
-__hhs_port_check (HomeSetup) 1.0.0
+__hhs_port_check (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

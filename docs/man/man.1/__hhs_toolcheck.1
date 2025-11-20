@@ -1,21 +1,25 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_toolcheck" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_toolcheck \-
-Check whether a tool is installed on the system.
+__hhs_toolcheck - Check whether a tool is installed on the system.
 .SH SYNOPSIS
 .nf
-__hhs_toolcheck [options]
+usage: __hhs_toolcheck [options] <app_name>
 .fi
 .SH DESCRIPTION
 Check whether a tool is installed on the system.
-.SH OPTIONS
-Use "__hhs_toolcheck -h" or "__hhs_toolcheck --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_toolcheck --help
+$1 (Req)
+The app to check.
+.SH DETAILS
+.nf
+
+    Options:
+      -q  : Quiet mode on
+.fi
 .SH VERSION
-__hhs_toolcheck (HomeSetup) 1.0.0
+__hhs_toolcheck (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

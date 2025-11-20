@@ -1,21 +1,29 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_toml_get" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_toml_get \-
-Get the key's value from a toml file.
+__hhs_toml_get - Get the key's value from a toml file.
 .SH SYNOPSIS
 .nf
-__hhs_toml_get [options]
+usage: __hhs_toml_get <file> <key> [group]
 .fi
 .SH DESCRIPTION
 Get the key's value from a toml file.
-.SH OPTIONS
-Use "__hhs_toml_get -h" or "__hhs_toml_get --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_toml_get --help
+$1 (Req)
+The toml file read from.
+.TP
+$2 (Req)
+The key to get.
+.TP
+$3 (Opt)
+The group to get the key from (root if not provided).
+.SH DETAILS
+.nf
+No additional details captured from --help.
+.fi
 .SH VERSION
-__hhs_toml_get (HomeSetup) 1.0.0
+__hhs_toml_get (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

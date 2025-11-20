@@ -1,21 +1,30 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_envs" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_envs \-
-Display all environment variables using filters.
+__hhs_envs - Display all environment variables using filters.
 .SH SYNOPSIS
 .nf
-__hhs_envs [options]
+usage: __hhs_envs [options] [regex_filters]
 .fi
 .SH DESCRIPTION
 Display all environment variables using filters.
-.SH OPTIONS
-Use "__hhs_envs -h" or "__hhs_envs --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_envs --help
+$1 (Opt)
+If -e is present, edit the env file.
+.TP
+$* (Opt)
+Filter string(s). Use -r to reveal secret values.
+.SH DETAILS
+.nf
+
+    Options:
+      -e            Edit current HHS_ENV_FILE.
+      -r, --reveal  Show secret values (not masked).
+      -h, --help    Show this help message.
+.fi
 .SH VERSION
-__hhs_envs (HomeSetup) 1.0.0
+__hhs_envs (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

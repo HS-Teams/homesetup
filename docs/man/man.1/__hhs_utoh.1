@@ -1,21 +1,26 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_utoh" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_utoh \-
-Convert unicode to hexadecimal.
+__hhs_utoh - Convert unicode to hexadecimal.
 .SH SYNOPSIS
 .nf
-__hhs_utoh [options]
+usage: __hhs_utoh <4d-unicode...>
 .fi
 .SH DESCRIPTION
 Convert unicode to hexadecimal.
-.SH OPTIONS
-Use "__hhs_utoh -h" or "__hhs_utoh --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_utoh --help
+$1..$N (Req)
+The unicode values to convert.
+.SH DETAILS
+.nf
+
+  Notes:
+    - unicode is a four digits hexadecimal number. E.g:. F205
+    - exceeding digits will be ignored
+.fi
 .SH VERSION
-__hhs_utoh (HomeSetup) 1.0.0
+__hhs_utoh (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

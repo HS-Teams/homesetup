@@ -1,21 +1,25 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_process_kill" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_process_kill \-
-Kills ALL processes specified by name
+__hhs_process_kill - Kills ALL processes specified by name
 .SH SYNOPSIS
 .nf
-__hhs_process_kill [options]
+usage: __hhs_process_kill [options] <process_name>
 .fi
 .SH DESCRIPTION
 Kills ALL processes specified by name
-.SH OPTIONS
-Use "__hhs_process_kill -h" or "__hhs_process_kill --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_process_kill --help
+$1 (Req)
+The process name to kill
+.SH DETAILS
+.nf
+
+    Options:
+        -f | --force : Do not prompt for confirmation when killing a process
+.fi
 .SH VERSION
-__hhs_process_kill (HomeSetup) 1.0.0
+__hhs_process_kill (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

@@ -1,21 +1,23 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_ip_lookup" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_ip_lookup \-
-Lookup DNS payload to determine the IP address.
+__hhs_ip_lookup - Lookup DNS payload to determine the IP address.
 .SH SYNOPSIS
 .nf
-__hhs_ip_lookup [options]
+usage: __hhs_ip_lookup <domain_name>
 .fi
 .SH DESCRIPTION
 Lookup DNS payload to determine the IP address.
-.SH OPTIONS
-Use "__hhs_ip_lookup -h" or "__hhs_ip_lookup --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_ip_lookup --help
+$1 (Req)
+The domain name to lookup.
+.SH DETAILS
+.nf
+No additional details captured from --help.
+.fi
 .SH VERSION
-__hhs_ip_lookup (HomeSetup) 1.0.0
+__hhs_ip_lookup (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

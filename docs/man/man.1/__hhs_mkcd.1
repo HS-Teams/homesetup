@@ -1,21 +1,25 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_mkcd" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_mkcd \-
-Create all folders using a slash or dot notation path and immediately change into it.
+__hhs_mkcd - Create all folders using a slash or dot notation path and immediately change into it.
 .SH SYNOPSIS
 .nf
-__hhs_mkcd [options]
+usage: __hhs_mkcd <dirtree | package>
 .fi
 .SH DESCRIPTION
 Create all folders using a slash or dot notation path and immediately change into it.
-.SH OPTIONS
-Use "__hhs_mkcd -h" or "__hhs_mkcd --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_mkcd --help
+$1 (Req)
+The directory tree to create, using slash (/) or dot (.) notation path.
+.SH DETAILS
+.nf
+
+E.g:. __hhs_mkcd dir1/dir2/dir3 (dirtree)
+E.g:. __hhs_mkcd dir1.dir2.dir3 (FQDN)
+.fi
 .SH VERSION
-__hhs_mkcd (HomeSetup) 1.0.0
+__hhs_mkcd (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

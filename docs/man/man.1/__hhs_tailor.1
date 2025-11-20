@@ -1,21 +1,25 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_tailor" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_tailor \-
-Tail a log using customized colors and patterns.
+__hhs_tailor - Tail a log using customized colors and patterns.
 .SH SYNOPSIS
 .nf
-__hhs_tailor [options]
+usage: __hhs_tailor [-F | -f | -r] [-q] [-b # | -c # | -n #] <file>
 .fi
 .SH DESCRIPTION
 Tail a log using customized colors and patterns.
-.SH OPTIONS
-Use "__hhs_tailor -h" or "__hhs_tailor --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_tailor --help
+$1 (Req)
+The log file name.
+.SH DETAILS
+.nf
+
+  Notes:
+    - filename: If not provided, /dev/stdin will be used instead.
+.fi
 .SH VERSION
-__hhs_tailor (HomeSetup) 1.0.0
+__hhs_tailor (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

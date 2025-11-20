@@ -1,21 +1,28 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_search_dir" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_search_dir \-
-Search for directories and links to directories recursively.
+__hhs_search_dir - Search for directories and links to directories recursively.
 .SH SYNOPSIS
 .nf
-__hhs_search_dir [options]
+usage: __hhs_search_dir <search_path> [dir_globs...]
 .fi
 .SH DESCRIPTION
 Search for directories and links to directories recursively.
-.SH OPTIONS
-Use "__hhs_search_dir -h" or "__hhs_search_dir --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_search_dir --help
+$1 (Req)
+The base search path.
+.TP
+$2 (Opt)
+The search glob expressions.
+.SH DETAILS
+.nf
+
+  Notes:
+    - <dir_globs...>: Comma separated directories. E.g:. "dir1,dir2,dir2"
+.fi
 .SH VERSION
-__hhs_search_dir (HomeSetup) 1.0.0
+__hhs_search_dir (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

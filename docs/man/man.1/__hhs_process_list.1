@@ -1,21 +1,32 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_process_list" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_process_list \-
-Display a process list matching the process name/expression.
+__hhs_process_list - Display a process list matching the process name/expression.
 .SH SYNOPSIS
 .nf
-__hhs_process_list [options]
+usage: __hhs_process_list [options] <process_name>
 .fi
 .SH DESCRIPTION
 Display a process list matching the process name/expression.
-.SH OPTIONS
-Use "__hhs_process_list -h" or "__hhs_process_list --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_process_list --help
+$1 (Req)
+The process name to check.
+.TP
+$2 (Opt)
+Whether to kill all found processes.
+.SH DETAILS
+.nf
+
+    Options:
+        -k, --kill        : When specified, attempts to kill the processes it finds
+        -i, --ignore-case : Make case insensitive search
+        -w, --words       : Match full words only
+        -f, --force       : Do not prompt when killing processes
+        -q, --quiet       : Make the operation less talkative
+.fi
 .SH VERSION
-__hhs_process_list (HomeSetup) 1.0.0
+__hhs_process_list (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

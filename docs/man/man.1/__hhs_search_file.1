@@ -1,21 +1,28 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_search_file" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_search_file \-
-Search for files and links to files recursively.
+__hhs_search_file - Search for files and links to files recursively.
 .SH SYNOPSIS
 .nf
-__hhs_search_file [options]
+usage: __hhs_search_file <search_path> [file_globs...]
 .fi
 .SH DESCRIPTION
 Search for files and links to files recursively.
-.SH OPTIONS
-Use "__hhs_search_file -h" or "__hhs_search_file --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_search_file --help
+$1 (Req)
+The base search path.
+.TP
+$2 (Req)
+The search glob expressions.
+.SH DETAILS
+.nf
+
+  Notes:
+    - <file_globs...>: Comma separated globs. E.g: "*.txt,*.md,*.rtf"
+.fi
 .SH VERSION
-__hhs_search_file (HomeSetup) 1.0.0
+__hhs_search_file (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

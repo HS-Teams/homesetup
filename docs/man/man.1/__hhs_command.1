@@ -1,21 +1,35 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_command" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_command \-
-Add/Remove/List/Execute saved bash commands.
+__hhs_command - Add/Remove/List/Execute saved bash commands.
 .SH SYNOPSIS
 .nf
-__hhs_command [options]
+usage: __hhs_command [options [cmd_alias] <cmd_expression>] | [cmd_index]
 .fi
 .SH DESCRIPTION
 Add/Remove/List/Execute saved bash commands.
-.SH OPTIONS
-Use "__hhs_command -h" or "__hhs_command --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_command --help
+$1 (Opt)
+The command index or alias.
+.TP
+$2..$N (Con)
+The command expression. This is required when alias is provided.
+.SH DETAILS
+.nf
+
+    Options:
+      [cmd_index]   : Execute the command specified by the command index.
+      -e | --edit   : Edit the commands file.
+      -a | --add    : Store a command.
+      -r | --remove : Remove a command.
+      -l | --list   : List all saved commands.
+
+  Notes:
+    MSelect default : When no arguments is provided, a menu with options will be displayed.
+.fi
 .SH VERSION
-__hhs_command (HomeSetup) 1.0.0
+__hhs_command (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

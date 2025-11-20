@@ -1,21 +1,26 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_toml_get_all" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_toml_get_all \-
-Print all key=value pairs from a toml group.
+__hhs_toml_get_all - Print all key=value pairs from a toml group.
 .SH SYNOPSIS
 .nf
-__hhs_toml_get_all [options]
+__hhs_toml_get_all --help
 .fi
 .SH DESCRIPTION
 Print all key=value pairs from a toml group.
-.SH OPTIONS
-Use "__hhs_toml_get_all -h" or "__hhs_toml_get_all --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_toml_get_all --help
+$1 (Req)
+The toml file.
+.TP
+$2 (Opt)
+The group (root if omitted).
+.SH DETAILS
+.nf
+✘ Fatal: __hhs_toml_get_all  The file "--help" does not exists or is empty.
+.fi
 .SH VERSION
-__hhs_toml_get_all (HomeSetup) 1.0.0
+__hhs_toml_get_all (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

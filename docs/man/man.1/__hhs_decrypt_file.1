@@ -1,21 +1,29 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_decrypt_file" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_decrypt_file \-
-Decrypt a GPG encrypted file.
+__hhs_decrypt_file - Decrypt a GPG encrypted file.
 .SH SYNOPSIS
 .nf
-__hhs_decrypt_file [options]
+usage: __hhs_decrypt_file <filename> <passphrase> [--keep]
 .fi
 .SH DESCRIPTION
 Decrypt a GPG encrypted file.
-.SH OPTIONS
-Use "__hhs_decrypt_file -h" or "__hhs_decrypt_file --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_decrypt_file --help
+$1 (Req)
+The file to decrypt.
+.TP
+$2 (Req)
+The passphrase used to decrypt the file.
+.TP
+$3 (Opt)
+If provided, keeps the encrypted file, delete it otherwise.
+.SH DETAILS
+.nf
+No additional details captured from --help.
+.fi
 .SH VERSION
-__hhs_decrypt_file (HomeSetup) 1.0.0
+__hhs_decrypt_file (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

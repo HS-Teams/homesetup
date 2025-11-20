@@ -1,21 +1,26 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_toml_keys" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_toml_keys \-
-Print all toml file group keys (tables).
+__hhs_toml_keys - Print all toml file group keys (tables).
 .SH SYNOPSIS
 .nf
-__hhs_toml_keys [options]
+usage: __hhs_toml_keys <file> [group]
 .fi
 .SH DESCRIPTION
 Print all toml file group keys (tables).
-.SH OPTIONS
-Use "__hhs_toml_keys -h" or "__hhs_toml_keys --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_toml_keys --help
+$1 (Req)
+The toml file read from.
+.TP
+$2 (Opt)
+The group to get the keys from (root if not provided).
+.SH DETAILS
+.nf
+No additional details captured from --help.
+.fi
 .SH VERSION
-__hhs_toml_keys (HomeSetup) 1.0.0
+__hhs_toml_keys (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE

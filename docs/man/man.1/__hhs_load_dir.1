@@ -1,21 +1,29 @@
 ." Auto-generated man page. Do not edit manually.
 .TH "__hhs_load_dir" "1" "2025-11-20" "HomeSetup" "User Commands"
 .SH NAME
-__hhs_load_dir \-
-Change the current working directory to pre-saved entry from __hhs_save.
+__hhs_load_dir - Change the current working directory to pre-saved entry from __hhs_save.
 .SH SYNOPSIS
 .nf
-__hhs_load_dir [options]
+usage: __hhs_load_dir [-l] | [dir_alias]
 .fi
 .SH DESCRIPTION
 Change the current working directory to pre-saved entry from __hhs_save.
-.SH OPTIONS
-Use "__hhs_load_dir -h" or "__hhs_load_dir --help" for full usage details.
-.SH EXAMPLES
+.SH ARGUMENTS
 .TP
-__hhs_load_dir --help
+$1 (Opt)
+The alias to access the directory saved.
+.SH DETAILS
+.nf
+
+Options:
+    [dir_alias] : The alias to load the path from.
+             -l : If provided, list all saved dirs instead.
+
+  Notes:
+    MSelect default : If no arguments is provided, a menu with options will be displayed.
+.fi
 .SH VERSION
-__hhs_load_dir (HomeSetup) 1.0.0
+__hhs_load_dir (HomeSetup) 1.9.11
 .SH AUTHOR
 HomeSetup Team
 .SH LICENSE
