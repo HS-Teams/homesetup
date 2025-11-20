@@ -6,13 +6,13 @@ BIN_DIR="$ROOT_DIR/bin"
 mkdir -p "$BIN_DIR"
 
 platforms=(
-  "linux amd64"
-  "darwin arm64"
+  "linux amd32 386"
+  "darwin intel32 386"
 )
 
 for entry in "${platforms[@]}"; do
-  read -r os arch <<<"$entry"
-  out="$BIN_DIR/hhs-demo-${os}-${arch}"
+  read -r os label goarch <<<"$entry"
+  out="$BIN_DIR/hhs-demo-${os}-${label}"
   echo "Building $out"
-  GOOS="$os" GOARCH="$arch" go build -o "$out" ./...
+  GOOS="$os" GOARCH="$goarch" go build -o "$out" ./...
 done
