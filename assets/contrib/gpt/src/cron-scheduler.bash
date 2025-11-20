@@ -16,7 +16,7 @@
 # +------------------------------------------------------------------------------+
 
 # https://semver.org/ ; major.minor.patch
-VERSION="0.0.1" # https://semver.org/ ; major.minor.patch
+VERSION="1.0.0" # https://semver.org/ ; major.minor.patch
 
 # Usage message
 USAGE="usage: $(basename "$0") -s <script_path> -i <iso_date> [-u <user>]

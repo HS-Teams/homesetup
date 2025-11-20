@@ -17,7 +17,7 @@
 
 {
   # https://semver.org/ ; major.minor.patch
-  VERSION="0.0.3"
+  VERSION="1.0.0"
 
   # Usage message
   USAGE="usage: $(basename "$0") [-h|--help] [-v|--version] [-f|--font <font_name>]

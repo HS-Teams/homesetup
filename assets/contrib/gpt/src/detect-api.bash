@@ -17,7 +17,7 @@
 # +------------------------------------------------------------------------------+
 
 # https://semver.org/ ; major.minor.patch
-VERSION="0.0.12"
+VERSION="1.0.0"
 
 USAGE="Usage: ./detect-api-calls.bash [OPTIONS]
 

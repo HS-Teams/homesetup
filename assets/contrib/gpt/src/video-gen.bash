@@ -16,7 +16,7 @@
 # ------------------------------------------------------------------------------
 
 # https://semver.org/ ; major.minor.patch
-VERSION="0.3.5"
+VERSION="1.0.0"
 
 # The default crossfade duration in seconds
 CROSSFADE_DURATION=0.3
