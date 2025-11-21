@@ -56,6 +56,6 @@ hhs_ollama_ai_autostart = false
 
 # Models: bin/apps/bash/hhs-app/plugins/ask/models.md
 # Current ollama model to be used with Ask plugin.
-hhs_ollama_model = "gemma:latest"
+hhs_ollama_model = "phi4-mini:latest"
 # Current ollama markdown viewer to be used with Ask plugin.
 hhs_ollama_md_viewer = "__hhs_md_viewer"

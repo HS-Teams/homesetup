@@ -111,7 +111,6 @@ function has_function() {
 # @param $1 [Req] : The plugin name.
 function has_plugin() {
 
-  echo "${PLUGINS[*]}"
   if [[ -n "${1}" ]] && list_contains "${PLUGINS[*]}" "${1}"; then
     return 0
   fi
@@ -180,6 +179,8 @@ function register_plugins() {
 
   IFS=$'\n'
   while read -r plugin; do
+    plugin="${plugin}/$(basename "${plugin}").${HHS_MY_SHELL//zsh/bash}"
+    [[ -s "${plugin}" ]] || continue
     while read -r fnc; do
       fn_line="${fnc##function }"
       fn_line="${fn_line%\(\) \{}"
@@ -192,7 +193,7 @@ function register_plugins() {
       PLUGINS+=("${plg_name}")
       PLUGINS_LIST+=("${plugin}")
     fi
-  done < <(find "${PLUGINS_DIR}" -maxdepth 2 -type f -iname "*.${HHS_MY_SHELL}")
+  done < <(find "${PLUGINS_DIR}" -maxdepth 1 -type d)
   IFS="${OLDIFS}"
 
   return 0
@@ -201,7 +202,7 @@ function register_plugins() {
 # @purpose: Read all internal functions and make them available to use
 function register_functions() {
 
-  local fn_line
+  local fn_line fnc_file
 
   IFS=$'\n'
   while read -r fnc_file; do

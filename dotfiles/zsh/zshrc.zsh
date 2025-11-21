@@ -123,17 +123,46 @@ while read -r pref; do
   if [[ ${pref} =~ ${re} ]]; then
     key="${match[1]}"
     val="${match[2]}"
-    case "${(U)val}" in
+    case "${val:u}" in
       TRUE)  val=1 ;;
       FALSE) val="" ;;
     esac
     val="${val//[\"\']/}"
-    typeset -g "${(U)key}"="${val}"
+    typeset -gx "${key:u}=${val}"
   fi
 done <"${HHS_SETUP_FILE}"
 
 # -----------------------------------------------------------------------------------
 # Settings (homesetup.toml) are available as environment variables from this point
+
+# Start the Ollama server if it's enabled
+if __hhs_has 'ollama' && [[ ${HHS_OLLAMA_AI_AUTOSTART} -eq 1 ]]; then
+  __hhs_log "DEBUG" "Starting Ollama server"
+  if ! ollama ps &>/dev/null; then
+    nohup ollama serve >"${HHS_LOG_DIR}/ollama.log" 2>&1 &
+    pid=$!
+    kill -0 "$pid" 2>/dev/null || __hhs_log "ERROR" "Unable to start Ollama server!"
+    __hhs_log "INFO" "Ollama server started with PID: ${pid}"
+  else
+    __hhs_log "INFO" "Ollama server is already running with PID: $(pgrep 'ollama')"
+  fi
+fi
+
+# Check for HomeSetup updates.
+if [[ ${HHS_NO_AUTO_UPDATE} -ne 1 ]]; then
+  if [[ ! -s "${HHS_DIR}/.last_update" || $(date "+%s%S") -ge $(grep . "${HHS_DIR}/.last_update") ]]; then
+    echo
+    echo -e "${BLUE}Checking for updates ...${NC}"
+    if __hhs_is_reachable 'https://github.com/'; then
+      __hhs updater execute check
+    else
+      __hhs_errcho 'hhsrc' "HomeSetup GitHub website is unreachable !"
+    fi
+    sleep 1
+  else
+    echo -en "\033[1J\033[H"
+  fi
+fi
 
 # Add custom paths to the system `$PATH`.
 if [[ -f "${HHS_DIR}/.path" ]]; then
@@ -148,20 +177,10 @@ fi
 brew_path="/opt/homebrew/bin"
 ruby_path="$(ruby -e 'puts Gem.bindir')"
 PATH="${brew_path:h}:${ruby_path}:${PATH}"
-# Remove PATH duplicates.
-PATH=$(awk -F: '{for (i=1;i<=NF;i++) { if ( !x[$i]++ ) printf("%s:",$i); }}' <<<"${PATH}")
-export PATH
 
 # Auto-suggestions and syntax-highlighting
 source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
 source "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
-
-# Shell options
-setopt share_history
-setopt hist_expire_dups_first
-setopt hist_ignore_dups
-setopt hist_verify
-setopt auto_cd
 
 # Alias definitions
 if ! [[ -s "${HHS_ALIASDEF}" ]]; then
@@ -173,6 +192,24 @@ fi
 # Initialize HomeSetup key bindings.
 bindkey '^[[A' history-search-backward
 bindkey '^[[B' history-search-forward
+
+# -----------------------------------------------------------------------------------
+# Set system locale variables (defaults)
+if [[ ${HHS_SET_LOCALES} -eq 1 ]]; then
+  export LANGUAGE=${LANGUAGE:-en_US:en}
+  export LANG=${LANG:-en_US.UTF-8}
+  if __hhs_has "locale"; then
+    export LC_ALL=${LC_ALL:-${LANG}}
+    export LC_CTYPE=${LC_CTYPE:-${LANG}}
+    export LC_COLLATE=${LC_COLLATE:-${LANG}}
+    export LC_MESSAGES=${LC_MESSAGES:-${LANG}}
+    export LC_MONETARY=${LC_MONETARY:-${LANG}}
+    export LC_NUMERIC=${LC_NUMERIC:-${LANG}}
+    export LC_TIME=${LC_TIME:-${LANG}}
+  fi
+else
+  __hhs_log "WARN" "Set system locales were disabled !"
+fi
 
 # -----------------------------------------------------------------------------------
 # Activate HomeSetup Python venv.
@@ -190,25 +227,12 @@ fi
 
 # -----------------------------------------------------------------------------------
 # Set/Unset the shell options
-if [[ ${HHS_LOAD_SHELL_OPTIONS} -eq 1 ]]; then
-  if [[ ! -s "${HHS_SHOPTS_FILE}" ]]; then
-    \shopt | awk '{print $1" = "$2}' >"${HHS_SHOPTS_FILE}" ||
-       __hhs_log "ERROR" "Unable to create the Shell Options file !"
-  fi
-  re_key_pair="^([a-zA-Z0-9]*) *= *([Oo][Nn]|[Oo][Ff][Ff])$"
-  while read -r line; do
-    if [[ ${line} =~ ${re_key_pair} ]]; then
-      option="${BASH_REMATCH[1]}"
-      state="${BASH_REMATCH[2]}"
-      if [[ "${state}" == 'on' ]]; then
-        \shopt -s "${option}" &>/dev/null || __hhs_log "WARN" "Unable to SET shell option: ${option}"
-      elif [[ "${state}" == 'off' ]]; then
-        \shopt -u "${option}" &>/dev/null || __hhs_log "WARN" "Unable to UNSET shell option: ${option}"
-      fi
-    fi
-  done <"${HHS_SHOPTS_FILE}"
-  __hhs_log "INFO" "Shell options are set !"
-fi
+
+setopt share_history
+setopt hist_expire_dups_first
+setopt hist_ignore_dups
+setopt hist_verify
+setopt auto_cd
 
 # -----------------------------------------------------------------------------------
 # Load dotfiles
@@ -249,6 +273,20 @@ for file in "${CUSTOM_DOTFILES[@]}"; do
   fi
 done
 
+# Load system settings using setman.
+if [[ ${HHS_EXPORT_SETTINGS} -eq 1 ]] && __hhs_is_venv; then
+  # Update the settings configuration.
+  echo "hhs.setman.database = ${HHS_SETMAN_DB_FILE}" >"${HHS_SETMAN_CONFIG_FILE}"
+  tmp_file="$(mktemp)"
+  if ${PYTHON3} -m setman source -n hhs -f "${tmp_file}" && source "${tmp_file}"; then
+    __hhs_log "INFO" "System settings loaded !"
+  else
+    __hhs_log "ERROR" "Failed to load system settings !"
+  fi
+else
+  __hhs_log "WARN" "System settings skipped !"
+fi
+
 # Restore the last used directory
 if [[ ${HHS_RESTORE_LAST_DIR} -eq 1 && -s "${HHS_DIR}/.last_dirs" ]]; then
   last_dir="$(grep -m 1 . "${HHS_DIR}/.last_dirs")"
@@ -258,14 +296,28 @@ if [[ ${HHS_RESTORE_LAST_DIR} -eq 1 && -s "${HHS_DIR}/.last_dirs" ]]; then
   }
 fi
 
+# Remove PATH duplicates.
+PATH=$(awk -F: '{for (i=1;i<=NF;i++) { if ( !x[$i]++ ) printf("%s:",$i); }}' <<<"${PATH}")
+export PATH
+
+# Zsh hooks
+function command_not_found_handler() {
+  __hhs_errcho "zsh" "Command not found: \"\033[9m${1}\033[m\""
+  echo -e "\n${YELLOW}${TIP_ICON} Tip: Try 'type $1', 'which $1' or ask 'Command not found: \"${1}\"' for help.${NC}"
+  return 127
+}
 
 # -----------------------------------------------------------------------------------
 # Workaround to fix missing __hhs_functions
 
 # Print HomeSetup MOTDs.
-echo -e "\033[H\033[J"
-echo -en "${ORANGE}[${HHS_MY_OS}-${HHS_MY_OS_RELEASE}/${HHS_MY_SHELL}] ${WHITE}${HAND_PEACE_ICN}  "
-echo -e "${GREEN}Welcome ${USER:-user} to HomeSetup ${BLUE}v${HHS_VERSION}${NC}\n"
+echo -en "\033[H\033[J"
+if [[ -d "${HHS_MOTD_DIR}" ]]; then
+  all=$(find "${HHS_MOTD_DIR}" -type f | sort | uniq)
+  for motd in ${all}; do
+    echo -e "$(eval "echo -e \"$(<"${motd}")\"")"
+  done
+fi
 
 alias cd='\cd'
 alias ..='cd ..'

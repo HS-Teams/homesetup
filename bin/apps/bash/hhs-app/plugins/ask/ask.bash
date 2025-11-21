@@ -167,7 +167,7 @@ function start_ollama() {
 function show_context() {
   if [[ -f "${HHS_OLLAMA_HISTORY_FILE}" ]]; then
     [[ -s "${HHS_OLLAMA_HISTORY_FILE}" ]] || quit 0 "${ORANGE}✨ Ollama history file is empty${NC}"
-    ${HHS_OLLAMA_MD_VIEWER} < "${HHS_OLLAMA_HISTORY_FILE}"
+    ${HHS_OLLAMA_MD_VIEWER:-cat} < "${HHS_OLLAMA_HISTORY_FILE}"
     quit 0
   fi
 
@@ -187,7 +187,7 @@ function clear_context() {
 # @purpose: Show available ollama models (local and for download)
 function show_models() {
   echo -e "${BLUE}Available to download:"
-  ${HHS_OLLAMA_MD_VIEWER} < "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/ollama-models.md"
+  ${HHS_OLLAMA_MD_VIEWER:-cat} < "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/ollama-models.md"
   __hhs_has ollama && ollama ps &>/dev/null && {
     echo -e "${BLUE}Available locally:\n${WHITE}"
     IFS=$'\n'
@@ -322,7 +322,7 @@ function execute() {
     echo -e "## [$(date '+%H:%M')] AI: \n$(cat "${resp}")" >> "${HHS_OLLAMA_HISTORY_FILE}"
     printf '\033[H\033[2J\033[3J'
     echo -e "✨ ${GREEN}${OLLAMA_MODEL}[${ctx}K]:\t${GRAY}${resp}\n${NC}"
-    ${HHS_OLLAMA_MD_VIEWER} < "${resp}"
+    ${HHS_OLLAMA_MD_VIEWER:-cat} < "${resp}"
   else
     echo -e "${ERROR_ICN} ${RED}Ollama failed to respond${NC}"
     ret_val=1

@@ -57,7 +57,6 @@ source "${HOME}"/.bash_colors
 source "${HOME}"/.bash_env
 source "${HOME}"/.bash_functions
 source "${HOME}"/.bash_icons
-source "${HOME}"/.bash_prompt
 
 # Re-export active dotfiles.
 export HHS_ACTIVE_DOTFILES="${OLD_DOTFILES[*]}"

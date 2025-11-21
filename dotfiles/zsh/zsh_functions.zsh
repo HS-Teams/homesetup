@@ -47,4 +47,19 @@ else
     return 0
   }
 
+  # @function: View markdown files with syntax highlighting.
+  # @param $1..$N [Req] : The markdown file(s) to view
+  function __hhs_md_viewer() {
+    # Glow
+    if __hhs_has 'glow'; then
+      glow -w 120 -s "dark" "${@}"
+    elif __hhs_has 'mdless'; then
+      mdless "${@}"
+    elif __hhs_has 'bat'; then
+      bat "${@}"
+    else
+      cat "${@}"
+    fi
+  }
+
 fi
