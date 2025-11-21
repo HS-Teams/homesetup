@@ -15,6 +15,8 @@
 # If not running interactively or as a CI build, skip it.
 [[ -z "${JOB_NAME}" && -z "${GITHUB_ACTIONS}" && -z "${PS1}" && -z "${PS2}" ]] && return
 
+echo -e "\033[1;34m[${SHELL##*\/}] HomeSetup is starting...\033[m"
+
 export HHS_ACTIVE_DOTFILES="${HHS_ACTIVE_DOTFILES} zshrc"
 
 # Unset other used variables
@@ -142,9 +144,10 @@ if [[ -f "${HHS_DIR}/.path" ]]; then
   done
 fi
 
-# HomeSetup paths
+# ZSH missing paths
 brew_path="/opt/homebrew/bin"
-PATH="${brew_path:h}:${PATH}"
+ruby_path="$(ruby -e 'puts Gem.bindir')"
+PATH="${brew_path:h}:${ruby_path}:${PATH}"
 # Remove PATH duplicates.
 PATH=$(awk -F: '{for (i=1;i<=NF;i++) { if ( !x[$i]++ ) printf("%s:",$i); }}' <<<"${PATH}")
 export PATH
@@ -158,6 +161,7 @@ setopt share_history
 setopt hist_expire_dups_first
 setopt hist_ignore_dups
 setopt hist_verify
+setopt auto_cd
 
 # Alias definitions
 if ! [[ -s "${HHS_ALIASDEF}" ]]; then
@@ -259,39 +263,22 @@ fi
 # Workaround to fix missing __hhs_functions
 
 # Print HomeSetup MOTDs.
-MOTD="${ORANGE}[${HHS_MY_OS}-${HHS_MY_OS_RELEASE}/${HHS_MY_SHELL}] ${WHITE}${HAND_PEACE_ICN}
-${GREEN}Welcome ${USER:-user} to HomeSetup ${BLUE}v${HHS_VERSION}
-${NC}"
-
-echo -e "${MOTD}"
-
-# Unalias any hhs found because we need this name to use for HomeSetup
-unalias hhs &> /dev/null
-command -v &>/dev/null 'hhs' && __hhs_log "ERROR" "'hhs' is already defined: $(command -v 'hhs')"
-
-# @function: Wrapper to either invoke the hhs application or change to HHS_HOME or HHS_DIR.
-# @param $* [Opt] : All parameters are passed to hhs.bash.
-function __hhs() {
-
-  if [[ -z "${1}" || "${1}" == 'home' ]]; then
-    \cd "${HHS_HOME}" || return 1
-  elif [[ "${1}" == 'dir' ]]; then
-    \cd "${HHS_DIR}" || return 1
-  else
-    hhs.bash "${@}" || return 1
-  fi
-
-  return 0
-}
+echo -e "\033[H\033[J"
+echo -en "${ORANGE}[${HHS_MY_OS}-${HHS_MY_OS_RELEASE}/${HHS_MY_SHELL}] ${WHITE}${HAND_PEACE_ICN}  "
+echo -e "${GREEN}Welcome ${USER:-user} to HomeSetup ${BLUE}v${HHS_VERSION}${NC}\n"
 
 alias cd='\cd'
-alias ..=..
+alias ..='cd ..'
+alias ...='cd ../../'
+alias ....='cd ../../../'
+alias .....='cd ../../../../'
 alias \?='\pwd'
 alias dirs='\dirs'
 alias du='\du'
 alias open='\open'
 alias shopt='\shopt'
 alias hhs='__hhs'
+alias gta='git add'
 
 # -----------------------------------------------------------------------------------
 # Finalization

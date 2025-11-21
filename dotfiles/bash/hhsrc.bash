@@ -401,6 +401,7 @@ function command_not_found_handle() {
 }
 
 # Print HomeSetup MOTDs.
+echo -en "\033[H\033[J"
 if [[ -d "${HHS_MOTD_DIR}" ]]; then
   all=$(find "${HHS_MOTD_DIR}" -type f | sort | uniq)
   for motd in ${all}; do

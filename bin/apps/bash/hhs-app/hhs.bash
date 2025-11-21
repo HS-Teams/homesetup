@@ -67,10 +67,10 @@ usage: ${APP_NAME} {function | plugin {task} <command>} [args...] [options]
 EOF
 
 # Directory containing all HHS plug-ins.
-PLUGINS_DIR="$(dirname "${0//${HHS_DIR}/$HHS_HOME}")/apps/${HHS_MY_SHELL}/hhs-app/plugins"
+PLUGINS_DIR="$(dirname "${0//${HHS_DIR}/$HHS_HOME}")/apps/${HHS_MY_SHELL//zsh/bash}/hhs-app/plugins"
 
 # Directory containing all local HHS functions.
-FUNCTIONS_DIR="$(dirname "${0//${HHS_DIR}/$HHS_HOME}")/apps/${HHS_MY_SHELL}/hhs-app/functions"
+FUNCTIONS_DIR="$(dirname "${0//${HHS_DIR}/$HHS_HOME}")/apps/${HHS_MY_SHELL//zsh/bash}/hhs-app/functions"
 
 # List of local hhs functions that can be executed.
 HHS_APP_FUNCTIONS=()
@@ -111,6 +111,7 @@ function has_function() {
 # @param $1 [Req] : The plugin name.
 function has_plugin() {
 
+  echo "${PLUGINS[*]}"
   if [[ -n "${1}" ]] && list_contains "${PLUGINS[*]}" "${1}"; then
     return 0
   fi

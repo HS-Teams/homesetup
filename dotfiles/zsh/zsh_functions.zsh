@@ -1,9 +1,9 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 # shellcheck disable=SC1090
 
-#  Script: bash_functions.bash
+#  Script: zsh_functions.bash
 # Purpose: This file is used to define some shell tools
-# Created: Aug 26, 2018
+# Created: Nov 21, 2025
 #  Author: <B>H</B>ugo <B>S</B>aporetti <B>J</B>unior
 #  Mailto: taius.hhs@gmail.com
 #    Site: https://github.com/yorevs/homesetup
@@ -14,23 +14,13 @@
 # !NOTICE: Do not change this file. To customize your functions edit the file ~/.functions
 
 # Do not source this file multiple times.
-if list_contains "${HHS_ACTIVE_DOTFILES}" "bash_functions"; then
+if list_contains "${HHS_ACTIVE_DOTFILES}" "zsh_functions"; then
   __hhs_log "DEBUG" "$0 was already loaded!"
 else
 
   export HHS_ACTIVE_DOTFILES="${HHS_ACTIVE_DOTFILES} bash_functions"
 
-  # Load all function files.
-  all=()
-  while IFS= read -r line; do all+=("$line"); done < <(find "${HHS_HOME}/bin/hhs-functions/bash" -type f -name "*.bash" | sort | uniq)
-  __hhs_log "DEBUG" "Loading (${#all[@]}) hhs-function files"
-  for file in "${all[@]}"; do
-    __hhs_log "DEBUG" "Loading ${file}"
-    __hhs_source "${file}" || __hhs_log "ERROR" "Unable to source file: ${file}"
-  done
-
   # Load all dev tools files.
-  all=()
   while IFS= read -r line; do all+=("$line"); done < <(find "${HHS_HOME}/bin/dev-tools/bash" -type f -name "*.bash" | sort | uniq)
   __hhs_log "DEBUG" "Loading (${#all[@]}) dev-tools files"
   for file in "${all[@]}"; do
@@ -47,9 +37,9 @@ else
   function __hhs() {
 
     if [[ -z "${1}" || "${1}" == 'home' ]]; then
-      __hhs_change_dir "${HHS_HOME}" || return 1
+      \cd "${HHS_HOME}" || return 1
     elif [[ "${1}" == 'dir' ]]; then
-      __hhs_change_dir "${HHS_DIR}" || return 1
+      \cd "${HHS_DIR}" || return 1
     else
       hhs.bash "${@}" || return 1
     fi

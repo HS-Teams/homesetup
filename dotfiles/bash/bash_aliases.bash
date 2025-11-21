@@ -258,7 +258,7 @@ else
   alias __hhs_uuid='python3 -c "import uuid as ul; print(ul.uuid4())"'
 
   # @alias: Reload HomeSetup
-  alias __hhs_reload='__hhs_clear; source "${HOME}/.bashrc"'
+  alias __hhs_reload='__hhs_clear; source "${HOME}/.${HHS_MY_SHELL}rc"'
   # @alias: Clear and reset all cursor attributes and IFS
   alias __hhs_clear='reset-cursor-attrs; echo -en "\033[2J\033[H${NC}"; export IFS="${OLDIFS}"'
   # @alias: Clear the screen and reset the terminal
