@@ -15,11 +15,12 @@
 # @function: Manipulate custom aliases (add/remove/edit/list).
 # @param $1 [Req] : The alias name.
 # @param $2 [Opt] : The alias expression.
+# @compatible: bash zsh
 function __hhs_aliases() {
 
   HHS_ALIASES_FILE=${HHS_ALIASES_FILE:-$HHS_DIR/.aliases}
 
-  local filter='.+' alias_name alias_expr pad pad_len all_aliases name expr
+  local filter='.+' alias_name alias_expr pad pad_len all_aliases=() name expr
   local col_offset=18 columns re
 
   touch "${HHS_ALIASES_FILE}"
@@ -60,7 +61,7 @@ function __hhs_aliases() {
     else
       alias_name="$1"
     fi
-    shift
+    [[ $# -gt 0 ]] && shift
 
     # Remove duplicate items
     sort -u "${HHS_ALIASES_FILE}" -o "${HHS_ALIASES_FILE}"
@@ -69,8 +70,7 @@ function __hhs_aliases() {
     alias_expr="${alias_expr//$'\n'/ }"
 
     if [[ -z "${alias_expr}" || "$1" == '-l' || "$1" == "--list" ]]; then
-      # List all aliases; if sorted, skips comments
-      IFS=$'\n' read -d '' -r -a all_aliases < <(grep -i -v ^\# "${HHS_ALIASES_FILE}")
+      while IFS= read -r line; do all_aliases+=("$line"); done < <(grep -i -v '^#' "${HHS_ALIASES_FILE}")
       IFS="${OLDIFS}"
       if [[ ${#all_aliases[@]} -gt 0 ]]; then
         pad=$(printf '%0.1s' "."{1..60})
