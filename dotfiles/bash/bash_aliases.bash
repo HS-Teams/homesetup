@@ -37,7 +37,7 @@ else
   # @alias: Change the current directory to the previous dir
   alias -- -='cd -'
   # @alias: Display the current working dir and remote repository if it applies
-  alias ?='__hhs_where_am_i'
+  alias \?='__hhs_where_am_i'
 
   # -----------------------------------------------------------------------------------
   # @category: General

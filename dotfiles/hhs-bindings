@@ -9,8 +9,8 @@ TAB: complete
 # Arrows UP & DOWN to search from history.
 "\e[A": history-search-backward
 "\e[B": history-search-forward
-# bind Alt + Arrows to navigate through words.
 
+# bind Alt + Arrows to navigate through words.
 # Alt + left
 "\e[1;3D": backward-word
 "\e\e[D": backward-word
