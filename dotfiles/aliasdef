@@ -81,7 +81,7 @@ __hhs_alias venv='__hhs_venv'
 __hhs_has 'netstat' && __hhs_alias port-check='__hhs_port_check'
 
 # ifconfig based shortcuts
-if __hhs_has 'ifconfig'; then
+if __hhs_has 'ifconfig' && __hhs_has __hhs_ip; then
   __hhs_alias ipl='__hhs_ip local'
   __hhs_alias ips='__hhs_ip'
   __hhs_alias ifa='__hhs_active_ifaces'

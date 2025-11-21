@@ -117,7 +117,7 @@ CUSTOM_DOTFILES=(
 )
 
 # Re-create the HomeSetup log file.
-started="$(${PYTHON3} -c 'import time; print(int(time.time() * 1000))')"
+started="$(${PYTHON3:-python3} -c 'import time; print(int(time.time() * 1000))')"
 echo -e "HomeSetup is starting: $(date)\n" >"${HHS_LOG_FILE}"
 
 # Source the bash common functions. Logs are available below here.
@@ -337,8 +337,10 @@ fi
 # Restore the last used directory
 if [[ ${HHS_RESTORE_LAST_DIR} -eq 1 && -s "${HHS_DIR}/.last_dirs" ]]; then
   last_dir="$(grep -m 1 . "${HHS_DIR}/.last_dirs")"
-  cd "${last_dir}" 2> /dev/null ||
-    { __hhs_log "WARN" "Unable to enter last directory: '${last_dir}' because it was not found !"; cd "${HOME}"; }
+  \cd "${last_dir}" 2> /dev/null || {
+    __hhs_log "WARN" "Unable to enter last directory: '${last_dir}' because it was not found !"
+    \cd "${HOME}"
+  }
 fi
 
 # Attach ble-sh to bash if it's enabled.
@@ -406,7 +408,10 @@ if [[ -d "${HHS_MOTD_DIR}" ]]; then
   done
 fi
 
-finished="$(${PYTHON3} -c 'import time; print(int(time.time() * 1000))')"
+# -----------------------------------------------------------------------------------
+# Finalization
+
+finished="$(${PYTHON3:-python3} -c 'import time; print(int(time.time() * 1000))')"
 diff_time=$((finished - started))
 diff_time_sec=$((diff_time/1000))
 diff_time_ms=$((diff_time-(diff_time_sec*1000)))

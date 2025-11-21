@@ -21,7 +21,8 @@ else
   export HHS_ACTIVE_DOTFILES="${HHS_ACTIVE_DOTFILES} bash_functions"
 
   # Load all function files.
-  read -r -d '' -a all < <(find "${HHS_HOME}/bin/hhs-functions/bash" -type f -name "*.bash" | sort | uniq)
+  all=()
+  while IFS= read -r line; do all+=("$line"); done < <(find "${HHS_HOME}/bin/hhs-functions/bash" -type f -name "*.bash" | sort | uniq)
   __hhs_log "DEBUG" "Loading (${#all[@]}) hhs-function files"
   for file in "${all[@]}"; do
     __hhs_log "DEBUG" "Loading ${file}"
@@ -29,14 +30,12 @@ else
   done
 
   # Load all dev tools files.
-  read -r -d '' -a all < <(find "${HHS_HOME}/bin/dev-tools/bash" -type f -name "*.bash" | sort | uniq)
+  while IFS= read -r line; do all+=("$line"); done < <(find "${HHS_HOME}/bin/dev-tools/bash" -type f -name "*.bash" | sort | uniq)
   __hhs_log "DEBUG" "Loading (${#all[@]}) dev-tools files"
   for file in "${all[@]}"; do
     __hhs_log "DEBUG" "Loading ${file}"
     __hhs_source "${file}" || __hhs_log "ERROR" "Unable to source file: ${file}"
   done
-
-  unset -f all
 
   # Unalias any hhs found because we need this name to use for HomeSetup
   unalias hhs &> /dev/null
