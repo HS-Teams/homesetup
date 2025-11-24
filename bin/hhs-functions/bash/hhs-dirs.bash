@@ -254,7 +254,7 @@ function __hhs_save_dir() {
       ret_val=0
     fi
   elif [[ "$1" == "-c" ]]; then
-    read -d '' -r -a all_dirs < "${HHS_SAVED_DIRS_FILE}"
+    while IFS= read -r l; do all_dirs+=("$l"); done < "${HHS_SAVED_DIRS_FILE}"
     for idx in $(seq 1 "${#all_dirs[@]}"); do
       dir=${all_dirs[idx - 1]}
       dir_alias=${dir%%=*}
@@ -275,7 +275,7 @@ function __hhs_save_dir() {
     else
       # Remove the old saved directory aliased
       ised -e "s#(^${dir_alias}=.*)*##g" -e '/^\s*$/d' "${HHS_SAVED_DIRS_FILE}"
-      read -d '' -r -a all_dirs < "${HHS_SAVED_DIRS_FILE}"
+      while IFS= read -r l; do all_dirs+=("$l"); done < "${HHS_SAVED_DIRS_FILE}"
       all_dirs+=("${dir_alias}=${dir}")
       printf "%s\n" "${all_dirs[@]}" > "${HHS_SAVED_DIRS_FILE}"
       sort -u "${HHS_SAVED_DIRS_FILE}" -o "${HHS_SAVED_DIRS_FILE}"
@@ -311,7 +311,7 @@ function __hhs_load_dir() {
     echo '    MSelect default : If no arguments is provided, a menu with options will be displayed.'
   else
 
-    read -d '' -r -a all_dirs < "${HHS_SAVED_DIRS_FILE}"
+    while IFS= read -r l; do all_dirs+=("$l"); done < "${HHS_SAVED_DIRS_FILE}"
 
     if [ ${#all_dirs[@]} -ne 0 ]; then
 
@@ -408,7 +408,7 @@ function __hhs_godir() {
     fi
     search_name="$(basename "${2:-$1}")"
     pushd "${search_path%/}" &> /dev/null || echo
-    read -d '' -r -a found_dirs < <(find -L . -type d -iname "*""${search_name}" 2> /dev/null)
+    while IFS= read -r l; do found_dirs+=("$l"); done < <(find -L . -type d -iname "*""${search_name}" 2> /dev/null)
     popd &> /dev/null || echo
     len=${#found_dirs[@]}
     # If no directory is found under the specified name

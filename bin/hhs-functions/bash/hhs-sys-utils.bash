@@ -14,7 +14,7 @@
 
 # @function: Display relevant system information.
 function __hhs_sysinfo() {
-  local username containers if_name if_ip all_ips all_users OLDIFS
+  local username containers if_name if_ip all_ips all_users=() OLDIFS
 
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]}"
@@ -61,7 +61,7 @@ function __hhs_sysinfo() {
 
   OLDIFS=$IFS
   IFS=$'\n'
-  read -r -d '' -a all_users < <(who -H && printf '\0')
+  while IFS= read -r line; do all_users+=("$line"); done < <(who -H)
   if [[ ${#all_users[@]} -gt 0 ]]; then
     echo -e "\n${GREEN}Currently Logged in Users:${WHITE}"
     for next in "${all_users[@]}"; do
@@ -99,9 +99,10 @@ function __hhs_sysinfo() {
 # @function: Display a process list matching the process name/expression.
 # @param $1 [Req] : The process name to check.
 # @param $2 [Opt] : Whether to kill all found processes.
+# @compatible: bash zsh
 function __hhs_process_list() {
 
-  local all_pids uid pid ppid cmd force=0 quiet=0 kill_flag=0 pad divider gflags='-E'
+  local all_pids=() uid pid ppid cmd force=0 quiet=0 kill_flag=0 pad divider gflags='-E'
 
   if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} [options] <process_name>"
@@ -140,7 +141,7 @@ function __hhs_process_list() {
     done
 
     IFS=$'\n'
-    read -r -d '' -a all_pids < <(ps -axco uid,pid,ppid,comm | grep ${gflags} "${1:-.}")
+    while IFS= read -r line; do all_pids+=("$line"); done < <(ps -axco uid,pid,ppid,comm | grep ${gflags} "${1:-.}")
     IFS="${OLDIFS}"
 
     if [[ ${#all_pids[@]} -gt 0 ]]; then
@@ -160,7 +161,7 @@ function __hhs_process_list() {
         if [[ -n "${pid}" && $kill_flag -eq 1 ]]; then
           tput sc
           if [[ $force -ne 1 ]]; then
-            read -r -n 1 -p "${YELLOW} Kill this process y/[n]? " ANS
+            __hhs_read -r -n 1 -p "${YELLOW} Kill this process y/[n]? " ANS
           fi
           if [[ -n "${force}" || "$ANS" == "y" || "$ANS" == "Y" ]]; then
             tput rc
@@ -229,7 +230,7 @@ function __hhs_partitions() {
     return 1
   else
     IFS=$'\n'
-    read -r -d '' -a all_parts < <(df -H | tail -n +2)
+    while IFS= read -r line; do all_parts+=("$line"); done < <(df -H | tail -n +2)
     IFS="${OLDIFS}"
     echo "${WHITE}"
     printf '%-4s\t%-5s\t%-4s\t%-8s\t%-s\n' 'Size' 'Avail' 'Used' 'Capacity' 'Mounted-ON'
@@ -253,13 +254,13 @@ function __hhs_partitions() {
 # @function: Provide information about the OS.
 function __hhs_os_info() {
 
-  local os_info linux_os_release='/etc/os-release'
+  local os_info=() linux_os_release='/etc/os-release'
 
   echo ''
   IFS=$'\n'
   code_name=$(__hhs_get_codename)
   if [[ "${HHS_MY_OS}" == "Darwin" ]]; then
-    read -r -d '' -a os_info < <(sw_vers | awk '{print $2}')
+    while IFS= read -r line; do os_info+=("$line"); done < <(sw_vers | awk '{print $2}')
     echo "${HHS_HIGHLIGHT_COLOR}    Type: ${WHITE}Darwin"
     echo "${HHS_HIGHLIGHT_COLOR}    Name: ${WHITE}${os_info[0]}"
     echo "${HHS_HIGHLIGHT_COLOR} Version: ${WHITE}${os_info[1]}"
@@ -291,14 +292,15 @@ function __hhs_os_info() {
 function __hhs_get_codename() {
 
   if [[ "${HHS_MY_OS}" == "Darwin" ]]; then
-
     # Using Standard macOS software agreement.
     local line re_codename='.*SOFTWARE LICENSE AGREEMENT FOR ([a-zA-Z ]+).*'
     local os_info_file="/System/Library/CoreServices/Setup Assistant.app/Contents/Resources/en.lproj/OSXSoftwareLicense.rtf"
 
     line=$(grep -E "${re_codename}" "${os_info_file}")
     if [[ ${line} =~ ${re_codename} ]]; then
-      echo "${BASH_REMATCH[1]//macOS /}"
+      [[ -z "${ZSH_VERSION}" ]] \
+        && echo "${BASH_REMATCH[1]//macOS /}" \
+        || echo "${match[1]//macOS /}"
       return 0
     fi
   elif [[ "${HHS_MY_OS}" == "Linux" ]]; then

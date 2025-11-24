@@ -14,6 +14,7 @@
 # @function: Add/Remove/List/Execute saved bash commands.
 # @param $1 [Opt] : The command index or alias.
 # @param $2..$N [Con] : The command expression. This is required when alias is provided.
+# @compatible: bash zsh
 function __hhs_command() {
 
   HHS_CMD_FILE=${HHS_CMD_FILE:-$HHS_DIR/.cmd_file}
@@ -37,7 +38,7 @@ function __hhs_command() {
     echo '    MSelect default : When no arguments is provided, a menu with options will be displayed.'
   else
 
-    IFS=$'\n' read -d '' -r -a all_cmds <"${HHS_CMD_FILE}"
+    while IFS= read -r line; do all_cmds+=("$line"); done < "${HHS_CMD_FILE}"
     IFS="${OLDIFS}"
 
     case "$1" in

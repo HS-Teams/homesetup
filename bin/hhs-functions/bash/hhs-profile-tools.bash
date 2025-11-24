@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1090
 
 #  Script: hhs-profile-tools.bash
 # Created: Oct 5, 2019
@@ -72,7 +71,7 @@ if __hhs_has jenv; then
   }
 fi
 
-if [[ -z "${HHS_HAS_DOCKER}" ]]; then
+if __hhs_has docker && __hhs_has colima && [[ -z "${HHS_HAS_DOCKER}" ]]; then
 
   # @function: Lazy load helper function to initialize Docker-Daemon for the terminal.
   function __hhs_activate_docker() {

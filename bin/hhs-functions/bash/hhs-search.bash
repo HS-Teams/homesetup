@@ -14,6 +14,7 @@
 # @function: Search for files and links to files recursively.
 # @param $1 [Req] : The base search path.
 # @param $2 [Req] : The search glob expressions.
+# @compatible: bash zsh
 function __hhs_search_file() {
 
   local names expr file_globs dir full_cmd
@@ -30,8 +31,6 @@ function __hhs_search_file() {
     expr="e=\"${file_globs}\"; a=e.split(','); print(' -o '.join(['-iname \"{}\"'.format(s) for s in a]))"
     names=$(python3 -c "${expr}")
     full_cmd="find -L ${dir} -type f \( ${names} \) 2> /dev/null | __hhs_highlight \"(${file_globs//\*/.*}|$)\""
-
-    # Execute the search command.
     echo "${YELLOW}Searching for files matching: \"${file_globs}\" in \"${dir}\" ${NC}"
     __hhs_log "DEBUG" "${FUNCNAME[0]} ${full_cmd}"
     eval "${full_cmd}"
@@ -43,6 +42,7 @@ function __hhs_search_file() {
 # @function: Search for directories and links to directories recursively.
 # @param $1 [Req] : The base search path.
 # @param $2 [Opt] : The search glob expressions.
+# @compatible: bash zsh
 function __hhs_search_dir() {
 
   local names expr dir dir_globs full_cmd
@@ -76,6 +76,7 @@ function __hhs_search_dir() {
 # @param $4 [Req] : The GLOB expression of the file search.
 # @param $5 [Opt] : Whether to replace the findings.
 # @param $6 [Con] : Required if $4 is provided. This is the replacement string.
+# @compatible: bash zsh
 function __hhs_search_string() {
 
   local gflags extra_str replace names file_globs_type='regex' gflags='-HnEI' sflags='g'

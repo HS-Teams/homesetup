@@ -15,6 +15,7 @@
 # @param $1 [Req] : The response file.
 # @param $2 [Req] : The render title.
 # @param $3 [Req] : The array of items.
+# @compatible: bash zsh
 function __hhs_mchoose() {
 
   if [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]]; then
@@ -102,6 +103,7 @@ if __name__ == \"__main__\":
 # @param $1 [Req] : The response file.
 # @param $2 [Req] : The render title.
 # @param $3 [Req] : The array of items.
+# @compatible: bash zsh
 function __hhs_mselect() {
 
   local outfile all_options=() all_options_str len
@@ -161,6 +163,7 @@ if __name__ == \"__main__\":
 # @param $1 [Req] : The response file.
 # @param $2 [Req] : The render title.
 # @param $3 [Req] : The form fields.
+# @compatible: bash zsh
 function __hhs_minput() {
 
   local outfile title all_fields=() len
@@ -228,6 +231,7 @@ if __name__ == \"__main__\":
 
 # @function: PUNCH-THE-CLOCK. This is a helper tool to aid with the timesheet.
 # @param $1 [Con] : The week list punches from.
+# @compatible: bash zsh
 function __hhs_punch() {
 
   __hhs_is_venv || { __hhs_errcho "${FUNCNAME[0]}" "Not available when HomeSetup python venv is not active!"; return 1; }

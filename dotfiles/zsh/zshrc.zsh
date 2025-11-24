@@ -111,7 +111,12 @@ started="$(${PYTHON3:-python3} -c 'import time; print(int(time.time() * 1000))')
 echo -e "HomeSetup is starting: $(date)\n" >"${HHS_LOG_FILE}"
 
 # Source the bash common functions. Logs are available below here.
-source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"
+source "${HHS_HOME}/dotfiles/bash/bash_commons.bash" bb/
+
+# ZSH missing paths
+brew_path="/opt/homebrew/bin"
+ruby_path="$(ruby -e 'puts Gem.bindir')"
+export PATH="${brew_path}:${ruby_path}:${PATH}"
 
 # Initialization setup (homesetup.toml).
 if [[ ! -s "${HHS_SETUP_FILE}" ]]; then
@@ -172,11 +177,6 @@ if [[ -f "${HHS_DIR}/.path" ]]; then
     [[ -n "${f_path}" ]] && PATH="${f_path}:${PATH}"
   done
 fi
-
-# ZSH missing paths
-brew_path="/opt/homebrew/bin"
-ruby_path="$(ruby -e 'puts Gem.bindir')"
-PATH="${brew_path:h}:${ruby_path}:${PATH}"
 
 # Auto-suggestions and syntax-highlighting
 source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
@@ -330,6 +330,7 @@ alias du='\du'
 alias shopt='\shopt'
 alias hhs='__hhs'
 alias gta='git add'
+alias __hhs_highlight='grep --color=always -E'
 
 # -----------------------------------------------------------------------------------
 # Finalization
