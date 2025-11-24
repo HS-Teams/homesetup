@@ -141,7 +141,7 @@ function __hhs_process_list() {
     done
 
     IFS=$'\n'
-    while IFS= read -r line; do all_pids+=("$line"); done < <(ps -axco uid,pid,ppid,comm | grep ${gflags} "${1:-.}")
+    while IFS= read -r line; do all_pids+=("$line"); done < <(ps -axco uid,pid,ppid,comm | grep "${gflags}" "${1:-.}")
     IFS="${OLDIFS}"
 
     if [[ ${#all_pids[@]} -gt 0 ]]; then
@@ -161,7 +161,7 @@ function __hhs_process_list() {
         if [[ -n "${pid}" && $kill_flag -eq 1 ]]; then
           tput sc
           if [[ $force -ne 1 ]]; then
-            __hhs_read -r -n 1 -p "${YELLOW} Kill this process y/[n]? " ANS
+            read -r -n 1 -p "${YELLOW} Kill this process y/[n]? " ANS
           fi
           if [[ -n "${force}" || "$ANS" == "y" || "$ANS" == "Y" ]]; then
             tput rc
@@ -298,9 +298,7 @@ function __hhs_get_codename() {
 
     line=$(grep -E "${re_codename}" "${os_info_file}")
     if [[ ${line} =~ ${re_codename} ]]; then
-      [[ -z "${ZSH_VERSION}" ]] \
-        && echo "${BASH_REMATCH[1]//macOS /}" \
-        || echo "${match[1]//macOS /}"
+      echo "${BASH_REMATCH[1]//macOS /}"
       return 0
     fi
   elif [[ "${HHS_MY_OS}" == "Linux" ]]; then
