@@ -81,13 +81,13 @@ function __hhs_classic_mselect() {
     # } Menu Renderization
 
     # Navigation input {
-    IFS= __hhs_read -rsn 1 keypress
+    IFS= read -rsn 1 keypress
     case "${keypress}" in
     [[:digit:]]) # An index was typed
       typed_index="${keypress}"
       echo -en "${keypress}" && index_len=1
       while [[ ${#typed_index} -lt ${#len} ]]; do
-        __hhs_read -rs -n 1 numpress
+        read -rs -n 1 numpress
         [[ -z "${numpress}" ]] && break
         [[ ! "${numpress}" =~ ^[0-9]*$ ]] && unset typed_index && break
         typed_index="${typed_index}${numpress}"
@@ -102,7 +102,7 @@ function __hhs_classic_mselect() {
       fi
       ;;
     $'\033') # Handle escape '\e[nX' codes
-      IFS= __hhs_read -rsn2 -t 1 keypress
+      IFS= read -rsn2 -t 1 keypress
       case "${keypress}" in
       [A) # Cursor up
         if [[ $sel_index -eq $show_from && $show_from -gt 0 ]]; then

@@ -59,7 +59,7 @@ function __hhs_tailor() {
     file=${file:-/dev/stdin}
 
     if [[ "${file}" == '/dev/stdin' ]]; then
-      while __hhs_read -r stream; do
+      while read -r stream; do
         echo "${stream}" | sed ${sed_flag} \
           -e "s/\[(${HHS_TAILOR_THREAD_NAME_RE})\]/\[${HHS_TAILOR_THREAD_NAME_COLOR}\1${NC}\]/g" \
           -e "s/(${HHS_TAILOR_FQDN_RE})/${HHS_TAILOR_FQDN_COLOR}\1${NC}/g" \

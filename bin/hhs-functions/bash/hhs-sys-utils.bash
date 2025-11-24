@@ -61,7 +61,7 @@ function __hhs_sysinfo() {
 
   OLDIFS=$IFS
   IFS=$'\n'
-  __hhs_read_array all_users < <(who -H)
+  while IFS= read -r line; do all_users+=("$line"); done < <(who -H)
   if [[ ${#all_users[@]} -gt 0 ]]; then
     echo -e "\n${GREEN}Currently Logged in Users:${WHITE}"
     for next in "${all_users[@]}"; do
@@ -82,7 +82,7 @@ function __hhs_sysinfo() {
   if __hhs_has docker && __hhs_has __hhs_docker_ps; then
     OLDIFS=$IFS
     IFS=$'\n'
-    __hhs_read_array containers < <(__hhs_docker_ps -a && printf '\0')
+    read -r -d '' -a containers < <(__hhs_docker_ps -a && printf '\0')
     if [[ ${#containers[@]} -gt 0 && $(__hhs_docker_count) -ge 1 ]]; then
       echo -e "\n${GREEN}Online Docker Containers:${WHITE}"
       for next in "${containers[@]}"; do
@@ -141,7 +141,7 @@ function __hhs_process_list() {
     done
 
     IFS=$'\n'
-    __hhs_read_array all_pids < <(ps -axco uid,pid,ppid,comm | grep ${gflags} "${1:-.}")
+    while IFS= read -r line; do all_pids+=("$line"); done < <(ps -axco uid,pid,ppid,comm | grep ${gflags} "${1:-.}")
     IFS="${OLDIFS}"
 
     if [[ ${#all_pids[@]} -gt 0 ]]; then
@@ -230,7 +230,7 @@ function __hhs_partitions() {
     return 1
   else
     IFS=$'\n'
-    __hhs_read_array all_parts < <(df -H | tail -n +2)
+    while IFS= read -r line; do all_parts+=("$line"); done < <(df -H | tail -n +2)
     IFS="${OLDIFS}"
     echo "${WHITE}"
     printf '%-4s\t%-5s\t%-4s\t%-8s\t%-s\n' 'Size' 'Avail' 'Used' 'Capacity' 'Mounted-ON'
@@ -260,7 +260,7 @@ function __hhs_os_info() {
   IFS=$'\n'
   code_name=$(__hhs_get_codename)
   if [[ "${HHS_MY_OS}" == "Darwin" ]]; then
-    __hhs_read_array os_info < <(sw_vers | awk '{print $2}')
+    while IFS= read -r line; do os_info+=("$line"); done < <(sw_vers | awk '{print $2}')
     echo "${HHS_HIGHLIGHT_COLOR}    Type: ${WHITE}Darwin"
     echo "${HHS_HIGHLIGHT_COLOR}    Name: ${WHITE}${os_info[0]}"
     echo "${HHS_HIGHLIGHT_COLOR} Version: ${WHITE}${os_info[1]}"

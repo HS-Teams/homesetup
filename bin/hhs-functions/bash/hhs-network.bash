@@ -25,7 +25,7 @@ if __hhs_has ifconfig; then
       return 1
     fi
 
-    IFS=$'\n' __hhs_read_array all_ifaces < <(ifconfig -a | grep '^[a-z0-9]*: ')
+    IFS=$'\n' read -r -d '' -a all_ifaces < <(ifconfig -a | grep '^[a-z0-9]*: ')
     IFS="${OLDIFS}"
 
     if [[ ${#all_ifaces[@]} == 0 ]]; then
@@ -90,7 +90,7 @@ if __hhs_has ifconfig; then
         fi
         if_name='all|vpn|local|(lo|eth|en|wl|utun|tun)[a-z0-9]+'
         if [[ ${ip_kind} =~ ${if_name} ]]; then
-          __hhs_read_array if_list < <(__hhs_active_ifaces -flat 2>/dev/null)
+          read -r -d '' -a if_list < <(__hhs_active_ifaces -flat 2>/dev/null)
           [[ "vpn" == "${ip_kind}" ]] && if_prefix='(utun|tun)[a-z0-9]+'
           [[ "local" == "${ip_kind}" ]] && if_prefix='(eth|en|wl)[a-z0-9]+'
           [[ -z "${if_prefix}" ]] && if_prefix="${ip_kind}"

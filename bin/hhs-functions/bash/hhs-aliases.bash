@@ -70,7 +70,7 @@ function __hhs_aliases() {
     alias_expr="${alias_expr//$'\n'/ }"
 
     if [[ -z "${alias_expr}" || "$1" == '-l' || "$1" == "--list" ]]; then
-      __hhs_read_array all_aliases < <(grep -i -v '^#' "${HHS_ALIASES_FILE}")
+      while IFS= read -r line; do all_aliases+=("$line"); done < <(grep -i -v '^#' "${HHS_ALIASES_FILE}")
       IFS="${OLDIFS}"
       if [[ ${#all_aliases[@]} -gt 0 ]]; then
         pad=$(printf '%0.1s' "."{1..60})
