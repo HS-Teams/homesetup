@@ -76,7 +76,7 @@ function __hhs_hist_stats() {
   echo "${YELLOW}Top ${top_n} used commands in history:${NC}"
   echo ''
 
-  while read -r cmd_qty cmd_name; do
+  while __hhs_read -r cmd_qty cmd_name; do
     [[ -z "${cmd_qty}" || -z "${cmd_name}" ]] && continue
 
     bar_len=$(((cmd_qty * width) / max_size))
@@ -162,7 +162,7 @@ function __hhs_shell_select() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} "
   else
-    read -d '' -r -a avail_shells <<<"$(grep '/.*' '/etc/shells')"
+    __hhs_read_array avail_shells <<<"$(grep '/.*' '/etc/shells')"
     if __hhs_has brew; then
       echo "${BLUE}Checking: HomeBrew's shells...${NC}"
       for next_sh in "${avail_shells[@]}"; do
@@ -219,7 +219,7 @@ function __hhs_shopt() {
     echo '  Notes:'
     echo '    If no option is provided, then, display all set & unset options.'
   elif [[ ${#} -eq 0 || ${enable} =~ on|off|-p ]]; then
-    IFS=$'\n' read -r -d '' -a shell_options < <(\shopt | awk '{print $1"="$2}')
+    IFS=$'\n' __hhs_read_array shell_options < <(\shopt | awk '{print $1"="$2}')
     IFS="${OLDIFS}"
     echo ' '
     echo "${YELLOW}Available shell ${enable:-on and off} options (${#shell_options[@]}):"
@@ -236,7 +236,7 @@ function __hhs_shopt() {
   elif [[ ${#} -ge 1 && ${enable} =~ -(s|u) ]]; then
     [[ -z "${option}" ]] && return 1
     if \shopt "${enable}" "${option}"; then
-      read -r option enable < <(\shopt "${option}" | awk '{print $1, $2}')
+      __hhs_read -r option enable < <(\shopt "${option}" | awk '{print $1, $2}')
       [[ 'off' == "${enable}" ]] && color="${RED}"
       __hhs_toml_set "${HHS_SHOPTS_FILE}" "${option}=${enable}" && {
         echo -e "${WHITE}Shell option ${CYAN}${option}${WHITE} set to ${color:-${GREEN}}${enable} ${NC}"
@@ -310,7 +310,7 @@ function __hhs_du() {
   echo "${YELLOW}Top ${top_n} disk usage at: ${BLUE}\"${dir//\./$(pwd)}\"${NC}"
   echo ''
 
-  while read -r size_human path; do
+  while __hhs_read -r size_human path; do
     [[ -z "${size_human}" || -z "${path}" ]] && continue
 
     # Convert to KiB for scaling

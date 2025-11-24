@@ -127,7 +127,7 @@ function __hhs_toml_get() {
 
   key="$(__hhs_toml__normalize_key "${key}")"
 
-  while IFS= read -r line || [[ -n "${line}" ]]; do
+  while IFS= __hhs_read -r line || [[ -n "${line}" ]]; do
     local raw="${line%$'\r'}"
     trimmed="$(__hhs_toml__strip_comments "${raw}")"
     trimmed="$(__hhs_toml__trim "${trimmed}")"
@@ -204,7 +204,7 @@ function __hhs_toml_set() {
   temp_file="${file}.tmp"
   : >"${temp_file}"
 
-  while IFS= read -r line || [[ -n "${line}" ]]; do
+  while IFS= __hhs_read -r line || [[ -n "${line}" ]]; do
     raw_line="${line%$'\r'}"
     clean_line="$(__hhs_toml__strip_comments "${raw_line}")"
     trimmed_line="$(__hhs_toml__trim "${clean_line}")"
@@ -273,7 +273,7 @@ function __hhs_toml_groups() {
     return 1
   fi
 
-  while IFS= read -r line || [[ -n "${line}" ]]; do
+  while IFS= __hhs_read -r line || [[ -n "${line}" ]]; do
     line="$(__hhs_toml__strip_comments "${line%$'\r'}")"
     line="$(__hhs_toml__trim "${line}")"
 
@@ -314,7 +314,7 @@ function __hhs_toml_keys() {
     return 1
   fi
 
-  while IFS= read -r line || [[ -n "${line}" ]]; do
+  while IFS= __hhs_read -r line || [[ -n "${line}" ]]; do
     raw_line="${line%$'\r'}"
     clean_line="$(__hhs_toml__strip_comments "${raw_line}")"
     trimmed_line="$(__hhs_toml__trim "${clean_line}")"
@@ -365,7 +365,7 @@ function __hhs_toml_get_all() {
   re_group="^\[([a-zA-Z0-9_.]+)\] *"
   re_kv="^([a-zA-Z0-9_.]+) *= *(.*)"
 
-  while read -r line; do
+  while __hhs_read -r line; do
     if [[ -z "${group}" && ${line} =~ ${re_group} ]]; then
       break
     elif [[ -n "${group_match}" && ${line} =~ ${re_group} ]]; then
