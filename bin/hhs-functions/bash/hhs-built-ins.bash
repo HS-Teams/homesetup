@@ -98,7 +98,7 @@ function __hhs_about() {
     [[ ${recurse} -eq 0 ]] && echo ''
     cmd=${1}
     IFS=$'\n'
-    read -r -d '' -a type_ret < <(type "${cmd}" 2> /dev/null)
+    __hhs_read_array type_ret < <(type "${cmd}" 2> /dev/null)
     IFS="${OLDIFS}"
     if [[ ${#type_ret[@]} -gt 0 ]]; then
       if [[ ${type_ret[0]} =~ ${re_alias} ]]; then
@@ -224,7 +224,7 @@ function __hhs_envs() {
   OLDIFS="$IFS"
   IFS=$'\n'
   \shopt -s nocasematch
-  env | sort | while IFS= read -r env_var; do
+  env | sort | while IFS= __hhs_read -r env_var; do
     if [[ $env_var =~ ^([a-zA-Z0-9_]+)=(.*) ]]; then
       name=${BASH_REMATCH[1]}
       value=${BASH_REMATCH[2]}
@@ -315,7 +315,7 @@ function __hhs_repeat() {
 
   hist_lines=$(history | tail -n "$((count + 1))" | head -n "${count}")
   cmd_index=0
-  echo "${hist_lines}" | while IFS= read -r line; do
+  echo "${hist_lines}" | while IFS= __hhs_read -r line; do
     cmd=$(printf '%s\n' "${line}" | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+\[[^]]+\][[:space:]]+//')
     [[ "${cmd}" == "${FUNCNAME[0]}"* ]] && continue
     echo -e "${BLUE}Executing [${cmd_index}] -> ${cmd}${NC}"

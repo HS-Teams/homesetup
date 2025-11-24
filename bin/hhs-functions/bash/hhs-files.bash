@@ -108,7 +108,7 @@ function __hhs_del_tree() {
     if [[ -n "${all}" ]]; then
       if [[ "${dry_run}" == 'N' || "${dry_run}" == 'I' ]]; then
         for next in ${all}; do
-          [[ "${dry_run}" == 'I' ]] && read -r -n 1 -p "Delete ${next} y/[n]? " ans && echo ''
+          [[ "${dry_run}" == 'I' ]] && __hhs_read -r -n 1 -p "Delete ${next} y/[n]? " ans && echo ''
           [[ "${dry_run}" == 'I' ]] || ans='Y'
           if [[ "${ans}" == 'y' || "${ans}" == 'Y' ]]; then
             trash_dest="${next##*/}"

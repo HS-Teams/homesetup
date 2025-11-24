@@ -102,7 +102,7 @@ function __hhs_classic_mchoose() {
     # } Menu Renderization
 
     # Navigation input {
-    IFS= read -rsn 1 keypress
+    IFS= __hhs_read -rsn 1 keypress
     case "${keypress}" in
     [[:space:]]) # Mark option
       if [[ ${all_checks[cur_index]} -eq 0 ]]; then
@@ -127,7 +127,7 @@ function __hhs_classic_mchoose() {
       typed_index="${keypress}"
       echo -en "${keypress}" && index_len=1
       while [[ ${#typed_index} -lt ${#len} ]]; do
-        IFS= read -rsn1 num_press
+        IFS= __hhs_read -rsn1 num_press
         [[ -z "${num_press}" ]] && break
         [[ ! "${num_press}" =~ ^[0-9]*$ ]] && unset typed_index && break
         typed_index="${typed_index}${num_press}"
@@ -142,7 +142,7 @@ function __hhs_classic_mchoose() {
       fi
       ;;
     $'\033') # Handle escape '\e[nX' codes
-      IFS= read -rsn2 -t 1 keypress
+      IFS= __hhs_read -rsn2 -t 1 keypress
       case "${keypress}" in
       [A) # Cursor up
         if [[ ${cur_index} -eq ${show_from} ]] && [[ ${show_from} -gt 0 ]]; then
