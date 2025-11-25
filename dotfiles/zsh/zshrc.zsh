@@ -111,7 +111,7 @@ started="$(${PYTHON3:-python3} -c 'import time; print(int(time.time() * 1000))')
 echo -e "HomeSetup is starting: $(date)\n" >"${HHS_LOG_FILE}"
 
 # Source the bash common functions. Logs are available below here.
-source "${HHS_HOME}/dotfiles/bash/bash_commons.bash" bb/
+source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"
 
 # ZSH missing paths
 brew_path="/opt/homebrew/bin"
@@ -121,7 +121,7 @@ export PATH="${brew_path}:${ruby_path}:${PATH}"
 # Initialization setup (homesetup.toml).
 if [[ ! -s "${HHS_SETUP_FILE}" ]]; then
   __hhs_log "WARN" "HomeSetup initialization file '${HHS_SETUP_FILE}' was not found. Using defaults."
-  \cp "${HHS_HOME}/dotfiles/homesetup.toml" "${HHS_SETUP_FILE}"
+  \cp -f "${HHS_HOME}/dotfiles/homesetup.toml" "${HHS_SETUP_FILE}"
 fi
 re='^([a-zA-Z0-9_.]+) *= *(.*)'
 while read -r pref; do
@@ -156,7 +156,7 @@ fi
 # Check for HomeSetup updates.
 if [[ ${HHS_NO_AUTO_UPDATE} -ne 1 ]]; then
   if [[ ! -s "${HHS_DIR}/.last_update" || $(date "+%s%S") -ge $(grep . "${HHS_DIR}/.last_update") ]]; then
-    echo
+    echo ''
     echo -e "${BLUE}Checking for updates ...${NC}"
     if __hhs_is_reachable 'https://github.com/'; then
       __hhs updater execute check
@@ -179,13 +179,13 @@ if [[ -f "${HHS_DIR}/.path" ]]; then
 fi
 
 # Auto-suggestions and syntax-highlighting
-source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
-source "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+__hhs_source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+__hhs_source "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 
 # Alias definitions
 if ! [[ -s "${HHS_ALIASDEF}" ]]; then
   __hhs_log "WARN" "'.aliasdef' file was copied because it was not found at: ${HHS_DIR}"
-  \cp "${HHS_HOME}/dotfiles/aliasdef" "${HHS_ALIASDEF}"
+  \cp -f "${HHS_HOME}/dotfiles/aliasdef" "${HHS_ALIASDEF}"
 fi
 
 # -----------------------------------------------------------------------------------
@@ -215,7 +215,7 @@ fi
 # Activate HomeSetup Python venv.
 if [[ ${HHS_PYTHON_VENV_ENABLED} -eq 1 ]]; then
   __hhs_log "DEBUG" "Activating python virtual environment"
-  if source "${HHS_VENV_PATH}"/bin/activate; then
+  if __hhs_source "${HHS_VENV_PATH}"/bin/activate; then
     __hhs_log "INFO" "HomeSetup Python venv has been activated: ${HHS_VENV_PATH}"
     export HHS_PYTHON_VENV_ACTIVE=1
   else
@@ -243,7 +243,7 @@ for file in "${DOTFILES[@]}"; do
   f_path="${HOME}/.${file}"
   if [[ -s "${f_path}" ]]; then
     __hhs_log "DEBUG" "Loading dotfile: ${f_path}"
-    source "${f_path}"
+    __hhs_source "${f_path}"
   else
     __hhs_log "WARN" "Skipped dotfile :: Not found -> ${f_path}"
   fi
@@ -278,7 +278,7 @@ if [[ ${HHS_EXPORT_SETTINGS} -eq 1 ]] && __hhs_is_venv; then
   # Update the settings configuration.
   echo "hhs.setman.database = ${HHS_SETMAN_DB_FILE}" >"${HHS_SETMAN_CONFIG_FILE}"
   tmp_file="$(mktemp)"
-  if ${PYTHON3} -m setman source -n hhs -f "${tmp_file}" && source "${tmp_file}"; then
+  if ${PYTHON3} -m setman source -n hhs -f "${tmp_file}" && __hhs_source "${tmp_file}"; then
     __hhs_log "INFO" "System settings loaded !"
   else
     __hhs_log "ERROR" "Failed to load system settings !"
@@ -311,7 +311,7 @@ function command_not_found_handler() {
 # Workaround to fix missing __hhs_functions
 
 # Print HomeSetup MOTDs.
-echo -en "\033[H\033[J"
+echo -en "\033[J\033[H"
 if [[ -d "${HHS_MOTD_DIR}" ]]; then
   all=$(find "${HHS_MOTD_DIR}" -type f | sort | uniq)
   for motd in ${all}; do

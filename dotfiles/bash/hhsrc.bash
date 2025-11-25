@@ -159,20 +159,20 @@ fi
 # Input method resources
 if ! [[ -s "${HHS_INPUTRC}" ]]; then
   __hhs_log "WARN" "'.inputrc' file was copied because it was not found at: ${HOME}"
-  \cp "${HHS_HOME}/dotfiles/inputrc" "${HHS_INPUTRC}"
+  \cp -f "${HHS_HOME}/dotfiles/inputrc" "${HHS_INPUTRC}"
 fi
 
 # Alias definitions
 if ! [[ -s "${HHS_ALIASDEF}" ]]; then
   __hhs_log "WARN" "'.aliasdef' file was copied because it was not found at: ${HHS_DIR}"
-  \cp "${HHS_HOME}/dotfiles/aliasdef" "${HHS_ALIASDEF}"
+  \cp -f "${HHS_HOME}/dotfiles/aliasdef" "${HHS_ALIASDEF}"
 fi
 
 # -----------------------------------------------------------------------------------
 # Initialize HomeSetup key bindings.
 if ! [[ -s "${HHS_KEY_BINDINGS}" ]]; then
   __hhs_log "WARN" "'${HHS_KEY_BINDINGS}' file was copied because it was not found at: ${HHS_DIR}"
-  \cp "${HHS_HOME}/dotfiles/hhs-bindings" "${HHS_KEY_BINDINGS}"
+  \cp -f "${HHS_HOME}/dotfiles/hhs-bindings" "${HHS_KEY_BINDINGS}"
 fi
 
 if bind -f "${HHS_KEY_BINDINGS}" &>/dev/null; then
@@ -203,7 +203,7 @@ fi
 # Initialize Ble-sh plug-in if it's enabled.
 if [[ ${HHS_USE_BLESH} -eq 1 ]]; then
   __hhs_log "INFO" "Loading Ble-sh plug-in"
-  [[ $- == *i* ]] && source "${HHS_BLESH_DIR}/out/ble.sh" --noattach
+  [[ $- == *i* ]] && __hhs_source "${HHS_BLESH_DIR}/out/ble.sh" --noattach
 else
   __hhs_log "WARN" "Ble-sh initialization was disabled !"
 fi
@@ -212,7 +212,7 @@ fi
 # Activate HomeSetup Python venv.
 if [[ ${HHS_PYTHON_VENV_ENABLED} -eq 1 ]]; then
   __hhs_log "DEBUG" "Activating python virtual environment"
-  if source "${HHS_VENV_PATH}"/bin/activate; then
+  if __hhs_source "${HHS_VENV_PATH}"/bin/activate; then
     __hhs_log "INFO" "HomeSetup Python venv has been activated: ${HHS_VENV_PATH}"
     export HHS_PYTHON_VENV_ACTIVE=1
   else
@@ -288,7 +288,7 @@ if [[ ${HHS_EXPORT_SETTINGS} -eq 1 ]] && __hhs_is_venv; then
   # Update the settings configuration.
   echo "hhs.setman.database = ${HHS_SETMAN_DB_FILE}" >"${HHS_SETMAN_CONFIG_FILE}"
   tmp_file="$(mktemp)"
-  if ${PYTHON3} -m setman source -n hhs -f "${tmp_file}" && source "${tmp_file}"; then
+  if ${PYTHON3} -m setman source -n hhs -f "${tmp_file}" && __hhs_source "${tmp_file}"; then
     __hhs_log "INFO" "System settings loaded !"
   else
     __hhs_log "ERROR" "Failed to load system settings !"
