@@ -123,6 +123,7 @@ echo -e "HomeSetup is starting: $(date)\n" >"${HHS_LOG_FILE}"
 # Source the bash common functions. Logs are available below here.
 source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"
 
+# -----------------------------------------------------------------------------------
 # Initialization setup (homesetup.toml).
 if [[ ! -s "${HHS_SETUP_FILE}" ]]; then
   __hhs_log "WARN" "HomeSetup initialization file '${HHS_SETUP_FILE}' was not found. Using defaults."

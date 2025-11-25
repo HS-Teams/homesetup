@@ -46,8 +46,8 @@ fi
 # If Starship did not start, configure classic HomeSetup prompt.
 if [[ -z "${STARSHIP_SESSION_KEY}" ]]; then
   __hhs_log "INFO" "Starting PowerLevel 10k prompt!"
-  source "$(brew --prefix)/share/powerlevel10k/powerlevel10k.zsh-theme"
-  [[ ! -f ~/.p10k.zsh ]] || source "${HOME}/.p10k.zsh"
+  __hhs_source "$(brew --prefix)/share/powerlevel10k/powerlevel10k.zsh-theme"
+  [[ ! -f ~/.p10k.zsh ]] || __hhs_source "${HOME}/.p10k.zsh"
 fi
 
 # ColorLS integration. Copy HomeSetup config files if they are not found.
@@ -61,5 +61,5 @@ if gem which colorls &>/dev/null; then
   [[ -f "${colorls_dir}/files.yaml" ]] || \cp "${hhs_colorls_dir}/files.yaml" "${colorls_dir}"
   [[ -f "${colorls_dir}/folder_aliases.yaml" ]] || \cp "${hhs_colorls_dir}/folder_aliases.yaml" "${colorls_dir}"
   [[ -f "${colorls_dir}/folders.yaml" ]] || \cp "${hhs_colorls_dir}/folders.yaml" "${colorls_dir}"
-  source "$(dirname "$(gem which colorls)")"/tab_complete.sh
+  __hhs_source "$(dirname "$(gem which colorls)")"/tab_complete.sh
 fi

@@ -118,6 +118,11 @@ brew_path="/opt/homebrew/bin"
 ruby_path="$(ruby -e 'puts Gem.bindir')"
 export PATH="${brew_path}:${ruby_path}:${PATH}"
 
+# Auto-suggestions and syntax-highlighting
+__hhs_source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+__hhs_source "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+
+# -----------------------------------------------------------------------------------
 # Initialization setup (homesetup.toml).
 if [[ ! -s "${HHS_SETUP_FILE}" ]]; then
   __hhs_log "WARN" "HomeSetup initialization file '${HHS_SETUP_FILE}' was not found. Using defaults."
@@ -177,10 +182,6 @@ if [[ -f "${HHS_DIR}/.path" ]]; then
     [[ -n "${f_path}" ]] && PATH="${f_path}:${PATH}"
   done
 fi
-
-# Auto-suggestions and syntax-highlighting
-__hhs_source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
-__hhs_source "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
 
 # Alias definitions
 if ! [[ -s "${HHS_ALIASDEF}" ]]; then
