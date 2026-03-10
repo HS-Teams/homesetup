@@ -12,25 +12,45 @@
 # !NOTICE: Do not change this file. To customize your functions edit the file ~/.functions
 
 # @function: Highlight words from the piped stream.
-# @param $1 [Req] : The word to highlight.
-# @param $2 [Opt] : The optional filename (uses stdin if omitted).
+# @param $1..$N [Opt] : Optional grep flags, followed by the search pattern and optional filename.
 # shellcheck disable=SC2120
 function __hhs_highlight() {
 
   local search file hl_color="${HHS_HIGHLIGHT_COLOR}"
+  local -a grep_opts
+
+  grep_opts=(-E -i --color=always)
 
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    echo "usage: ${FUNCNAME[0]} <text_to_highlight> [filename]"
+    echo "usage: ${FUNCNAME[0]} [grep_flags...] <text_to_highlight> [filename]"
     echo ''
     echo '  Notes: '
+    echo '    grep_flags: Optional grep-compatible flags such as -i, -v or -n.'
+    echo '                Use -- before the pattern if it starts with a dash.'
     echo '    filename: If not provided, stdin will be used instead.'
     return 1
   else
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+      --)
+        shift
+        break
+        ;;
+      -*)
+        grep_opts+=("$1")
+        shift
+        ;;
+      *)
+        break
+        ;;
+      esac
+    done
+
     search="${1:-.*}"
     file="${2:-/dev/stdin}"
     hl_color=${HHS_HIGHLIGHT_COLOR//\e[/}
     hl_color=${HHS_HIGHLIGHT_COLOR/m/}
-    GREP_COLOR="${hl_color}" grep -Ei --color=always "${search}" "${file}"
+    GREP_COLOR="${hl_color}" grep "${grep_opts[@]}" "${search}" "${file}"
   fi
 
   return 0

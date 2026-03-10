@@ -16,6 +16,7 @@ local config = {
   term = "xterm-256color",
   default_prog = { "sh", "-c", "exec $(" .. brew_prefix .. " --prefix bash)/bin/bash -l" },
   exit_behavior = 'Close',
+  window_close_confirmation = 'AlwaysPrompt',
 
   -- Don't ask the macOS IME/text services to compose input
   use_dead_keys = true,
@@ -75,7 +76,6 @@ local config = {
   colors = {
     scrollbar_thumb = '#75e9be',
   },
-
   macos_window_background_blur = 10,
   use_fancy_tab_bar = true,
   adjust_window_size_when_changing_font_size = false,
@@ -92,7 +92,7 @@ local config = {
   keys = {
     -- Existing shortcuts
     { key = "t", mods = "CMD", action = wezterm.action.SpawnTab("CurrentPaneDomain") },
-    { key = "w", mods = "CMD", action = wezterm.action.CloseCurrentTab({ confirm = false }) },
+    { key = "w", mods = "CMD", action = wezterm.action.CloseCurrentTab({ confirm = true }) },
     { key = "k", mods = "CMD", action = wezterm.action { ClearScrollback = "ScrollbackAndViewport" } },
     { key = "1", mods = "CMD", action = wezterm.action.ActivateTab(0) },
     { key = "2", mods = "CMD", action = wezterm.action.ActivateTab(1) },

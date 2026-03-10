@@ -14,19 +14,87 @@
 # @function: Search for previously issued commands from history using filter.
 # @param $1 [Req] : The case-insensitive filter to be used when listing.
 function __hhs_history() {
+  local filter lc_filter grep_status pad pad_len hist_id hist_cmd hist_label dot_count found=0
+
+  filter="${*}"
+  lc_filter="$(printf '%s' "${filter}" | tr '[:upper:]' '[:lower:]')"
+  pad=$(printf '%0.1s' "."{1..30})
+  pad_len=41
 
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} [regex_filter]"
     return 1
   fi
+
   echo ''
-  if [[ "$#" -eq 0 ]]; then
-    history | sort -k2 -k 1,1nr | uniq -f 1 | sort -n | __hhs_highlight -i "^ *[0-9]*  "
-  else
-    history | sort -k2 -k 1,1nr | uniq -f 1 | sort -n | __hhs_highlight -i "${*}"
+
+  if [[ -n "${filter}" ]]; then
+    printf '' | grep -Eiq -- "${filter}"
+    grep_status=$?
+    [[ ${grep_status} -eq 2 ]] && return 2
   fi
 
-  return $?
+  while IFS=$'\034' read -r hist_id hist_cmd; do
+    [[ -z "${hist_id}" || -z "${hist_cmd}" ]] && continue
+
+    hist_label="$(printf "%4d" "${hist_id}")"
+    dot_count=$((pad_len - ${#hist_label}))
+    ((dot_count < 1)) && dot_count=1
+
+    echo -en "${WHITE}${hist_label}${NC}"
+    printf '%*.*s' 0 "${dot_count}" "${pad}"
+    echo -e " ${GREEN} ${HHS_HIGHLIGHT_COLOR}${hist_cmd}${NC}"
+    found=1
+  done < <(history | awk -v filter="${lc_filter}" '
+    function trim(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      return value
+    }
+    function strip_metadata(value, changed) {
+      value = trim(value)
+      changed = 1
+      while (changed) {
+        changed = 0
+        if (sub(/^\[[^]]*\][[:space:]]*/, "", value)) {
+          changed = 1
+        } else if (sub(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]]+/, "", value)) {
+          changed = 1
+        } else if (sub(/^[0-9]{2}:[0-9]{2}:[0-9]{2}[[:space:]]+/, "", value)) {
+          changed = 1
+        } else if (sub(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}:[0-9]{2}[[:space:]]+/, "", value)) {
+          changed = 1
+        }
+      }
+      return trim(value)
+    }
+    {
+      line = $0
+      if (!match(line, /^[[:space:]]*[0-9]+\**[[:space:]]+/)) {
+        next
+      }
+
+      hist_id = substr(line, RSTART, RLENGTH)
+      gsub(/[^0-9]/, "", hist_id)
+      cmd = trim(substr(line, RLENGTH + 1))
+      cmd = strip_metadata(cmd)
+
+      if (cmd == "") {
+        next
+      }
+      if (filter != "" && tolower(cmd) !~ filter) {
+        next
+      }
+
+      printf "%d\034%s\n", hist_id + 0, cmd
+    }
+  ')
+
+  if [[ -n "${filter}" && ${found} -eq 0 ]]; then
+    return 1
+  fi
+
+  return 0
 }
 
 # @function: Display statistics about commands in history (aligned + dotted padding)

@@ -32,6 +32,26 @@ EOF
 }
 
 # TC - 2
+@test "when-highlighting-with-grep-flags-then-leading-options-are-forwarded" {
+  local input_file
+  input_file="${BATS_TEST_TMPDIR}/highlight-flags.txt"
+
+  cat <<'EOF' >"${input_file}"
+alpha
+Beta
+gamma
+EOF
+
+  run __hhs_highlight -i "beta" "${input_file}"
+
+  assert_success
+  assert_output --partial $'\e['
+  assert_output --partial 'Beta'
+  refute_output --partial 'alpha'
+  refute_output --partial 'gamma'
+}
+
+# TC - 3
 @test "when-jq-is-available-then-json-print-uses-it" {
   ensure_json_print
   run command -v jq
@@ -43,7 +63,7 @@ EOF
   assert_output --partial '"foo": 1'
 }
 
-# TC - 3
+# TC - 4
 @test "when-xmllint-is-available-then-xml-print-uses-it" {
   # Ensure xmllint is installed
   if ! command -v xmllint >/dev/null; then
@@ -61,7 +81,7 @@ EOF
   assert_output --partial '<child>2</child>'
 }
 
-# TC - 4
+# TC - 5
 @test "when-converting-string-to-ascii-then-numeric-representations-are-returned" {
   run __hhs_ascof 'Hi'
 
@@ -71,7 +91,7 @@ EOF
   assert_output --partial 'Str: Hi'
 }
 
-# TC - 5
+# TC - 6
 @test "when-converting-valid-unicode-then-all-representations-are-printed" {
   run __hhs_utoh f123
 
