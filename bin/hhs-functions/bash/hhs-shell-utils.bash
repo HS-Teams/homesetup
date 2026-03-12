@@ -15,6 +15,7 @@
 # @param $1 [Req] : The case-insensitive filter to be used when listing.
 function __hhs_history() {
   local filter lc_filter grep_status pad pad_len hist_id hist_cmd hist_label dot_count found=0
+  local columns col_offset=8
 
   filter="${*}"
   lc_filter="$(printf '%s' "${filter}" | tr '[:upper:]' '[:lower:]')"
@@ -27,6 +28,8 @@ function __hhs_history() {
   fi
 
   echo ''
+  columns="$(($(tput cols) - pad_len - col_offset))"
+  ((columns < 1)) && columns=1
 
   if [[ -n "${filter}" ]]; then
     printf '' | grep -Eiq -- "${filter}"
@@ -41,15 +44,33 @@ function __hhs_history() {
     dot_count=$((pad_len - ${#hist_label}))
     ((dot_count < 1)) && dot_count=1
 
-    echo -en "${WHITE}${hist_label}${NC}"
+    printf '%s' "${WHITE}${hist_label}${NC}"
     printf '%*.*s' 0 "${dot_count}" "${pad}"
-    echo -e " ${GREEN} ${HHS_HIGHLIGHT_COLOR}${hist_cmd}${NC}"
+    printf '%s' " ${GREEN} ${HHS_HIGHLIGHT_COLOR}${hist_cmd:0:${columns}}"
+    [[ ${#hist_cmd} -ge ${columns} ]] && printf '%s' "..."
+    printf '%s\n' "${NC}"
     found=1
   done < <(history | awk -v filter="${lc_filter}" '
     function trim(value) {
       sub(/^[[:space:]]+/, "", value)
       sub(/[[:space:]]+$/, "", value)
       return value
+    }
+    function store_entry(value) {
+      value = strip_metadata(trim(value))
+      gsub(/[[:space:]]+/, " ", value)
+      value = trim(value)
+
+      if (current_hist_id == "" || value == "") {
+        return
+      }
+
+      count += 1
+      hist_ids[count] = current_hist_id + 0
+      cmds[count] = value
+      if (!(value in first_pos)) {
+        first_pos[value] = count
+      }
     }
     function strip_metadata(value, changed) {
       value = trim(value)
@@ -71,22 +92,32 @@ function __hhs_history() {
     {
       line = $0
       if (!match(line, /^[[:space:]]*[0-9]+\**[[:space:]]+/)) {
+        if (current_hist_id != "") {
+          current_cmd = current_cmd " " trim(line)
+        }
         next
       }
 
-      hist_id = substr(line, RSTART, RLENGTH)
-      gsub(/[^0-9]/, "", hist_id)
-      cmd = trim(substr(line, RLENGTH + 1))
-      cmd = strip_metadata(cmd)
+      store_entry(current_cmd)
 
-      if (cmd == "") {
-        next
-      }
-      if (filter != "" && tolower(cmd) !~ filter) {
-        next
-      }
+      current_hist_id = substr(line, RSTART, RLENGTH)
+      gsub(/[^0-9]/, "", current_hist_id)
+      current_cmd = trim(substr(line, RLENGTH + 1))
+    }
+    END {
+      store_entry(current_cmd)
 
-      printf "%d\034%s\n", hist_id + 0, cmd
+      for (i = 1; i <= count; i++) {
+        cmd = cmds[i]
+        if (first_pos[cmd] != i) {
+          continue
+        }
+        if (filter != "" && tolower(cmd) !~ filter) {
+          continue
+        }
+
+        printf "%d\034%s\n", hist_ids[i], cmd
+      }
     }
   ')
 

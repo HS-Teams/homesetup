@@ -12,6 +12,16 @@ load test_helper
 load "${HHS_FUNCTIONS_DIR}/hhs-shell-utils.bash"
 load_bats_libs
 
+# @function: Stub terminal width for deterministic truncation checks.
+function tput() {
+  if [[ "$1" == "cols" ]]; then
+    echo '60'
+    return 0
+  fi
+
+  return 1
+}
+
 # @function: Stub the shell history builtin so tests can control the input.
 function history() {
   cat <<'EOF'
@@ -19,6 +29,10 @@ function history() {
   18  [hjunior, 2026-03-10 08:00:00] git status
   22  2026-03-10 09:00:00 ls -la
   31  [hjunior, 2026-03-10T09:30:00] npm test
+  44  [hjunior, 2026-03-10 10:15:00] verylongcommand-with-many-arguments --flag value
+  52  [hjunior, 2026-03-10 12:00:00] echo a
+b
+  60  [hjunior, 2026-03-10 12:10:00] \rm -rf .gradle-local/
 EOF
 }
 
@@ -32,6 +46,7 @@ EOF
   assert_output --partial 'git status'
   assert_output --partial 'ls -la'
   assert_output --partial 'npm test'
+  assert_output --partial 'verylongcom...'
   refute_output --partial '2026-03-10'
   refute_output --partial '09:30:00'
   refute_output --partial '[hjunior,'
@@ -48,9 +63,34 @@ EOF
 }
 
 # TC - 3
+@test "when-history-has-duplicate-commands-then-only-the-oldest-entry-is-rendered" {
+  run __hhs_history "ls -la"
+
+  assert_success
+  assert_output --partial '  12'
+  refute_output --partial '  22'
+}
+
+# TC - 4
 @test "when-filter-matches-no-history-command-then-command-fails" {
   run __hhs_history "docker"
 
   assert_failure
   assert_output ''
+}
+
+# TC - 5
+@test "when-history-command-spans-multiple-lines-then-newlines-are-replaced-by-spaces" {
+  run __hhs_history "echo a b"
+
+  assert_success
+  assert_output --partial 'echo a b'
+}
+
+# TC - 6
+@test "when-history-command-contains-backslash-r-then-it-is-rendered-literally" {
+  run __hhs_history
+
+  assert_success
+  assert_output --partial '\rm -rf .gr...'
 }
