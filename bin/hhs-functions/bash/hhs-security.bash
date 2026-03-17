@@ -101,14 +101,28 @@ usage: ${FUNCNAME[0]} [-l <password_length>] [-t <password_type>]
     case "$1" in
     -l | --length)
       shift
+      if [[ $# -eq 0 || "$1" =~ ^- ]]; then
+        __hhs_errcho "${FUNCNAME[0]}" "Missing value for --length. \n${usage}"
+        return 1
+      fi
       length="${1}"
       ;;
     -t | --type)
       shift
+      if [[ $# -eq 0 || "$1" =~ ^- ]]; then
+        __hhs_errcho "${FUNCNAME[0]}" "Missing value for --type. \n${usage}"
+        return 1
+      fi
       type="${1}"
       ;;
-    -h | --help) quit 0 "${usage}" ;;
-    *) quit 1 "Unknown option: $1 \n${usage}" ;;
+    -h | --help)
+      echo -e "${usage}"
+      return 0
+      ;;
+    *)
+      __hhs_errcho "${FUNCNAME[0]}" "Unknown option: $1 \n${usage}"
+      return 1
+      ;;
     esac
     shift
   done
@@ -116,7 +130,7 @@ usage: ${FUNCNAME[0]} [-l <password_length>] [-t <password_type>]
   if [[ -z "${length}" || -z "${type}" ]]; then
     __hhs_errcho "${FUNCNAME[0]}" "Missing required arguments. \n${usage}"
     return 1
-  elif ! [[ "${length}" =~ ^[0-9]+$ ]]; then
+  elif ! [[ "${length}" =~ ^[1-9][0-9]*$ ]]; then
     __hhs_errcho "${FUNCNAME[0]}" "Password length must be a positive integer. \n${usage}"
     return 1
   elif ! [[ "${type}" =~ ^[1-4]$ ]]; then
@@ -138,7 +152,7 @@ usage: ${FUNCNAME[0]} [-l <password_length>] [-t <password_type>]
       # Generate 70% alphanumeric characters
       for ((i = 0; i < num_letters; i++)); do
         rand_index=$((16#${hash_str:index:2} % ${#alphanum}))
-        password+="${alphanum:1:1}"
+        password+="${alphanum:rand_index:1}"
         ((index += 2))
       done
 
@@ -172,6 +186,6 @@ usage: ${FUNCNAME[0]} [-l <password_length>] [-t <password_type>]
     echo -e "${GREEN}Password copied to the clipboard!${NC}"
     return 0
   fi
-echo '5'
+
   return 1
 }

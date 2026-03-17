@@ -31,6 +31,7 @@ __hhs_alias tailor='__hhs_tailor'
 __hhs_alias fetch='fetch.bash'
 __hhs_alias check-ip='check-ip.bash'
 __hhs_alias services='__hhs_services'
+__hhs_alias pwgen='__hhs_pwgen'
 
 [[ ${HHS_AI_ENABLED} -eq 1 ]] && __hhs_alias ask='__hhs_ask'
 
