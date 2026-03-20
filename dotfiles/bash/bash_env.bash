@@ -191,7 +191,7 @@ else
   # Development tools. To override it please export HHS_DEV_TOOLS variable at ${HHS_ENV_FILE}
   DEVELOPER_TOOLS=(
     'git' 'hexdump' 'nvim' 'tree' 'pcregrep' 'gpg' 'base64' 'rsync'
-    'java' 'ruby' 'gem' 'python3' 'pip3'
+    'java' 'ruby' 'gem' 'python3' 'pip3' 'node' 'npm'
     'gcc' 'make' 'gradle'
     'jq' 'sqlite3' 'gawk' 'hunspell'
     'bat' 'fd' 'nvim' 'delta' 'tldr' 'zoxide' 'glow' 'btop'
