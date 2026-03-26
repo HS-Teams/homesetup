@@ -325,3 +325,61 @@ function __hhs_repeat() {
 
   return 0
 }
+
+# @function: Execute a shell command sequence N times.
+# @param $1 [Req]: Number of times to execute the command sequence.
+# @param $2..$N [Req]: Shell commands separated by semicolons.
+function __hhs_do() {
+  local count="${1}" command i status=0 cmd cmd_status errexit_enabled
+  local -a commands=()
+
+  if [[ $# -lt 2 || "${1}" == "-h" || "${1}" == "--help" ]]; then
+    echo "usage: ${FUNCNAME[0]} <N> <command; command; ...>"
+    echo ''
+    echo '    Arguments:'
+    echo '      <N>        : Number of times to repeat the command sequence.'
+    echo '      <command>  : One or more shell commands separated by semicolons.'
+    echo '      Note: Each semicolon-separated command is attempted in order; failures do not stop later commands.'
+    echo ''
+    echo '    Examples:'
+    echo "      ${FUNCNAME[0]} 10 'pk -f Global; sleep 1; echo -n \".\"'"
+    echo "      ${FUNCNAME[0]} 3 'echo one; echo two'"
+    return 1
+  fi
+
+  [[ "${count}" =~ ^[1-9][0-9]*$ ]] || {
+    __hhs_errcho "${FUNCNAME[0]}" "Argument must be a positive integer."
+    return 1
+  }
+
+  shift
+  command="${*}"
+
+  [[ -z "${command}" ]] && {
+    __hhs_errcho "${FUNCNAME[0]}" "A command sequence must be provided."
+    return 1
+  }
+
+  IFS=';' read -r -a commands <<< "${command}"
+  for ((i = 1; i <= count; i++)); do
+    for cmd in "${commands[@]}"; do
+      cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+      cmd="${cmd%"${cmd##*[![:space:]]}"}"
+      [[ -z "${cmd}" ]] && continue
+
+      errexit_enabled=0
+      [[ $- == *e* ]] && errexit_enabled=1
+      set +e
+      eval "${cmd}"
+      cmd_status=$?
+      (( errexit_enabled )) && set -e
+
+      if [[ ${cmd_status} -ne 0 ]]; then
+        __hhs_errcho "${FUNCNAME[0]}" "Command failed on iteraction ${i}: '${cmd}'"
+        status=1
+      fi
+    done
+  done
+
+  return ${status}
+}
