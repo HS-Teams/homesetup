@@ -13,6 +13,7 @@ load "${HHS_FUNCTIONS_DIR}/hhs-shell-utils.bash"
 load_bats_libs
 
 # @function: Stub terminal width for deterministic truncation checks.
+# shellcheck disable=SC2329
 function tput() {
   if [[ "$1" == "cols" ]]; then
     echo '60'
@@ -23,6 +24,7 @@ function tput() {
 }
 
 # @function: Stub the shell history builtin so tests can control the input.
+# shellcheck disable=SC2329
 function history() {
   cat <<'EOF'
   12  [hjunior, 2026-03-09 10:00:00] ls -la
@@ -93,4 +95,41 @@ EOF
 
   assert_success
   assert_output --partial '\rm -rf .gr...'
+}
+
+# TC - 7
+@test "when-history-command-contains-quotes-and-exclamation-then-it-is-rendered-literally" {
+  function tput() {
+    if [[ "$1" == "cols" ]]; then
+      echo '120'
+      return 0
+    fi
+
+    return 1
+  }
+
+  # shellcheck disable=SC2329
+  function history() {
+    cat <<'EOF'
+  22  [hjunior, 2026-03-21 15:23:04]  rg 'Encounter: Relay Saboteur attacks you!'
+EOF
+  }
+
+  run __hhs_history "Encounter: Relay Saboteur attacks you!"
+
+  assert_success
+  assert_output --partial "rg 'Encounter: Relay Saboteur attacks you!'"
+}
+
+# TC - 8
+@test "when-history-contains-non-utf8-bytes-then-parser-does-not-fail" {
+  # shellcheck disable=SC2329
+  function history() {
+    printf '  22  [hjunior, 2026-03-21 15:23:04]  rg bad\377cmd\n'
+  }
+
+  run __hhs_history
+
+  assert_success
+  refute_output --partial 'towc:'
 }

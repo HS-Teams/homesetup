@@ -18,7 +18,7 @@ function __hhs_history() {
   local columns col_offset=8
 
   filter="${*}"
-  lc_filter="$(printf '%s' "${filter}" | tr '[:upper:]' '[:lower:]')"
+  lc_filter="$(LC_ALL=C printf '%s' "${filter}" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
   pad=$(printf '%0.1s' "."{1..30})
   pad_len=41
 
@@ -50,7 +50,8 @@ function __hhs_history() {
     [[ ${#hist_cmd} -ge ${columns} ]] && printf '%s' "..."
     printf '%s\n' "${NC}"
     found=1
-  done < <(history | awk -v filter="${lc_filter}" '
+  # Parse history as raw bytes so malformed or non-UTF-8 entries do not crash awk.
+  done < <(LC_ALL=C history | LC_ALL=C awk -v filter="${lc_filter}" '
     function trim(value) {
       sub(/^[[:space:]]+/, "", value)
       sub(/[[:space:]]+$/, "", value)

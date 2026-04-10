@@ -375,7 +375,7 @@ function __hhs_do() {
       (( errexit_enabled )) && set -e
 
       if [[ ${cmd_status} -ne 0 ]]; then
-        __hhs_errcho "${FUNCNAME[0]}" "Command failed on iteraction ${i}: '${cmd}'"
+        __hhs_errcho "${FUNCNAME[0]}" "Command failed on iteration ${i}: '${cmd}'"
         status=1
       fi
     done
