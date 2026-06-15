@@ -47,12 +47,18 @@ setup_file() {
 
 # TC - 4
 @test "when-command-sequence-fails-then-do-should-continue" {
+  local command_line
+  local -a command_lines=()
+
   run __hhs_do 2 'printf "%s\n" alpha; false; printf "%s\n" omega'
   assert_failure
-  [[ "${lines[0]}" == "alpha" ]]
-  [[ "${lines[1]}" == "omega" ]]
-  [[ "${lines[2]}" == "alpha" ]]
-  [[ "${lines[3]}" == "omega" ]]
+  while IFS= read -r command_line; do
+    command_lines[${#command_lines[@]}]="${command_line}"
+  done < <(printf '%s\n' "${output}" | grep -E '^(alpha|omega)$')
+  [[ "${command_lines[0]}" == "alpha" ]]
+  [[ "${command_lines[1]}" == "omega" ]]
+  [[ "${command_lines[2]}" == "alpha" ]]
+  [[ "${command_lines[3]}" == "omega" ]]
   assert_output --partial "Command failed on iteration 1:"
   assert_output --partial "Command failed on iteration 2:"
 }
