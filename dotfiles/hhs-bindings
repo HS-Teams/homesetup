@@ -2,8 +2,6 @@
 
 # [TAB] press
 TAB: complete
-"\C-i": complete
-"\t": complete
 
 # [Shift + TAB] press -> menu complete.
 "\e[Z": menu-complete
