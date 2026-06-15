@@ -20,3 +20,11 @@ load_bats_libs
   assert_output --partial 'complete can be invoked via "\C-i"'
   assert_output --partial 'menu-complete can be invoked via "\e[Z"'
 }
+
+# TC - 2
+@test "when-loading-hhs-bindings-then-tab-should-use-standard-completion" {
+  run bash --noprofile --norc -i -c "bind -f '${HHS_HOME}/dotfiles/hhs-bindings'; bind -q complete; bind -q menu-complete"
+  assert_success
+  assert_output --partial 'complete can be invoked via "\C-i"'
+  assert_output --partial 'menu-complete can be invoked via "\e[Z"'
+}

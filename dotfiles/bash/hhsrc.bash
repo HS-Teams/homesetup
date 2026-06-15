@@ -177,6 +177,7 @@ if ! [[ -s "${HHS_KEY_BINDINGS}" ]]; then
 fi
 
 if bind -f "${HHS_KEY_BINDINGS}" &>/dev/null; then
+  bind '"\C-i": complete'
   __hhs_log "INFO" "Key bindings loaded: ${HHS_KEY_BINDINGS}"
 else
   __hhs_log "WARN" "Key bindings failed to load: ${HHS_KEY_BINDINGS}"
