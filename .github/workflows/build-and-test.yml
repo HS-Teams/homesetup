@@ -80,11 +80,11 @@ jobs:
       DEEPL_API_KEY: "${{ secrets.DEEPL_API_KEY }}"
       OPENAI_API_KEY: "${{ secrets.OPENAI_API_KEY }}"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: true
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ vars.PYTHON_MINOR_PATH }}
       - name: Update PIP

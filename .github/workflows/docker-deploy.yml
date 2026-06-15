@@ -50,7 +50,7 @@ jobs:
   detect-version:
     runs-on: 'ubuntu-latest'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Detect Version
         id: detect-version
         run: |
@@ -116,8 +116,8 @@ jobs:
           echo "- Image-Tag: ${{ inputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
           echo "- Docker-Container: ${{ matrix.container }}" >> $GITHUB_STEP_SUMMARY
           echo "- Python: ${PYTHON3}, Pip: $(${PYTHON3} -m pip -V)" >> $GITHUB_STEP_SUMMARY
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ vars.PYTHON_MINOR_PATH }}
       - name: Login to Docker Hub
