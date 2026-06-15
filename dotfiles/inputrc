@@ -15,6 +15,14 @@
 # Preserve system wide settings.
 $include /etc/inputrc
 
+# Key bindings ----------------------------------------------------------
+
+# Keep normal TAB in non-menu completion mode even when /etc/inputrc differs
+# across Linux distributions. Shift+TAB is reserved for menu completion.
+TAB: complete
+"\C-i": complete
+"\e[Z": menu-complete
+
 # Preferences -----------------------------------------------------------
 
 # Ensure all binding keeps the default Emacs behavior.
