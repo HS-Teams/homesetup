@@ -182,8 +182,8 @@ else
   __hhs_log "WARN" "Key bindings failed to load: ${HHS_KEY_BINDINGS}"
 fi
 
-bind '"\t": menu-complete'
-bind '"\C-i": complete' &>/dev/null || __hhs_log "WARN" "TAB key binding failed to load."
+bind '"\t": menu-complete' &>/dev/null || __hhs_log "WARN" "TAB key '\t' binding failed to load."
+bind '"\C-i": complete' &>/dev/null || __hhs_log "WARN" "TAB key '\C-i' binding failed to load."
 
 # -----------------------------------------------------------------------------------
 # Set system locale variables (defaults)

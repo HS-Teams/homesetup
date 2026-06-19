@@ -1217,6 +1217,8 @@ usage: $APP_NAME [OPTIONS] <args>
     echo -e "${NC}"
 
     echo -e "HomeSetup installation finished: $(date)" >>"${INSTALL_LOG}"
+    sleep 1
+    exec bash -l
   }
 
   # shellcheck disable=SC2317

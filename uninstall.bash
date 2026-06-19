@@ -238,3 +238,5 @@ uninstall_dotfiles() {
 check_installation
 
 echo '!!! HomeSetup will be gone after you open a new terminal !!!'
+
+exec bash -l
