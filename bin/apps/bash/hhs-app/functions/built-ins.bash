@@ -234,7 +234,7 @@ function help() {
 # @purpose: Clear HomeSetup logs, backups and caches and restore original HomeSetup files.
 function reset() {
 
-  local all_files title mchoose_file ret_val=0
+  local all_files filtered_files file title mchoose_file ret_val=0
 
   all_files=(
     "${HHS_LOG_DIR}/*.log"
@@ -250,6 +250,11 @@ function reset() {
 
   __hhs_has 'colorls' && gem which colorls &>/dev/null && all_files+=("$(dirname "$(gem which colorls)")/yaml/*.yaml")
   __hhs_has 'starship' && all_files+=("${STARSHIP_CONFIG}")
+
+  for file in "${all_files[@]}"; do
+    [[ -n "${file}" ]] && filtered_files+=("${file}")
+  done
+  all_files=("${filtered_files[@]}")
 
   title="${YELLOW}Attention! Mark what you want to delete  (${#all_files[@]})${NC}"
   mchoose_file=$(mktemp)
