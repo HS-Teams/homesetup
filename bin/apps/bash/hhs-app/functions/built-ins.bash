@@ -264,6 +264,7 @@ function reset() {
     echo ' ' >> "${mchoose_file}"
     echo -e "${YELLOW}Deleting selected files...${NC}\n"
     while read -r -d ' ' file; do
+      [[ -s "${file}" ]] || continue
       echo -en "${HHS_HIGHLIGHT_COLOR}Deleting file ${WHITE}"
       echo -n "${file} $(printf '\056%.0s' {1..60})" | head -c 60
       if \rm -f "${file}" &> /dev/null; then
