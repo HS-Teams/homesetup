@@ -68,7 +68,7 @@ show_always = true
 disabled = false
 
 [hostname]
-disabled = false
+disabled = true
 
 [custom.hostname_local]
 when = ''' test -z "$SSH_CONNECTION" '''
