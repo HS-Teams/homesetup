@@ -104,13 +104,13 @@ disabled = true
 style = 'fg:seg_4_text bg:seg_4'
 when = ''' test -z "$SSH_CONNECTION" '''
 command = "hostname -s"
-format = '[[](fg:droid_text bg:seg_4)  $output ](${style})'
+format = '[[ ](fg:droid_text bg:seg_4)  $output ](${style})'
 
 [custom.hostname_ssh]
 style = 'fg:seg_4_text bg:seg_4'
 when = ''' test -n "$SSH_CONNECTION" '''
 command = "hostname -s | cut -d. -f1"
-format = '[[](fg:droid_text bg:seg_4)  $output ](${style})'
+format = '[[ ](fg:droid_text bg:seg_4)  $output ](${style})'
 
 [directory]
 style = 'fg:seg_5_text bg:seg_5'
