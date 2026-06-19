@@ -27,7 +27,7 @@ continuation_prompt = '… '
 palette = 'homesetup'
 
 # Format the prompt.
-format = """${os}${time}${username}${hostname}${directory}${git_branch}${git_status}${character}"""
+format = """${os}${time}${username}${custom.hostname_local}${custom.hostname_ssh}${hostname}${directory}${git_branch}${git_status}${character}"""
 
 # Define HomeSetup custom colors.
 # Ref.: https://i.stack.imgur.com/KTSQa.png
@@ -68,11 +68,17 @@ show_always = true
 disabled = false
 
 [hostname]
-ssh_only = false
-ssh_symbol = " :"
-trim_at = "."
-format = "[[${ssh_symbol}](white) ${hostname}](purple) "
 disabled = false
+
+[custom.hostname_local]
+when = ''' test -z "$SSH_CONNECTION" '''
+command = "hostname -s"
+format = "[[](white) $output](purple) "
+
+[custom.hostname_ssh]
+when = ''' test -n "$SSH_CONNECTION" '''
+command = "hostname -s | cut -d. -f1"
+format = "[[](white) $output](purple) "
 
 [directory]
 style = "orange"
