@@ -78,7 +78,7 @@ format = "[[](white) $output](purple) "
 [custom.hostname_ssh]
 when = ''' test -n "$SSH_CONNECTION" '''
 command = "hostname -s | cut -d. -f1"
-format = "[[](white) $output](purple) "
+format = "[[](white)  $output](purple) "
 
 [directory]
 style = "orange"
