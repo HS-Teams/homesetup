@@ -181,6 +181,8 @@ if bind -f "${HHS_KEY_BINDINGS}" &>/dev/null; then
 else
   __hhs_log "WARN" "Key bindings failed to load: ${HHS_KEY_BINDINGS}"
 fi
+
+bind '"\t": menu-complete'
 bind '"\C-i": complete' &>/dev/null || __hhs_log "WARN" "TAB key binding failed to load."
 
 # -----------------------------------------------------------------------------------
@@ -302,6 +304,14 @@ fi
 # Load bash completions.
 if [[ ${HHS_LOAD_COMPLETIONS} -eq 1 ]]; then
   __hhs_log "INFO" "Loading bash completions!"
+  if ! declare -F _get_comp_words_by_ref >/dev/null 2>&1; then
+    for bash_completion_file in /usr/share/bash-completion/bash_completion /etc/bash_completion; do
+      if [[ -r "${bash_completion_file}" ]]; then
+        __hhs_source "${bash_completion_file}" && __hhs_log "INFO" "Bash completion helpers loaded: ${bash_completion_file}"
+        break
+      fi
+    done
+  fi
   while read -r cpl; do
     app_name="$(basename "${cpl//-completion/}")"
     app_name="${app_name//\.${HHS_MY_SHELL}/}"

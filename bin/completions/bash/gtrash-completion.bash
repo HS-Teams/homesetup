@@ -12,7 +12,18 @@ __gtrash_debug()
 __gtrash_init_completion()
 {
     COMPREPLY=()
-    _get_comp_words_by_ref "$@" cur prev words cword
+    if declare -F _get_comp_words_by_ref >/dev/null 2>&1; then
+        _get_comp_words_by_ref "$@" cur prev words cword
+    else
+        words=("${COMP_WORDS[@]}")
+        cword="${COMP_CWORD}"
+        cur="${COMP_WORDS[COMP_CWORD]}"
+        if [[ "${COMP_CWORD}" -gt 0 ]]; then
+            prev="${COMP_WORDS[COMP_CWORD-1]}"
+        else
+            prev=""
+        fi
+    fi
 }
 
 # This function calls the gtrash program to obtain the completion

@@ -9,10 +9,12 @@
 __ssh_complete() {
 
   local suggestions=()
+  local ssh_config="${HOME}/.ssh/config"
 
   [ "${#COMP_WORDS[@]}" != "2" ] && return 0
+  [[ -r "${ssh_config}" ]] || return 0
 
-  suggestions=($(compgen -W "$(grep '^Host .*' ~/.ssh/config | cut -d ' ' -f2-)" -- "${COMP_WORDS[1]}"))
+  suggestions=($(compgen -W "$(grep '^Host .*' "${ssh_config}" | cut -d ' ' -f2-)" -- "${COMP_WORDS[1]}"))
   COMPREPLY=("${suggestions[@]}")
 
   return 0
