@@ -34,7 +34,7 @@ ${time}\
 [](fg:seg_2 bg:seg_3)\
 ${username}\
 [](fg:seg_3 bg:seg_4)\
-${hostname}\
+${custom.hostname_local}${custom.hostname_ssh}${hostname}\
 [](fg:seg_4 bg:seg_5)\
 ${directory}\
 [](fg:seg_5 bg:seg_6)\
@@ -98,12 +98,19 @@ show_always = true
 disabled = false
 
 [hostname]
+disabled = true
+
+[custom.hostname_local]
 style = 'fg:seg_4_text bg:seg_4'
-ssh_only = false
-ssh_symbol = ' '
-trim_at = '.'
-format = '[[  ${ssh_symbol}](fg:droid_text bg:seg_4)${hostname} ](${style})'
-disabled = false
+when = ''' test -z "$SSH_CONNECTION" '''
+command = "hostname -s"
+format = '[[](fg:droid_text bg:seg_4)  $output ](${style})'
+
+[custom.hostname_ssh]
+style = 'fg:seg_4_text bg:seg_4'
+when = ''' test -n "$SSH_CONNECTION" '''
+command = "hostname -s | cut -d. -f1"
+format = '[[](fg:droid_text bg:seg_4)  $output ](${style})'
 
 [directory]
 style = 'fg:seg_5_text bg:seg_5'

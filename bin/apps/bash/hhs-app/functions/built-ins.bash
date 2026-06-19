@@ -234,12 +234,13 @@ function help() {
 # @purpose: Clear HomeSetup logs, backups and caches and restore original HomeSetup files.
 function reset() {
 
-  local all_files filtered_files file title mchoose_file ret_val=0
+  local all_files filtered_files file matched_file title mchoose_file colorls_dir ret_val=0
+  local -a matched_files=()
 
   all_files=(
     "${HHS_LOG_DIR}/*.log"
     "${HHS_BACKUP_DIR}/*.bak"
-    "${HHS_CACHE_DIR}/*.cache"
+    "${HHS_CACHE_DIR}/*.*"
     "${HHS_DIR}/.aliasdef"
     "${HOME}/.inputrc"
     "${HHS_KEY_BINDINGS}"
@@ -248,7 +249,14 @@ function reset() {
     "${HHS_OLLAMA_HISTORY_FILE}"
   )
 
-  __hhs_has 'colorls' && gem which colorls &>/dev/null && all_files+=("$(dirname "$(gem which colorls)")/yaml/*.yaml")
+  __hhs_has 'colorls' && gem which colorls &>/dev/null && {
+    colorls_dir="$(dirname "$(gem which colorls)")/yaml"
+    if compgen -G "${colorls_dir}/*.yaml" &>/dev/null; then
+      all_files+=("${colorls_dir}/*.yaml")
+    else
+      all_files+=("${HOME}/.config/colorls/*.yaml")
+    fi
+  }
   __hhs_has 'starship' && all_files+=("${STARSHIP_CONFIG}")
 
   for file in "${all_files[@]}"; do
@@ -264,11 +272,18 @@ function reset() {
     echo ' ' >> "${mchoose_file}"
     echo -e "${YELLOW}Deleting selected files...${NC}\n"
     while read -r -d ' ' file; do
-      [[ -n "${file}" ]] && continue
-      [[ -s "${file}" ]] || echo -en "${YELLOW}Skipping file ${WHITE}"
-      [[ -s "${file}" ]] && echo -en "${HHS_HIGHLIGHT_COLOR}Deleting file ${WHITE}"
+      [[ -z "${file}" ]] && continue
+      matched_files=()
+      if [[ "${file}" == *[\*\?\[]* ]]; then
+        while IFS= read -r matched_file; do
+          matched_files+=("${matched_file}")
+        done < <(compgen -G "${file}")
+      else
+        matched_files+=("${file}")
+      fi
+      echo -en "${HHS_HIGHLIGHT_COLOR}Deleting file ${WHITE}"
       echo -n "${file} $(printf '\056%.0s' {1..60})" | head -c 60
-      if [[ -s "${file}" ]] && \rm -f "${file}" &> /dev/null; then
+      if [[ ${#matched_files[@]} -gt 0 ]] && \rm -f -- "${matched_files[@]}" &> /dev/null; then
         echo -e "${WHITE}${GREEN} OK${NC}"
       else
         echo -e "${WHITE}${RED} FAILED${NC}"
@@ -278,8 +293,8 @@ function reset() {
     echo ''
   fi
   [[ -f "${mchoose_file}" ]] && \rm -f "${mchoose_file}" &> /dev/null
-  source "${HOME}/.bash_prompt"
   echo -e "${YELLOW}Some changes will take effect after you 'reopen' your terminal!${NC}"
 
   return $ret_val
+
 }
