@@ -148,6 +148,7 @@ usage: $APP_NAME [OPTIONS] <args>
     'hspylib-vault'
     'hspylib-firebase'
     'bumpver'
+    'streamlit'
     'setuptools'
     'wheel'
   )

@@ -68,6 +68,7 @@ export HHS_VENV_PATH="${HHS_DIR}"/venv
 export HHS_KEY_BINDINGS="${HHS_DIR}"/.hhs-bindings
 export HHS_INPUTRC="${HOME}"/.inputrc
 export HHS_ALIASDEF="${HHS_DIR}"/.aliasdef
+export HHS_STREAMLIT_UI_PORT="${HHS_STREAMLIT_UI_PORT:-18501}"
 
 # if the log directory is not found, we have to create it.
 [[ -d "${HHS_LOG_DIR}" ]] || mkdir -p "${HHS_LOG_DIR}"

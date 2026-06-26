@@ -53,6 +53,7 @@ PYTHON_MODULES=(
   'hspylib-firebase'
   'hspylib-datasource'
   'hspylib-askai'
+  'streamlit'
 )
 
 # Shell type
@@ -207,6 +208,10 @@ uninstall_dotfiles() {
     echo -e "\n${BLUE}Removing HomeSetup HsPyLib-AskAi${NC}"
     ${PIP} uninstall -y hspylib-askai &> /dev/null \
       || echo -e "${RED}# Unable to uninstall HomeSetup HsPyLib-AskAi !\n${NC}"
+    # Streamlit
+    echo -e "\n${BLUE}Removing HomeSetup Streamlit UI${NC}"
+    ${PIP} uninstall -y streamlit &> /dev/null \
+      || echo -e "${RED}# Unable to uninstall HomeSetup Streamlit UI !\n${NC}"
     # HsPyLib-Core
     echo -e "\n${BLUE}Removing HomeSetup HsPyLib-Core${NC}"
     ${PIP} uninstall -y hspylib &> /dev/null \
