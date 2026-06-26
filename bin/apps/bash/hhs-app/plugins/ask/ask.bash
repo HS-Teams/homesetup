@@ -258,6 +258,12 @@ function select_ollama_model() {
   fi
 
   if [[ -n "${model_name}" ]]; then
+    if ! ollama list | tail -n +2 | awk '{print $1}' | grep -Fxq "${model_name}"; then
+      if ! ollama pull "${model_name}"; then
+        quit 2 "Unable to download ollama model: ${model_name}!"
+      fi
+    fi
+
     if ! __hhs_toml_set "${HHS_SETUP_FILE}" "hhs_ollama_model=${model_name}" "ollama"; then
       quit 2 "Unable to set ollama model: ${model_name}!"
     fi

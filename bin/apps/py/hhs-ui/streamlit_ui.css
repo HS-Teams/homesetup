@@ -12,6 +12,9 @@
   --hhs-dracula-red: #ff5555;
   --hhs-dracula-yellow: #f1fa8c;
   --hhs-dracula-panel: #21222c;
+  --hhs-footer-guard-height: 3.5rem;
+  --hhs-log-chrome-height: calc(14rem + 128px);
+  --hhs-ui-blue: #4da3ff;
   --hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
 }
 
@@ -155,10 +158,49 @@ div[data-testid="stNumberInput"] {
   margin: 0 0 0.75rem;
 }
 
+.hhs-ai-settings-current-model {
+  color: var(--hhs-dracula-comment);
+  display: flex;
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+.hhs-ai-settings-current-model span {
+  background: var(--hhs-dracula-current-line);
+  border-radius: 4px;
+  padding: 0.2rem 0.45rem;
+}
+
+.hhs-ai-settings-current-model strong {
+  color: var(--hhs-dracula-green);
+}
+
+.hhs-ai-selected-model {
+  color: var(--hhs-dracula-foreground);
+  font-size: 0.9rem;
+  font-weight: 650;
+  margin: 0 0 0.5rem;
+}
+
+.hhs-ai-selected-model strong {
+  color: var(--hhs-ui-blue);
+  font-weight: 800;
+}
+
+.hhs-ai-model-action-footer-guard {
+  display: block;
+  min-height: 8rem;
+  width: 100%;
+}
+
 .st-key-ai_show_context_button,
 .st-key-ai_clear_chat_button,
 .st-key-ai_confirm_clear_button,
-.st-key-ai_cancel_clear_button {
+.st-key-ai_cancel_clear_button,
+.st-key-ai_confirm_model_select_button,
+.st-key-ai_cancel_model_select_button,
+.st-key-ai_confirm_model_delete_button,
+.st-key-ai_cancel_model_delete_button {
   margin: 4px 0 0.75rem;
   margin-left: auto;
   max-width: 6.75rem;
@@ -169,7 +211,36 @@ div[data-testid="stNumberInput"] {
 .st-key-ai_show_context_button button,
 .st-key-ai_clear_chat_button button,
 .st-key-ai_confirm_clear_button button,
-.st-key-ai_cancel_clear_button button {
+.st-key-ai_cancel_clear_button button,
+.st-key-ai_confirm_model_select_button button,
+.st-key-ai_cancel_model_select_button button,
+.st-key-ai_confirm_model_delete_button button,
+.st-key-ai_cancel_model_delete_button button {
+  background: var(--hhs-dracula-current-line);
+  border: 0;
+  border-radius: 4px;
+  color: var(--hhs-dracula-cyan);
+  font-size: 0.9rem;
+  font-weight: 800;
+  min-height: 1.75rem;
+  padding: 0.2rem 0.45rem;
+}
+
+div[class*="st-key-ai_select_model_button_"] {
+  margin: 4px 0 0.75rem;
+}
+
+div[class*="st-key-ai_delete_model_button_"] {
+  margin: 4px 0 0.75rem;
+}
+
+div[class*="st-key-monitor_process_kill_button_"] {
+  margin: 4px 0 0.75rem;
+}
+
+div[class*="st-key-ai_select_model_button_"] button,
+div[class*="st-key-ai_delete_model_button_"] button,
+div[class*="st-key-monitor_process_kill_button_"] button {
   background: var(--hhs-dracula-current-line);
   border: 0;
   border-radius: 4px;
@@ -253,18 +324,46 @@ div[data-testid="stNumberInput"] {
   white-space: pre;
 }
 
-.hhs-log-output {
-  background: transparent;
+.hhs-terminal-panel {
+  background: var(--hhs-dracula-panel);
+  border: 1px solid var(--hhs-dracula-comment);
+  border-radius: 0.4rem;
+  box-sizing: border-box;
   color: var(--hhs-dracula-foreground);
   font-family: var(--hhs-ui-font-family) !important;
   font-size: 0.92rem;
   line-height: 1.45;
-  margin: 0.75rem 0 0;
-  max-height: 34rem;
   overflow: auto;
-  padding: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
+  padding: 0.9rem 1rem;
+  white-space: pre;
+  word-break: normal;
+}
+
+.hhs-log-output {
+  height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height));
+  margin: 0.35rem 0 0;
+  max-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height));
+  min-height: 12rem;
+}
+
+.hhs-footer-guard {
+  display: block;
+  height: var(--hhs-footer-guard-height);
+  width: 100%;
+}
+
+.hhs-log-file-title {
+  color: var(--hhs-dracula-green);
+  font-size: 0.92rem;
+  font-weight: 800;
+  margin: 0.55rem 0 0;
+}
+
+.hhs-log-file-title code {
+  background: var(--hhs-dracula-panel);
+  border-radius: 0.25rem;
+  color: var(--hhs-dracula-green);
+  padding: 0.15rem 0.35rem;
 }
 
 .hhs-log-info {
@@ -361,7 +460,7 @@ div[class*="st-key-service_selected_value_"] textarea {
 
 .hhs-tab-loader {
   align-items: center;
-  background: rgba(40, 42, 54, 0.76);
+  background: var(--hhs-dracula-background);
   bottom: 0;
   display: flex;
   justify-content: center;
@@ -402,6 +501,18 @@ div[class*="st-key-service_selected_value_"] textarea {
 .hhs-tab-loader-label {
   font-size: 0.95rem;
   font-weight: 700;
+}
+
+.hhs-tab-loader-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
+.hhs-tab-loader-elapsed {
+  color: var(--hhs-dracula-comment);
+  font-size: 0.76rem;
+  font-weight: 650;
 }
 
 @keyframes hhs-loader-spin {

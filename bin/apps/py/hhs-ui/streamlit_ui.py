@@ -19,6 +19,7 @@ Copyright:
 
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
@@ -26,7 +27,9 @@ import re
 import shlex
 import subprocess
 import textwrap
+import time
 from base64 import b64encode
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -38,7 +41,7 @@ from streamlit import config as st_config
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.66"
+VERSION = "0.0.67"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -60,6 +63,11 @@ APP_THEME_OPTIONS = {
     "theme.codeBackgroundColor": "#21222c",
 }
 UI_STATE_FILE = APP_DIR / ".streamlit-ui-state"
+UI_CACHE_FILE = APP_DIR / ".streamlit-ui-cache"
+UI_CACHE_REALTIME_TTL_SECONDS = 15
+UI_CACHE_NORMAL_TTL_SECONDS = 60
+UI_CACHE_LOW_CHANGE_TTL_SECONDS = 120
+UI_CACHE_DEFAULT_TTL_SECONDS = UI_CACHE_NORMAL_TTL_SECONDS
 APP_CSS = ""
 VIEWS = ("Home", "Configs", "Services", "Monitor", "History")
 AI_VIEW = "AI"
@@ -67,16 +75,20 @@ AI_VIEWS = ("CHAT", "SETTINGS")
 HOME_VIEWS = ("System", "Tools")
 CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")
 HISTORY_VIEWS = ("COMMANDS", "DIRECTORIES", "STATS")
-MONITOR_VIEWS = ("DISK", "MEM", "CPU", "LOGS")
+MONITOR_VIEWS = ("DISK", "MEM", "CPU", "PROCESSES", "LOGS")
 ENV_FILTERS = ("All", "HHS", "Other")
 LIST_FILTERS = ("All", "Other")
 HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
 SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")
 AI_CODE_BLOCK_WRAP_COLUMNS = 96
+PROCESS_TABLE_KEY = "monitor_process_table"
 PERSISTED_UI_KEYS = (
     "active_view",
     "ai_chat_messages",
+    "ai_clear_chat_execute_pending",
+    "ai_model_delete_execute_pending",
+    "ai_model_select_execute_pending",
     "ai_view",
     "alias_filter",
     "alias_other_filter",
@@ -98,6 +110,8 @@ PERSISTED_UI_KEYS = (
     "monitor_disk_directory",
     "monitor_disk_top_n",
     "monitor_log_file",
+    "monitor_logs_tail",
+    "monitor_process_filter",
     "monitor_view",
     "path_filter",
     "path_other_filter",
@@ -127,6 +141,7 @@ HISTORY_COMMAND_LINE_PATTERN = re.compile(r"^(\d+)\.{2,}\s+(?:|➜|→|=>)\s+
 HISTORY_DIRECTORY_LINE_PATTERN = re.compile(r"^(\d+):\s+(\S+)\s+(.*)$")
 HISTORY_STATS_LINE_PATTERN = re.compile(r"^\d+:\s+(.+?)\.{2,}\s+(\d+)\s+\|")
 DISK_USAGE_LINE_PATTERN = re.compile(r"^\s*\d+:\s+(.+?)\.{2,}\s+([0-9.]+[A-Za-z]*)\s+\|")
+PROCESS_LIST_LINE_PATTERN = re.compile(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s+(?:[✓✔]\s+)?active process$", re.IGNORECASE)
 TOP_PROCESS_SORT_KEYS = {
     "CPU": {"darwin": "cpu", "linux": "%CPU", "field": "CPU"},
     "MEM": {"darwin": "mem", "linux": "%MEM", "field": "MEM"},
@@ -150,6 +165,8 @@ LOG_TAILOR_RULES = (
     (re.compile(r"(((https?|ftp|file):/)|(/?[a-zA-Z0-9]+))/[-A-Za-z0-9+&@#/%?=~_|!:,.;]*\.*[-A-Za-z0-9+&@#/%=~_|]"), "uri"),
 )
 COMMAND_COLUMNS = "10000"
+AI_MODEL_TABLE_KEY = "ai_model_table"
+AI_MODEL_TABLE_RESET_COUNTER_KEY = "ai_model_table_reset_counter"
 ALIAS_TABLE_KEY = "alias_vars_table"
 ALIAS_TABLE_RESET_COUNTER_KEY = "alias_vars_table_reset_counter"
 ALIAS_VALUE_EDITOR_KEY_PREFIX = "alias_selected_value"
@@ -163,6 +180,7 @@ ENV_TABLE_HEIGHT = 420
 ENV_TABLE_KEY = "env_vars_table"
 ENV_TABLE_RESET_COUNTER_KEY = "env_vars_table_reset_counter"
 ENV_TABLE_WIDTH = "stretch"
+AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT = 0
 ENV_VALUE_EDITOR_SCROLL_HELPER_HEIGHT = 0
 ENV_VALUE_EDITOR_HEIGHT = 40
 ENV_VALUE_EDITOR_KEY_PREFIX = "env_selected_value"
@@ -281,9 +299,25 @@ def close_document_view() -> None:
 
 def clear_ai_chat_history() -> None:
     """Reset the backend ask history and clear the current AI chat history."""
-    run_hhs_ask_reset()
+    run_hhs_ask_reset(close_dialogs=True)
+    cache_clear()
     st.session_state["ai_chat_messages"] = []
     st.session_state["ai_clear_chat_pending"] = False
+    save_ui_state()
+
+
+def confirm_ai_chat_clear() -> None:
+    """Schedule the AI chat history reset after closing dialogs."""
+    st.session_state["ai_clear_chat_execute_pending"] = True
+    st.session_state["ai_clear_chat_pending"] = False
+    save_ui_state()
+
+
+def execute_pending_ai_chat_clear() -> None:
+    """Execute a pending AI chat reset after dialogs are closed."""
+    if st.session_state.get("ai_clear_chat_execute_pending"):
+        clear_ai_chat_history()
+    st.session_state["ai_clear_chat_execute_pending"] = False
     save_ui_state()
 
 
@@ -303,6 +337,89 @@ def show_ai_chat_context() -> None:
     output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
     message = strip_ansi(output or "No Ollama context available.").strip() or "No Ollama context available."
     st.session_state["ai_chat_messages"].append({"role": "system", "content": message})
+    save_ui_state()
+
+
+def request_ai_model_selection(old_model: str, new_model: str, model_status: str) -> None:
+    """Show the AI model selection confirmation prompt."""
+    st.session_state["ai_model_select_error"] = ""
+    st.session_state["ai_model_select_pending"] = {"old": old_model, "new": new_model, "status": model_status}
+
+
+def cancel_ai_model_selection() -> None:
+    """Hide the AI model selection confirmation prompt."""
+    st.session_state["ai_model_select_pending"] = None
+
+
+def confirm_ai_model_selection() -> None:
+    """Schedule the pending Ollama model selection after closing dialogs."""
+    pending = st.session_state.get("ai_model_select_pending") or {}
+    st.session_state["ai_model_select_execute_pending"] = pending
+    st.session_state["ai_model_select_pending"] = None
+    save_ui_state()
+
+
+def execute_pending_ai_model_selection() -> None:
+    """Execute the pending Ollama model selection after dialogs are closed."""
+    pending = st.session_state.get("ai_model_select_execute_pending") or {}
+    new_model = str(pending.get("new", "")).strip()
+    model_status = str(pending.get("status", "")).strip()
+    if new_model:
+        loader_message = "Downloading model..." if not model_status else "Selecting Ollama model..."
+        result = run_hhs_ask_select_model(new_model, loader_message, close_dialogs=True)
+        if result.returncode != 0:
+            st.session_state["ai_model_select_error"] = strip_ansi(result.stderr or result.stdout or "Unable to select model.")
+        else:
+            st.session_state["ai_model_select_error"] = ""
+            cache_clear()
+            reset_ai_model_table_selection()
+    st.session_state["ai_model_select_execute_pending"] = None
+    save_ui_state()
+
+
+def request_ai_model_deletion(model_name: str, model_status: str) -> None:
+    """Show the AI model deletion confirmation prompt."""
+    st.session_state["ai_model_delete_error"] = ""
+    st.session_state["ai_model_delete_pending"] = {"name": model_name, "status": model_status}
+
+
+def cancel_ai_model_deletion() -> None:
+    """Hide the AI model deletion confirmation prompt."""
+    st.session_state["ai_model_delete_pending"] = None
+
+
+def confirm_ai_model_deletion() -> None:
+    """Schedule the pending Ollama model deletion after closing dialogs."""
+    pending = st.session_state.get("ai_model_delete_pending") or {}
+    st.session_state["ai_model_delete_execute_pending"] = pending
+    st.session_state["ai_model_delete_pending"] = None
+    save_ui_state()
+
+
+def execute_pending_ai_model_deletion() -> None:
+    """Execute the pending Ollama model deletion after dialogs are closed."""
+    pending = st.session_state.get("ai_model_delete_execute_pending") or {}
+    if isinstance(pending, str):
+        pending = {"name": pending, "status": ""}
+    model_name = str(pending.get("name", "")).strip()
+    model_status = str(pending.get("status", "")).strip()
+    if model_name:
+        result = run_ollama_delete_model(model_name, close_dialogs=True)
+        if result.returncode != 0:
+            st.session_state["ai_model_delete_error"] = strip_ansi(result.stderr or result.stdout or "Unable to delete model.")
+        else:
+            st.session_state["ai_model_delete_error"] = ""
+            cache_clear()
+            if model_status == "Active":
+                fallback_model = first_downloaded_ollama_model(run_hhs_ask_models().stdout, excluded_model=model_name)
+                if fallback_model:
+                    fallback_result = run_hhs_ask_select_model(fallback_model, close_dialogs=True)
+                    if fallback_result.returncode != 0:
+                        st.session_state["ai_model_delete_error"] = strip_ansi(
+                            fallback_result.stderr or fallback_result.stdout or "Unable to select fallback model."
+                        )
+            reset_ai_model_table_selection()
+    st.session_state["ai_model_delete_execute_pending"] = None
     save_ui_state()
 
 
@@ -328,11 +445,102 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
         f'<div class="{loader_class}">'
         '<div class="hhs-tab-loader-panel">'
         '<span class="hhs-tab-loader-spinner"></span>'
+        '<span class="hhs-tab-loader-copy">'
         f'<span class="hhs-tab-loader-label">{safe_message}</span>'
+        '<span class="hhs-tab-loader-elapsed" data-start-time="0">time elapsed: 0m:00s</span>'
+        '</span>'
         '</div>'
         '</div>',
         unsafe_allow_html=True,
     )
+    st.markdown(
+        """
+        <script>
+          (() => {
+            const elapsedNodes = window.parent.document.querySelectorAll(".hhs-tab-loader-elapsed");
+            elapsedNodes.forEach((node) => {
+              if (node.dataset.timerStarted === "true") {
+                return;
+              }
+              node.dataset.timerStarted = "true";
+              const startedAt = Date.now();
+              const renderElapsed = () => {
+                const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+                const minutes = Math.floor(elapsedSeconds / 60);
+                const seconds = String(elapsedSeconds % 60).padStart(2, "0");
+                node.textContent = `time elapsed: ${minutes}m:${seconds}s`;
+              };
+              renderElapsed();
+              window.setInterval(renderElapsed, 1000);
+            });
+          })();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def renderTerminalPanel(content: str, css_classes: str = "", content_is_html: bool = False) -> None:
+    """Render reusable terminal-style output with optional pre-rendered HTML content."""
+    panel_classes = "hhs-terminal-panel"
+    if css_classes:
+        panel_classes = f"{panel_classes} {css_classes}"
+    safe_content = content if content_is_html else html.escape(content)
+    st.markdown(f'<div class="{panel_classes}">{safe_content}</div>', unsafe_allow_html=True)
+
+
+def close_all_dialogs() -> None:
+    """Close every Streamlit dialog or inline confirmation controlled by this UI."""
+    st.session_state["ai_clear_chat_pending"] = False
+    st.session_state["ai_model_select_pending"] = None
+    st.session_state["ai_model_delete_pending"] = None
+
+
+def setOverlay(active: bool, message: str = "Loading...", transient: bool = False, close_dialogs: bool = False) -> None:
+    """Show or hide the reusable full-page command overlay."""
+    placeholder_key = "_hhs_overlay_placeholder"
+    if active:
+        if close_dialogs:
+            close_all_dialogs()
+        save_ui_state()
+        placeholder = st.empty()
+        st.session_state[placeholder_key] = placeholder
+        with placeholder:
+            render_preloader(message, transient=transient)
+        return
+
+    placeholder = st.session_state.pop(placeholder_key, None)
+    if placeholder is not None:
+        placeholder.empty()
+
+
+def popDialog(
+    title: str,
+    message: str,
+    confirm_key: str,
+    cancel_key: str,
+    on_confirm: Callable[[], None],
+    on_cancel: Callable[[], None],
+    confirm_label: str = "Confirm",
+    cancel_label: str = "Cancel",
+) -> None:
+    """Render a reusable confirmation dialog with app-rerun-safe actions."""
+
+    @st.dialog(title)
+    def render_dialog() -> None:
+        """Render the configured confirmation dialog content."""
+        st.write(message)
+        confirm_col, cancel_col = st.columns(2)
+        with confirm_col:
+            if st.button(confirm_label, key=confirm_key, width="stretch"):
+                on_confirm()
+                st.rerun(scope="app")
+        with cancel_col:
+            if st.button(cancel_label, key=cancel_key, width="stretch"):
+                on_cancel()
+                st.rerun(scope="app")
+
+    render_dialog()
 
 
 def homesetup_version() -> str:
@@ -525,6 +733,110 @@ def styled_tool_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
     return styler
 
 
+def renderTable(
+    rows: list[dict[str, str]],
+    key: str | None,
+    empty_hint: str = "",
+    action_hint: str = "",
+    headers: list[str] | None = None,
+    checkbox: bool = True,
+    height: int | None = None,
+    width: str | None = None,
+    use_container_width: bool = False,
+    hide_index: bool = True,
+    table_data: object | None = None,
+    row_style: Callable[[pd.Series], list[str]] | None = None,
+    selected_label: Callable[[dict[str, str], int], str] | None = None,
+    selected_label_html: bool = False,
+    action_buttons: list[dict[str, object]] | None = None,
+    action_column_weights: list[float] | None = None,
+) -> tuple[int | None, dict[str, str] | None]:
+    """Render a reusable HomeSetup table and return the selected row."""
+    rendered_data = table_data if table_data is not None else rows
+    if row_style is not None:
+        rendered_data = pd.DataFrame(rows).style.apply(row_style, axis=1)
+
+    dataframe_args: dict[str, object] = {"hide_index": hide_index}
+    if key is not None:
+        dataframe_args["key"] = key
+    if headers is not None:
+        dataframe_args["column_order"] = headers
+    if height is not None:
+        dataframe_args["height"] = height
+    if use_container_width:
+        dataframe_args["use_container_width"] = True
+    elif width is not None:
+        dataframe_args["width"] = width
+    if checkbox:
+        dataframe_args["on_select"] = "rerun"
+        dataframe_args["selection_mode"] = "single-row"
+
+    selection = st.dataframe(rendered_data, **dataframe_args)
+    if not checkbox:
+        return None, None
+
+    selected_rows = selection.selection.rows if selection else []
+    if not selected_rows or selected_rows[0] >= len(rows):
+        if empty_hint:
+            st.caption(empty_hint)
+        return None, None
+
+    selected_index = selected_rows[0]
+    selected_row = rows[selected_index]
+    if action_hint:
+        st.caption(action_hint)
+    if selected_label is not None:
+        label = selected_label(selected_row, selected_index)
+        if selected_label_html:
+            st.markdown(label, unsafe_allow_html=True)
+        else:
+            st.caption(label)
+
+    visible_actions = [
+        action
+        for action in action_buttons or []
+        if table_action_visible(action, selected_row, selected_index)
+    ]
+    if visible_actions:
+        weights = action_column_weights or [1.0] * len(visible_actions)
+        columns = st.columns(weights)
+        for column, action in zip(columns, visible_actions):
+            label = str(action["label"])
+            key_prefix = str(action.get("key_prefix", label.lower().replace(" ", "_")))
+            with column:
+                st.button(
+                    label,
+                    disabled=table_action_disabled(action, selected_row, selected_index),
+                    help=action.get("help"),
+                    key=f"{key_prefix}_{selected_index}",
+                    on_click=action.get("on_click"),
+                    args=table_action_args(action, selected_row, selected_index),
+                    width=str(action.get("width", "stretch")),
+                )
+
+    return selected_index, selected_row
+
+
+def table_action_visible(action: dict[str, object], row: dict[str, str], index: int) -> bool:
+    """Return whether a renderTable action button should be visible."""
+    visible = action.get("visible", True)
+    return bool(visible(row, index) if callable(visible) else visible)
+
+
+def table_action_disabled(action: dict[str, object], row: dict[str, str], index: int) -> bool:
+    """Return whether a renderTable action button should be disabled."""
+    disabled = action.get("disabled", False)
+    return bool(disabled(row, index) if callable(disabled) else disabled)
+
+
+def table_action_args(action: dict[str, object], row: dict[str, str], index: int) -> tuple[object, ...]:
+    """Return callback arguments for a renderTable action button."""
+    args = action.get("args", ())
+    if callable(args):
+        args = args(row, index)
+    return tuple(args) if isinstance(args, tuple | list) else (args,)
+
+
 def render_home_tools_panel() -> None:
     """Render HomeSetup development tool checks on the Home view."""
     result = run_hhs_tools()
@@ -535,10 +847,12 @@ def render_home_tools_panel() -> None:
     if not rows:
         st.caption("No tool checks found.")
         return
-    st.dataframe(
-        styled_tool_rows(rows),
+    renderTable(
+        rows,
+        key=None,
+        checkbox=False,
+        table_data=styled_tool_rows(rows),
         height=ENV_TABLE_HEIGHT,
-        hide_index=True,
         width=ENV_TABLE_WIDTH,
     )
 
@@ -633,6 +947,66 @@ def parse_current_ollama_model(output: str) -> str:
         if len(parts) >= 2:
             return parts[1]
     return "unknown"
+
+
+def parse_ollama_model_rows(output: str, current_model: str = "") -> list[dict[str, str]]:
+    """Parse available Ollama model rows from the ask -m Markdown table."""
+    rows: list[dict[str, str]] = []
+    seen_models: set[str] = set()
+    downloaded_models = parse_downloaded_ollama_models(output)
+    for line in strip_ansi(output).splitlines():
+        markdown_columns = [column.strip().strip("`") for column in line.strip().strip("|").split("|")]
+        if (
+            len(markdown_columns) >= 6
+            and markdown_columns[0]
+            and markdown_columns[0] != "Pull Name"
+            and not markdown_columns[0].startswith(":")
+            and ":" in markdown_columns[0]
+        ):
+            model_name = markdown_columns[0]
+            if model_name not in seen_models:
+                rows.append(
+                    {
+                        "Name": model_name,
+                        "Params": markdown_columns[2],
+                        "Size": markdown_columns[3],
+                        "Context": markdown_columns[4],
+                        "Capabilities": markdown_columns[5],
+                        "Status": ollama_model_status(model_name, current_model, downloaded_models),
+                    }
+                )
+                seen_models.add(model_name)
+            continue
+    return rows
+
+
+def parse_downloaded_ollama_models(output: str) -> set[str]:
+    """Return downloaded Ollama model names from the ask -m local model section."""
+    models: set[str] = set()
+    for line in strip_ansi(output).splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].isdigit() and parts[1] != "NAME" and ":" in parts[1]:
+            models.add(parts[1])
+    return models
+
+
+def first_downloaded_ollama_model(output: str, excluded_model: str = "") -> str:
+    """Return the first downloaded Ollama model listed in the available models table."""
+    downloaded_models = parse_downloaded_ollama_models(output)
+    for row in parse_ollama_model_rows(output):
+        model_name = row["Name"]
+        if model_name != excluded_model and model_name in downloaded_models:
+            return model_name
+    return ""
+
+
+def ollama_model_status(model_name: str, current_model: str, downloaded_models: set[str]) -> str:
+    """Return the UI status for one Ollama model."""
+    if model_name == current_model:
+        return "Active"
+    if model_name in downloaded_models:
+        return "Downloaded"
+    return ""
 
 
 def ollama_model_context_size(ollama_model: str) -> str:
@@ -855,20 +1229,147 @@ def command_env() -> dict[str, str]:
     }
 
 
-def run_bash_command(command: str, loader_message: str) -> subprocess.CompletedProcess[str]:
-    """Run a Bash command while rendering the HomeSetup command preloader."""
-    loader = st.empty()
-    with loader:
-        render_preloader(loader_message, transient=False)
-    completed = subprocess.run(
+def run_bash_command(
+    command: str,
+    loader_message: str,
+    close_dialogs: bool = False,
+    ttl_seconds: int = UI_CACHE_DEFAULT_TTL_SECONDS,
+) -> subprocess.CompletedProcess[str]:
+    """Run a Bash command with hash-keyed command-result caching and a preloader."""
+    cache_key = command_cache_key(command)
+    cached_value = cache_get(cache_key)
+    if cached_value is not None:
+        return completed_process_from_cache(command, cached_value)
+
+    setOverlay(True, loader_message, close_dialogs=close_dialogs)
+    try:
+        result = subprocess.run(
+            ["bash", "-lc", command],
+            capture_output=True,
+            check=False,
+            env=command_env(),
+            text=True,
+        )
+        cache_set(cache_key, cache_value_from_completed_process(result), ttl_seconds)
+        return result
+    finally:
+        setOverlay(False)
+
+
+def load_ui_cache() -> dict[str, dict[str, object]]:
+    """Load the UI cache file and lazily prune expired entries."""
+    if not UI_CACHE_FILE.exists():
+        return {}
+    try:
+        data = json.loads(UI_CACHE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    cache = {
+        key: value
+        for key, value in data.items()
+        if isinstance(key, str) and key.startswith("command_hash:") and isinstance(value, dict)
+    }
+    pruned_cache = prune_ui_cache_entries(cache)
+    if pruned_cache != cache or len(cache) != len(data):
+        save_ui_cache(pruned_cache)
+    return pruned_cache
+
+
+def save_ui_cache(cache: dict[str, dict[str, object]]) -> None:
+    """Persist the UI cache file."""
+    try:
+        UI_CACHE_FILE.write_text(json.dumps(cache, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        return
+
+
+def prune_ui_cache_entries(cache: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
+    """Return cache entries whose TTL has not expired."""
+    now = time.time()
+    return {
+        key: entry
+        for key, entry in cache.items()
+        if isinstance(entry.get("expires_at"), int | float) and float(entry["expires_at"]) > now
+    }
+
+
+def format_cache_ttl(ttl_seconds: int | float | str) -> str:
+    """Format cache TTL using the actual expiry unit."""
+    return f"{int(parse_cache_ttl_seconds(ttl_seconds))}s"
+
+
+def parse_cache_ttl_seconds(ttl: int | float | str) -> float:
+    """Parse cache TTL strings that carry their expiry unit."""
+    if isinstance(ttl, int | float):
+        return float(ttl)
+    clean_ttl = ttl.strip().lower()
+    if clean_ttl.endswith("ms"):
+        return float(clean_ttl[:-2] or 0) / 1000
+    if clean_ttl.endswith("s"):
+        return float(clean_ttl[:-1] or 0)
+    if clean_ttl.endswith("m"):
+        return float(clean_ttl[:-1] or 0) * 60
+    if clean_ttl.endswith("h"):
+        return float(clean_ttl[:-1] or 0) * 3600
+    return float(clean_ttl or 0)
+
+
+def cache_get(key: str) -> dict[str, object] | None:
+    """Return a non-expired cache entry value."""
+    entry = load_ui_cache().get(key)
+    value = entry.get("value") if isinstance(entry, dict) else None
+    return value if isinstance(value, dict) else None
+
+
+def cache_set(key: str, value: dict[str, object], ttl_seconds: int = UI_CACHE_DEFAULT_TTL_SECONDS) -> None:
+    """Store a value in the UI cache with a TTL."""
+    cache = load_ui_cache()
+    ttl = format_cache_ttl(ttl_seconds)
+    cache[key] = {
+        "ttl": ttl,
+        "expires_at": time.time() + parse_cache_ttl_seconds(ttl),
+        "value": value,
+    }
+    save_ui_cache(cache)
+
+
+def cache_delete(key_prefix: str) -> None:
+    """Delete cache entries matching a key or key prefix."""
+    cache = load_ui_cache()
+    updated_cache = {key: value for key, value in cache.items() if key != key_prefix and not key.startswith(f"{key_prefix}:")}
+    if updated_cache != cache:
+        save_ui_cache(updated_cache)
+
+
+def cache_clear() -> None:
+    """Delete all UI cache entries."""
+    save_ui_cache({})
+
+
+def completed_process_from_cache(command: str, cached_value: dict[str, object]) -> subprocess.CompletedProcess[str]:
+    """Build a CompletedProcess from a cached command result."""
+    return subprocess.CompletedProcess(
         ["bash", "-lc", command],
-        capture_output=True,
-        check=False,
-        env=command_env(),
-        text=True,
+        int(cached_value.get("returncode", 0)),
+        str(cached_value.get("stdout", "")),
+        str(cached_value.get("stderr", "")),
     )
-    loader.empty()
-    return completed
+
+
+def cache_value_from_completed_process(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
+    """Return a JSON-safe cache value from a CompletedProcess."""
+    return {
+        "returncode": result.returncode,
+        "stdout": result.stdout or "",
+        "stderr": result.stderr or "",
+    }
+
+
+def command_cache_key(command: str) -> str:
+    """Return a stable cache key based on the full command string."""
+    return f"command_hash:{hashlib.sha256(command.encode('utf-8')).hexdigest()}"
 
 
 def build_hhs_envs_command(prefix_filter: str | None) -> str:
@@ -978,6 +1479,29 @@ def build_process_monitor_command(metric: str, top_n: int = 10) -> str:
     )
 
 
+def build_hhs_process_list_command(process_filter: str) -> str:
+    """Build the Bash command used to list processes via HomeSetup."""
+    hhs_home = homesetup_home()
+    safe_filter = process_filter.strip() or "."
+    return (
+        f'export HHS_HOME="{hhs_home}"; '
+        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
+        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-sys-utils.bash"; '
+        f"__hhs_process_list {shlex.quote(safe_filter)}"
+    )
+
+
+def build_hhs_process_kill_command(process_name: str) -> str:
+    """Build the Bash command used to kill a process via HomeSetup."""
+    hhs_home = homesetup_home()
+    return (
+        f'export HHS_HOME="{hhs_home}"; '
+        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
+        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-sys-utils.bash"; '
+        f"__hhs_process_kill -f {shlex.quote(process_name)}"
+    )
+
+
 def build_hhs_logs_command(log_file: str, tail_lines: int = 200) -> str:
     """Build the Bash command used to run the __hhs logs command."""
     hhs_home = homesetup_home()
@@ -1005,7 +1529,7 @@ def build_hhs_ask_execute_command(arguments: list[str]) -> str:
     return (
         f'export HHS_HOME="{hhs_home}"; '
         f'export HHS_DIR="{hhs_dir}"; '
-        f'export HHS_SETUP_FILE="${{HHS_SETUP_FILE:-{hhs_dir}/homesetup.toml}}"; '
+        f'export HHS_SETUP_FILE="${{HHS_SETUP_FILE:-{hhs_dir}/.homesetup.toml}}"; '
         f'export HHS_LOG_DIR="${{HHS_LOG_DIR:-{hhs_log_dir()}}}"; '
         'export HHS_LOG_FILE="${HHS_LOG_FILE:-${HHS_LOG_DIR}/hhs-ui.log}"; '
         'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
@@ -1043,6 +1567,16 @@ def build_hhs_ask_reset_command() -> str:
 def build_hhs_ask_models_command() -> str:
     """Build the Bash command used to list Ollama ask models."""
     return build_hhs_ask_execute_command(["-m"])
+
+
+def build_hhs_ask_select_model_command(model_name: str) -> str:
+    """Build the Bash command used to select the active Ollama ask model."""
+    return build_hhs_ask_execute_command(["-s", model_name])
+
+
+def build_ollama_delete_model_command(model_name: str) -> str:
+    """Build the Bash command used to delete an Ollama model."""
+    return f"ollama rm {shlex.quote(model_name)}"
 
 
 def build_hhs_paths_command() -> str:
@@ -1119,6 +1653,7 @@ def run_hhs_sysinfo() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_sysinfo_command(),
         "Loading system information...",
+        ttl_seconds=UI_CACHE_LOW_CHANGE_TTL_SECONDS,
     )
 
 
@@ -1127,6 +1662,7 @@ def run_hhs_tools() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_tools_command(),
         "Loading tool checks...",
+        ttl_seconds=UI_CACHE_LOW_CHANGE_TTL_SECONDS,
     )
 
 
@@ -1159,6 +1695,7 @@ def run_hhs_disk_usage(directory: str, top_n: int = 10) -> subprocess.CompletedP
     return run_bash_command(
         build_hhs_disk_usage_command(directory, top_n),
         "Loading disk usage...",
+        ttl_seconds=UI_CACHE_REALTIME_TTL_SECONDS,
     )
 
 
@@ -1167,6 +1704,24 @@ def run_process_monitor(metric: str, top_n: int = 10) -> subprocess.CompletedPro
     return run_bash_command(
         build_process_monitor_command(metric, top_n),
         f"Loading {metric.lower()} usage...",
+        ttl_seconds=UI_CACHE_REALTIME_TTL_SECONDS,
+    )
+
+
+def run_hhs_process_list(process_filter: str) -> subprocess.CompletedProcess[str]:
+    """Run the HomeSetup process list command and return the completed process."""
+    return run_bash_command(
+        build_hhs_process_list_command(process_filter),
+        "Loading processes...",
+        ttl_seconds=UI_CACHE_REALTIME_TTL_SECONDS,
+    )
+
+
+def run_hhs_process_kill(process_name: str) -> subprocess.CompletedProcess[str]:
+    """Run the HomeSetup process kill command and return the completed process."""
+    return run_bash_command(
+        build_hhs_process_kill_command(process_name),
+        "Killing process...",
     )
 
 
@@ -1175,6 +1730,7 @@ def run_hhs_logs(log_file: str, tail_lines: int = 200) -> subprocess.CompletedPr
     return run_bash_command(
         build_hhs_logs_command(log_file, tail_lines),
         "Loading logs...",
+        ttl_seconds=UI_CACHE_REALTIME_TTL_SECONDS,
     )
 
 
@@ -1194,11 +1750,12 @@ def run_hhs_ask_context() -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_hhs_ask_reset() -> subprocess.CompletedProcess[str]:
+def run_hhs_ask_reset(close_dialogs: bool = False) -> subprocess.CompletedProcess[str]:
     """Run the __hhs ask reset command and return the completed process."""
     return run_bash_command(
         build_hhs_ask_reset_command(),
         "Resetting Ollama context...",
+        close_dialogs=close_dialogs,
     )
 
 
@@ -1207,6 +1764,29 @@ def run_hhs_ask_models() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_ask_models_command(),
         "Loading Ollama model...",
+        ttl_seconds=UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+    )
+
+
+def run_hhs_ask_select_model(
+    model_name: str,
+    loader_message: str = "Selecting Ollama model...",
+    close_dialogs: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """Run the __hhs ask model selection command and return the completed process."""
+    return run_bash_command(
+        build_hhs_ask_select_model_command(model_name),
+        loader_message,
+        close_dialogs=close_dialogs,
+    )
+
+
+def run_ollama_delete_model(model_name: str, close_dialogs: bool = False) -> subprocess.CompletedProcess[str]:
+    """Run the Ollama model deletion command and return the completed process."""
+    return run_bash_command(
+        build_ollama_delete_model_command(model_name),
+        "Deleting model...",
+        close_dialogs=close_dialogs,
     )
 
 
@@ -1247,17 +1827,16 @@ def run_hhs_services() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_services_command(),
         "Loading services...",
+        ttl_seconds=UI_CACHE_REALTIME_TTL_SECONDS,
     )
 
 
 def run_hhs_services_quietly() -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup services list command without rendering a loader."""
-    return subprocess.run(
-        ["bash", "-lc", build_hhs_services_command()],
-        capture_output=True,
-        check=False,
-        env=command_env(),
-        text=True,
+    """Run the HomeSetup services list command through the shared command runner."""
+    return run_bash_command(
+        build_hhs_services_command(),
+        "Loading services...",
+        ttl_seconds=UI_CACHE_REALTIME_TTL_SECONDS,
     )
 
 
@@ -1521,6 +2100,25 @@ def parse_process_monitor(output: str, metric: str) -> list[dict[str, float | st
     return rows
 
 
+def parse_hhs_process_list(output: str) -> list[dict[str, str]]:
+    """Parse __hhs_process_list output into process rows."""
+    rows: list[dict[str, str]] = []
+    for line in strip_ansi(output).splitlines():
+        match = PROCESS_LIST_LINE_PATTERN.match(line)
+        if not match:
+            continue
+        rows.append(
+            {
+                "UID": match.group(1),
+                "PID": match.group(2),
+                "PPID": match.group(3),
+                "Command": match.group(4).strip(),
+                "Status": "Active",
+            }
+        )
+    return rows
+
+
 def path_sources(output: str) -> list[str]:
     """Parse __hhs_paths output into path source labels."""
     sources = []
@@ -1605,6 +2203,23 @@ def history_command_value_editor_key(index: int) -> str:
 def history_directory_value_editor_key(index: int) -> str:
     """Return the Streamlit widget key for a selected history directory value viewer."""
     return f"{HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX}_{index}"
+
+
+def ai_model_table_key() -> str:
+    """Return the AI model dataframe key for the current selection generation."""
+    reset_counter = st.session_state.setdefault(AI_MODEL_TABLE_RESET_COUNTER_KEY, 0)
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+        st.session_state[AI_MODEL_TABLE_RESET_COUNTER_KEY] = reset_counter
+    return f"{AI_MODEL_TABLE_KEY}_{reset_counter}"
+
+
+def reset_ai_model_table_selection() -> None:
+    """Reset the AI model dataframe selection for the next rerun."""
+    reset_counter = st.session_state.setdefault(AI_MODEL_TABLE_RESET_COUNTER_KEY, 0)
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[AI_MODEL_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
 
 
 def env_table_key() -> str:
@@ -1788,27 +2403,63 @@ def scroll_to_env_value_editor(editor_key: str) -> None:
     )
 
 
+def scroll_to_ai_model_actions(anchor_id: str) -> None:
+    """Scroll the browser viewport to the selected AI model action buttons."""
+    components.html(
+        f"""
+        <script>
+          const anchorId = {anchor_id!r};
+          const scrollToActions = () => {{
+            const doc = window.parent.document;
+            const target = doc.getElementById(anchorId);
+            const scrollables = () => [
+              doc.scrollingElement,
+              doc.documentElement,
+              doc.body,
+              ...Array.from(doc.querySelectorAll("*")).filter((element) => {{
+                const style = window.parent.getComputedStyle(element);
+                const canScroll = /(auto|scroll)/.test(style.overflowY + style.overflow);
+                return canScroll && element.scrollHeight > element.clientHeight;
+              }})
+            ].filter(Boolean);
+            const scrollBottom = () => {{
+              const scrollHeight = Math.max(
+                doc.body.scrollHeight,
+                doc.documentElement.scrollHeight
+              );
+              window.parent.scrollTo({{ top: scrollHeight, behavior: "auto" }});
+              for (const item of scrollables()) {{
+                item.scrollTop = item.scrollHeight;
+              }}
+              if (target) {{
+                target.scrollIntoView({{ behavior: "auto", block: "end", inline: "nearest" }});
+              }}
+            }};
+            [0, 50, 150, 300, 600, 1000].forEach((delay) => {{
+              window.setTimeout(scrollBottom, delay);
+            }});
+            window.requestAnimationFrame(scrollBottom);
+          }};
+          window.setTimeout(scrollToActions, 50);
+        </script>
+        """,
+        height=AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT,
+    )
+
+
 def render_env_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable read-only environment variable rows."""
     rows = apply_env_value_overrides(rows)
-    selection = st.dataframe(
+    _, selected_row = renderTable(
         rows,
-        height=ENV_TABLE_HEIGHT,
-        hide_index=True,
         key=env_table_key(),
-        on_select="rerun",
-        selection_mode="single-row",
+        empty_hint="Select an environment row to edit its value.",
+        height=ENV_TABLE_HEIGHT,
         width=ENV_TABLE_WIDTH,
     )
-    selected_rows = selection.selection.rows if selection else []
-    if not selected_rows:
-        st.caption("Select an environment row to edit its value.")
-        return
-    if selected_rows[0] >= len(rows):
-        st.caption("Select an environment row to edit its value.")
+    if selected_row is None:
         return
 
-    selected_row = rows[selected_rows[0]]
     editor_key = env_value_editor_key(selected_row["Name"])
     st.session_state.setdefault(editor_key, selected_row["Value"])
     st.caption(f"Selected: {selected_row['Name']}")
@@ -1827,25 +2478,16 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
 def render_path_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable editable PATH rows."""
     rows = apply_path_value_overrides(rows)
-    selection = st.dataframe(
+    selected_index, selected_row = renderTable(
         rows,
-        height=PATH_TABLE_HEIGHT,
-        hide_index=True,
         key=path_table_key(),
-        on_select="rerun",
-        selection_mode="single-row",
+        empty_hint="Select a PATH row to edit its value.",
+        height=PATH_TABLE_HEIGHT,
         width=PATH_TABLE_WIDTH,
     )
-    selected_rows = selection.selection.rows if selection else []
-    if not selected_rows:
-        st.caption("Select a PATH row to edit its value.")
-        return
-    if selected_rows[0] >= len(rows):
-        st.caption("Select a PATH row to edit its value.")
+    if selected_index is None or selected_row is None:
         return
 
-    selected_index = selected_rows[0]
-    selected_row = rows[selected_index]
     editor_key = path_value_editor_key(selected_index)
     st.session_state.setdefault(editor_key, selected_row["Value"])
     st.caption(f"Selected: {selected_row['Name']}")
@@ -1869,25 +2511,16 @@ def render_read_only_rows(
     selected_label: str,
 ) -> None:
     """Render selectable read-only configuration rows."""
-    selection = st.dataframe(
+    selected_index, selected_row = renderTable(
         rows,
-        height=ENV_TABLE_HEIGHT,
-        hide_index=True,
         key=table_key,
-        on_select="rerun",
-        selection_mode="single-row",
+        empty_hint=empty_caption,
+        height=ENV_TABLE_HEIGHT,
         width=ENV_TABLE_WIDTH,
     )
-    selected_rows = selection.selection.rows if selection else []
-    if not selected_rows:
-        st.caption(empty_caption)
-        return
-    if selected_rows[0] >= len(rows):
-        st.caption(empty_caption)
+    if selected_index is None or selected_row is None:
         return
 
-    selected_index = selected_rows[0]
-    selected_row = rows[selected_index]
     editor_key = f"{value_key_prefix}_{selected_index}"
     st.session_state[editor_key] = selected_row["Value"]
     selected_name = selected_row.get("Name") or selected_row.get("Index") or selected_row.get("Value", "")
@@ -1958,9 +2591,18 @@ def reset_service_table_selection() -> None:
 def apply_selected_service_action(operation: str, service_name: str) -> None:
     """Run a service action and reset the service selection."""
     result = run_hhs_service_action(operation, service_name)
+    cache_clear()
     st.session_state["service_action_message"] = result.stdout or result.stderr or ""
     st.session_state["service_action_succeeded"] = result.returncode == 0
     reset_service_table_selection()
+
+
+def apply_selected_process_kill(process_name: str) -> None:
+    """Kill the selected process name and store the action result."""
+    result = run_hhs_process_kill(process_name)
+    cache_clear()
+    st.session_state["monitor_process_action_message"] = result.stdout or result.stderr or ""
+    st.session_state["monitor_process_action_succeeded"] = result.returncode == 0
 
 
 def styled_service_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
@@ -1984,50 +2626,41 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
         else:
             st.error(strip_ansi(action_message))
 
-    selection = st.dataframe(
-        styled_service_rows(rows),
-        height=ENV_TABLE_HEIGHT,
-        hide_index=True,
+    _, selected_row = renderTable(
+        rows,
         key=service_table_key(),
-        on_select="rerun",
-        selection_mode="single-row",
+        empty_hint="Select a SERVICE row start/stop/restart.",
+        action_hint="",
+        table_data=styled_service_rows(rows),
+        height=ENV_TABLE_HEIGHT,
         width=ENV_TABLE_WIDTH,
+        selected_label=lambda row, _index: f"Selected: {row['Name']}",
+        action_buttons=[
+            {
+                "label": "Start",
+                "key_prefix": "service_start_button",
+                "on_click": apply_selected_service_action,
+                "disabled": lambda row, _index: service_is_up(row),
+                "args": lambda row, _index: ("start", row["Name"]),
+            },
+            {
+                "label": "Stop",
+                "key_prefix": "service_stop_button",
+                "on_click": apply_selected_service_action,
+                "disabled": lambda row, _index: service_is_down(row),
+                "args": lambda row, _index: ("stop", row["Name"]),
+            },
+            {
+                "label": "Restart",
+                "key_prefix": "service_restart_button",
+                "on_click": apply_selected_service_action,
+                "args": lambda row, _index: ("restart", row["Name"]),
+            },
+        ],
+        action_column_weights=[1, 1, 1],
     )
-    selected_rows = selection.selection.rows if selection else []
-    if not selected_rows:
-        st.caption("Select a SERVICE row start/stop/restart.")
+    if selected_row is None:
         return
-    if selected_rows[0] >= len(rows):
-        st.caption("Select a SERVICE row start/stop/restart.")
-        return
-
-    selected_index = selected_rows[0]
-    selected_row = rows[selected_index]
-    st.caption(f"Selected: {selected_row['Name']}")
-    start_col, stop_col, restart_col = st.columns(3)
-    start_col.button(
-        "Start",
-        disabled=service_is_up(selected_row),
-        key=f"service_start_button_{selected_index}",
-        on_click=apply_selected_service_action,
-        args=("start", selected_row["Name"]),
-        width="stretch",
-    )
-    stop_col.button(
-        "Stop",
-        disabled=service_is_down(selected_row),
-        key=f"service_stop_button_{selected_index}",
-        on_click=apply_selected_service_action,
-        args=("stop", selected_row["Name"]),
-        width="stretch",
-    )
-    restart_col.button(
-        "Restart",
-        key=f"service_restart_button_{selected_index}",
-        on_click=apply_selected_service_action,
-        args=("restart", selected_row["Name"]),
-        width="stretch",
-    )
 
 
 def render_envs_table() -> None:
@@ -2419,7 +3052,7 @@ def render_process_monitor_chart(metric: str) -> None:
         st.caption(f"No {metric.lower()} usage entries found.")
         return
     for row in rows:
-        row["Label"] = f"{row['Command']} ({row['PID']})"
+        row["Label"] = row["Command"]
     has_byte_values = metric == "MEM" and any(re.search(r"[A-Za-z]", str(row["ValueLabel"])) for row in rows)
     axis = (
         alt.Axis(
@@ -2461,6 +3094,57 @@ def render_process_monitor_chart(metric: str) -> None:
     st.altair_chart(chart, width="stretch")
 
 
+def render_monitor_processes_panel() -> None:
+    """Render the HomeSetup process list monitor panel."""
+    action_message = st.session_state.pop("monitor_process_action_message", "")
+    action_succeeded = st.session_state.pop("monitor_process_action_succeeded", None)
+    if action_message:
+        if action_succeeded:
+            st.success(strip_ansi(action_message))
+        else:
+            st.error(strip_ansi(action_message))
+
+    label_col, input_col = st.columns([0.55, 3.45], vertical_alignment="center")
+    with label_col:
+        st.markdown('<span class="hhs-inline-form-label">Filter</span>', unsafe_allow_html=True)
+    with input_col:
+        process_filter = st.text_input(
+            "Filter",
+            key="monitor_process_filter",
+            label_visibility="collapsed",
+            on_change=save_ui_state,
+            placeholder="Type process filter",
+        )
+    result = run_hhs_process_list(process_filter)
+    if result.returncode != 0:
+        st.error(strip_ansi(result.stderr or result.stdout or "Unable to load processes."))
+        return
+    rows = parse_hhs_process_list(result.stdout)
+    if not rows:
+        st.caption("No processes found.")
+        return
+
+    _, selected_row = renderTable(
+        rows,
+        key=PROCESS_TABLE_KEY,
+        empty_hint="Select a process row to kill the process.",
+        height=ENV_TABLE_HEIGHT,
+        width=ENV_TABLE_WIDTH,
+        selected_label=lambda row, _index: f"Selected: {row['Command']}",
+        action_buttons=[
+            {
+                "label": "Kill",
+                "key_prefix": "monitor_process_kill_button",
+                "on_click": apply_selected_process_kill,
+                "args": lambda row, _index: (row["Command"],),
+            }
+        ],
+        action_column_weights=[1, 3],
+    )
+    if selected_row is None:
+        return
+
+
 def render_monitor_logs_panel() -> None:
     """Render the HomeSetup logs monitor panel."""
     log_files = hhs_log_files()
@@ -2470,7 +3154,7 @@ def render_monitor_logs_panel() -> None:
     selected_log = st.session_state.get("monitor_log_file", "")
     if selected_log not in log_files:
         st.session_state["monitor_log_file"] = log_files[0]
-    label_col, input_col = st.columns([0.55, 3.45], vertical_alignment="center")
+    label_col, input_col, tail_col = st.columns([0.55, 3.0, 0.45], vertical_alignment="center")
     with label_col:
         st.markdown('<span class="hhs-inline-form-label">Log file</span>', unsafe_allow_html=True)
     with input_col:
@@ -2481,18 +3165,32 @@ def render_monitor_logs_panel() -> None:
             label_visibility="collapsed",
             on_change=save_ui_state,
         )
-    st.markdown(f"##### `{selected_log}`")
-    render_monitor_logs_tail(selected_log)
+    with tail_col:
+        tail_enabled = st.checkbox(
+            "Tail",
+            key="monitor_logs_tail",
+            on_change=save_ui_state,
+        )
+    st.markdown(f'<div class="hhs-log-file-title"><code>{html.escape(selected_log)}</code></div>', unsafe_allow_html=True)
+    if tail_enabled:
+        render_monitor_logs_tail(selected_log)
+    else:
+        render_monitor_logs_once(selected_log)
 
 
 @st.fragment(run_every="5s")
 def render_monitor_logs_tail(selected_log: str) -> None:
     """Render a tail-like log pane that refreshes only while LOGS is active."""
+    render_monitor_logs_once(selected_log)
+
+
+def render_monitor_logs_once(selected_log: str) -> None:
+    """Render the selected log once without automatic refresh."""
     result = run_hhs_logs(selected_log, 200)
     if result.returncode != 0:
         st.error(strip_ansi(result.stderr or result.stdout or "Unable to load logs."))
         return
-    st.markdown(f'<div class="hhs-log-output">{colorize_log_output(result.stdout)}</div>', unsafe_allow_html=True)
+    renderTerminalPanel(colorize_log_output(result.stdout), css_classes="hhs-log-output", content_is_html=True)
 
 
 def render_configs_view() -> None:
@@ -2595,12 +3293,25 @@ def render_monitor_view() -> None:
         render_process_monitor_chart("MEM")
     elif monitor_view == "CPU":
         render_process_monitor_chart("CPU")
+    elif monitor_view == "PROCESSES":
+        render_monitor_processes_panel()
     elif monitor_view == "LOGS":
         render_monitor_logs_panel()
 
 
 def render_ai_chat_panel() -> None:
     """Render the HomeSetup Ollama chat panel."""
+    if st.session_state.get("ai_clear_chat_pending", False):
+        popDialog(
+            title="Confirm chat clear",
+            message="Clear the chat and reset AI context entirely?",
+            confirm_key="ai_confirm_clear_button",
+            cancel_key="ai_cancel_clear_button",
+            on_confirm=confirm_ai_chat_clear,
+            on_cancel=cancel_ai_chat_clear_confirmation,
+        )
+        return
+
     username = current_username()
     model_result = run_hhs_ask_models()
     ollama_model = parse_current_ollama_model(model_result.stdout) if model_result.returncode == 0 else "unknown"
@@ -2633,25 +3344,6 @@ def render_ai_chat_panel() -> None:
             disabled=not st.session_state["ai_chat_messages"],
             width="stretch",
         )
-    if st.session_state.get("ai_clear_chat_pending", False):
-        st.warning("Clear the chat and reset AI context entirely?")
-        confirm_col, cancel_col, _ = st.columns([0.55, 0.55, 3.0])
-        with confirm_col:
-            st.button(
-                "Confirm",
-                key="ai_confirm_clear_button",
-                help="Clear chat and reset AI context",
-                on_click=clear_ai_chat_history,
-                width="stretch",
-            )
-        with cancel_col:
-            st.button(
-                "Cancel",
-                key="ai_cancel_clear_button",
-                help="Keep chat history",
-                on_click=cancel_ai_chat_clear_confirmation,
-                width="stretch",
-            )
     for message in st.session_state["ai_chat_messages"]:
         if message["role"] == "assistant":
             avatar_file = APP_AI_OLLAMA_AVATAR_FILE
@@ -2682,13 +3374,133 @@ def render_ai_chat_panel() -> None:
             save_ui_state()
 
 
+def style_ai_model_row(row: pd.Series) -> list[str]:
+    """Return dataframe row styles for the active Ollama model."""
+    status = str(row.get("Status", ""))
+    if status == "Active":
+        return ["background-color: rgba(139, 233, 253, 0.18); color: #8be9fd; font-weight: 800;"] * len(row)
+    if status == "Downloaded":
+        return ["color: #4da3ff; font-weight: 800;" if column == "Status" else "" for column in row.index]
+    return [""] * len(row)
+
+
+def render_ai_model_select_dialog(old_model: str, new_model: str) -> None:
+    """Render the AI model selection confirmation dialog."""
+    popDialog(
+        title="Confirm model change",
+        message=f"Change active model from '{old_model}' to '{new_model}'?",
+        confirm_key="ai_confirm_model_select_button",
+        cancel_key="ai_cancel_model_select_button",
+        on_confirm=confirm_ai_model_selection,
+        on_cancel=cancel_ai_model_selection,
+    )
+
+
+def render_ai_model_delete_dialog(model_name: str) -> None:
+    """Render the AI model deletion confirmation dialog."""
+    popDialog(
+        title="Confirm model deletion",
+        message=f"Delete Ollama model '{model_name}'?",
+        confirm_key="ai_confirm_model_delete_button",
+        cancel_key="ai_cancel_model_delete_button",
+        on_confirm=confirm_ai_model_deletion,
+        on_cancel=cancel_ai_model_deletion,
+    )
+
+
 def render_ai_settings_panel() -> None:
     """Render the HomeSetup Ollama settings panel."""
-    st.caption("Settings are not implemented yet.")
+    pending = st.session_state.get("ai_model_select_pending")
+    if pending:
+        old_model = str(pending.get("old", ""))
+        new_model = str(pending.get("new", ""))
+        render_ai_model_select_dialog(old_model, new_model)
+        return
+
+    pending_delete = st.session_state.get("ai_model_delete_pending")
+    if pending_delete:
+        if isinstance(pending_delete, dict):
+            pending_delete_name = str(pending_delete.get("name", ""))
+        else:
+            pending_delete_name = str(pending_delete)
+        render_ai_model_delete_dialog(pending_delete_name)
+        return
+
+    model_result = run_hhs_ask_models()
+    if model_result.returncode != 0:
+        st.error(strip_ansi(model_result.stderr or model_result.stdout or "Unable to load Ollama models."))
+        return
+
+    current_model = parse_current_ollama_model(model_result.stdout)
+    current_context = ollama_model_context_size(current_model)
+    st.markdown(
+        f"""
+        <div class="hhs-ai-settings-current-model">
+          <span>Selected Model: <strong>{html.escape(current_model)}[{html.escape(current_context)}]</strong></span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("##### Available Models")
+    rows = parse_ollama_model_rows(model_result.stdout, current_model)
+    if not rows:
+        st.caption("No Ollama models found.")
+        return
+
+    selected_index, selected_row = renderTable(
+        rows,
+        key=ai_model_table_key(),
+        empty_hint="Select a model row to select the active model.",
+        use_container_width=True,
+        row_style=style_ai_model_row,
+        selected_label=lambda row, _index: (
+            f'<div class="hhs-ai-selected-model">Selected: <strong>{html.escape(row["Name"])}</strong></div>'
+        ),
+        selected_label_html=True,
+        action_buttons=[
+            {
+                "label": "Select Model",
+                "key_prefix": "ai_select_model_button",
+                "on_click": request_ai_model_selection,
+                "disabled": lambda row, _index: row["Name"] == current_model,
+                "args": lambda row, _index: (current_model, row["Name"], str(row.get("Status", ""))),
+            },
+            {
+                "label": "Delete Model",
+                "key_prefix": "ai_delete_model_button",
+                "on_click": request_ai_model_deletion,
+                "visible": lambda row, _index: str(row.get("Status", "")) in ("Active", "Downloaded"),
+                "args": lambda row, _index: (row["Name"], str(row.get("Status", ""))),
+            },
+        ],
+        action_column_weights=[1, 1, 2],
+    )
+    if selected_index is not None:
+        actions_anchor_id = f"hhs-ai-model-actions-{selected_index}"
+        st.markdown(
+            f"""
+            <div class="hhs-ai-model-action-footer-guard"></div>
+            <div id="{actions_anchor_id}"></div>
+            """,
+            unsafe_allow_html=True,
+        )
+        scroll_to_ai_model_actions(actions_anchor_id)
+
+    if st.session_state.get("ai_model_select_error"):
+        st.error(st.session_state["ai_model_select_error"])
+    if st.session_state.get("ai_model_delete_error"):
+        st.error(st.session_state["ai_model_delete_error"])
 
 
 def render_ai_view() -> None:
     """Render the HomeSetup Ollama AI view."""
+    if st.session_state.get("ai_clear_chat_execute_pending"):
+        execute_pending_ai_chat_clear()
+    if st.session_state.get("ai_model_select_execute_pending"):
+        execute_pending_ai_model_selection()
+    if st.session_state.get("ai_model_delete_execute_pending"):
+        execute_pending_ai_model_deletion()
+
     st.markdown(
         """
         <section class="hhs-view-heading">
@@ -2760,6 +3572,13 @@ def main() -> None:
     if not isinstance(st.session_state["ai_chat_messages"], list):
         st.session_state["ai_chat_messages"] = []
     st.session_state.setdefault("ai_clear_chat_pending", False)
+    st.session_state.setdefault("ai_clear_chat_execute_pending", False)
+    st.session_state.setdefault("ai_model_select_pending", None)
+    st.session_state.setdefault("ai_model_select_execute_pending", None)
+    st.session_state.setdefault("ai_model_select_error", "")
+    st.session_state.setdefault("ai_model_delete_pending", None)
+    st.session_state.setdefault("ai_model_delete_execute_pending", None)
+    st.session_state.setdefault("ai_model_delete_error", "")
     st.session_state.setdefault("ai_view", "CHAT")
     if st.session_state["ai_view"] not in AI_VIEWS:
         st.session_state["ai_view"] = "CHAT"
@@ -2778,6 +3597,7 @@ def main() -> None:
     st.session_state.setdefault("monitor_view", "DISK")
     if st.session_state["monitor_view"] not in MONITOR_VIEWS:
         st.session_state["monitor_view"] = "DISK"
+    st.session_state.setdefault("monitor_process_filter", "")
     st.session_state.setdefault("monitor_disk_directory", monitor_default_disk_directory())
     if not str(st.session_state["monitor_disk_directory"]).strip():
         st.session_state["monitor_disk_directory"] = monitor_default_disk_directory()
@@ -2785,6 +3605,7 @@ def main() -> None:
     if not isinstance(st.session_state["monitor_disk_top_n"], int):
         st.session_state["monitor_disk_top_n"] = 10
     st.session_state.setdefault("monitor_log_file", "")
+    st.session_state.setdefault("monitor_logs_tail", True)
     st.session_state.setdefault("alias_filter", "All")
     if st.session_state["alias_filter"] not in LIST_FILTERS:
         st.session_state["alias_filter"] = "All"
