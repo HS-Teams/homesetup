@@ -15,12 +15,16 @@
 PLUGIN_NAME="services"
 
 # Current hhs services version
-VERSION="1.0.0"
+VERSION="1.0.1"
 
 # Namespace cleanup
 UNSETS=(
-  help version cleanup execute
+  help version cleanup execute detect_os service_manager lowercase is_hhs_streamlit_ui_running add_hhs_services
+  manage_service list_services_status
 )
+
+# Streamlit UI port.
+HHS_STREAMLIT_UI_PORT="${HHS_STREAMLIT_UI_PORT:-18501}"
 
 # Usage message
 read -r -d '' USAGE <<EOF
@@ -94,18 +98,69 @@ function detect_os() {
   echo "${os}"
 }
 
+# @param $1 [Req]: detected OS
+# @purpose: Return the service manager executable for the current OS.
+function service_manager() {
+  local os="${1}" manager=""
+
+  case "${os}" in
+    darwin)
+      manager="$(command -v brew)"
+      [[ -z "${manager}" && -x /opt/homebrew/bin/brew ]] && manager="/opt/homebrew/bin/brew"
+      [[ -z "${manager}" && -x /usr/local/bin/brew ]] && manager="/usr/local/bin/brew"
+      ;;
+    alpine)
+      manager="$(command -v rc-service)"
+      ;;
+    debian|fedora|centos)
+      manager="$(command -v systemctl)"
+      ;;
+  esac
+
+  [[ -n "${manager}" ]] || quit 1 "Service manager not found for OS: ${os}"
+  echo "${manager}"
+}
+
+# @param $1 [Req]: Value to lowercase.
+# @purpose: Lowercase text in a Bash 3 compatible way.
+function lowercase() {
+  printf '%s' "${1}" | tr '[:upper:]' '[:lower:]'
+}
+
+# @purpose: Check whether the HomeSetup Streamlit UI port is accepting connections.
+function is_hhs_streamlit_ui_running() {
+  python3 - "${HHS_STREAMLIT_UI_PORT}" <<'PY' &>/dev/null
+import socket
+import sys
+
+port = int(sys.argv[1])
+with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+    pass
+PY
+}
+
+# @purpose: Add HomeSetup-managed services to the service status list.
+function add_hhs_services() {
+  if is_hhs_streamlit_ui_running; then
+    raw_services+=("homesetup-ui:running")
+  else
+    raw_services+=("homesetup-ui:stopped")
+  fi
+}
+
 # @param $1 [Req]: operation (start, stop, restart, status)
 # @param $2 [Req]: service name
 # @purpose: Run a service command based on OS and method
 function manage_service() {
-  local action="${1}" service="${2}" os
+  local action="${1}" service="${2}" os manager
 
   os="$(detect_os)"
+  manager="$(service_manager "${os}")" || return $?
 
   case "${os}" in
-    darwin) brew services "${action}" "${service}" &>/dev/null ;;
-    alpine) rc-service "${service}" "${action}" &>/dev/null ;;
-    debian|fedora|centos) systemctl "${action}" "${service}" &>/dev/null ;;
+    darwin) "${manager}" services "${action}" "${service}" ;;
+    alpine) "${manager}" "${service}" "${action}" ;;
+    debian|fedora|centos) "${manager}" "${action}" "${service}" ;;
     *) quit 1 "Unsupported OS: ${os}" ;;
   esac
 
@@ -115,18 +170,20 @@ function manage_service() {
 # @param $1 [Opt]: service filter (case-insensitive)
 # @purpose: List all services with standardized indexed, dot-padded and colorized status
 function list_services_status() {
-  local filter="${1:-}" os service status longest=0 line service_entry=""
+  local filter="${1:-}" os service status longest=0 line service_entry="" manager filter_lc service_lc
   local -a raw_services=()
   local i total width service_name padded_line
 
   os="$(detect_os)"
+  manager="$(service_manager "${os}")" || return $?
+  filter_lc="$(lowercase "${filter}")"
 
   # Populate raw_services array
   case "${os}" in
     darwin)
       while IFS= read -r line; do
         raw_services+=("${line}")
-      done < <(brew services list | awk 'NR>1 { print $1 ":" $2 }')
+      done < <("${manager}" services list | awk 'NR>1 { print $1 ":" $2 }')
       ;;
     alpine)
       while IFS= read -r line; do
@@ -149,13 +206,16 @@ function list_services_status() {
       ;;
   esac
 
+  add_hhs_services
+
   total="${#raw_services[@]}"
   width="${#total}"  # padding width for index (based on total)
 
   # First pass: find longest service name (filtered only)
   for line in "${raw_services[@]}"; do
     service="${line%%:*}"
-    [[ -n "${filter}" && ! "${service,,}" =~ ${filter,,} ]] && continue
+    service_lc="$(lowercase "${service}")"
+    [[ -n "${filter_lc}" && ! "${service_lc}" =~ ${filter_lc} ]] && continue
     [[ ${#service} -gt ${longest} ]] && longest=${#service}
   done
 
@@ -167,7 +227,8 @@ function list_services_status() {
   for line in "${raw_services[@]}"; do
     service="${line%%:*}"
     status="${line##*:}"
-    [[ -n "${filter}" && ! "${service,,}" =~ ${filter,,} ]] && continue
+    service_lc="$(lowercase "${service}")"
+    [[ -n "${filter_lc}" && ! "${service_lc}" =~ ${filter_lc} ]] && continue
     printf -v service_entry "%${width}d: %s" "${i}" "${service}"
     while [[ ${#service_entry} -lt $((width + 2 + longest + 3)) ]]; do service_entry+="."; done
     ((i++))

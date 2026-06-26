@@ -184,7 +184,7 @@ function __hhs_defs() {
 function __hhs_envs() {
 
   local pad pad_len filters name value ret_val=0 columns col_offset=8 env_var
-  local reveal_secrets=false
+  local name_lc reveal_secrets=false
 
   HHS_ENV_FILE=${HHS_ENV_FILE:-$HHS_DIR/.env}
   touch "${HHS_ENV_FILE}"
@@ -230,7 +230,8 @@ function __hhs_envs() {
       value=${BASH_REMATCH[2]}
       if [[ ${name} =~ ${filters} ]]; then
         if [[ "$reveal_secrets" != true ]]; then
-          if [[ ${name,,} =~ (secret|token|password|passwd|pass|pwd|api_key|apikey|credential|creds) ]]; then
+          name_lc="$(tr '[:upper:]' '[:lower:]' <<<"${name}")"
+          if [[ ${name_lc} =~ (secret|token|password|passwd|pass|pwd|api_key|apikey|credential|creds) ]]; then
             value="********"
           fi
         fi

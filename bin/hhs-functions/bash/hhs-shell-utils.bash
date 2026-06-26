@@ -15,7 +15,12 @@
 # @param $1 [Req] : The case-insensitive filter to be used when listing.
 function __hhs_history() {
   local filter lc_filter grep_status pad pad_len hist_id hist_cmd hist_label dot_count found=0
-  local columns col_offset=8
+  local columns col_offset=8 histtimeformat="${HISTTIMEFORMAT-}"
+
+  if [[ $- != *i* && -f "${HISTFILE:-${HOME}/.bash_history}" ]]; then
+    set -o history
+    history -r "${HISTFILE:-${HOME}/.bash_history}"
+  fi
 
   filter="${*}"
   lc_filter="$(LC_ALL=C printf '%s' "${filter}" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
@@ -51,7 +56,7 @@ function __hhs_history() {
     printf '%s\n' "${NC}"
     found=1
   # Parse history as raw bytes so malformed or non-UTF-8 entries do not crash awk.
-  done < <(LC_ALL=C history | LC_ALL=C awk -v filter="${lc_filter}" '
+  done < <(HISTTIMEFORMAT='' LC_ALL=C history | LC_ALL=C awk -v filter="${lc_filter}" '
     function trim(value) {
       sub(/^[[:space:]]+/, "", value)
       sub(/[[:space:]]+$/, "", value)
@@ -62,7 +67,7 @@ function __hhs_history() {
       gsub(/[[:space:]]+/, " ", value)
       value = trim(value)
 
-      if (current_hist_id == "" || value == "") {
+      if (current_hist_id == "" || value == "" || value ~ /^#[0-9]+$/) {
         return
       }
 
@@ -79,6 +84,8 @@ function __hhs_history() {
       while (changed) {
         changed = 0
         if (sub(/^\[[^]]*\][[:space:]]*/, "", value)) {
+          changed = 1
+        } else if (sub(/^[0-9]+:[[:space:]]+invalid timestamp[[:space:]]*/, "", value)) {
           changed = 1
         } else if (sub(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]]+/, "", value)) {
           changed = 1
@@ -123,9 +130,11 @@ function __hhs_history() {
   ')
 
   if [[ -n "${filter}" && ${found} -eq 0 ]]; then
+    HISTTIMEFORMAT="${histtimeformat}"
     return 1
   fi
 
+  HISTTIMEFORMAT="${histtimeformat}"
   return 0
 }
 
@@ -134,20 +143,27 @@ function __hhs_history() {
 function __hhs_hist_stats() {
   local top_n=${1:-10} width=${2:-30} i=1
   local cmd_name cmd_qty hist_output bar_len bar columns pad_len pad max_size
+  local histtimeformat="${HISTTIMEFORMAT-}"
 
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} [top_N]"
     return 0
   fi
 
+  if [[ $- != *i* && -f "${HISTFILE:-${HOME}/.bash_history}" ]]; then
+    set -o history
+    history -r "${HISTFILE:-${HOME}/.bash_history}"
+  fi
+
   # Generic parser – handles user/date/timestamped history formats
   hist_output="$(
-    history |
+    HISTTIMEFORMAT='' history |
       sed -E 's/^\[[^]]*\][[:space:]]*//' |             # remove [user,date,...]
       sed -E 's/^[[:space:]]*[0-9]+\**[[:space:]]*//' | # remove numeric ids
       awk '{
         for (i=1; i<=NF; i++) {
           t=$i
+          if (t ~ /^#[0-9]+$/) continue
           if (t ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) continue
           if (t ~ /^[0-9]{2}:[0-9]{2}:[0-9]{2}$/) continue
           if (t ~ /^([0-9]{4}-[0-9]{2}-[0-9]{2})[T ]([0-9]{2}:[0-9]{2}:[0-9]{2})$/) continue
@@ -162,6 +178,7 @@ function __hhs_hist_stats() {
 
   [[ -z "${hist_output}" ]] && {
     __hhs_errcho "${FUNCNAME[0]}" "No valid command tokens found in history."
+    HISTTIMEFORMAT="${histtimeformat}"
     return 1
   }
 
@@ -204,6 +221,7 @@ function __hhs_hist_stats() {
 
   echo ''
   echo "${NC}"
+  HISTTIMEFORMAT="${histtimeformat}"
 }
 
 # @function: Display the current dir (pwd) and remote repo url, if it applies.
