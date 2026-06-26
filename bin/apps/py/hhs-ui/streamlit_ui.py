@@ -25,6 +25,7 @@ import os
 import re
 import shlex
 import subprocess
+import textwrap
 from base64 import b64encode
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,7 @@ APP_FONT_FAMILY = "Droid Sans Mono for Powerline Nerd Font Complete"
 APP_FONT_FILE = APP_DIR / "assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
 APP_AI_USER_AVATAR_FILE = APP_DIR / "assets/images/user.png"
 APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"
+APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"
 APP_THEME_OPTIONS = {
     "theme.base": "dark",
     "theme.primaryColor": "#bd93f9",
@@ -61,6 +63,7 @@ UI_STATE_FILE = APP_DIR / ".streamlit-ui-state"
 APP_CSS = ""
 VIEWS = ("Home", "Configs", "Services", "Monitor", "History")
 AI_VIEW = "AI"
+AI_VIEWS = ("CHAT", "SETTINGS")
 HOME_VIEWS = ("System", "Tools")
 CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")
 HISTORY_VIEWS = ("COMMANDS", "DIRECTORIES", "STATS")
@@ -70,9 +73,11 @@ LIST_FILTERS = ("All", "Other")
 HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
 SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")
+AI_CODE_BLOCK_WRAP_COLUMNS = 96
 PERSISTED_UI_KEYS = (
     "active_view",
     "ai_chat_messages",
+    "ai_view",
     "alias_filter",
     "alias_other_filter",
     "cmds_filter",
@@ -272,6 +277,33 @@ def close_document_view() -> None:
     st.session_state[DOCUMENT_VIEW_ACTIVE_KEY] = False
     if previous_view in VIEWS:
         st.session_state["active_view"] = previous_view
+
+
+def clear_ai_chat_history() -> None:
+    """Reset the backend ask history and clear the current AI chat history."""
+    run_hhs_ask_reset()
+    st.session_state["ai_chat_messages"] = []
+    st.session_state["ai_clear_chat_pending"] = False
+    save_ui_state()
+
+
+def request_ai_chat_clear_confirmation() -> None:
+    """Show the AI chat clear confirmation prompt."""
+    st.session_state["ai_clear_chat_pending"] = True
+
+
+def cancel_ai_chat_clear_confirmation() -> None:
+    """Hide the AI chat clear confirmation prompt."""
+    st.session_state["ai_clear_chat_pending"] = False
+
+
+def show_ai_chat_context() -> None:
+    """Append the current backend ask context as a HomeSetup chat message."""
+    result = run_hhs_ask_context()
+    output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
+    message = strip_ansi(output or "No Ollama context available.").strip() or "No Ollama context available."
+    st.session_state["ai_chat_messages"].append({"role": "system", "content": message})
+    save_ui_state()
 
 
 def render_sidebar() -> None:
@@ -522,16 +554,6 @@ def render_document_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    title_spacer_col, title_clear_col = st.columns([3.7, 0.3], vertical_alignment="center")
-    with title_clear_col:
-        st.button(
-            "⌫",
-            key="ai_clear_chat_button",
-            help="Clear chat history",
-            on_click=clear_ai_chat_history,
-            disabled=not st.session_state["ai_chat_messages"],
-            width="stretch",
-        )
     st.write("")
     if not document.is_file():
         st.error(f"Document not found: {document}")
@@ -595,6 +617,111 @@ def clean_hhs_ask_output(output: str) -> str:
             continue
         lines.append(line)
     return "\n".join(lines).strip()
+
+
+def current_username() -> str:
+    """Return the current UI username."""
+    return os.environ.get("USER") or os.environ.get("LOGNAME") or "user"
+
+
+def parse_current_ollama_model(output: str) -> str:
+    """Parse the current Ollama model name from ask -m output."""
+    for line in strip_ansi(output).splitlines():
+        if "(current)" not in line:
+            continue
+        parts = line.split()
+        if len(parts) >= 2:
+            return parts[1]
+    return "unknown"
+
+
+def ollama_model_context_size(ollama_model: str) -> str:
+    """Return the context size for an Ollama model from HomeSetup model metadata."""
+    models_file = homesetup_home() / "bin/apps/bash/hhs-app/plugins/ask/ollama-models.md"
+    if not models_file.is_file():
+        return "?"
+    clean_model = ollama_model.strip("`")
+    for line in models_file.read_text(encoding="utf-8").splitlines():
+        columns = [column.strip().strip("`") for column in line.strip().strip("|").split("|")]
+        if len(columns) >= 5 and columns[0] == clean_model:
+            return columns[4] or "?"
+    return "?"
+
+
+def format_ai_chat_prefix(role: str, username: str, ollama_model: str, context_size: str) -> str:
+    """Format an AI chat message with icon, speaker, and content."""
+    if role == "assistant":
+        return f'<span class="hhs-ai-assistant-text">{html.escape(ollama_model)}&#91;{html.escape(context_size)}&#93;:</span><br>'
+    if role == "system":
+        return '<span class="hhs-ai-system-text">HomeSetup:</span><br>'
+    return f'<span class="hhs-ai-user-text">{html.escape(username)}&#91;You&#93;:</span>'
+
+
+def wrap_ai_code_line(line: str) -> list[str]:
+    """Wrap one code-block line to keep AI markdown inside the chat layout."""
+    if len(line) <= AI_CODE_BLOCK_WRAP_COLUMNS:
+        return [line]
+    indent = re.match(r"^\s*", line).group(0)
+    wrapped = textwrap.wrap(
+        line,
+        width=AI_CODE_BLOCK_WRAP_COLUMNS,
+        initial_indent="",
+        subsequent_indent=indent,
+        break_long_words=True,
+        break_on_hyphens=False,
+        replace_whitespace=False,
+        drop_whitespace=False,
+    )
+    return wrapped or [line]
+
+
+def normalize_ai_code_blocks(content: str) -> str:
+    """Normalize assistant Markdown code fences and wrap long code lines."""
+    lines = content.splitlines()
+    normalized: list[str] = []
+    in_code_block = False
+    fence_marker = "```"
+
+    for line in lines:
+        malformed_fence = re.match(r"^(```+|~~~+)([A-Za-z0-9_.+-]+)\s+(.+)$", line)
+        if not in_code_block and malformed_fence:
+            fence_marker = malformed_fence.group(1)
+            normalized.append(f"{fence_marker}{malformed_fence.group(2)}")
+            normalized.extend(wrap_ai_code_line(malformed_fence.group(3)))
+            normalized.append(fence_marker)
+            continue
+
+        code_fence = re.match(r"^(```+|~~~+)(?:[A-Za-z0-9_.+-]+)?\s*$", line)
+        if code_fence:
+            in_code_block = not in_code_block
+            fence_marker = code_fence.group(1)
+            normalized.append(line)
+            continue
+
+        if in_code_block:
+            normalized.extend(wrap_ai_code_line(line))
+        else:
+            normalized.append(line)
+
+    if in_code_block:
+        normalized.append(fence_marker)
+    return "\n".join(normalized)
+
+
+def prepare_ai_chat_content(role: str, content: str) -> str:
+    """Return chat content normalized for the selected AI message role."""
+    if role == "assistant":
+        return normalize_ai_code_blocks(content)
+    return content
+
+
+def render_ai_chat_message(role: str, content: str, username: str, ollama_model: str, context_size: str) -> None:
+    """Render an AI chat message with a colored prefix and Markdown content."""
+    separator = "\n" if role in ("assistant", "system") else " "
+    st.markdown(
+        f"{format_ai_chat_prefix(role, username, ollama_model, context_size)}{separator}{prepare_ai_chat_content(role, content)}",
+        unsafe_allow_html=True,
+    )
 
 
 def human_size_to_bytes(value: str) -> float:
@@ -870,11 +997,11 @@ def build_hhs_logs_command(log_file: str, tail_lines: int = 200) -> str:
     )
 
 
-def build_hhs_ask_command(message: str) -> str:
-    """Build the Bash command used to run the __hhs ask command."""
+def build_hhs_ask_execute_command(arguments: list[str]) -> str:
+    """Build the Bash command used to run the __hhs ask execute command."""
     hhs_home = homesetup_home()
     hhs_dir = os.environ.get("HHS_DIR", str(Path.home() / ".config/hhs"))
-    safe_message = shlex.quote(message)
+    safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
     return (
         f'export HHS_HOME="{hhs_home}"; '
         f'export HHS_DIR="{hhs_dir}"; '
@@ -894,8 +1021,28 @@ def build_hhs_ask_command(message: str) -> str:
         f'source "{hhs_home}/bin/apps/bash/app-commons.bash"; '
         f'source "{hhs_home}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"; '
         "function __hhs() { if [[ \"$1\" == \"ask\" && \"$2\" == \"execute\" ]]; then shift 2; execute \"$@\"; else return 127; fi; }; "
-        f"__hhs ask execute {safe_message}"
+        f"__hhs ask execute {safe_arguments}"
     )
+
+
+def build_hhs_ask_command(message: str) -> str:
+    """Build the Bash command used to run the __hhs ask command."""
+    return build_hhs_ask_execute_command(["-k", message])
+
+
+def build_hhs_ask_context_command() -> str:
+    """Build the Bash command used to show the current Ollama ask context."""
+    return build_hhs_ask_execute_command(["-c"])
+
+
+def build_hhs_ask_reset_command() -> str:
+    """Build the Bash command used to reset the current Ollama ask context."""
+    return build_hhs_ask_execute_command(["-r"])
+
+
+def build_hhs_ask_models_command() -> str:
+    """Build the Bash command used to list Ollama ask models."""
+    return build_hhs_ask_execute_command(["-m"])
 
 
 def build_hhs_paths_command() -> str:
@@ -1036,6 +1183,30 @@ def run_hhs_ask(message: str) -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_ask_command(message),
         "Asking Ollama...",
+    )
+
+
+def run_hhs_ask_context() -> subprocess.CompletedProcess[str]:
+    """Run the __hhs ask context command and return the completed process."""
+    return run_bash_command(
+        build_hhs_ask_context_command(),
+        "Loading Ollama context...",
+    )
+
+
+def run_hhs_ask_reset() -> subprocess.CompletedProcess[str]:
+    """Run the __hhs ask reset command and return the completed process."""
+    return run_bash_command(
+        build_hhs_ask_reset_command(),
+        "Resetting Ollama context...",
+    )
+
+
+def run_hhs_ask_models() -> subprocess.CompletedProcess[str]:
+    """Run the __hhs ask model listing command and return the completed process."""
+    return run_bash_command(
+        build_hhs_ask_models_command(),
+        "Loading Ollama model...",
     )
 
 
@@ -2428,8 +2599,96 @@ def render_monitor_view() -> None:
         render_monitor_logs_panel()
 
 
+def render_ai_chat_panel() -> None:
+    """Render the HomeSetup Ollama chat panel."""
+    username = current_username()
+    model_result = run_hhs_ask_models()
+    ollama_model = parse_current_ollama_model(model_result.stdout) if model_result.returncode == 0 else "unknown"
+    context_size = ollama_model_context_size(ollama_model)
+    meta_col, context_col, clear_col = st.columns([3.0, 0.55, 0.55], vertical_alignment="center")
+    with meta_col:
+        st.markdown(
+            f"""
+            <div class="hhs-ai-chat-meta">
+              <span>User: <strong class="hhs-ai-chat-user">{html.escape(username)}</strong></span>
+              <span>Model: <strong class="hhs-ai-chat-model">{html.escape(ollama_model)}[{html.escape(context_size)}]</strong></span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with context_col:
+        st.button(
+            "Context",
+            key="ai_show_context_button",
+            help="Show current Ollama context",
+            on_click=show_ai_chat_context,
+            width="stretch",
+        )
+    with clear_col:
+        st.button(
+            "Clear",
+            key="ai_clear_chat_button",
+            help="Clear chat history",
+            on_click=request_ai_chat_clear_confirmation,
+            disabled=not st.session_state["ai_chat_messages"],
+            width="stretch",
+        )
+    if st.session_state.get("ai_clear_chat_pending", False):
+        st.warning("Clear the chat and reset AI context entirely?")
+        confirm_col, cancel_col, _ = st.columns([0.55, 0.55, 3.0])
+        with confirm_col:
+            st.button(
+                "Confirm",
+                key="ai_confirm_clear_button",
+                help="Clear chat and reset AI context",
+                on_click=clear_ai_chat_history,
+                width="stretch",
+            )
+        with cancel_col:
+            st.button(
+                "Cancel",
+                key="ai_cancel_clear_button",
+                help="Keep chat history",
+                on_click=cancel_ai_chat_clear_confirmation,
+                width="stretch",
+            )
+    for message in st.session_state["ai_chat_messages"]:
+        if message["role"] == "assistant":
+            avatar_file = APP_AI_OLLAMA_AVATAR_FILE
+            message_name = "Ollama"
+        elif message["role"] == "system":
+            avatar_file = APP_AI_HOMESETUP_AVATAR_FILE
+            message_name = "HomeSetup"
+        else:
+            avatar_file = APP_AI_USER_AVATAR_FILE
+            message_name = "User"
+        avatar = str(avatar_file) if avatar_file.is_file() else None
+        with st.chat_message(message_name, avatar=avatar):
+            render_ai_chat_message(message["role"], message["content"], username, ollama_model, context_size)
+    if prompt := st.chat_input("Ask Ollama through HomeSetup"):
+        st.session_state["ai_chat_messages"].append({"role": "user", "content": prompt})
+        save_ui_state()
+        with st.chat_message("User", avatar=str(APP_AI_USER_AVATAR_FILE) if APP_AI_USER_AVATAR_FILE.is_file() else None):
+            render_ai_chat_message("user", prompt, username, ollama_model, context_size)
+        with st.chat_message("Ollama", avatar=str(APP_AI_OLLAMA_AVATAR_FILE) if APP_AI_OLLAMA_AVATAR_FILE.is_file() else None):
+            result = run_hhs_ask(prompt)
+            if result.returncode != 0:
+                answer = strip_ansi(result.stderr or result.stdout or "Unable to ask Ollama.")
+                render_ai_chat_message("assistant", answer, username, ollama_model, context_size)
+            else:
+                answer = clean_hhs_ask_output(result.stdout) or strip_ansi(result.stdout)
+                render_ai_chat_message("assistant", answer, username, ollama_model, context_size)
+            st.session_state["ai_chat_messages"].append({"role": "assistant", "content": answer})
+            save_ui_state()
+
+
+def render_ai_settings_panel() -> None:
+    """Render the HomeSetup Ollama settings panel."""
+    st.caption("Settings are not implemented yet.")
+
+
 def render_ai_view() -> None:
-    """Render the HomeSetup Ollama chat view."""
+    """Render the HomeSetup Ollama AI view."""
     st.markdown(
         """
         <section class="hhs-view-heading">
@@ -2438,27 +2697,20 @@ def render_ai_view() -> None:
         """,
         unsafe_allow_html=True,
     )
+    ai_view = st.segmented_control(
+        "AI view",
+        options=AI_VIEWS,
+        default=st.session_state["ai_view"],
+        key="ai_view",
+        label_visibility="collapsed",
+        on_change=save_ui_state,
+        width="stretch",
+    )
     st.write("")
-    for message in st.session_state["ai_chat_messages"]:
-        avatar_file = APP_AI_OLLAMA_AVATAR_FILE if message["role"] == "assistant" else APP_AI_USER_AVATAR_FILE
-        avatar = str(avatar_file) if avatar_file.is_file() else None
-        with st.chat_message(message["role"], avatar=avatar):
-            st.markdown(message["content"])
-    if prompt := st.chat_input("Ask Ollama through HomeSetup"):
-        st.session_state["ai_chat_messages"].append({"role": "user", "content": prompt})
-        save_ui_state()
-        with st.chat_message("user", avatar=str(APP_AI_USER_AVATAR_FILE) if APP_AI_USER_AVATAR_FILE.is_file() else None):
-            st.markdown(prompt)
-        with st.chat_message("assistant", avatar=str(APP_AI_OLLAMA_AVATAR_FILE) if APP_AI_OLLAMA_AVATAR_FILE.is_file() else None):
-            result = run_hhs_ask(prompt)
-            if result.returncode != 0:
-                answer = strip_ansi(result.stderr or result.stdout or "Unable to ask Ollama.")
-                st.error(answer)
-            else:
-                answer = clean_hhs_ask_output(result.stdout) or strip_ansi(result.stdout)
-                st.markdown(answer)
-            st.session_state["ai_chat_messages"].append({"role": "assistant", "content": answer})
-            save_ui_state()
+    if ai_view == "CHAT":
+        render_ai_chat_panel()
+    elif ai_view == "SETTINGS":
+        render_ai_settings_panel()
 
 
 def render_main_view() -> None:
@@ -2507,6 +2759,10 @@ def main() -> None:
     st.session_state.setdefault("ai_chat_messages", [])
     if not isinstance(st.session_state["ai_chat_messages"], list):
         st.session_state["ai_chat_messages"] = []
+    st.session_state.setdefault("ai_clear_chat_pending", False)
+    st.session_state.setdefault("ai_view", "CHAT")
+    if st.session_state["ai_view"] not in AI_VIEWS:
+        st.session_state["ai_view"] = "CHAT"
     st.session_state.setdefault(DOCUMENT_VIEW_ACTIVE_KEY, False)
     st.session_state.setdefault(DOCUMENT_PREVIOUS_VIEW_KEY, "Home")
     st.session_state.setdefault(DOCUMENT_SELECTED_KEY, "README")

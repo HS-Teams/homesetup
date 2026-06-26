@@ -184,6 +184,34 @@ function clear_context() {
   quit 0 "${ORANGE}✨ Ollama history file not found${NC}"
 }
 
+# @purpose: Ensure ollama history uses the expected Markdown heading hierarchy
+function ensure_context_header() {
+  local tmp
+
+  mkdir -p "$(dirname "${HHS_OLLAMA_HISTORY_FILE}")" || quit 2 "Unable to prepare ollama history directory"
+  touch "${HHS_OLLAMA_HISTORY_FILE}" || quit 2 "Unable to prepare ollama history file"
+  tmp="$(mktemp /tmp/hhs-ollama-history.XXXXXX)" || quit 2 "Unable to prepare ollama history formatter"
+
+  awk '
+    /^# Current Ask context$/ { next }
+    /^### Started:/ { sub(/^###/, "##"); print; next }
+    /^## Started:/ { print; next }
+    /^# \[[0-9][0-9]:[0-9][0-9]\] (User|AI):/ { sub(/^#/, "###"); print; next }
+    /^## \[[0-9][0-9]:[0-9][0-9]\] (User|AI):/ { sub(/^##/, "###"); print; next }
+    { print }
+  ' "${HHS_OLLAMA_HISTORY_FILE}" > "${tmp}.body" || quit 2 "Unable to format ollama history file"
+
+  {
+    echo "# Current Ask context"
+    echo
+    grep -q '^## Started:' "${tmp}.body" || echo "## Started: $(date +%F)"
+    cat "${tmp}.body"
+  } > "${tmp}" || quit 2 "Unable to update ollama history file"
+
+  mv "${tmp}" "${HHS_OLLAMA_HISTORY_FILE}" || quit 2 "Unable to replace ollama history file"
+  rm -f "${tmp}.body"
+}
+
 # @purpose: Show available ollama models (local and for download)
 function show_models() {
   echo -e "${BLUE}Available to download:"
@@ -308,8 +336,8 @@ function execute() {
   # Question & Answer
   start_ollama &> /dev/null
   resp="$(mktemp /tmp/hhs-"${OLLAMA_MODEL}"-response.XXXXXX)" || quit 1 "Failed to create temporary file."
-  grep -q '^### Started:' "${HHS_OLLAMA_HISTORY_FILE}" || echo "### Started: $(date +%F)" >> "${HHS_OLLAMA_HISTORY_FILE}"
-  echo -e "## [$(date '+%H:%M')] User: \n${query}" >> "${HHS_OLLAMA_HISTORY_FILE}"
+  ensure_context_header
+  echo -e "### [$(date '+%H:%M')] User: \n${query}" >> "${HHS_OLLAMA_HISTORY_FILE}"
   echo -e "✨ ${GREEN}${OLLAMA_MODEL}[${ctx}K]:\n"
   printf '%s### CONTEXT ###\n%s\n\n### USER INPUT ###\n\n%s\n' \
     "$HHS_OLLAMA_PROMPT" "$CONTEXT" "${query}" |
@@ -319,7 +347,7 @@ function execute() {
 
   # Display the response
   if [[ -s "${resp}" ]]; then
-    echo -e "## [$(date '+%H:%M')] AI: \n$(cat "${resp}")" >> "${HHS_OLLAMA_HISTORY_FILE}"
+    echo -e "### [$(date '+%H:%M')] AI: \n$(cat "${resp}")" >> "${HHS_OLLAMA_HISTORY_FILE}"
     printf '\033[H\033[2J\033[3J'
     echo -e "✨ ${GREEN}${OLLAMA_MODEL}[${ctx}K]:\t${GRAY}${resp}\n${NC}"
     ${HHS_OLLAMA_MD_VIEWER:-cat} < "${resp}"
