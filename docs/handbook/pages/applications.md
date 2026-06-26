@@ -21,9 +21,12 @@
       - [Ask](applications/bash/hhs-app/plugins/ask.md)
       - [Firebase](applications/bash/hhs-app/plugins/firebase.md)
       - [HSPM](applications/bash/hhs-app/plugins/hspm.md)
+      - [Services](applications/bash/hhs-app/plugins/services.md)
       - [Settings](applications/bash/hhs-app/plugins/settings.md)
       - [Setup](applications/bash/hhs-app/plugins/setup.md)
       - [Starship](applications/bash/hhs-app/plugins/starship.md)
+      - [Taius](applications/bash/hhs-app/plugins/taius.md)
+      - [UI](applications/bash/hhs-app/plugins/ui.md)
       - [Updater](applications/bash/hhs-app/plugins/updater.md)
 
 <!-- tocstop -->

@@ -88,6 +88,10 @@ Listing all PATH entries:
 /Users/hjunior/HomeSetup/tests/bats/bats-core/bin.....................  => Shell export
 ```
 
+The listing uses a leading glyph to identify the path type: a folder for directories, a symlink glyph for links, and a
+question glyph for missing entries. The source label is one of `Shell export`, `Custom path`, `Private system path`, or
+`General system path`.
+
 `__hhs_paths -a /tmp`
 
 **Output**
@@ -103,4 +107,3 @@ Path was added: "/tmp"
 ```bash
 Path was removed: "/tmp"
 ```
-

@@ -20,9 +20,12 @@
     - [Plugins](hhs-app.md#plug-ins)
       - [Firebase](hhs-app/plugins/firebase.md)
       - [HSPM](hhs-app/plugins/hspm.md)
+      - [Services](hhs-app/plugins/services.md)
       - [Settings](hhs-app/plugins/settings.md)
       - [Setup](hhs-app/plugins/setup.md)
       - [Starship](hhs-app/plugins/starship.md)
+      - [Taius](hhs-app/plugins/taius.md)
+      - [UI](hhs-app/plugins/ui.md)
       - [Updater](hhs-app/plugins/updater.md)
 
 <!-- tocstop -->

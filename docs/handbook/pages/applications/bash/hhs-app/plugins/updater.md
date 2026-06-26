@@ -21,9 +21,12 @@
       - [Ask](ask.md)
       - [Firebase](firebase.md)
       - [HSPM](hspm.md)
+      - [Services](services.md)
       - [Settings](settings.md)
       - [Setup](setup.md)
       - [Starship](starship.md)
+      - [Taius](taius.md)
+      - [UI](ui.md)
       - [Updater](updater.md)
 
 <!-- tocstop -->

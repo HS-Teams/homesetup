@@ -277,9 +277,11 @@ Directory changed to: "/Users/hjunior/HomeSetup"
 **Output**
 
 ```bash
-AKS...................................... points to '/tmp'
-HOM...................................... points to '/Users/hjunior'
-DOT...................................... points to '/Users/hjunior/HomeSetup'
+Available directories (3) saved:
+
+AKS......................................  '/tmp'
+HOM......................................  '/Users/hjunior'
+DOT......................................  '/Users/hjunior/HomeSetup'
 ```
 
 ------

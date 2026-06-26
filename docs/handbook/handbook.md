@@ -72,6 +72,7 @@ install HomeSetup this file will be created automatically for you, so you just n
 | HHS_SET_LOCALES          | Whether to set current locale or not.                                                             |
 | HHS_SHOPTS_FILE          | File containing all shell options.                                                                |
 | HHS_STARSHIP_PRESETS_DIR | Directory containing all HomeSet-Starship presets.                                                |
+| HHS_STREAMLIT_UI_PORT    | Port used by the HomeSetup Streamlit UI. Defaults to 18501.                                      |
 | HHS_USE_STARSHIP         | Whether to use Starship prompt or not.                                                            |
 | HHS_VAULT_FILE           | This file holds the user vault, used to store secure information.                                 |
 | HHS_VAULT_USER           | This is the user that hhs vault plugin will use to store your vault data.                         |

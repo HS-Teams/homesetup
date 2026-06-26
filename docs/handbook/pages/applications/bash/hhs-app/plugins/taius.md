@@ -31,13 +31,13 @@
 
 <!-- tocstop -->
 
-## Setup
+## Taius
 
 ### "help"
 
 #### **Purpose**
 
-HomeSetup initialization setup.
+Display the HomeSetup Taius AskAI integration help.
 
 #### **Returns**
 
@@ -45,44 +45,54 @@ HomeSetup initialization setup.
 
 #### **Parameters**
 
-- $1 _Optional_ : If specified, restore HomeSetup defaults.
+N/A
 
 #### **Examples**
 
-`__hhs setup help`
+`__hhs taius help`
 
 **Output**
 
 ```bash
-usage: __hhs setup [-restore]
+usage: __hhs taius <question> [options]
 
- ____       _
-/ ___|  ___| |_ _   _ _ __
-\___ \ / _ \ __| | | | '_ \
- ___) |  __/ |_| |_| | |_) |
-|____/ \___|\__|\__,_| .__/
-                     |_|
-
-  HomeSetup initialization setup.
+  HomeSetup AskAI integration.
 
     options:
-      -restore    : Restore the HomeSetup defaults.
+      -h | --help              : Display this help message.
+      -v | --version           : Display current plugin version.
+
+    arguments:
+      question                 : The question to ask Taius about HomeSetup.
+
+    examples:
+      Ask for usage guidance:
+        => __hhs taius "How do I update HomeSetup?"
+
+  Notes:
+    - Requires the HomeSetup Python virtual environment and AskAI installation.
 ```
 
-`__hhs setup`
+------
 
-```bash
-HomeSetup Initialization Settings
-Please check the desired startup settings:
+### "question"
 
-  1      hhs_set_locales
-  2       hhs_export_settings
-  3       hhs_restore_last_dir
-  4       hhs_use_starship
-  5       hhs_load_shell_options
-  6       homebrew_no_auto_update
-  7       hhs_no_auto_update
-  8       hhs_load_completions
+#### **Purpose**
 
-[Enter] Accept  [↑↓] Navigate  [Space] Mark  [I] Invert  [Esc] Quit  [1..8] Goto:
-```
+Ask Taius a question about HomeSetup through the AskAI RAG integration.
+
+#### **Returns**
+
+**0** if AskAI is executed; **non-zero** otherwise.
+
+#### **Parameters**
+
+- $1..$N _Required_ : Question text.
+
+#### **Examples**
+
+`__hhs taius execute "How do I launch the UI?"`
+
+**Output**
+
+N/A

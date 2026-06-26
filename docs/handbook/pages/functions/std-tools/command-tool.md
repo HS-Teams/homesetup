@@ -71,7 +71,17 @@ Add/Remove/List/Execute saved bash commands.
 **Output**
 
 ```bash
-Command stored: "TEST" as ls -la
+Command saved: "TEST" as ls -la
+```
+
+`__hhs_command -l`
+
+**Output**
+
+```bash
+Available commands (1):
+
+(001) Command TEST.......................  'ls -la'
 ```
 
 `__hhs_command test`
@@ -96,6 +106,5 @@ Command stored: "TEST" as ls -la
 **Output**
 
 ```bash
-Command removed: "TEST"
+Command "TEST" removed!
 ```
-
