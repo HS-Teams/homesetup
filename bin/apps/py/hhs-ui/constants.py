@@ -21,7 +21,10 @@ APP_AI_USER_AVATAR_FILE = APP_DIR / "assets/images/user.png"
 APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"
 APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"
 UI_STATE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-state"
-UI_CACHE_FILE = Path(os.environ.get("HHS_CACHE_DIR", APP_DIR)) / ".streamlit-ui-cache"
+UI_CACHE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-cache"
+UI_SSH_CONNECTION_FILE = (
+    Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-ssh-connection"
+)
 UI_CACHE_REALTIME_TTL_SECONDS = 15
 UI_CACHE_NORMAL_TTL_SECONDS = 60
 UI_CACHE_LOW_CHANGE_TTL_SECONDS = 120
@@ -60,6 +63,7 @@ PERSISTED_UI_KEYS = (
     "env_other_filter",
     "env_value_overrides",
     "home_view",
+    "ssh_host_selected",
     "home_tools_filter",
     "home_tools_other_filter",
     "history_commands_filter",

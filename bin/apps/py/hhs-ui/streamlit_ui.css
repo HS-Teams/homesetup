@@ -82,6 +82,35 @@ textarea,
   color: var(--hhs-selected-item-value);
 }
 
+.hhs-vspacer {
+  height: 0.65rem;
+}
+
+.hhs-sidebar-separator {
+  border: 0;
+  border-top: 1px solid var(--hhs-theme-border-color);
+  margin: 0;
+  width: 100%;
+}
+
+.st-key-ssh_connect_button button,
+.st-key-ssh_disconnect_button button {
+  color: #ffffff !important;
+  font-size: 0.82rem;
+  font-weight: 800;
+  min-height: 2.55rem;
+}
+
+.st-key-ssh_connect_button button {
+  background: #16a34a !important;
+  border-color: #22c55e !important;
+}
+
+.st-key-ssh_disconnect_button button {
+  background: #dc2626 !important;
+  border-color: #ef4444 !important;
+}
+
 [data-testid="stMarkdownContainer"] li code,
 [data-testid="stMarkdownContainer"] p code {
   color: var(--hhs-theme-text-color-accent);
@@ -152,6 +181,36 @@ textarea,
   font-weight: 750;
   letter-spacing: 0;
   line-height: 1;
+  margin: 0;
+}
+
+.hhs-remote-connect-required {
+  color: var(--hhs-theme-text-color);
+  margin: 0;
+  padding: 0;
+}
+
+.hhs-remote-connect-required h1 {
+  color: var(--hhs-theme-text-color);
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin: 0 0 0.85rem;
+}
+
+.hhs-remote-connect-required hr {
+  border: 0;
+  border-top: 1px solid var(--hhs-theme-border-color);
+  margin: 0;
+}
+
+.hhs-remote-connect-required h2 {
+  color: #dc2626;
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
   margin: 0;
 }
 
@@ -327,6 +386,12 @@ div[class*="st-key-monitor_process_kill_button_"] button {
   margin: 0.35rem 0 0;
   max-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height));
   min-height: 12rem;
+}
+
+.hhs-home-tool-action-output {
+  max-height: min(52dvh, 28rem);
+  max-width: min(82vw, 58rem);
+  overflow: auto;
 }
 
 .hhs-footer-guard {

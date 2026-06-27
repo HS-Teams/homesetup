@@ -35,6 +35,7 @@
 * Favor standard, maintained tools over deprecated ones.
 * Generate concise, production-quality output.
 * Prefer following the existing code style and patterns.
+* Ensure you always cleanup the unused imports (for python files).
 
 ## Testing and Commiting
 

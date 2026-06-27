@@ -134,6 +134,99 @@ setup() {
   run grep -q 'padding: 0 2rem 0 var(--hhs-sidebar-inline-inset)' "${css_file}"
   assert_success
 
+  run grep -q 'host_kind = "Local" if selected_host_is_local() else "SSH"' "${ui_file}"
+  assert_success
+
+  run grep -q 'Host ({host_kind})' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'options = ["", local_hostname()]' "${ui_file}"
+  assert_failure
+
+  run grep -Fq 'options = [local_hostname()]' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'st.session_state["ssh_host_selected"] = local_hostname()' "${ui_file}"
+  assert_success
+
+  run grep -q 'def selected_remote_host_requires_connection' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_remote_connection_required_view' "${ui_file}"
+  assert_success
+
+  run grep -q 'Connect to the remote host to interact' "${ui_file}"
+  assert_success
+
+  run grep -q 'Remote host: {host} -&gt; {host_address}' "${ui_file}"
+  assert_success
+
+  run grep -q 'def parse_ssh_config_hostnames' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_config_hostname' "${ui_file}"
+  assert_success
+
+  run grep -q 'keyword == "hostname"' "${ui_file}"
+  assert_success
+
+  run grep -q '<hr />' "${ui_file}"
+  assert_success
+
+  run grep -q '.hhs-remote-connect-required h1' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-remote-connect-required hr' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-remote-connect-required h2' "${css_file}"
+  assert_success
+
+  run grep -q 'color: #dc2626' "${css_file}"
+  assert_success
+
+  run grep -q 'UI_CACHE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-cache"' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_CACHE_FILE = Path(os.environ.get("HHS_CACHE_DIR"' "${constants_file}"
+  assert_failure
+
+  run grep -q '"Connect"' "${ui_file}"
+  assert_success
+
+  run grep -q '"Disconnect"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ssh_connect_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ssh_disconnect_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'class="hhs-vspacer"' "${ui_file}"
+  assert_success
+
+  run grep -q 'class="hhs-sidebar-separator"' "${ui_file}"
+  assert_success
+
+  run grep -q '.st-key-ssh_connect_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-ssh_disconnect_button button' "${css_file}"
+  assert_success
+
+  run grep -q 'background: #16a34a' "${css_file}"
+  assert_success
+
+  run grep -q 'background: #dc2626' "${css_file}"
+  assert_success
+
+  run grep -q 'color: #ffffff' "${css_file}"
+  assert_success
+
+  run grep -q 'min-height: 2.55rem' "${css_file}"
+  assert_success
+
   run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 
@@ -416,6 +509,18 @@ PY
   run grep -q 'def render_home_tool_action_dialog' "${ui_file}"
   assert_success
 
+  run grep -q 'hhs-home-tool-action-output' "${ui_file}"
+  assert_success
+
+  run grep -q '.hhs-home-tool-action-output' "${css_file}"
+  assert_success
+
+  run grep -q 'max-height: min(52dvh, 28rem)' "${css_file}"
+  assert_success
+
+  run grep -q 'max-width: min(82vw, 58rem)' "${css_file}"
+  assert_success
+
   run grep -q 'def home_tool_action_noun' "${ui_file}"
   assert_success
 
@@ -550,6 +655,156 @@ PY
 
   run grep -q 'def run_hhs_services_quietly' "${ui_file}"
   assert_success
+
+  run grep -q 'def parse_ssh_config_hosts' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_ssh_connect_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_ssh_disconnect_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'UI_SSH_CONNECTION_FILE' "${constants_file}"
+  assert_success
+
+  run grep -q 'def cleanup_registered_ssh_connection_on_session_start' "${ui_file}"
+  assert_success
+
+  run grep -q 'cleanup_registered_ssh_connection_on_session_start()' "${ui_file}"
+  assert_success
+
+  run grep -q 'def register_ssh_connection' "${ui_file}"
+  assert_success
+
+  run grep -q 'def clear_registered_ssh_connection' "${ui_file}"
+  assert_success
+
+  run grep -q 'def request_ssh_host_connect' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_change=request_ssh_host_connection' "${ui_file}"
+  assert_failure
+
+  run grep -q 'def selected_ssh_host_is_connected' "${ui_file}"
+  assert_success
+
+  run grep -q 'ssh_connection_host' "${ui_file}"
+  assert_success
+
+  run grep -q 'def request_ssh_host_disconnection' "${ui_file}"
+  assert_success
+
+  run grep -q 'def execute_pending_ssh_disconnection' "${ui_file}"
+  assert_success
+
+  run grep -q -- '-O exit' "${ui_file}"
+  assert_success
+
+  run grep -q 'pgrep -f --' "${ui_file}"
+  assert_success
+
+  run grep -q 'kill -TERM' "${ui_file}"
+  assert_success
+
+  run grep -q 'kill -KILL' "${ui_file}"
+  assert_success
+
+  run grep -q 'rm -f {safe_control_path}' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_config_option' "${ui_file}"
+  assert_success
+
+  run grep -q -- '-F "${HOME}/.ssh/config"' "${ui_file}"
+  assert_success
+
+  run grep -q 'ControlMaster=yes' "${ui_file}"
+  assert_success
+
+  run grep -q 'ConnectionAttempts=1' "${ui_file}"
+  assert_success
+
+  run grep -q 'timeout_seconds=15' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_ssh_wrapped_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'bash -ic' "${ui_file}"
+  assert_success
+
+  run grep -q 'ssh -tt' "${ui_file}"
+  assert_success
+
+  run grep -q 'safe_remote_shell = shlex.quote' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'JOB_NAME="${JOB_NAME:-HomeSetup-UI}"' "${ui_file}"
+  assert_failure
+
+  run grep -Fq 'source "${HOME}/.bashrc"' "${ui_file}"
+  assert_failure
+
+  run grep -Fq '[[ ! -s "${HOME}/.hhsrc" ]]' "${ui_file}"
+  assert_failure
+
+  run grep -Fq '"HomeSetup" is not installed on the host.' "${ui_file}"
+  assert_failure
+
+  run grep -Fq 'def handle_missing_remote_homesetup' "${ui_file}"
+  assert_failure
+
+  run grep -Fq 'result.returncode != 86' "${ui_file}"
+  assert_failure
+
+  run grep -q 'def effective_bash_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'source "{hhs_home}' "${ui_file}"
+  assert_failure
+
+  run grep -q 'export HHS_HOME="{hhs_home}' "${ui_file}"
+  assert_failure
+
+  run grep -q '/Users/hjunior/HomeSetup' "${ui_file}"
+  assert_failure
+
+  run grep -q 'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"' "${ui_file}"
+  assert_failure
+
+  run grep -q 'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"' "${ui_file}"
+  assert_success
+
+  run grep -q 'or not selected_ssh_host_is_connected(host)' "${ui_file}"
+  assert_success
+
+  run grep -q 'force_local: bool = False' "${ui_file}"
+  assert_success
+
+  run grep -q 'timeout_seconds: int | None = None' "${ui_file}"
+  assert_success
+
+  run grep -q 'effective_timeout = 60' "${ui_file}"
+  assert_success
+
+  run grep -q 'except subprocess.TimeoutExpired' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_ssh_connection_dialog' "${ui_file}"
+  assert_success
+
+  run grep -q 'setOverlay(False)' "${ui_file}"
+  assert_success
+
+  run grep -q 'Successfully connected to {host}' "${ui_file}"
+  assert_success
+
+  run grep -q 'Failed to connect to {host}' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.error(st.session_state.get("ssh_connection_error", "SSH failed."))' "${ui_file}"
+  assert_failure
 }
 
 # TC - 11

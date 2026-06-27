@@ -408,6 +408,10 @@ def execute_pending_ai_model_deletion() -> None:
 def render_sidebar() -> None:
     """Render the closeable HomeSetup sidebar."""
     theme_options = available_theme_options()
+    host_options = host_selector_options()
+    selected_host = selected_ssh_host()
+    if selected_host not in host_options:
+        st.session_state["ssh_host_selected"] = local_hostname()
     selected_theme = validated_theme_name(
         st.session_state.get(THEME_SELECTED_KEY, ""), theme_options
     )
@@ -421,6 +425,36 @@ def render_sidebar() -> None:
             f'<div class="hhs-sidebar-title">HomeSetup - UI v{html.escape(VERSION)}</div>',
             unsafe_allow_html=True,
         )
+        st.write("")
+        host_kind = "Local" if selected_host_is_local() else "SSH"
+        st.markdown(f"**Host ({host_kind}):**")
+        st.selectbox(
+            f"Host ({host_kind})",
+            options=host_options,
+            key="ssh_host_selected",
+            label_visibility="collapsed",
+            width="stretch",
+        )
+        if not selected_host_is_local():
+            st.markdown('<div class="hhs-vspacer"></div>', unsafe_allow_html=True)
+            if selected_ssh_host_is_connected():
+                st.button(
+                    "Disconnect",
+                    key="ssh_disconnect_button",
+                    on_click=request_ssh_host_disconnection,
+                    width="stretch",
+                )
+            else:
+                st.button(
+                    "Connect",
+                    key="ssh_connect_button",
+                    on_click=request_ssh_host_connect,
+                    width="stretch",
+                )
+            st.markdown(
+                '<div class="hhs-vspacer"></div><hr class="hhs-sidebar-separator" /><div class="hhs-vspacer"></div>',
+                unsafe_allow_html=True,
+            )
         st.write("")
         st.markdown("**Theme**")
         selected_theme = st.selectbox(
@@ -1557,36 +1591,374 @@ def command_env() -> dict[str, str]:
     }
 
 
+def local_hostname() -> str:
+    """Return the local host name shown by the sidebar host selector."""
+    return os.uname().nodename.strip() or "localhost"
+
+
+def ssh_config_file() -> Path:
+    """Return the user's OpenSSH config file path."""
+    return Path.home() / ".ssh" / "config"
+
+
+def parse_ssh_config_hosts(config_text: str) -> tuple[str, ...]:
+    """Return concrete Host aliases configured in an OpenSSH config file."""
+    hosts: list[str] = []
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if parts and parts[0].lower() == "host":
+            for host in parts[1:]:
+                if any(char in host for char in "*?!"):
+                    continue
+                if host not in hosts:
+                    hosts.append(host)
+    return tuple(hosts)
+
+
+def parse_ssh_config_hostnames(config_text: str) -> dict[str, str]:
+    """Return concrete SSH Host aliases mapped to their configured HostName."""
+    hostnames: dict[str, str] = {}
+    active_hosts: list[str] = []
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if not parts:
+            continue
+        keyword = parts[0].lower()
+        if keyword == "host":
+            active_hosts = [
+                host for host in parts[1:] if not any(char in host for char in "*?!")
+            ]
+            continue
+        if keyword == "hostname" and len(parts) > 1:
+            hostname = parts[1]
+            for host in active_hosts:
+                hostnames[host] = hostname
+    return hostnames
+
+
+def ssh_config_hosts() -> tuple[str, ...]:
+    """Return concrete SSH Host aliases configured in ~/.ssh/config."""
+    config_file = ssh_config_file()
+    if not config_file.exists():
+        return ()
+    try:
+        return parse_ssh_config_hosts(config_file.read_text(encoding="utf-8"))
+    except OSError:
+        return ()
+
+
+def ssh_config_hostname(host: str) -> str:
+    """Return the configured HostName for an SSH Host alias."""
+    config_file = ssh_config_file()
+    if not config_file.exists():
+        return host
+    try:
+        hostnames = parse_ssh_config_hostnames(config_file.read_text(encoding="utf-8"))
+    except OSError:
+        return host
+    return hostnames.get(host, host)
+
+
+def host_selector_options() -> tuple[str, ...]:
+    """Return local and SSH host options for the sidebar selector."""
+    options = [local_hostname()]
+    for host in ssh_config_hosts():
+        if host not in options:
+            options.append(host)
+    return tuple(options)
+
+
+def selected_ssh_host() -> str:
+    """Return the selected SSH host, or an empty string for local execution."""
+    return str(st.session_state.get("ssh_host_selected", "")).strip()
+
+
+def selected_host_is_local(host: str | None = None) -> bool:
+    """Return whether the selected host should use local command execution."""
+    host_name = (host if host is not None else selected_ssh_host()).strip()
+    local_names = {"", "localhost", "127.0.0.1", "::1", local_hostname()}
+    return host_name in local_names
+
+
+def ssh_control_path(host: str) -> str:
+    """Return the ControlMaster socket path for a selected SSH host."""
+    host_hash = hashlib.sha256(host.encode("utf-8")).hexdigest()[:16]
+    return f"/tmp/hhs-ui-ssh-{host_hash}.sock"
+
+
+def ssh_config_option() -> str:
+    """Return the OpenSSH config option used for UI-managed SSH commands."""
+    return '-F "${HOME}/.ssh/config"'
+
+
+def build_ssh_connect_command(host: str) -> str:
+    """Build a local command that opens or validates a ControlMaster connection."""
+    safe_host = shlex.quote(host)
+    safe_control_path = shlex.quote(ssh_control_path(host))
+    safe_config_option = ssh_config_option()
+    ssh_options = (
+        "-o BatchMode=yes -o ConnectTimeout=5 -o ConnectionAttempts=1 "
+        "-o ServerAliveInterval=5 -o ServerAliveCountMax=1"
+    )
+    return (
+        f"ssh {safe_config_option} {ssh_options} -o ControlPath={safe_control_path} -O check {safe_host} "
+        ">/dev/null 2>&1 || "
+        f"ssh -MNf {safe_config_option} {ssh_options} "
+        f"-o ControlMaster=yes -o ControlPersist=10m "
+        f"-o ControlPath={safe_control_path} {safe_host}"
+    )
+
+
+def build_ssh_disconnect_command(host: str) -> str:
+    """Build a local command that terminates a ControlMaster connection."""
+    safe_host = shlex.quote(host)
+    control_path = ssh_control_path(host)
+    safe_control_path = shlex.quote(control_path)
+    safe_control_path_pattern = shlex.quote(f"ControlPath={control_path}")
+    safe_config_option = ssh_config_option()
+    return (
+        f"ssh {safe_config_option} -o BatchMode=yes "
+        f"-o ControlPath={safe_control_path} -O exit {safe_host} >/dev/null 2>&1 || true; "
+        f"if command -v pgrep >/dev/null 2>&1; then "
+        f"for pid in $(pgrep -f -- {safe_control_path_pattern} 2>/dev/null || true); do "
+        '[[ "${pid}" != "$$" ]] && kill -TERM "${pid}" 2>/dev/null || true; '
+        "done; "
+        "sleep 0.2; "
+        f"for pid in $(pgrep -f -- {safe_control_path_pattern} 2>/dev/null || true); do "
+        '[[ "${pid}" != "$$" ]] && kill -KILL "${pid}" 2>/dev/null || true; '
+        "done; "
+        "fi; "
+        f"rm -f {safe_control_path}"
+    )
+
+
+def build_ssh_wrapped_command(command: str, host: str) -> str:
+    """Build a command that executes the provided Bash command over interactive SSH Bash."""
+    safe_host = shlex.quote(host)
+    safe_control_path = shlex.quote(ssh_control_path(host))
+    safe_config_option = ssh_config_option()
+    safe_remote_command = shlex.quote(command)
+    safe_remote_shell = shlex.quote(f"bash -ic {safe_remote_command}")
+    return (
+        f"ssh -tt {safe_config_option} -o BatchMode=yes -o ControlPath={safe_control_path} "
+        f"{safe_host} {safe_remote_shell}"
+    )
+
+
+def registered_ssh_connection_host() -> str:
+    """Return the SSH host registered by a previous UI-managed connection."""
+    try:
+        return UI_SSH_CONNECTION_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def register_ssh_connection(host: str) -> None:
+    """Persist the UI-managed SSH connection host for later cleanup."""
+    UI_SSH_CONNECTION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    UI_SSH_CONNECTION_FILE.write_text(f"{host.strip()}\n", encoding="utf-8")
+
+
+def clear_registered_ssh_connection() -> None:
+    """Remove the UI-managed SSH connection cleanup marker."""
+    try:
+        UI_SSH_CONNECTION_FILE.unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+
+
+def cleanup_registered_ssh_connection_on_session_start() -> None:
+    """Terminate a registered SSH connection when a new Streamlit session starts."""
+    if st.session_state.get("ssh_connection_cleanup_checked"):
+        return
+    st.session_state["ssh_connection_cleanup_checked"] = True
+    host = registered_ssh_connection_host()
+    if not host:
+        return
+    run_bash_command(
+        build_ssh_disconnect_command(host),
+        f"Disconnecting stale SSH host {host}...",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        timeout_seconds=10,
+    )
+    clear_registered_ssh_connection()
+    cache_clear()
+
+
+def effective_bash_command(command: str, force_local: bool = False) -> str:
+    """Return the local or SSH-wrapped Bash command to execute."""
+    host = selected_ssh_host()
+    if (
+        force_local
+        or selected_host_is_local(host)
+        or not selected_ssh_host_is_connected(host)
+    ):
+        return command
+    return build_ssh_wrapped_command(command, host)
+
+
+def selected_ssh_host_is_connected(host: str | None = None) -> bool:
+    """Return whether the selected host has an active UI-managed SSH connection."""
+    host_name = (host if host is not None else selected_ssh_host()).strip()
+    return (
+        bool(host_name)
+        and st.session_state.get("ssh_connection_status") == "connected"
+        and st.session_state.get("ssh_connection_host") == host_name
+    )
+
+
+def request_ssh_host_connect() -> None:
+    """Schedule an SSH ControlMaster connection for the selected host."""
+    host = selected_ssh_host()
+    if selected_host_is_local(host):
+        return
+    st.session_state["ssh_connect_pending"] = host
+    st.session_state["ssh_disconnect_pending"] = ""
+    cache_clear()
+    save_ui_state()
+
+
+def request_ssh_host_disconnection() -> None:
+    """Schedule an SSH ControlMaster disconnection for the selected host."""
+    host = selected_ssh_host()
+    connected_host = str(st.session_state.get("ssh_connection_host", "")).strip()
+    if connected_host:
+        host = connected_host
+    if selected_host_is_local(host):
+        return
+    st.session_state["ssh_disconnect_pending"] = host
+    st.session_state["ssh_connect_pending"] = ""
+
+
+def execute_pending_ssh_connection() -> None:
+    """Open a pending SSH ControlMaster connection from the normal render flow."""
+    host = str(st.session_state.get("ssh_connect_pending", "")).strip()
+    if not host:
+        return
+    st.session_state["ssh_connect_pending"] = ""
+    result = run_bash_command(
+        build_ssh_connect_command(host),
+        f"Connecting to SSH host {host}...",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        timeout_seconds=15,
+    )
+    if result.returncode == 0:
+        st.session_state["ssh_connection_status"] = "connected"
+        st.session_state["ssh_connection_host"] = host
+        st.session_state["ssh_connection_error"] = ""
+        st.session_state["ssh_connection_dialog_title"] = (
+            f"Successfully connected to {host}"
+        )
+        register_ssh_connection(host)
+    else:
+        st.session_state["ssh_connection_status"] = "failed"
+        st.session_state["ssh_connection_host"] = ""
+        st.session_state["ssh_connection_error"] = strip_ansi(
+            result.stderr or result.stdout or f"Unable to connect to SSH host {host}."
+        )
+        st.session_state["ssh_connection_dialog_title"] = f"Failed to connect to {host}"
+
+
+def execute_pending_ssh_disconnection() -> None:
+    """Close a pending SSH ControlMaster connection from the normal render flow."""
+    host = str(st.session_state.get("ssh_disconnect_pending", "")).strip()
+    if not host:
+        return
+    st.session_state["ssh_disconnect_pending"] = ""
+    run_bash_command(
+        build_ssh_disconnect_command(host),
+        f"Disconnecting from SSH host {host}...",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        timeout_seconds=10,
+    )
+    st.session_state["ssh_connection_status"] = ""
+    st.session_state["ssh_connection_host"] = ""
+    st.session_state["ssh_connection_error"] = ""
+    st.session_state["ssh_connection_dialog_title"] = ""
+    clear_registered_ssh_connection()
+    cache_clear()
+
+
+def close_ssh_connection_dialog() -> None:
+    """Close the SSH connection result dialog."""
+    setOverlay(False)
+    st.session_state["ssh_connection_dialog_title"] = ""
+
+
+def render_ssh_connection_dialog() -> None:
+    """Render the SSH connection result dialog when a connection attempt completes."""
+    title = str(st.session_state.get("ssh_connection_dialog_title", "")).strip()
+    if not title:
+        return
+    setOverlay(False)
+
+    @st.dialog(title)
+    def render_dialog() -> None:
+        """Render the selected SSH connection result."""
+        if st.button("Close", key="ssh_connection_dialog_close_button", width="stretch"):
+            close_ssh_connection_dialog()
+            st.rerun(scope="app")
+
+    render_dialog()
+
+
 def run_bash_command(
     command: str,
     loader_message: str,
     close_dialogs: bool = False,
     ttl_seconds: int = UI_CACHE_DEFAULT_TTL_SECONDS,
     use_cache: bool = True,
+    force_local: bool = False,
+    timeout_seconds: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a Bash command with hash-keyed command-result caching and a preloader."""
-    cache_key = command_cache_key(command)
+    command_to_run = effective_bash_command(command, force_local=force_local)
+    effective_timeout = timeout_seconds
+    if effective_timeout is None and command_to_run != command:
+        effective_timeout = 60
+    cache_key = command_cache_key(command_to_run)
     cached_value = cache_get(cache_key) if use_cache else None
     if use_cache and cached_value is not None:
-        return completed_process_from_cache(command, cached_value)
+        return completed_process_from_cache(command_to_run, cached_value)
 
     setOverlay(True, loader_message, close_dialogs=close_dialogs)
     try:
         result = subprocess.run(
-            ["bash", "-lc", command],
+            ["bash", "-lc", command_to_run],
             capture_output=True,
             check=False,
             env=command_env(),
             text=True,
+            timeout=effective_timeout,
         )
         if use_cache:
             cache_set(
                 cache_key, cache_value_from_completed_process(result), ttl_seconds
             )
         return result
+    except subprocess.TimeoutExpired as error:
+        return subprocess.CompletedProcess(
+            ["bash", "-lc", command_to_run],
+            124,
+            error.stdout or "",
+            error.stderr or f"Command timed out after {effective_timeout} seconds.",
+        )
     finally:
         setOverlay(False)
-
 
 def load_ui_cache() -> dict[str, dict[str, object]]:
     """Load the UI cache file and lazily prune expired entries."""
@@ -1721,21 +2093,19 @@ def command_cache_key(command: str) -> str:
 
 def build_hhs_envs_command(prefix_filter: str | None) -> str:
     """Build the Bash command used to run the __hhs_envs HomeSetup function."""
-    hhs_home = homesetup_home()
     filter_arg = f' "{prefix_filter}"' if prefix_filter else ""
     return (
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
         f"__hhs_envs{filter_arg}"
     )
 
 
 def build_hhs_sysinfo_command() -> str:
     """Build the Bash command used to run the __hhs_sysinfo HomeSetup function."""
-    hhs_home = homesetup_home()
     return (
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-sys-utils.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-sys-utils.bash"; '
         "__hhs_sysinfo"
     )
 
@@ -1772,41 +2142,39 @@ def run_open_working_directory() -> subprocess.CompletedProcess[str]:
 
 def build_hhs_tools_command() -> str:
     """Build the Bash command used to run the __hhs_tools HomeSetup function."""
-    hhs_home = homesetup_home()
     return (
-        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
-        f'export HHS_HOME="{hhs_home}"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'export HHS_HOME="${HHS_HOME}"; '
         'export HHS_MY_OS="$(uname -s)"; '
         "unset HHS_ACTIVE_DOTFILES; "
         "shopt -s expand_aliases; "
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_icons.bash"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_env.bash"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_aliases.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-toolcheck.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_icons.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_env.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_aliases.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-toolcheck.bash"; '
         "__hhs_tools"
     )
 
 
 def build_hhs_hspm_command(operation: str, tool_name: str) -> str:
     """Build the Bash command used to run an hspm tool operation."""
-    hhs_home = homesetup_home()
     safe_operation = (
         operation if operation in {"install", "uninstall", "reinstall"} else ""
     )
     safe_tool_name = shlex.quote(tool_name.strip())
     return (
-        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
-        f'export HHS_HOME="{hhs_home}"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'export HHS_HOME="${HHS_HOME}"; '
         'export HHS_MY_OS="$(uname -s)"; '
         'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
-        f'export PLUGINS_DIR="{hhs_home}/bin/apps/bash/hhs-app/plugins"; '
+        'export PLUGINS_DIR="${HHS_HOME}/bin/apps/bash/hhs-app/plugins"; '
         'export HHS_LOG_DIR="${HHS_LOG_DIR:-${HHS_DIR}/log}"; '
         'mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_colors.bash"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_env.bash"; '
-        f'source "{hhs_home}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_colors.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_env.bash"; '
+        'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"; '
         'function __hhs() { if [[ "$1" == "hspm" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
         f"__hhs hspm execute {safe_operation} {safe_tool_name}"
     )
@@ -1819,35 +2187,32 @@ def build_tool_tldr_command(tool_name: str) -> str:
 
 def build_hhs_history_command() -> str:
     """Build the Bash command used to run the __hhs_history HomeSetup function."""
-    hhs_home = homesetup_home()
     return (
-        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-shell-utils.bash"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-shell-utils.bash"; '
         "__hhs_history"
     )
 
 
 def build_hhs_history_dirs_command() -> str:
     """Build the Bash command used to run the __hhs_dirs HomeSetup function."""
-    hhs_home = homesetup_home()
     return (
-        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
+        'export HHS_DIR="${HHS_DIR}"; '
         'export HHS_DIRS_FILE="${HHS_DIRS_FILE:-${HHS_DIR}/.dirs}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-dirs.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-dirs.bash"; '
         "__hhs_dirs -l"
     )
 
 
 def build_hhs_history_stats_command(top_n: int = 10) -> str:
     """Build the Bash command used to run the __hhs_hist_stats HomeSetup function."""
-    hhs_home = homesetup_home()
     safe_top_n = max(1, min(int(top_n), 100))
     return (
-        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-shell-utils.bash"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-shell-utils.bash"; '
         f"__hhs_hist_stats {safe_top_n}"
     )
 
@@ -1863,9 +2228,9 @@ def build_hhs_disk_usage_command(directory: str, top_n: int = 10) -> str:
         else shlex.quote(expanded_directory)
     )
     return (
-        f'export HHS_HOME="{hhs_home}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-shell-utils.bash"; '
+        'export HHS_HOME="${HHS_HOME}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-shell-utils.bash"; '
         f"__hhs_du {directory_arg} {safe_top_n}"
     )
 
@@ -1891,40 +2256,37 @@ def build_process_monitor_command(metric: str, top_n: int = 10) -> str:
 
 def build_hhs_process_list_command(process_filter: str) -> str:
     """Build the Bash command used to list processes via HomeSetup."""
-    hhs_home = homesetup_home()
     safe_filter = process_filter.strip() or "."
     return (
-        f'export HHS_HOME="{hhs_home}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-sys-utils.bash"; '
+        'export HHS_HOME="${HHS_HOME}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-sys-utils.bash"; '
         f"__hhs_process_list {shlex.quote(safe_filter)}"
     )
 
 
 def build_hhs_process_kill_command(process_name: str) -> str:
     """Build the Bash command used to kill a process via HomeSetup."""
-    hhs_home = homesetup_home()
     return (
-        f'export HHS_HOME="{hhs_home}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-sys-utils.bash"; '
+        'export HHS_HOME="${HHS_HOME}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-sys-utils.bash"; '
         f"__hhs_process_kill -f {shlex.quote(process_name)}"
     )
 
 
 def build_hhs_logs_command(log_file: str, tail_lines: int = 200) -> str:
     """Build the Bash command used to run the __hhs logs command."""
-    hhs_home = homesetup_home()
     safe_log_file = Path(log_file).name
     safe_tail_lines = max(1, min(int(tail_lines), 5000))
     return (
-        f'export HHS_HOME="{hhs_home}"; '
-        f'export HHS_LOG_DIR="{hhs_log_dir()}"; '
+        'export HHS_HOME="${HHS_HOME}"; '
+        'export HHS_LOG_DIR="${HHS_LOG_DIR:-${HHS_DIR}/log}"; '
         'export HHS_LOG_FILE="${HHS_LOG_DIR}/hhs.log"; '
         'export APP_NAME="${APP_NAME:-hhs-ui}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-taylor.bash"; '
-        f'source "{hhs_home}/bin/apps/bash/hhs-app/functions/built-ins.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-taylor.bash"; '
+        'source "${HHS_HOME}/bin/apps/bash/hhs-app/functions/built-ins.bash"; '
         'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; return "${exit_code}"; }; '
         'function __hhs() { if [[ "$1" == "logs" ]]; then shift; logs "$@"; else return 127; fi; }; '
         f"__hhs logs -n {safe_tail_lines} {shlex.quote(safe_log_file)}"
@@ -1933,14 +2295,12 @@ def build_hhs_logs_command(log_file: str, tail_lines: int = 200) -> str:
 
 def build_hhs_ask_execute_command(arguments: list[str]) -> str:
     """Build the Bash command used to run the __hhs ask execute command."""
-    hhs_home = homesetup_home()
-    hhs_dir = os.environ.get("HHS_DIR", str(Path.home() / ".config/hhs"))
     safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
     return (
-        f'export HHS_HOME="{hhs_home}"; '
-        f'export HHS_DIR="{hhs_dir}"; '
-        f'export HHS_SETUP_FILE="${{HHS_SETUP_FILE:-{hhs_dir}/.homesetup.toml}}"; '
-        f'export HHS_LOG_DIR="${{HHS_LOG_DIR:-{hhs_log_dir()}}}"; '
+        'export HHS_HOME="${HHS_HOME}"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'export HHS_SETUP_FILE="${HHS_SETUP_FILE:-${HHS_DIR}/.homesetup.toml}"; '
+        'export HHS_LOG_DIR="${HHS_LOG_DIR:-${HHS_DIR}/log}"; '
         'export HHS_LOG_FILE="${HHS_LOG_FILE:-${HHS_LOG_DIR}/hhs-ui.log}"; '
         'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
         'export HHS_MY_OS="$(uname -s)"; '
@@ -1949,11 +2309,11 @@ def build_hhs_ask_execute_command(arguments: list[str]) -> str:
         "export HHS_OLLAMA_MD_VIEWER=cat; "
         'export APP_NAME="${APP_NAME:-hhs-ui}"; '
         "export IS_PIPED=0; "
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_colors.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-toml.bash"; '
-        f'source "{hhs_home}/bin/apps/bash/app-commons.bash"; '
-        f'source "{hhs_home}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_colors.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-toml.bash"; '
+        'source "${HHS_HOME}/bin/apps/bash/app-commons.bash"; '
+        'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"; '
         'function __hhs() { if [[ "$1" == "ask" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
         f"__hhs ask execute {safe_arguments}"
     )
@@ -1991,44 +2351,40 @@ def build_ollama_delete_model_command(model_name: str) -> str:
 
 def build_hhs_paths_command() -> str:
     """Build the Bash command used to run the __hhs_paths HomeSetup function."""
-    hhs_home = homesetup_home()
     return (
-        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-paths.bash"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-paths.bash"; '
         "__hhs_paths"
     )
 
 
 def build_hhs_dirs_command() -> str:
     """Build the Bash command used to run the __hhs_load_dir HomeSetup function."""
-    hhs_home = homesetup_home()
     return (
-        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-dirs.bash"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-dirs.bash"; '
         "__hhs_load_dir -l"
     )
 
 
 def build_hhs_commands_command() -> str:
     """Build the Bash command used to run the __hhs_command HomeSetup function."""
-    hhs_home = homesetup_home()
     return (
-        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-command.bash"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-command.bash"; '
         "__hhs_command -l"
     )
 
 
 def build_hhs_aliases_command() -> str:
     """Build the Bash command used to run the __hhs_aliases HomeSetup function."""
-    hhs_home = homesetup_home()
     return (
-        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/hhs-functions/bash/hhs-aliases.bash"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-aliases.bash"; '
         "__hhs_aliases -l"
     )
 
@@ -2037,15 +2393,14 @@ def build_hhs_services_command(
     operation: str = "status", service_name: str = ""
 ) -> str:
     """Build the Bash command used to run the __hhs_services HomeSetup function."""
-    hhs_home = homesetup_home()
     safe_operation = re.sub(r"[^A-Za-z_-]+", "", operation) or "status"
     safe_service_name = service_name.replace("\\", "\\\\").replace('"', '\\"')
     return (
-        f'export HHS_DIR="{hhs_home}"; '
-        f'export HHS_HOME="{hhs_home}"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'export HHS_HOME="${HHS_HOME}"; '
         'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
-        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
-        f'source "{hhs_home}/bin/apps/bash/hhs-app/plugins/services/services.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/services/services.bash"; '
         'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; return "${exit_code}"; }; '
         'function __hhs() { if [[ "$1" == "services" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
         f'__hhs services execute "{safe_operation}" "{safe_service_name}"'
@@ -3161,7 +3516,10 @@ def render_home_tool_action_dialog() -> None:
     def render_dialog() -> None:
         """Render the selected Home tool action result."""
         if output:
-            st.code(output, language="text")
+            render_terminal_output(
+                html.escape(output),
+                css_classes="hhs-home-tool-action-output",
+            )
         if st.button("Close", key="home_tool_action_close_button", width="stretch"):
             close_home_tool_action_dialog()
             st.rerun(scope="app")
@@ -4255,8 +4613,35 @@ def render_ai_view() -> None:
         render_ai_settings_panel()
 
 
+def selected_remote_host_requires_connection() -> bool:
+    """Return whether a remote host is selected without an active SSH connection."""
+    host = selected_ssh_host()
+    return not selected_host_is_local(host) and not selected_ssh_host_is_connected(host)
+
+
+def render_remote_connection_required_view() -> None:
+    """Render an empty main page that asks the user to connect the remote host."""
+    selected_host = selected_ssh_host()
+    host = html.escape(selected_host)
+    host_address = html.escape(ssh_config_hostname(selected_host))
+    st.markdown(
+        f"""
+        <section class="hhs-remote-connect-required">
+          <h1>Remote host: {host} -&gt; {host_address}</h1>
+          <hr />
+          <br />
+          <h2>Connect to the remote host to interact</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_main_view() -> None:
     """Render the active HomeSetup UI view."""
+    if selected_remote_host_requires_connection():
+        render_remote_connection_required_view()
+        return
     if st.session_state.get(DOCUMENT_VIEW_ACTIVE_KEY):
         render_document_view()
         return
@@ -4320,6 +4705,23 @@ def main() -> None:
     st.session_state.setdefault(DOCUMENT_VIEW_ACTIVE_KEY, False)
     st.session_state.setdefault(DOCUMENT_PREVIOUS_VIEW_KEY, "Home")
     st.session_state.setdefault(DOCUMENT_SELECTED_KEY, "README")
+    st.session_state.setdefault("ssh_host_selected", local_hostname())
+    st.session_state.setdefault("ssh_connect_pending", "")
+    st.session_state.setdefault("ssh_disconnect_pending", "")
+    st.session_state.setdefault("ssh_connection_status", "")
+    st.session_state.setdefault("ssh_connection_host", "")
+    st.session_state.setdefault("ssh_connection_error", "")
+    st.session_state.setdefault("ssh_connection_dialog_title", "")
+    cleanup_registered_ssh_connection_on_session_start()
+    if selected_host_is_local():
+        st.session_state["ssh_connection_status"] = ""
+        st.session_state["ssh_connection_host"] = ""
+        st.session_state["ssh_connection_error"] = ""
+        st.session_state["ssh_connect_pending"] = ""
+        st.session_state["ssh_disconnect_pending"] = ""
+    execute_pending_ssh_disconnection()
+    execute_pending_ssh_connection()
+    render_ssh_connection_dialog()
     st.session_state.setdefault("home_view", "System")
     if st.session_state["home_view"] not in HOME_VIEWS:
         st.session_state["home_view"] = "System"
