@@ -20,45 +20,6 @@ APP_FONT_FILE = (
 APP_AI_USER_AVATAR_FILE = APP_DIR / "assets/images/user.png"
 APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"
 APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"
-APP_THEME_OPTIONS_BY_THEME = {
-    "azurite": {
-        "theme.base": "dark",
-        "theme.primaryColor": "#2563eb",
-        "theme.backgroundColor": "#0f172a",
-        "theme.secondaryBackgroundColor": "#1e293b",
-        "theme.textColor": "#f8fafc",
-        "theme.linkColor": "#38bdf8",
-        "theme.borderColor": "#94a3b8",
-        "theme.dataframeBorderColor": "#94a3b8",
-        "theme.dataframeHeaderBackgroundColor": "#1e293b",
-        "theme.codeBackgroundColor": "#111827",
-    },
-    "dracula": {
-        "theme.base": "dark",
-        "theme.primaryColor": "#bd93f9",
-        "theme.backgroundColor": "#282a36",
-        "theme.secondaryBackgroundColor": "#44475a",
-        "theme.textColor": "#f8f8f2",
-        "theme.linkColor": "#8be9fd",
-        "theme.borderColor": "#6272a4",
-        "theme.dataframeBorderColor": "#6272a4",
-        "theme.dataframeHeaderBackgroundColor": "#44475a",
-        "theme.codeBackgroundColor": "#21222c",
-    },
-    "tokyo-night": {
-        "theme.base": "dark",
-        "theme.primaryColor": "#bb9af7",
-        "theme.backgroundColor": "#1a1b26",
-        "theme.secondaryBackgroundColor": "#24283b",
-        "theme.textColor": "#c0caf5",
-        "theme.linkColor": "#7dcfff",
-        "theme.borderColor": "#565f89",
-        "theme.dataframeBorderColor": "#565f89",
-        "theme.dataframeHeaderBackgroundColor": "#24283b",
-        "theme.codeBackgroundColor": "#16161e",
-    },
-}
-APP_THEME_OPTIONS = APP_THEME_OPTIONS_BY_THEME["dracula"]
 UI_STATE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-state"
 UI_CACHE_FILE = Path(os.environ.get("HHS_CACHE_DIR", APP_DIR)) / ".streamlit-ui-cache"
 UI_CACHE_REALTIME_TTL_SECONDS = 15

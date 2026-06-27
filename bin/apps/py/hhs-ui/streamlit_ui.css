@@ -55,6 +55,21 @@ textarea,
   height: 100% !important;
 }
 
+[data-testid="stMarkdownContainer"] table th {
+  color: var(--hhs-markdown-table-header);
+}
+
+[data-testid="stMarkdownContainer"] table td {
+  color: var(--hhs-markdown-table-value);
+}
+
+[data-testid="stMarkdownContainer"] li code,
+[data-testid="stMarkdownContainer"] p code {
+  color: var(--hhs-theme-text-color-accent);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
 .hhs-sidebar-clock {
   font-size: 0.85rem;
   font-weight: 650;
@@ -62,6 +77,19 @@ textarea,
   position: fixed;
   top: 20px;
   z-index: 1000000;
+}
+
+.hhs-sidebar-title {
+  color: var(--hhs-theme-text-color);
+  font-size: 0.85rem;
+  font-weight: 650;
+  line-height: 1.35;
+  left: 20px;
+  position: fixed;
+  top: 58px;
+  z-index: 1000000;
+  border-bottom: 2px solid var(--hhs-theme-text-color);
+  padding-bottom: 0.6rem;
 }
 
 .st-key-active_view [role="radiogroup"] {

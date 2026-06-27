@@ -69,26 +69,72 @@ def validated_theme_name(
     return selected_theme if selected_theme in options else ""
 
 
-def theme_config_options(theme_name: object) -> dict[str, str]:
-    """Return Streamlit native theme options for a selectable UI theme."""
-    selected_theme = validated_theme_name(theme_name)
-    if selected_theme in APP_THEME_OPTIONS_BY_THEME:
-        return APP_THEME_OPTIONS_BY_THEME[selected_theme]
-    return APP_THEME_OPTIONS
-
-
-def load_app_theme_css() -> str:
-    """Load the selected HomeSetup Streamlit UI theme stylesheet."""
+def theme_css_file(theme_name: object) -> Path:
+    """Return the stylesheet path for a selectable UI theme."""
     theme_options = available_theme_options()
-    selected_theme = validated_theme_name(
-        st.session_state.get(THEME_SELECTED_KEY, ""), theme_options
-    )
+    selected_theme = validated_theme_name(theme_name, theme_options)
     if not selected_theme:
         selected_theme = default_theme_name(theme_options)
     theme_file = APP_THEME_CSS_FILE.with_name(f"{selected_theme}.css")
     if not theme_file.is_file():
-        theme_file = APP_THEME_CSS_FILE
-    return theme_file.read_text(encoding="utf-8")
+        return APP_THEME_CSS_FILE
+    return theme_file
+
+
+def css_custom_properties(css_source: str) -> dict[str, str]:
+    """Return CSS custom property values from a stylesheet source string."""
+    properties: dict[str, str] = {}
+    for property_name, property_value in re.findall(
+        r"--([A-Za-z0-9_-]+)\s*:\s*([^;]+);", css_source
+    ):
+        properties[property_name] = property_value.strip()
+    return properties
+
+
+def css_theme_bool(value: str) -> bool | str:
+    """Return a boolean value for CSS boolean tokens or the original string."""
+    normalized_value = value.strip().lower()
+    if normalized_value == "true":
+        return True
+    if normalized_value == "false":
+        return False
+    return value
+
+
+def theme_config_options(theme_name: object) -> dict[str, object]:
+    """Return Streamlit native theme options parsed from a selectable CSS theme."""
+    theme_properties = css_custom_properties(
+        theme_css_file(theme_name).read_text(encoding="utf-8")
+    )
+    option_tokens = {
+        "theme.base": "hhs-theme-base",
+        "theme.primaryColor": "hhs-theme-primary-color",
+        "theme.backgroundColor": "hhs-theme-background-color",
+        "theme.secondaryBackgroundColor": "hhs-theme-secondary-background-color",
+        "theme.textColor": "hhs-theme-text-color",
+        "theme.linkColor": "hhs-theme-link-color",
+        "theme.borderColor": "hhs-theme-border-color",
+        "theme.dataframeBorderColor": "hhs-theme-dataframe-border-color",
+        "theme.dataframeHeaderBackgroundColor": (
+            "hhs-theme-dataframe-header-background-color"
+        ),
+        "theme.codeBackgroundColor": "hhs-theme-code-background-color",
+        "theme.baseRadius": "hhs-theme-base-radius",
+        "theme.buttonRadius": "hhs-theme-button-radius",
+        "theme.showWidgetBorder": "hhs-theme-show-widget-border",
+        "theme.showSidebarBorder": "hhs-theme-show-sidebar-border",
+    }
+    return {
+        option_name: css_theme_bool(theme_properties[token_name])
+        for option_name, token_name in option_tokens.items()
+        if token_name in theme_properties
+    }
+
+
+def load_app_theme_css() -> str:
+    """Load the selected HomeSetup Streamlit UI theme stylesheet."""
+    selected_theme = st.session_state.get(THEME_SELECTED_KEY, "")
+    return theme_css_file(selected_theme).read_text(encoding="utf-8")
 
 
 def persist_theme_selection(theme_name: str) -> None:
@@ -161,7 +207,14 @@ def configure_app_font_theme(theme_name: object = "") -> None:
 def render_styles() -> None:
     """Render app-level Streamlit styles."""
     st.markdown(
-        f"<style>{load_app_font_face_css()}{APP_CSS}{load_app_css()}{load_app_theme_css()}</style>",
+        (
+            "<style>"
+            f"{load_app_font_face_css()}"
+            f"{APP_CSS}"
+            f"{load_app_css()}"
+            f"{load_app_theme_css()}"
+            "</style>"
+        ),
         unsafe_allow_html=True,
     )
 
@@ -364,7 +417,10 @@ def render_sidebar() -> None:
     previous_theme = st.session_state.get("theme_last_seen", selected_theme)
     with st.sidebar:
         render_sidebar_clock()
-        st.caption(f"HomeSetup - UI v{VERSION}")
+        st.markdown(
+            f'<div class="hhs-sidebar-title">HomeSetup - UI v{html.escape(VERSION)}</div>',
+            unsafe_allow_html=True,
+        )
         st.write("")
         st.markdown("**Theme**")
         selected_theme = st.selectbox(

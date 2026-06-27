@@ -94,19 +94,49 @@ setup() {
   run grep -q 'APP_FONT_FAMILY = "Droid Sans Mono for Powerline Nerd Font Complete"' "${constants_file}"
   assert_success
 
-  run grep -q 'APP_THEME_OPTIONS_BY_THEME = {' "${constants_file}"
-  assert_success
-
-  run grep -q '"theme.base": "dark"' "${constants_file}"
-  assert_success
-
-  run grep -q '"theme.backgroundColor": "#282a36"' "${constants_file}"
-  assert_success
-
   run grep -q -- '--hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-background: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-theme-background-color: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  assert_success
+
+  run grep -q -- '--hhs-background: var(--hhs-theme-background-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  assert_success
+
+  run grep -q 'def css_custom_properties' "${ui_file}"
+  assert_success
+
+  run grep -q 'def theme_config_options' "${ui_file}"
+  assert_success
+
+  run grep -q 'class="hhs-sidebar-title"' "${ui_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-theme-text-color)' "${css_file}"
+  assert_success
+
+  run grep -q 'position: fixed' "${css_file}"
+  assert_success
+
+  run grep -q 'top: 58px' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-primary-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  assert_success
+
+  run grep -q -- '--hhs-markdown-table-value: var(--hhs-theme-primary-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  assert_success
+
+  run grep -q -- '--hhs-theme-text-color-accent: var(--hhs-success)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  assert_success
+
+  run grep -q 'color: var(--hhs-markdown-table-header)' "${css_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-markdown-table-value)' "${css_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-theme-text-color-accent)' "${css_file}"
   assert_success
 
   run python3 - <<'PY'
@@ -175,8 +205,39 @@ with tempfile.TemporaryDirectory() as tmpdir:
     tmp_path = Path(tmpdir)
     themes_dir = tmp_path / "themes"
     themes_dir.mkdir()
-    (themes_dir / "dracula.css").write_text("dracula-css", encoding="utf-8")
-    (themes_dir / "tokyo-night.css").write_text("tokyo-night-css", encoding="utf-8")
+    (themes_dir / "dracula.css").write_text("""
+:root {
+  --hhs-theme-base: dark;
+  --hhs-theme-background-color: #282a36;
+  --hhs-theme-primary-color: #bd93f9;
+  --hhs-theme-text-color: #f8f8f2;
+  --hhs-theme-code-background-color: #21222c;
+  --hhs-theme-show-widget-border: true;
+}
+dracula-css
+""", encoding="utf-8")
+    (themes_dir / "homesetup.css").write_text("""
+:root {
+  --hhs-theme-base: dark;
+  --hhs-theme-background-color: #07111f;
+  --hhs-theme-primary-color: #3b82f6;
+  --hhs-theme-text-color: #dbeafe;
+  --hhs-theme-code-background-color: #0b1628;
+  --hhs-theme-show-widget-border: true;
+}
+homesetup-css
+""", encoding="utf-8")
+    (themes_dir / "tokyo-night.css").write_text("""
+:root {
+  --hhs-theme-base: dark;
+  --hhs-theme-background-color: #1a1b26;
+  --hhs-theme-primary-color: #bb9af7;
+  --hhs-theme-text-color: #c0caf5;
+  --hhs-theme-code-background-color: #16161e;
+  --hhs-theme-show-widget-border: true;
+}
+tokyo-night-css
+""", encoding="utf-8")
     ui.APP_THEME_CSS_FILE = themes_dir / "dracula.css"
     ui.UI_STATE_FILE = tmp_path / "hhs-dir" / ".streamlit-ui-state"
 
@@ -191,11 +252,21 @@ with tempfile.TemporaryDirectory() as tmpdir:
     streamlit.session_state.clear()
     ui.restore_ui_state()
     assert streamlit.session_state["theme_selected"] == "tokyo-night"
-    assert ui.load_app_theme_css() == "tokyo-night-css"
+    assert "tokyo-night-css" in ui.load_app_theme_css()
 
     config_options.clear()
     ui.configure_app_font_theme(ui.persisted_theme_name())
     assert config_options["theme.backgroundColor"] == "#1a1b26"
+    assert config_options["theme.showWidgetBorder"] is True
+
+    theme_options = ui.theme_config_options("tokyo-night")
+    assert theme_options["theme.backgroundColor"] == "#1a1b26"
+    assert theme_options["theme.primaryColor"] == "#bb9af7"
+    assert theme_options["theme.textColor"] == "#c0caf5"
+
+    homesetup_options = ui.theme_config_options("homesetup")
+    assert homesetup_options["theme.backgroundColor"] == "#07111f"
+    assert homesetup_options["theme.codeBackgroundColor"] == "#0b1628"
 
     app_state_file = tmp_path / ".streamlit-ui-state"
     app_state_file.write_text('{"theme_selected": "dracula"}', encoding="utf-8")
