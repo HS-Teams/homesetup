@@ -502,7 +502,7 @@ def setOverlay(
         save_ui_state()
         placeholder = st.empty()
         st.session_state[placeholder_key] = placeholder
-        with placeholder:
+        with placeholder.container():
             render_preloader(message, transient=transient)
         time.sleep(0.1)
         return

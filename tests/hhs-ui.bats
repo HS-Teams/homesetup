@@ -273,6 +273,9 @@ PY
   run grep -q 'setOverlay(True, loader_message, close_dialogs=close_dialogs)' "${ui_file}"
   assert_success
 
+  run grep -q 'with placeholder.container()' "${ui_file}"
+  assert_success
+
   run grep -q 'time.sleep(0.1)' "${ui_file}"
   assert_success
 
