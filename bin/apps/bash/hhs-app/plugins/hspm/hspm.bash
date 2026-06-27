@@ -20,14 +20,14 @@ VERSION=1.0.0
 # Namespace cleanup
 UNSETS=(
   help version cleanup execute cleanup_recipes
-  uninstall_recipe list_recipes install_recipe
+  uninstall_recipe reinstall_recipe list_recipes install_recipe
   add_breadcrumb del_breadcrumb recover_packages
   _install_ _uninstall_ _depends_ _which_
 )
 
 # Usage message
 read -r -d '' USAGE <<EOF
-usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|list|recover} [options]
+usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|reinstall|list|recover} [options]
 
  _   _ ____  ____  __  __
 | | | / ___||  _ \|  \/  |
@@ -48,6 +48,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|list|recover} [options]
       list                         : List all available OS-based installation recipes.
       install <package...>         : Install packages using matching recipes.
       uninstall <package...>       : Uninstall packages using matching recipes.
+      reinstall <package...>       : Uninstall and install packages using matching recipes.
       recover                      : Recover packages previously installed by hspm.
 
     examples:
@@ -152,6 +153,15 @@ function execute() {
       for next_recipe in "${@}"; do
         echo ''
         uninstall_recipe "${next_recipe}"
+      done
+      echo ''
+      ;;
+    # Reinstall the app
+    reinstall)
+      [[ "${#}" -le 0 ]] && usage 1
+      for next_recipe in "${@}"; do
+        echo ''
+        reinstall_recipe "${next_recipe}"
       done
       echo ''
       ;;
@@ -285,6 +295,16 @@ function uninstall_recipe() {
   else
     __hhs_errcho "${PLUGIN_NAME}" "Failed to uninstall \"${package}\" ! Please type __hhs logs hspm to find out details\n"
   fi
+}
+
+# purpose: Reinstall the specified app using the uninstallation and installation recipes
+function reinstall_recipe() {
+
+  local package
+
+  package="${1}"
+  uninstall_recipe "${package}"
+  install_recipe "${package}"
 }
 
 # @purpose: Install or list all packages previously installed by hspm.

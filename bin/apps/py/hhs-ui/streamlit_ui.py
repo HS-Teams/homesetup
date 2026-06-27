@@ -552,6 +552,7 @@ def close_all_dialogs() -> None:
     st.session_state["ai_clear_chat_pending"] = False
     st.session_state["ai_model_select_pending"] = None
     st.session_state["ai_model_delete_pending"] = None
+    st.session_state["home_tool_action_execute_pending"] = None
 
 
 def setOverlay(
@@ -877,10 +878,50 @@ def styled_tool_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
     return styler
 
 
+def home_tool_status_text(row: dict[str, str]) -> str:
+    """Return a normalized Home tool status for action button decisions."""
+    return str(row.get("Status", "")).lower()
+
+
+def home_tool_is_installed(row: dict[str, str]) -> bool:
+    """Return whether a Home tool row is currently installed."""
+    status = home_tool_status_text(row)
+    return "installed" in status and "not installed" not in status
+
+
+def home_tool_is_not_found(row: dict[str, str]) -> bool:
+    """Return whether a Home tool row is currently missing."""
+    status = home_tool_status_text(row)
+    return "not found" in status or "not installed" in status
+
+
+def render_selected_item(label: str, value: str) -> None:
+    """Render a selected item label/value pair using theme-controlled styles."""
+    st.markdown(
+        (
+            '<div class="hhs-selected-item">'
+            f'<span class="hhs-selected-item-label">{html.escape(label)}</span>'
+            " "
+            f'<span class="hhs-selected-item-value">{html.escape(value)}</span>'
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_selected_item_text(text: str) -> None:
+    """Render selected item text split on the first label/value separator."""
+    label, separator, value = text.partition(":")
+    if not separator:
+        render_selected_item(text, "")
+        return
+    render_selected_item(f"{label}:", value.strip())
+
+
 def renderTable(
     rows: list[dict[str, str]],
     key: str | None,
-    empty_hint: str = "",
+    empty_hint: str = "Select a row to interact",
     action_hint: str = "",
     headers: list[str] | None = None,
     checkbox: bool = True,
@@ -936,7 +977,7 @@ def renderTable(
         if selected_label_html:
             st.markdown(label, unsafe_allow_html=True)
         else:
-            st.caption(label)
+            render_selected_item_text(label)
 
     visible_actions = [
         action
@@ -1032,6 +1073,10 @@ def table_action_args(
 
 def render_home_tools_panel() -> None:
     """Render HomeSetup development tool checks on the Home view."""
+    execute_pending_home_tool_action()
+    render_home_tool_action_dialog()
+    render_home_tool_tldr_dialog()
+
     result = run_hhs_tools()
     if result.returncode != 0:
         st.error(result.stderr or result.stdout or "Unable to load tool checks.")
@@ -1045,7 +1090,7 @@ def render_home_tools_panel() -> None:
     )
     with filter_col:
         tools_filter = st.radio(
-            "Tools filter",
+            "Filters",
             LIST_FILTERS,
             horizontal=True,
             index=0,
@@ -1056,7 +1101,7 @@ def render_home_tools_panel() -> None:
     if tools_filter == "Other":
         with other_filter_col:
             other_filter = st.text_input(
-                "Tools filter text",
+                "Filters",
                 key="home_tools_other_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -1068,12 +1113,41 @@ def render_home_tools_panel() -> None:
         return
     renderTable(
         filtered_rows,
-        key="home_tools_table",
+        key=home_tools_table_key(),
         checkbox=True,
         selected_label=lambda row, _index: f"Selected: {row.get('Tool', '')}",
         table_data=styled_tool_rows(filtered_rows),
         height=ENV_TABLE_HEIGHT,
         width=ENV_TABLE_WIDTH,
+        action_buttons=[
+            {
+                "label": "Install",
+                "key_prefix": "home_tool_install_button",
+                "on_click": apply_selected_tool_action,
+                "disabled": lambda row, _index: home_tool_is_installed(row),
+                "args": lambda row, _index: ("install", row.get("Tool", "")),
+            },
+            {
+                "label": "Uninstall",
+                "key_prefix": "home_tool_uninstall_button",
+                "on_click": apply_selected_tool_action,
+                "disabled": lambda row, _index: home_tool_is_not_found(row),
+                "args": lambda row, _index: ("uninstall", row.get("Tool", "")),
+            },
+            {
+                "label": "Reinstall",
+                "key_prefix": "home_tool_reinstall_button",
+                "on_click": apply_selected_tool_action,
+                "disabled": lambda row, _index: home_tool_is_not_found(row),
+                "args": lambda row, _index: ("reinstall", row.get("Tool", "")),
+            },
+            {
+                "label": "TLDR",
+                "key_prefix": "home_tool_tldr_button",
+                "on_click": apply_selected_tool_tldr,
+                "args": lambda row, _index: (row.get("Tool", ""),),
+            },
+        ],
     )
 
 
@@ -1714,6 +1788,35 @@ def build_hhs_tools_command() -> str:
     )
 
 
+def build_hhs_hspm_command(operation: str, tool_name: str) -> str:
+    """Build the Bash command used to run an hspm tool operation."""
+    hhs_home = homesetup_home()
+    safe_operation = (
+        operation if operation in {"install", "uninstall", "reinstall"} else ""
+    )
+    safe_tool_name = shlex.quote(tool_name.strip())
+    return (
+        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
+        f'export HHS_HOME="{hhs_home}"; '
+        'export HHS_MY_OS="$(uname -s)"; '
+        'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
+        f'export PLUGINS_DIR="{hhs_home}/bin/apps/bash/hhs-app/plugins"; '
+        'export HHS_LOG_DIR="${HHS_LOG_DIR:-${HHS_DIR}/log}"; '
+        'mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"; '
+        f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
+        f'source "{hhs_home}/dotfiles/bash/bash_colors.bash"; '
+        f'source "{hhs_home}/dotfiles/bash/bash_env.bash"; '
+        f'source "{hhs_home}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"; '
+        'function __hhs() { if [[ "$1" == "hspm" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
+        f"__hhs hspm execute {safe_operation} {safe_tool_name}"
+    )
+
+
+def build_tool_tldr_command(tool_name: str) -> str:
+    """Build the Bash command used to read TLDR help for a tool."""
+    return f"tldr {shlex.quote(tool_name.strip())}"
+
+
 def build_hhs_history_command() -> str:
     """Build the Bash command used to run the __hhs_history HomeSetup function."""
     hhs_home = homesetup_home()
@@ -1972,6 +2075,26 @@ def run_hhs_tools() -> subprocess.CompletedProcess[str]:
         build_hhs_tools_command(),
         "Loading tool checks...",
         ttl_seconds=UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+    )
+
+
+def run_hhs_tool_action(
+    operation: str, tool_name: str
+) -> subprocess.CompletedProcess[str]:
+    """Run an hspm install or uninstall action for a Home tool."""
+    return run_bash_command(
+        build_hhs_hspm_command(operation, tool_name),
+        f"Running hspm {operation} for {tool_name}...",
+        use_cache=False,
+    )
+
+
+def run_tool_tldr(tool_name: str) -> subprocess.CompletedProcess[str]:
+    """Run tldr for the selected Home tool."""
+    return run_bash_command(
+        build_tool_tldr_command(tool_name),
+        f"Loading TLDR for {tool_name}...",
+        use_cache=False,
     )
 
 
@@ -2588,6 +2711,23 @@ def reset_ai_model_table_selection() -> None:
     st.session_state[AI_MODEL_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
 
 
+def home_tools_table_key() -> str:
+    """Return the Home Tools dataframe key for the current selection generation."""
+    reset_counter = st.session_state.setdefault("home_tools_table_reset_counter", 0)
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+        st.session_state["home_tools_table_reset_counter"] = reset_counter
+    return f"home_tools_table_{reset_counter}"
+
+
+def reset_home_tools_table_selection() -> None:
+    """Reset the Home Tools dataframe selection for the next rerun."""
+    reset_counter = st.session_state.setdefault("home_tools_table_reset_counter", 0)
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state["home_tools_table_reset_counter"] = reset_counter + 1
+
+
 def env_table_key() -> str:
     """Return the Streamlit dataframe key for the current selection generation."""
     reset_counter = st.session_state.setdefault(ENV_TABLE_RESET_COUNTER_KEY, 0)
@@ -2823,7 +2963,6 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
     _, selected_row = renderTable(
         rows,
         key=env_table_key(),
-        empty_hint="Select an environment row to edit its value.",
         height=ENV_TABLE_HEIGHT,
         width=ENV_TABLE_WIDTH,
     )
@@ -2832,7 +2971,7 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
 
     editor_key = env_value_editor_key(selected_row["Name"])
     st.session_state.setdefault(editor_key, selected_row["Value"])
-    st.caption(f"Selected: {selected_row['Name']}")
+    render_selected_item("Selected:", selected_row["Name"])
     st.text_area(
         "Selected value",
         height=ENV_VALUE_EDITOR_HEIGHT,
@@ -2851,7 +2990,6 @@ def render_path_rows(rows: list[dict[str, str]]) -> None:
     selected_index, selected_row = renderTable(
         rows,
         key=path_table_key(),
-        empty_hint="Select a PATH row to edit its value.",
         height=PATH_TABLE_HEIGHT,
         width=PATH_TABLE_WIDTH,
     )
@@ -2860,7 +2998,7 @@ def render_path_rows(rows: list[dict[str, str]]) -> None:
 
     editor_key = path_value_editor_key(selected_index)
     st.session_state.setdefault(editor_key, selected_row["Value"])
-    st.caption(f"Selected: {selected_row['Name']}")
+    render_selected_item("Selected:", selected_row["Name"])
     st.text_area(
         "Selected PATH value",
         height=PATH_VALUE_EDITOR_HEIGHT,
@@ -2877,8 +3015,8 @@ def render_read_only_rows(
     rows: list[dict[str, str]],
     table_key: str,
     value_key_prefix: str,
-    empty_caption: str,
     selected_label: str,
+    empty_caption: str = "Select a row to interact",
 ) -> None:
     """Render selectable read-only configuration rows."""
     selected_index, selected_row = renderTable(
@@ -2898,7 +3036,7 @@ def render_read_only_rows(
         or selected_row.get("Index")
         or selected_row.get("Value", "")
     )
-    st.caption(f"Selected: {selected_name}")
+    render_selected_item("Selected:", selected_name)
     st.text_area(
         selected_label,
         disabled=True,
@@ -2965,6 +3103,110 @@ def reset_service_table_selection() -> None:
     st.session_state[SERVICE_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
 
 
+def apply_selected_tool_action(operation: str, tool_name: str) -> None:
+    """Schedule the selected Home tool install/uninstall action."""
+    st.session_state["home_tool_action_execute_pending"] = {
+        "operation": operation,
+        "tool_name": tool_name,
+    }
+    reset_home_tools_table_selection()
+
+
+def execute_pending_home_tool_action() -> None:
+    """Run a pending Home tool action from the normal render flow."""
+    pending = st.session_state.pop("home_tool_action_execute_pending", None) or {}
+    operation = str(pending.get("operation", "")).strip()
+    tool_name = str(pending.get("tool_name", "")).strip()
+    if not operation or not tool_name:
+        return
+
+    result = run_hhs_tool_action(operation, tool_name)
+    cache_clear()
+    st.session_state["home_tool_action_operation"] = operation
+    st.session_state["home_tool_action_name"] = tool_name
+    st.session_state["home_tool_action_message"] = result.stdout or result.stderr or ""
+    st.session_state["home_tool_action_succeeded"] = result.returncode == 0
+
+
+def home_tool_action_noun(operation: str) -> str:
+    """Return the display noun for a Home tool action operation."""
+    return {
+        "install": "Installation",
+        "uninstall": "Uninstallation",
+        "reinstall": "Reinstallation",
+    }.get(operation, "Operation")
+
+
+def close_home_tool_action_dialog() -> None:
+    """Close the selected Home tool action result dialog."""
+    st.session_state.pop("home_tool_action_operation", None)
+    st.session_state.pop("home_tool_action_name", None)
+    st.session_state.pop("home_tool_action_message", None)
+    st.session_state.pop("home_tool_action_succeeded", None)
+
+
+def render_home_tool_action_dialog() -> None:
+    """Render the selected Home tool action result dialog when requested."""
+    tool_name = str(st.session_state.get("home_tool_action_name", "")).strip()
+    if not tool_name:
+        return
+
+    operation = str(st.session_state.get("home_tool_action_operation", "")).strip()
+    output = strip_ansi(str(st.session_state.get("home_tool_action_message", ""))).strip()
+    succeeded = bool(st.session_state.get("home_tool_action_succeeded", False))
+    status = "succeeded" if succeeded else "failed"
+    title = f"{home_tool_action_noun(operation)} of {tool_name} {status}"
+
+    @st.dialog(title)
+    def render_dialog() -> None:
+        """Render the selected Home tool action result."""
+        if output:
+            st.code(output, language="text")
+        if st.button("Close", key="home_tool_action_close_button", width="stretch"):
+            close_home_tool_action_dialog()
+            st.rerun(scope="app")
+
+    render_dialog()
+
+
+def apply_selected_tool_tldr(tool_name: str) -> None:
+    """Load TLDR output for the selected Home tool and open its dialog."""
+    result = run_tool_tldr(tool_name)
+    st.session_state["home_tool_tldr_name"] = tool_name
+    st.session_state["home_tool_tldr_output"] = result.stdout or result.stderr or ""
+    st.session_state["home_tool_tldr_succeeded"] = result.returncode == 0
+
+
+def close_home_tool_tldr_dialog() -> None:
+    """Close the selected Home tool TLDR dialog."""
+    st.session_state.pop("home_tool_tldr_name", None)
+    st.session_state.pop("home_tool_tldr_output", None)
+    st.session_state.pop("home_tool_tldr_succeeded", None)
+
+
+def render_home_tool_tldr_dialog() -> None:
+    """Render the selected Home tool TLDR output dialog when requested."""
+    tool_name = str(st.session_state.get("home_tool_tldr_name", "")).strip()
+    if not tool_name:
+        return
+
+    output = strip_ansi(str(st.session_state.get("home_tool_tldr_output", ""))).strip()
+    succeeded = bool(st.session_state.get("home_tool_tldr_succeeded", False))
+
+    @st.dialog(f"TLDR: {tool_name}")
+    def render_dialog() -> None:
+        """Render the selected Home tool TLDR result."""
+        if succeeded:
+            st.code(output or "No TLDR output found.", language="text")
+        else:
+            st.error(output or f"Unable to load TLDR for {tool_name}.")
+        if st.button("Close", key="home_tool_tldr_close_button", width="stretch"):
+            close_home_tool_tldr_dialog()
+            st.rerun(scope="app")
+
+    render_dialog()
+
+
 def apply_selected_service_action(operation: str, service_name: str) -> None:
     """Run a service action and reset the service selection."""
     result = run_hhs_service_action(operation, service_name)
@@ -3008,7 +3250,6 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
     _, selected_row = renderTable(
         rows,
         key=service_table_key(),
-        empty_hint="Select a SERVICE row start/stop/restart.",
         action_hint="",
         table_data=styled_service_rows(rows),
         height=ENV_TABLE_HEIGHT,
@@ -3049,7 +3290,7 @@ def render_envs_table() -> None:
     )
     with filter_col:
         env_filter = st.radio(
-            "Environment filter",
+            "Filters",
             ENV_FILTERS,
             horizontal=True,
             index=1,
@@ -3060,7 +3301,7 @@ def render_envs_table() -> None:
     if env_filter == "Other":
         with other_filter_col:
             other_filter = st.text_input(
-                "Filter text",
+                "Filters",
                 key="env_other_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -3080,7 +3321,7 @@ def render_paths_table() -> None:
     )
     with filter_col:
         path_filter = st.radio(
-            "PATH filter",
+            "Filters",
             PATH_FILTERS,
             horizontal=True,
             index=0,
@@ -3091,7 +3332,7 @@ def render_paths_table() -> None:
     if path_filter == "Other":
         with other_filter_col:
             other_filter = st.text_input(
-                "PATH filter text",
+                "Filters",
                 key="path_other_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -3113,7 +3354,7 @@ def render_dirs_table() -> None:
     )
     with filter_col:
         dirs_filter = st.radio(
-            "DIR filter",
+            "Filters",
             LIST_FILTERS,
             horizontal=True,
             index=0,
@@ -3124,7 +3365,7 @@ def render_dirs_table() -> None:
     if dirs_filter == "Other":
         with other_filter_col:
             other_filter = st.text_input(
-                "DIR filter text",
+                "Filters",
                 key="dirs_other_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -3138,7 +3379,6 @@ def render_dirs_table() -> None:
         filter_rows_by_text(parse_hhs_dirs(result.stdout), dirs_filter, other_filter),
         dir_table_key(),
         DIR_VALUE_EDITOR_KEY_PREFIX,
-        "Select a DIR row to inspect its value.",
         "Selected DIR value",
     )
 
@@ -3150,7 +3390,7 @@ def render_cmds_table() -> None:
     )
     with filter_col:
         cmds_filter = st.radio(
-            "COMMAND filter",
+            "Filters",
             LIST_FILTERS,
             horizontal=True,
             index=0,
@@ -3161,7 +3401,7 @@ def render_cmds_table() -> None:
     if cmds_filter == "Other":
         with other_filter_col:
             other_filter = st.text_input(
-                "COMMAND filter text",
+                "Filters",
                 key="cmds_other_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -3177,7 +3417,6 @@ def render_cmds_table() -> None:
         ),
         cmd_table_key(),
         CMD_VALUE_EDITOR_KEY_PREFIX,
-        "Select a COMMAND row to inspect its value.",
         "Selected COMMAND value",
     )
 
@@ -3189,7 +3428,7 @@ def render_aliases_table() -> None:
     )
     with filter_col:
         alias_filter = st.radio(
-            "ALIAS filter",
+            "Filters",
             LIST_FILTERS,
             horizontal=True,
             index=0,
@@ -3200,7 +3439,7 @@ def render_aliases_table() -> None:
     if alias_filter == "Other":
         with other_filter_col:
             other_filter = st.text_input(
-                "ALIAS filter text",
+                "Filters",
                 key="alias_other_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -3216,7 +3455,6 @@ def render_aliases_table() -> None:
         ),
         alias_table_key(),
         ALIAS_VALUE_EDITOR_KEY_PREFIX,
-        "Select an ALIAS row to inspect its value.",
         "Selected ALIAS value",
     )
 
@@ -3228,7 +3466,7 @@ def render_services_table() -> None:
     )
     with filter_col:
         service_filter = st.radio(
-            "SERVICE filter",
+            "Filters",
             SERVICE_FILTERS,
             horizontal=True,
             index=0,
@@ -3239,7 +3477,7 @@ def render_services_table() -> None:
     if service_filter == "Other":
         with other_filter_col:
             other_filter = st.text_input(
-                "SERVICE filter text",
+                "Filters",
                 key="service_other_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -3263,7 +3501,7 @@ def render_history_commands_table() -> None:
     )
     with filter_col:
         history_commands_filter = st.radio(
-            "COMMANDS filter",
+            "Filters",
             HISTORY_FILTERS,
             horizontal=True,
             index=0,
@@ -3274,7 +3512,7 @@ def render_history_commands_table() -> None:
     if history_commands_filter == "Others":
         with other_filter_col:
             other_filter = st.text_input(
-                "COMMANDS filter text",
+                "Filters",
                 key="history_commands_other_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -3290,7 +3528,6 @@ def render_history_commands_table() -> None:
         ),
         history_command_table_key(),
         HISTORY_COMMAND_VALUE_EDITOR_KEY_PREFIX,
-        "Select a COMMANDS row to inspect its value.",
         "Selected COMMANDS value",
     )
 
@@ -3302,7 +3539,7 @@ def render_history_directories_table() -> None:
     )
     with filter_col:
         history_directories_filter = st.radio(
-            "DIRECTORIES filter",
+            "Filters",
             HISTORY_FILTERS,
             horizontal=True,
             index=0,
@@ -3313,7 +3550,7 @@ def render_history_directories_table() -> None:
     if history_directories_filter == "Others":
         with other_filter_col:
             other_filter = st.text_input(
-                "DIRECTORIES filter text",
+                "Filters",
                 key="history_directories_other_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -3331,7 +3568,6 @@ def render_history_directories_table() -> None:
         ),
         history_directory_table_key(),
         HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX,
-        "Select a DIRECTORIES row to inspect its value.",
         "Selected DIRECTORIES value",
     )
 
@@ -3535,11 +3771,11 @@ def render_monitor_processes_panel() -> None:
     label_col, input_col = st.columns([0.55, 3.45], vertical_alignment="center")
     with label_col:
         st.markdown(
-            '<span class="hhs-inline-form-label">Filter</span>', unsafe_allow_html=True
+            '<span class="hhs-inline-form-label">Filters</span>', unsafe_allow_html=True
         )
     with input_col:
         process_filter = st.text_input(
-            "Filter",
+            "Filters",
             key="monitor_process_filter",
             label_visibility="collapsed",
             on_change=save_ui_state,
@@ -3559,7 +3795,6 @@ def render_monitor_processes_panel() -> None:
     _, selected_row = renderTable(
         rows,
         key=PROCESS_TABLE_KEY,
-        empty_hint="Select a process row to kill the process.",
         height=ENV_TABLE_HEIGHT,
         width=ENV_TABLE_WIDTH,
         selected_label=lambda row, _index: f"Selected: {row['Command']}",
@@ -3941,7 +4176,6 @@ def render_ai_settings_panel() -> None:
     selected_index, selected_row = renderTable(
         rows,
         key=ai_model_table_key(),
-        empty_hint="Select a model row to select the active model.",
         use_container_width=True,
         row_style=style_ai_model_row,
         selected_label=lambda row, _index: (
@@ -4093,6 +4327,8 @@ def main() -> None:
     if st.session_state["home_tools_filter"] not in LIST_FILTERS:
         st.session_state["home_tools_filter"] = "All"
     st.session_state.setdefault("home_tools_other_filter", "")
+    st.session_state.setdefault("home_tools_table_reset_counter", 0)
+    st.session_state.setdefault("home_tool_action_execute_pending", None)
     st.session_state.setdefault("config_view", "ENV")
     if st.session_state["config_view"] not in CONFIG_VIEWS:
         st.session_state["config_view"] = "ENV"

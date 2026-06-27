@@ -21,6 +21,7 @@ setup() {
   constants_file="${HHS_REPO_DIR}/bin/apps/py/hhs-ui/constants.py"
   css_file="${HHS_REPO_DIR}/bin/apps/py/hhs-ui/streamlit_ui.css"
   ask_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"
+  hspm_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"
   ui_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/ui.bash"
 }
 
@@ -48,6 +49,12 @@ setup() {
   assert_success
 
   run grep -q '^function execute()' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'reinstall <package...>' "${hspm_plugin_file}"
+  assert_success
+
+  run grep -q 'reinstall_recipe' "${hspm_plugin_file}"
   assert_success
 }
 
@@ -143,6 +150,24 @@ setup() {
   assert_success
 
   run grep -q 'color: var(--hhs-theme-text-color-accent)' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-selected-item-label: var(--hhs-theme-text-color)' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-selected-item-value: var(--hhs-success)' "${css_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-selected-item-label)' "${css_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-selected-item-value)' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-selected-item-label: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  assert_success
+
+  run grep -q -- '--hhs-selected-item-value: var(--hhs-success)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 
   run python3 - <<'PY'
@@ -334,13 +359,131 @@ PY
   run grep -q 'key="home_tools_other_filter"' "${ui_file}"
   assert_success
 
-  run grep -q 'key="home_tools_table"' "${ui_file}"
+  run grep -q 'HOME_TOOLS_TABLE_KEY = "home_tools_table"' "${constants_file}"
+  assert_success
+
+  run grep -q 'HOME_TOOLS_TABLE_RESET_COUNTER_KEY = "home_tools_table_reset_counter"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def home_tools_table_key' "${ui_file}"
+  assert_success
+
+  run grep -q 'def reset_home_tools_table_selection' "${ui_file}"
+  assert_success
+
+  run grep -q 'key=home_tools_table_key()' "${ui_file}"
+  assert_success
+
+  run grep -q 'reset_home_tools_table_selection()' "${ui_file}"
   assert_success
 
   run grep -q 'checkbox=True' "${ui_file}"
   assert_success
 
   run grep -q 'selected_label=lambda row, _index: f"Selected: {row.get('"'"'Tool'"'"', '"'"''"'"')}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_hspm_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def home_tool_is_installed' "${ui_file}"
+  assert_success
+
+  run grep -q 'def home_tool_is_not_found' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhs hspm execute' "${ui_file}"
+  assert_success
+
+  run grep -q '"install", "uninstall", "reinstall"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_tool_tldr_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'tldr {shlex.quote(tool_name.strip())}' "${ui_file}"
+  assert_success
+
+  run grep -q 'def apply_selected_tool_action' "${ui_file}"
+  assert_success
+
+  run grep -q 'home_tool_action_execute_pending' "${ui_file}"
+  assert_success
+
+  run grep -q 'def execute_pending_home_tool_action' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_home_tool_action_dialog' "${ui_file}"
+  assert_success
+
+  run grep -q 'def home_tool_action_noun' "${ui_file}"
+  assert_success
+
+  run grep -q '"Installation"' "${ui_file}"
+  assert_success
+
+  run grep -q 'title = f"{home_tool_action_noun(operation)} of {tool_name} {status}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def apply_selected_tool_tldr' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_home_tool_tldr_dialog' "${ui_file}"
+  assert_success
+
+  run grep -q 'label": "Install"' "${ui_file}"
+  assert_success
+
+  run grep -q 'label": "Uninstall"' "${ui_file}"
+  assert_success
+
+  run grep -q 'label": "Reinstall"' "${ui_file}"
+  assert_success
+
+  run grep -q 'label": "TLDR"' "${ui_file}"
+  assert_success
+
+  run grep -q 'empty_hint: str = "Select a row to interact"' "${ui_file}"
+  assert_success
+
+  run grep -q 'empty_caption: str = "Select a row to interact"' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text()
+old_labels = (
+    "Tools filter",
+    "Tools filter text",
+    "Environment filter",
+    "Environment filter text",
+    "PATH filter",
+    "PATH filter text",
+    "DIR filter",
+    "DIR filter text",
+    "COMMAND filter",
+    "COMMAND filter text",
+    "ALIAS filter",
+    "ALIAS filter text",
+    "SERVICE filter",
+    "SERVICE filter text",
+    "COMMANDS filter",
+    "COMMANDS filter text",
+    "DIRECTORIES filter",
+    "DIRECTORIES filter text",
+    ">Filter</span>",
+    'st.text_input("Filter"',
+)
+missing_defaults = (
+    '"Filters"',
+    '"Select a row to interact"',
+)
+violations = [label for label in old_labels if label in source]
+violations.extend(default for default in missing_defaults if default not in source)
+if violations:
+    raise AssertionError("\n".join(violations))
+PY
   assert_success
 
   run grep -q 'CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")' "${constants_file}"

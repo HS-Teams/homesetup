@@ -3,6 +3,8 @@
   --hhs-bar-chart-height: max(12rem, min(380px, calc(100dvh - var(--hhs-bar-chart-chrome-height) - var(--hhs-footer-guard-height))));
   --hhs-footer-guard-height: 3.5rem;
   --hhs-log-chrome-height: calc(14rem + 128px);
+  --hhs-selected-item-label: var(--hhs-theme-text-color);
+  --hhs-selected-item-value: var(--hhs-success);
   --hhs-sidebar-inline-inset: 20px;
   --hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
 }
@@ -62,6 +64,22 @@ textarea,
 
 [data-testid="stMarkdownContainer"] table td {
   color: var(--hhs-markdown-table-value);
+}
+
+.hhs-selected-item {
+  color: var(--hhs-selected-item-label);
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.45;
+  margin: 0.25rem 0;
+}
+
+.hhs-selected-item-label {
+  color: var(--hhs-selected-item-label);
+}
+
+.hhs-selected-item-value {
+  color: var(--hhs-selected-item-value);
 }
 
 [data-testid="stMarkdownContainer"] li code,

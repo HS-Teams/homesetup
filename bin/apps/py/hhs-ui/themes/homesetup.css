@@ -30,6 +30,8 @@
   --hhs-model-accent: #2563eb;
   --hhs-markdown-table-header: var(--hhs-theme-text-color);
   --hhs-markdown-table-value: var(--hhs-theme-text-color-accent);
+  --hhs-selected-item-label: var(--hhs-theme-text-color);
+  --hhs-selected-item-value: var(--hhs-success);
   --hhs-bar-chart-color: var(--hhs-chart-accent);
 }
 
