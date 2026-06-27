@@ -106,7 +106,7 @@ setup() {
   run grep -q -- '--hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-dracula-background: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-background: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 
   run python3 - <<'PY'
@@ -117,12 +117,19 @@ ui_source = Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs-ui/streamlit_ui.css").read_text()
 dracula_css = Path("bin/apps/py/hhs-ui/themes/dracula.css").read_text()
 
+assert 'class="hhs-footer-logo"' in ui_source
+assert 'load_app_image_data_uri(APP_AI_HOMESETUP_AVATAR_FILE, "image/png")' in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source
 base_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", base_css).group(1)
+logo_block = re.search(r"\.hhs-footer-logo\s*\{([^}]*)\}", base_css).group(1)
 theme_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", dracula_css).group(1)
+assert "height:" in logo_block
+assert "width:" in logo_block
 assert "border-bottom" not in base_block
 assert "border-bottom" not in theme_block
-assert "color: var(--hhs-dracula-purple)" in theme_block
+assert "color: var(--hhs-primary)" in theme_block
+assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in dracula_css
+assert "border-color: var(--hhs-primary)" in dracula_css
 PY
   assert_success
 
@@ -308,7 +315,7 @@ PY
   run grep -q 'hhs-tab-loader' "${css_file}"
   assert_success
 
-  run grep -q 'background: var(--hhs-dracula-background)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q 'background: var(--hhs-background)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 }
 
@@ -431,7 +438,7 @@ PY
   run grep -q 'color: #4da3ff' "${ui_file}"
   assert_success
 
-  run grep -q -- '--hhs-ui-blue: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-model-accent: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 }
 

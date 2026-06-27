@@ -119,6 +119,12 @@ def load_app_font_data_uri() -> str:
     return f"data:font/woff2;base64,{font_data}"
 
 
+def load_app_image_data_uri(image_file: Path, mime_type: str) -> str:
+    """Load a HomeSetup UI image as a browser-embeddable data URI."""
+    image_data = b64encode(image_file.read_bytes()).decode("ascii")
+    return f"data:{mime_type};base64,{image_data}"
+
+
 def load_app_font_face_css() -> str:
     """Load the HomeSetup UI font as an embeddable CSS font face."""
     return (
@@ -705,9 +711,11 @@ def render_footer() -> None:
     """Render the HomeSetup UI footer."""
     version = homesetup_version()
     working_dir = html.escape(os.getcwd())
+    logo_data_uri = load_app_image_data_uri(APP_AI_HOMESETUP_AVATAR_FILE, "image/png")
     st.markdown(
         f"""
         <footer class="hhs-app-footer">
+          <img class="hhs-footer-logo" src="{logo_data_uri}" alt="" aria-hidden="true">
           <span>HomeSetup - v{version}</span>
           <span class="hhs-footer-spacer"></span>
           <span class="hhs-footer-glyph"></span>
