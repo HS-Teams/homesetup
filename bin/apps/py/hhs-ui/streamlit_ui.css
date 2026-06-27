@@ -95,6 +95,16 @@ textarea,
   display: none;
 }
 
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapseButton"] button {
+  background: transparent !important;
+  border-left: 0 !important;
+  border-radius: 0 !important;
+  border-right: 0 !important;
+  border-top: 0 !important;
+  box-shadow: none !important;
+}
+
 .hhs-view-heading {
   margin: 0 0 0.75rem;
   padding: 0;

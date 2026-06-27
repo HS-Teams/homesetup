@@ -422,7 +422,7 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
         "</div>",
         unsafe_allow_html=True,
     )
-    st.markdown(
+    components.html(
         """
         <script>
           (() => {
@@ -445,7 +445,7 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
           })();
         </script>
         """,
-        unsafe_allow_html=True,
+        height=0,
     )
 
 

@@ -109,6 +109,18 @@ setup() {
   run grep -q -- '--hhs-dracula-background: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 
+  run grep -q 'stExpandSidebarButton' "${css_file}"
+  assert_success
+
+  run grep -q 'stSidebarCollapseButton' "${css_file}"
+  assert_success
+
+  run grep -q 'stExpandSidebarButton' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  assert_success
+
+  run grep -q 'border-bottom: 2px solid var(--hhs-dracula-purple)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  assert_success
+
   run grep -q '<style>' "${css_file}"
   assert_failure
 }
@@ -277,6 +289,12 @@ PY
   assert_success
 
   run grep -q 'time.sleep(0.1)' "${ui_file}"
+  assert_success
+
+  run grep -q 'components.html(' "${ui_file}"
+  assert_success
+
+  run grep -q 'window.setInterval(renderElapsed, 1000)' "${ui_file}"
   assert_success
 
   run grep -q 'setOverlay(False)' "${ui_file}"

@@ -61,6 +61,18 @@ body,
   color: var(--hhs-dracula-purple);
 }
 
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapseButton"] button {
+  border-bottom: 2px solid var(--hhs-dracula-purple) !important;
+  color: var(--hhs-dracula-purple) !important;
+}
+
+[data-testid="stExpandSidebarButton"] *,
+[data-testid="stSidebarCollapseButton"] button * {
+  color: var(--hhs-dracula-purple) !important;
+  fill: currentColor !important;
+}
+
 .hhs-view-heading {
   border-bottom: 1px solid var(--hhs-dracula-comment);
 }
