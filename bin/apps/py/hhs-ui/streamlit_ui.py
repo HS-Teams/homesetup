@@ -39,184 +39,78 @@ import streamlit as st
 import streamlit.components.v1 as components
 from streamlit import config as st_config
 
-# NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
-# at minimum by incrementing the patch number.
-VERSION = "0.0.67"
-DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
-APP_DIR = Path(__file__).resolve().parent
-APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
-APP_FONT_FAMILY = "Droid Sans Mono for Powerline Nerd Font Complete"
-APP_FONT_FILE = APP_DIR / "assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
-APP_AI_USER_AVATAR_FILE = APP_DIR / "assets/images/user.png"
-APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"
-APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"
-APP_THEME_OPTIONS = {
-    "theme.base": "dark",
-    "theme.primaryColor": "#bd93f9",
-    "theme.backgroundColor": "#282a36",
-    "theme.secondaryBackgroundColor": "#44475a",
-    "theme.textColor": "#f8f8f2",
-    "theme.linkColor": "#8be9fd",
-    "theme.borderColor": "#6272a4",
-    "theme.dataframeBorderColor": "#6272a4",
-    "theme.dataframeHeaderBackgroundColor": "#44475a",
-    "theme.codeBackgroundColor": "#21222c",
-}
-UI_STATE_FILE = APP_DIR / ".streamlit-ui-state"
-UI_CACHE_FILE = APP_DIR / ".streamlit-ui-cache"
-UI_CACHE_REALTIME_TTL_SECONDS = 15
-UI_CACHE_NORMAL_TTL_SECONDS = 60
-UI_CACHE_LOW_CHANGE_TTL_SECONDS = 120
-UI_CACHE_DEFAULT_TTL_SECONDS = UI_CACHE_NORMAL_TTL_SECONDS
-APP_CSS = ""
-VIEWS = ("Home", "Configs", "Services", "Monitor", "History")
-AI_VIEW = "AI"
-AI_VIEWS = ("CHAT", "SETTINGS")
-HOME_VIEWS = ("System", "Tools")
-CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")
-HISTORY_VIEWS = ("COMMANDS", "DIRECTORIES", "STATS")
-MONITOR_VIEWS = ("DISK", "MEM", "CPU", "PROCESSES", "LOGS")
-ENV_FILTERS = ("All", "HHS", "Other")
-LIST_FILTERS = ("All", "Other")
-HISTORY_FILTERS = ("All", "Others")
-PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
-SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")
-AI_CODE_BLOCK_WRAP_COLUMNS = 96
-PROCESS_TABLE_KEY = "monitor_process_table"
-PERSISTED_UI_KEYS = (
-    "active_view",
-    "ai_chat_messages",
-    "ai_clear_chat_execute_pending",
-    "ai_model_delete_execute_pending",
-    "ai_model_select_execute_pending",
-    "ai_view",
-    "alias_filter",
-    "alias_other_filter",
-    "cmds_filter",
-    "cmds_other_filter",
-    "config_view",
-    "dirs_filter",
-    "dirs_other_filter",
-    "env_filter",
-    "env_other_filter",
-    "env_value_overrides",
-    "home_view",
-    "history_commands_filter",
-    "history_commands_other_filter",
-    "history_directories_filter",
-    "history_directories_other_filter",
-    "history_stats_top_n",
-    "history_view",
-    "monitor_disk_directory",
-    "monitor_disk_top_n",
-    "monitor_log_file",
-    "monitor_logs_tail",
-    "monitor_process_filter",
-    "monitor_view",
-    "path_filter",
-    "path_other_filter",
-    "path_value_overrides",
-    "service_filter",
-    "service_other_filter",
-)
-PERSISTED_UI_KEY_PREFIXES = (
-    "alias_selected_value_",
-    "cmd_selected_value_",
-    "dir_selected_value_",
-    "env_selected_value_",
-    "history_command_selected_value_",
-    "history_directory_selected_value_",
-    "path_selected_value_",
-    "service_selected_value_",
-)
-ANSI_ESCAPE_PATTERN = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[()][A-Za-z0-9])")
-ALIAS_LINE_PATTERN = re.compile(r"^(.+?)\.{2,}\s+(?:|=>)\s+'?(.*?)'?$")
-COMMAND_LINE_PATTERN = re.compile(r"^\((\d+)\)\s+(.+?)\.{2,}\s+(?:|=>)\s+'?(.*?)'?(?:\.\.\.)?$")
-DIR_LINE_PATTERN = re.compile(r"^(.+?)\.{2,}\s+(?:|=>)\s+'?(.*?)'?$")
-ENV_LINE_PATTERN = re.compile(r"^([A-Za-z0-9_]+)\s+\.{2,}\s+(?:|=>)\s+(.*)$")
-PATH_SOURCE_PATTERN = re.compile(r"(?:|=>)\s+(.*)$")
-PATH_TYPE_PATTERN = re.compile(r"^(\S+)\s+")
-SERVICE_LINE_PATTERN = re.compile(r"^(\d+):\s+(.+?)\.{2,}\s*(\S+)\s+(.+)$")
-HISTORY_COMMAND_LINE_PATTERN = re.compile(r"^(\d+)\.{2,}\s+(?:|➜|→|=>)\s+(.*)$")
-HISTORY_DIRECTORY_LINE_PATTERN = re.compile(r"^(\d+):\s+(\S+)\s+(.*)$")
-HISTORY_STATS_LINE_PATTERN = re.compile(r"^\d+:\s+(.+?)\.{2,}\s+(\d+)\s+\|")
-DISK_USAGE_LINE_PATTERN = re.compile(r"^\s*\d+:\s+(.+?)\.{2,}\s+([0-9.]+[A-Za-z]*)\s+\|")
-PROCESS_LIST_LINE_PATTERN = re.compile(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s+(?:[✓✔]\s+)?active process$", re.IGNORECASE)
-TOP_PROCESS_SORT_KEYS = {
-    "CPU": {"darwin": "cpu", "linux": "%CPU", "field": "CPU"},
-    "MEM": {"darwin": "mem", "linux": "%MEM", "field": "MEM"},
-}
-TOOL_LINE_PATTERN = re.compile(
-    r"^\[(.*?)\]\s+Checking:\s+(.+?)\s+\.{2,}\s+(\S+)\s+(INSTALLED|NOT FOUND|ALIASED|FUNCTION)(?:\s+=>\s+(.*))?$"
-)
-SYSINFO_KEY_VALUE_PATTERN = re.compile(r"^\s*([A-Za-z0-9_. -]+?)\.{2,}\s*:\s*(.*)$")
-SYSINFO_SECTION_PATTERN = re.compile(r"^([A-Za-z][A-Za-z0-9 -]+):$")
-LOG_TAILOR_RULES = (
-    (re.compile(r"\[( *[-a-zA-Z0-9_ =]+ *)\]"), "thread"),
-    (re.compile(r" [a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+ ?"), "fqdn"),
-    (re.compile(r"INFO|OUT"), "info"),
-    (re.compile(r"DEBUG|FINE|TRACE"), "debug"),
-    (re.compile(r"WARN[ING]*"), "warn"),
-    (re.compile(r"CRITICAL|SEV[ERE]*|FATAL|ERR[OR]*"), "error"),
-    (
-        re.compile(r"([0-9]{1,4}[-/]?){3}[T ]([0-9]{1,2}[-:]?){2,3}((\.[0-9]+([+-][0-9]{1,2}[-:][0-9]{1,2}|Z))|([,.][0-9]+))?"),
-        "date",
-    ),
-    (re.compile(r"(((https?|ftp|file):/)|(/?[a-zA-Z0-9]+))/[-A-Za-z0-9+&@#/%?=~_|!:,.;]*\.*[-A-Za-z0-9+&@#/%=~_|]"), "uri"),
-)
-COMMAND_COLUMNS = "10000"
-AI_MODEL_TABLE_KEY = "ai_model_table"
-AI_MODEL_TABLE_RESET_COUNTER_KEY = "ai_model_table_reset_counter"
-ALIAS_TABLE_KEY = "alias_vars_table"
-ALIAS_TABLE_RESET_COUNTER_KEY = "alias_vars_table_reset_counter"
-ALIAS_VALUE_EDITOR_KEY_PREFIX = "alias_selected_value"
-CMD_TABLE_KEY = "cmd_vars_table"
-CMD_TABLE_RESET_COUNTER_KEY = "cmd_vars_table_reset_counter"
-CMD_VALUE_EDITOR_KEY_PREFIX = "cmd_selected_value"
-DIR_TABLE_KEY = "dir_vars_table"
-DIR_TABLE_RESET_COUNTER_KEY = "dir_vars_table_reset_counter"
-DIR_VALUE_EDITOR_KEY_PREFIX = "dir_selected_value"
-ENV_TABLE_HEIGHT = 420
-ENV_TABLE_KEY = "env_vars_table"
-ENV_TABLE_RESET_COUNTER_KEY = "env_vars_table_reset_counter"
-ENV_TABLE_WIDTH = "stretch"
-AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT = 0
-ENV_VALUE_EDITOR_SCROLL_HELPER_HEIGHT = 0
-ENV_VALUE_EDITOR_HEIGHT = 40
-ENV_VALUE_EDITOR_KEY_PREFIX = "env_selected_value"
-ENV_VALUE_OVERRIDES_KEY = "env_value_overrides"
-HISTORY_COMMAND_TABLE_KEY = "history_command_vars_table"
-HISTORY_COMMAND_TABLE_RESET_COUNTER_KEY = "history_command_vars_table_reset_counter"
-HISTORY_COMMAND_VALUE_EDITOR_KEY_PREFIX = "history_command_selected_value"
-HISTORY_DIRECTORY_TABLE_KEY = "history_directory_vars_table"
-HISTORY_DIRECTORY_TABLE_RESET_COUNTER_KEY = "history_directory_vars_table_reset_counter"
-HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX = "history_directory_selected_value"
-PATH_TABLE_HEIGHT = ENV_TABLE_HEIGHT
-PATH_TABLE_KEY = "path_vars_table"
-PATH_TABLE_RESET_COUNTER_KEY = "path_vars_table_reset_counter"
-PATH_TABLE_WIDTH = ENV_TABLE_WIDTH
-PATH_VALUE_EDITOR_HEIGHT = ENV_VALUE_EDITOR_HEIGHT
-PATH_VALUE_EDITOR_KEY_PREFIX = "path_selected_value"
-PATH_VALUE_OVERRIDES_KEY = "path_value_overrides"
-SERVICE_TABLE_KEY = "service_vars_table"
-SERVICE_TABLE_RESET_COUNTER_KEY = "service_vars_table_reset_counter"
-SERVICE_VALUE_EDITOR_KEY_PREFIX = "service_selected_value"
-TWO_OPTION_FILTER_COLUMNS = [0.75, 3.25]
-THREE_OPTION_FILTER_COLUMNS = [1.1, 2.9]
-FOUR_OPTION_FILTER_COLUMNS = [1.75, 2.25]
-PATH_FILTER_COLUMNS = [2.25, 1.75]
-DOCUMENT_VIEW_ACTIVE_KEY = "document_view_active"
-DOCUMENT_PREVIOUS_VIEW_KEY = "document_previous_view"
-DOCUMENT_SELECTED_KEY = "document_selected"
-DOCUMENTS = {
-    "README": ("README", "README.md"),
-    "HANDBOOK": ("Handbook", "docs/handbook/handbook.md"),
-}
+from constants import *  # noqa: F403
 
 
 def load_app_css() -> str:
     """Load the HomeSetup Streamlit UI stylesheet."""
     return APP_CSS_FILE.read_text(encoding="utf-8")
+
+
+def available_theme_options() -> tuple[str, ...]:
+    """Return all selectable theme names from the themes folder."""
+    return tuple(sorted(theme.stem for theme in APP_THEME_CSS_FILE.parent.glob("*.css")))
+
+
+def default_theme_name(theme_options: tuple[str, ...] | None = None) -> str:
+    """Return the default selectable HomeSetup UI theme name."""
+    options = theme_options if theme_options is not None else available_theme_options()
+    if APP_THEME_CSS_FILE.stem in options:
+        return APP_THEME_CSS_FILE.stem
+    return options[0] if options else ""
+
+
+def validated_theme_name(
+    theme_name: object, theme_options: tuple[str, ...] | None = None
+) -> str:
+    """Return a valid selectable theme name or an empty string."""
+    selected_theme = str(theme_name or "").strip()
+    options = theme_options if theme_options is not None else available_theme_options()
+    return selected_theme if selected_theme in options else ""
+
+
+def theme_config_options(theme_name: object) -> dict[str, str]:
+    """Return Streamlit native theme options for a selectable UI theme."""
+    selected_theme = validated_theme_name(theme_name)
+    if selected_theme in APP_THEME_OPTIONS_BY_THEME:
+        return APP_THEME_OPTIONS_BY_THEME[selected_theme]
+    return APP_THEME_OPTIONS
+
+
+def load_app_theme_css() -> str:
+    """Load the selected HomeSetup Streamlit UI theme stylesheet."""
+    theme_options = available_theme_options()
+    selected_theme = validated_theme_name(
+        st.session_state.get(THEME_SELECTED_KEY, ""), theme_options
+    )
+    if not selected_theme:
+        selected_theme = default_theme_name(theme_options)
+    theme_file = APP_THEME_CSS_FILE.with_name(f"{selected_theme}.css")
+    if not theme_file.is_file():
+        theme_file = APP_THEME_CSS_FILE
+    return theme_file.read_text(encoding="utf-8")
+
+
+def persist_theme_selection(theme_name: str) -> None:
+    """Persist the selected theme directly into the UI state file."""
+    selected_theme = validated_theme_name(theme_name)
+    if not selected_theme:
+        return
+    if st.session_state.get(THEME_SELECTED_KEY) != selected_theme:
+        st.session_state[THEME_SELECTED_KEY] = selected_theme
+    data = load_ui_state()
+    data[THEME_SELECTED_KEY] = selected_theme
+    UI_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    UI_STATE_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
+def request_theme_reload() -> None:
+    """Persist the selected theme and schedule the theme loading overlay."""
+    selected_theme = validated_theme_name(st.session_state.get(THEME_SELECTED_KEY, ""))
+    if selected_theme:
+        persist_theme_selection(selected_theme)
+        st.session_state["theme_reload_pending"] = True
+        st.session_state["theme_reload_name"] = selected_theme
 
 
 def load_app_font_data_uri() -> str:
@@ -238,9 +132,9 @@ def load_app_font_face_css() -> str:
     )
 
 
-def configure_app_font_theme() -> None:
-    """Configure Streamlit's Dracula-based theme for native components."""
-    for option_name, option_value in APP_THEME_OPTIONS.items():
+def configure_app_font_theme(theme_name: object = "") -> None:
+    """Configure Streamlit's selected theme for native components."""
+    for option_name, option_value in theme_config_options(theme_name).items():
         st_config.set_option(option_name, option_value)
     st_config.set_option(
         "theme.fontFaces",
@@ -260,7 +154,10 @@ def configure_app_font_theme() -> None:
 
 def render_styles() -> None:
     """Render app-level Streamlit styles."""
-    st.markdown(f"<style>{load_app_font_face_css()}{APP_CSS}{load_app_css()}</style>", unsafe_allow_html=True)
+    st.markdown(
+        f"<style>{load_app_font_face_css()}{APP_CSS}{load_app_css()}{load_app_theme_css()}</style>",
+        unsafe_allow_html=True,
+    )
 
 
 def format_datetime(value: datetime) -> str:
@@ -284,7 +181,9 @@ def document_details(document_key: str) -> tuple[str, Path]:
 
 def open_document_view(document_key: str) -> None:
     """Open a document view in the main content panel."""
-    st.session_state[DOCUMENT_PREVIOUS_VIEW_KEY] = st.session_state.get("active_view", "Home")
+    st.session_state[DOCUMENT_PREVIOUS_VIEW_KEY] = st.session_state.get(
+        "active_view", "Home"
+    )
     st.session_state[DOCUMENT_SELECTED_KEY] = document_key
     st.session_state[DOCUMENT_VIEW_ACTIVE_KEY] = True
 
@@ -335,15 +234,24 @@ def show_ai_chat_context() -> None:
     """Append the current backend ask context as a HomeSetup chat message."""
     result = run_hhs_ask_context()
     output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
-    message = strip_ansi(output or "No Ollama context available.").strip() or "No Ollama context available."
+    message = (
+        strip_ansi(output or "No Ollama context available.").strip()
+        or "No Ollama context available."
+    )
     st.session_state["ai_chat_messages"].append({"role": "system", "content": message})
     save_ui_state()
 
 
-def request_ai_model_selection(old_model: str, new_model: str, model_status: str) -> None:
+def request_ai_model_selection(
+    old_model: str, new_model: str, model_status: str
+) -> None:
     """Show the AI model selection confirmation prompt."""
     st.session_state["ai_model_select_error"] = ""
-    st.session_state["ai_model_select_pending"] = {"old": old_model, "new": new_model, "status": model_status}
+    st.session_state["ai_model_select_pending"] = {
+        "old": old_model,
+        "new": new_model,
+        "status": model_status,
+    }
 
 
 def cancel_ai_model_selection() -> None:
@@ -365,10 +273,14 @@ def execute_pending_ai_model_selection() -> None:
     new_model = str(pending.get("new", "")).strip()
     model_status = str(pending.get("status", "")).strip()
     if new_model:
-        loader_message = "Downloading model..." if not model_status else "Selecting Ollama model..."
+        loader_message = (
+            "Downloading model..." if not model_status else "Selecting Ollama model..."
+        )
         result = run_hhs_ask_select_model(new_model, loader_message, close_dialogs=True)
         if result.returncode != 0:
-            st.session_state["ai_model_select_error"] = strip_ansi(result.stderr or result.stdout or "Unable to select model.")
+            st.session_state["ai_model_select_error"] = strip_ansi(
+                result.stderr or result.stdout or "Unable to select model."
+            )
         else:
             st.session_state["ai_model_select_error"] = ""
             cache_clear()
@@ -380,7 +292,10 @@ def execute_pending_ai_model_selection() -> None:
 def request_ai_model_deletion(model_name: str, model_status: str) -> None:
     """Show the AI model deletion confirmation prompt."""
     st.session_state["ai_model_delete_error"] = ""
-    st.session_state["ai_model_delete_pending"] = {"name": model_name, "status": model_status}
+    st.session_state["ai_model_delete_pending"] = {
+        "name": model_name,
+        "status": model_status,
+    }
 
 
 def cancel_ai_model_deletion() -> None:
@@ -406,17 +321,25 @@ def execute_pending_ai_model_deletion() -> None:
     if model_name:
         result = run_ollama_delete_model(model_name, close_dialogs=True)
         if result.returncode != 0:
-            st.session_state["ai_model_delete_error"] = strip_ansi(result.stderr or result.stdout or "Unable to delete model.")
+            st.session_state["ai_model_delete_error"] = strip_ansi(
+                result.stderr or result.stdout or "Unable to delete model."
+            )
         else:
             st.session_state["ai_model_delete_error"] = ""
             cache_clear()
             if model_status == "Active":
-                fallback_model = first_downloaded_ollama_model(run_hhs_ask_models().stdout, excluded_model=model_name)
+                fallback_model = first_downloaded_ollama_model(
+                    run_hhs_ask_models().stdout, excluded_model=model_name
+                )
                 if fallback_model:
-                    fallback_result = run_hhs_ask_select_model(fallback_model, close_dialogs=True)
+                    fallback_result = run_hhs_ask_select_model(
+                        fallback_model, close_dialogs=True
+                    )
                     if fallback_result.returncode != 0:
                         st.session_state["ai_model_delete_error"] = strip_ansi(
-                            fallback_result.stderr or fallback_result.stdout or "Unable to select fallback model."
+                            fallback_result.stderr
+                            or fallback_result.stdout
+                            or "Unable to select fallback model."
                         )
             reset_ai_model_table_selection()
     st.session_state["ai_model_delete_execute_pending"] = None
@@ -425,22 +348,68 @@ def execute_pending_ai_model_deletion() -> None:
 
 def render_sidebar() -> None:
     """Render the closeable HomeSetup sidebar."""
+    theme_options = available_theme_options()
+    selected_theme = validated_theme_name(
+        st.session_state.get(THEME_SELECTED_KEY, ""), theme_options
+    )
+    if not selected_theme:
+        selected_theme = default_theme_name(theme_options)
+        st.session_state[THEME_SELECTED_KEY] = selected_theme
+    previous_theme = st.session_state.get("theme_last_seen", selected_theme)
     with st.sidebar:
         render_sidebar_clock()
         st.caption(f"HomeSetup - UI v{VERSION}")
         st.write("")
+        st.markdown("**Theme**")
+        selected_theme = st.selectbox(
+            "Theme",
+            options=theme_options,
+            key=THEME_SELECTED_KEY,
+            placeholder="",
+            disabled=False,
+            label_visibility="collapsed",
+            on_change=request_theme_reload,
+            width="stretch",
+        )
+        if selected_theme != previous_theme and selected_theme in theme_options:
+            persist_theme_selection(selected_theme)
+            st.session_state["theme_last_seen"] = selected_theme
+            st.session_state["theme_reload_pending"] = True
+            st.session_state["theme_reload_name"] = selected_theme
+            st.rerun()
+        st.session_state["theme_last_seen"] = selected_theme
+        st.write("")
         st.markdown("**Documents**")
         if st.session_state.get(DOCUMENT_VIEW_ACTIVE_KEY):
-            st.button("BACK", key="document_back_button", on_click=close_document_view, width="stretch")
+            st.button(
+                "BACK",
+                key="document_back_button",
+                on_click=close_document_view,
+                width="stretch",
+            )
         else:
-            st.button("README", key="readme_open_button", on_click=open_document_view, args=("README",), width="stretch")
-            st.button("HANDBOOK", key="handbook_open_button", on_click=open_document_view, args=("HANDBOOK",), width="stretch")
+            st.button(
+                "README",
+                key="readme_open_button",
+                on_click=open_document_view,
+                args=("README",),
+                width="stretch",
+            )
+            st.button(
+                "HANDBOOK",
+                key="handbook_open_button",
+                on_click=open_document_view,
+                args=("HANDBOOK",),
+                width="stretch",
+            )
 
 
 def render_preloader(message: str = "Loading...", transient: bool = True) -> None:
     """Render a full-page overlay preloader."""
     safe_message = html.escape(message)
-    loader_class = "hhs-tab-loader hhs-tab-loader-transient" if transient else "hhs-tab-loader"
+    loader_class = (
+        "hhs-tab-loader hhs-tab-loader-transient" if transient else "hhs-tab-loader"
+    )
     st.markdown(
         f'<div class="{loader_class}">'
         '<div class="hhs-tab-loader-panel">'
@@ -448,9 +417,9 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
         '<span class="hhs-tab-loader-copy">'
         f'<span class="hhs-tab-loader-label">{safe_message}</span>'
         '<span class="hhs-tab-loader-elapsed" data-start-time="0">time elapsed: 0m:00s</span>'
-        '</span>'
-        '</div>'
-        '</div>',
+        "</span>"
+        "</div>"
+        "</div>",
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -480,13 +449,36 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
     )
 
 
-def renderTerminalPanel(content: str, css_classes: str = "", content_is_html: bool = False) -> None:
+def render_theme_reload_overlay() -> None:
+    """Render the theme loading overlay and reload the browser after a short delay."""
+    theme_name = str(st.session_state.get("theme_reload_name") or st.session_state.get(THEME_SELECTED_KEY) or "")
+    safe_theme_name = theme_name.strip() or APP_THEME_CSS_FILE.stem
+    st.session_state["theme_reload_pending"] = False
+    render_preloader(f"Loading theme {safe_theme_name}", transient=False)
+    components.html(
+        """
+        <script>
+          window.setTimeout(() => {
+            window.parent.location.reload();
+          }, 2000);
+        </script>
+        """,
+        height=0,
+    )
+    st.stop()
+
+
+def renderTerminalPanel(
+    content: str, css_classes: str = "", content_is_html: bool = False
+) -> None:
     """Render reusable terminal-style output with optional pre-rendered HTML content."""
     panel_classes = "hhs-terminal-panel"
     if css_classes:
         panel_classes = f"{panel_classes} {css_classes}"
     safe_content = content if content_is_html else html.escape(content)
-    st.markdown(f'<div class="{panel_classes}">{safe_content}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="{panel_classes}">{safe_content}</div>', unsafe_allow_html=True
+    )
 
 
 def close_all_dialogs() -> None:
@@ -496,7 +488,12 @@ def close_all_dialogs() -> None:
     st.session_state["ai_model_delete_pending"] = None
 
 
-def setOverlay(active: bool, message: str = "Loading...", transient: bool = False, close_dialogs: bool = False) -> None:
+def setOverlay(
+    active: bool,
+    message: str = "Loading...",
+    transient: bool = False,
+    close_dialogs: bool = False,
+) -> None:
     """Show or hide the reusable full-page command overlay."""
     placeholder_key = "_hhs_overlay_placeholder"
     if active:
@@ -507,6 +504,7 @@ def setOverlay(active: bool, message: str = "Loading...", transient: bool = Fals
         st.session_state[placeholder_key] = placeholder
         with placeholder:
             render_preloader(message, transient=transient)
+        time.sleep(0.1)
         return
 
     placeholder = st.session_state.pop(placeholder_key, None)
@@ -560,7 +558,12 @@ def monitor_default_disk_directory() -> str:
 
 def hhs_log_dir() -> Path:
     """Return the HomeSetup log directory used by monitor logs."""
-    return Path(os.environ.get("HHS_LOG_DIR", Path(os.environ.get("HHS_DIR", Path.home() / ".config/hhs")) / "logs")).expanduser()
+    return Path(
+        os.environ.get(
+            "HHS_LOG_DIR",
+            Path(os.environ.get("HHS_DIR", Path.home() / ".config/hhs")) / "logs",
+        )
+    ).expanduser()
 
 
 def hhs_log_files() -> list[str]:
@@ -580,20 +583,24 @@ def is_persisted_ui_key(key: str) -> bool:
 
 def is_persistable_ui_value(value: object) -> bool:
     """Return whether a Streamlit session value is safe for JSON UI persistence."""
-    if isinstance(value, str | bool | int | float):
+    if isinstance(value, (str, bool, int, float)):
         return True
     if isinstance(value, list):
         return all(
-            isinstance(item, str | bool | int | float)
+            isinstance(item, (str, bool, int, float))
             or (
                 isinstance(item, dict)
-                and all(isinstance(key, str) and isinstance(dict_value, str | bool | int | float) for key, dict_value in item.items())
+                and all(
+                    isinstance(key, str)
+                    and isinstance(dict_value, (str, bool, int, float))
+                    for key, dict_value in item.items()
+                )
             )
             for item in value
         )
     if isinstance(value, dict):
         return all(
-            isinstance(key, str) and isinstance(item, str | bool | int | float)
+            isinstance(key, str) and isinstance(item, (str, bool, int, float))
             for key, item in value.items()
         )
     return False
@@ -612,8 +619,29 @@ def load_ui_state() -> dict[str, object]:
     return {
         key: value
         for key, value in data.items()
-        if isinstance(key, str) and is_persisted_ui_key(key) and is_persistable_ui_value(value)
+        if isinstance(key, str)
+        and is_persisted_ui_key(key)
+        and is_persistable_ui_value(value)
     }
+
+
+def persisted_theme_name() -> str:
+    """Return the valid persisted UI theme or the default theme."""
+    selected_theme = validated_theme_name(load_ui_state().get(THEME_SELECTED_KEY, ""))
+    if selected_theme:
+        return selected_theme
+    return default_theme_name()
+
+
+def restore_persisted_theme_selection() -> str:
+    """Restore the persisted UI theme into Streamlit session state."""
+    selected_theme = validated_theme_name(st.session_state.get(THEME_SELECTED_KEY, ""))
+    if not selected_theme:
+        selected_theme = validated_theme_name(load_ui_state().get(THEME_SELECTED_KEY, ""))
+    if not selected_theme:
+        selected_theme = default_theme_name()
+    st.session_state[THEME_SELECTED_KEY] = selected_theme
+    return selected_theme
 
 
 def export_env_value_overrides(overrides: object) -> None:
@@ -633,7 +661,9 @@ def export_path_value_overrides(overrides: object) -> None:
     for old_path, new_path in overrides.items():
         if not isinstance(old_path, str) or not isinstance(new_path, str):
             continue
-        path_entries = [new_path if entry == old_path else entry for entry in path_entries]
+        path_entries = [
+            new_path if entry == old_path else entry for entry in path_entries
+        ]
         if new_path not in path_entries:
             path_entries.append(new_path)
     os.environ["PATH"] = ":".join(path_entries)
@@ -644,7 +674,8 @@ def restore_ui_state() -> None:
     if st.session_state.get("ui_state_restored"):
         return
     for key, value in load_ui_state().items():
-        st.session_state.setdefault(key, value)
+        st.session_state[key] = value
+    restore_persisted_theme_selection()
     export_env_value_overrides(st.session_state.get(ENV_VALUE_OVERRIDES_KEY))
     export_path_value_overrides(st.session_state.get(PATH_VALUE_OVERRIDES_KEY))
     st.session_state["ui_state_restored"] = True
@@ -652,21 +683,36 @@ def restore_ui_state() -> None:
 
 def save_ui_state() -> None:
     """Persist selected Streamlit UI values to disk."""
+    persisted_theme = validated_theme_name(load_ui_state().get(THEME_SELECTED_KEY, ""))
     data = {
         key: st.session_state[key]
         for key in sorted(st.session_state)
-        if is_persisted_ui_key(key) and is_persistable_ui_value(st.session_state.get(key))
+        if is_persisted_ui_key(key)
+        and is_persistable_ui_value(st.session_state.get(key))
     }
+    selected_theme = validated_theme_name(data.get(THEME_SELECTED_KEY, ""))
+    if selected_theme:
+        data[THEME_SELECTED_KEY] = selected_theme
+    elif persisted_theme:
+        data[THEME_SELECTED_KEY] = persisted_theme
+    else:
+        data.pop(THEME_SELECTED_KEY, None)
+    UI_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     UI_STATE_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def render_footer() -> None:
     """Render the HomeSetup UI footer."""
     version = homesetup_version()
+    working_dir = html.escape(os.getcwd())
     st.markdown(
         f"""
         <footer class="hhs-app-footer">
           <span>HomeSetup - v{version}</span>
+          <span class="hhs-footer-spacer"></span>
+          <span class="hhs-footer-glyph"></span>
+          <span class="hhs-footer-spacer"></span>
+          <span>Working dir: {working_dir}</span>
         </footer>
         """,
         unsafe_allow_html=True,
@@ -762,11 +808,13 @@ def renderTable(
     if headers is not None:
         dataframe_args["column_order"] = headers
     if height is not None:
-        dataframe_args["height"] = height
+        dataframe_args["height"] = table_height(height)
     if use_container_width:
         dataframe_args["use_container_width"] = True
     elif width is not None:
         dataframe_args["width"] = width
+    else:
+        dataframe_args["width"] = "stretch"
     if checkbox:
         dataframe_args["on_select"] = "rerun"
         dataframe_args["selection_mode"] = "single-row"
@@ -806,7 +854,9 @@ def renderTable(
             with column:
                 st.button(
                     label,
-                    disabled=table_action_disabled(action, selected_row, selected_index),
+                    disabled=table_action_disabled(
+                        action, selected_row, selected_index
+                    ),
                     help=action.get("help"),
                     key=f"{key_prefix}_{selected_index}",
                     on_click=action.get("on_click"),
@@ -817,19 +867,64 @@ def renderTable(
     return selected_index, selected_row
 
 
-def table_action_visible(action: dict[str, object], row: dict[str, str], index: int) -> bool:
+def table_height(height: int) -> int:
+    """Return the app table height after applying the global viewport reduction."""
+    return max(1, height - TABLE_HEIGHT_REDUCTION)
+
+
+def bar_chart_height(height: int = BAR_CHART_HEIGHT) -> int:
+    """Return the app bar chart height after applying the global viewport reduction."""
+    return max(1, height - BAR_CHART_HEIGHT_REDUCTION)
+
+
+def bar_chart_container_height() -> str:
+    """Return the Vega-Lite height mode for browser-aware chart containers."""
+    return "container"
+
+
+def renderBarChart(
+    rows: list[dict[str, object]],
+    x: alt.X,
+    y: alt.Y,
+    tooltip: list[alt.Tooltip],
+    color: str = "#ffb86c",
+    height: int = BAR_CHART_HEIGHT,
+) -> None:
+    """Render a reusable responsive bar chart with app-wide sizing."""
+    fallback_height = bar_chart_height(height)
+    chart = (
+        alt.Chart(alt.Data(values=rows))
+        .mark_bar(color=color)
+        .encode(
+            x=x,
+            y=y,
+            tooltip=tooltip,
+        )
+        .properties(height=bar_chart_container_height())
+        .configure_view(continuousHeight=fallback_height)
+    )
+    st.altair_chart(chart, width="stretch")
+
+
+def table_action_visible(
+    action: dict[str, object], row: dict[str, str], index: int
+) -> bool:
     """Return whether a renderTable action button should be visible."""
     visible = action.get("visible", True)
     return bool(visible(row, index) if callable(visible) else visible)
 
 
-def table_action_disabled(action: dict[str, object], row: dict[str, str], index: int) -> bool:
+def table_action_disabled(
+    action: dict[str, object], row: dict[str, str], index: int
+) -> bool:
     """Return whether a renderTable action button should be disabled."""
     disabled = action.get("disabled", False)
     return bool(disabled(row, index) if callable(disabled) else disabled)
 
 
-def table_action_args(action: dict[str, object], row: dict[str, str], index: int) -> tuple[object, ...]:
+def table_action_args(
+    action: dict[str, object], row: dict[str, str], index: int
+) -> tuple[object, ...]:
     """Return callback arguments for a renderTable action button."""
     args = action.get("args", ())
     if callable(args):
@@ -859,7 +954,9 @@ def render_home_tools_panel() -> None:
 
 def render_document_view() -> None:
     """Render the selected HomeSetup document."""
-    title, document = document_details(str(st.session_state.get(DOCUMENT_SELECTED_KEY, "README")))
+    title, document = document_details(
+        str(st.session_state.get(DOCUMENT_SELECTED_KEY, "README"))
+    )
     st.markdown(
         f"""
         <section class="hhs-view-heading">
@@ -880,9 +977,14 @@ def strip_ansi(value: str) -> str:
     return ANSI_ESCAPE_PATTERN.sub("", value)
 
 
-def overlaps_existing_range(start: int, end: int, ranges: list[tuple[int, int, str]]) -> bool:
+def overlaps_existing_range(
+    start: int, end: int, ranges: list[tuple[int, int, str]]
+) -> bool:
     """Return whether a candidate highlight range overlaps an existing range."""
-    return any(start < existing_end and end > existing_start for existing_start, existing_end, _ in ranges)
+    return any(
+        start < existing_end and end > existing_start
+        for existing_start, existing_end, _ in ranges
+    )
 
 
 def log_tailor_highlight_ranges(value: str) -> list[tuple[int, int, str]]:
@@ -906,7 +1008,9 @@ def colorize_log_output(value: str) -> str:
     for start, end, css_class in ranges:
         if start > cursor:
             html_parts.append(html.escape(clean_value[cursor:start]))
-        html_parts.append(f'<span class="hhs-log-{css_class}">{html.escape(clean_value[start:end])}</span>')
+        html_parts.append(
+            f'<span class="hhs-log-{css_class}">{html.escape(clean_value[start:end])}</span>'
+        )
         cursor = end
     html_parts.append(html.escape(clean_value[cursor:]))
     return "".join(html_parts).replace("\n", "<br>")
@@ -949,13 +1053,17 @@ def parse_current_ollama_model(output: str) -> str:
     return "unknown"
 
 
-def parse_ollama_model_rows(output: str, current_model: str = "") -> list[dict[str, str]]:
+def parse_ollama_model_rows(
+    output: str, current_model: str = ""
+) -> list[dict[str, str]]:
     """Parse available Ollama model rows from the ask -m Markdown table."""
     rows: list[dict[str, str]] = []
     seen_models: set[str] = set()
     downloaded_models = parse_downloaded_ollama_models(output)
     for line in strip_ansi(output).splitlines():
-        markdown_columns = [column.strip().strip("`") for column in line.strip().strip("|").split("|")]
+        markdown_columns = [
+            column.strip().strip("`") for column in line.strip().strip("|").split("|")
+        ]
         if (
             len(markdown_columns) >= 6
             and markdown_columns[0]
@@ -972,7 +1080,9 @@ def parse_ollama_model_rows(output: str, current_model: str = "") -> list[dict[s
                         "Size": markdown_columns[3],
                         "Context": markdown_columns[4],
                         "Capabilities": markdown_columns[5],
-                        "Status": ollama_model_status(model_name, current_model, downloaded_models),
+                        "Status": ollama_model_status(
+                            model_name, current_model, downloaded_models
+                        ),
                     }
                 )
                 seen_models.add(model_name)
@@ -985,7 +1095,12 @@ def parse_downloaded_ollama_models(output: str) -> set[str]:
     models: set[str] = set()
     for line in strip_ansi(output).splitlines():
         parts = line.split()
-        if len(parts) >= 2 and parts[0].isdigit() and parts[1] != "NAME" and ":" in parts[1]:
+        if (
+            len(parts) >= 2
+            and parts[0].isdigit()
+            and parts[1] != "NAME"
+            and ":" in parts[1]
+        ):
             models.add(parts[1])
     return models
 
@@ -1000,7 +1115,9 @@ def first_downloaded_ollama_model(output: str, excluded_model: str = "") -> str:
     return ""
 
 
-def ollama_model_status(model_name: str, current_model: str, downloaded_models: set[str]) -> str:
+def ollama_model_status(
+    model_name: str, current_model: str, downloaded_models: set[str]
+) -> str:
     """Return the UI status for one Ollama model."""
     if model_name == current_model:
         return "Active"
@@ -1011,24 +1128,32 @@ def ollama_model_status(model_name: str, current_model: str, downloaded_models: 
 
 def ollama_model_context_size(ollama_model: str) -> str:
     """Return the context size for an Ollama model from HomeSetup model metadata."""
-    models_file = homesetup_home() / "bin/apps/bash/hhs-app/plugins/ask/ollama-models.md"
+    models_file = (
+        homesetup_home() / "bin/apps/bash/hhs-app/plugins/ask/ollama-models.md"
+    )
     if not models_file.is_file():
         return "?"
     clean_model = ollama_model.strip("`")
     for line in models_file.read_text(encoding="utf-8").splitlines():
-        columns = [column.strip().strip("`") for column in line.strip().strip("|").split("|")]
+        columns = [
+            column.strip().strip("`") for column in line.strip().strip("|").split("|")
+        ]
         if len(columns) >= 5 and columns[0] == clean_model:
             return columns[4] or "?"
     return "?"
 
 
-def format_ai_chat_prefix(role: str, username: str, ollama_model: str, context_size: str) -> str:
+def format_ai_chat_prefix(
+    role: str, username: str, ollama_model: str, context_size: str
+) -> str:
     """Format an AI chat message with icon, speaker, and content."""
     if role == "assistant":
         return f'<span class="hhs-ai-assistant-text">{html.escape(ollama_model)}&#91;{html.escape(context_size)}&#93;:</span><br>'
     if role == "system":
         return '<span class="hhs-ai-system-text">HomeSetup:</span><br>'
-    return f'<span class="hhs-ai-user-text">{html.escape(username)}&#91;You&#93;:</span>'
+    return (
+        f'<span class="hhs-ai-user-text">{html.escape(username)}&#91;You&#93;:</span>'
+    )
 
 
 def wrap_ai_code_line(line: str) -> list[str]:
@@ -1089,7 +1214,9 @@ def prepare_ai_chat_content(role: str, content: str) -> str:
     return content
 
 
-def render_ai_chat_message(role: str, content: str, username: str, ollama_model: str, context_size: str) -> None:
+def render_ai_chat_message(
+    role: str, content: str, username: str, ollama_model: str, context_size: str
+) -> None:
     """Render an AI chat message with a colored prefix and Markdown content."""
     separator = "\n" if role in ("assistant", "system") else " "
     st.markdown(
@@ -1136,7 +1263,9 @@ def expand_monitor_disk_directory(directory: str) -> str:
     """Expand a disk monitor directory using the app's HomeSetup defaults."""
     default_directory = monitor_default_disk_directory()
     raw_directory = (directory or "").strip() or default_directory
-    expanded_directory = raw_directory.replace("${HHS_HOME}", default_directory).replace("$HHS_HOME", default_directory)
+    expanded_directory = raw_directory.replace(
+        "${HHS_HOME}", default_directory
+    ).replace("$HHS_HOME", default_directory)
     return os.path.expandvars(os.path.expanduser(expanded_directory))
 
 
@@ -1269,7 +1398,9 @@ def load_ui_cache() -> dict[str, dict[str, object]]:
     cache = {
         key: value
         for key, value in data.items()
-        if isinstance(key, str) and key.startswith("command_hash:") and isinstance(value, dict)
+        if isinstance(key, str)
+        and key.startswith("command_hash:")
+        and isinstance(value, dict)
     }
     pruned_cache = prune_ui_cache_entries(cache)
     if pruned_cache != cache or len(cache) != len(data):
@@ -1285,13 +1416,16 @@ def save_ui_cache(cache: dict[str, dict[str, object]]) -> None:
         return
 
 
-def prune_ui_cache_entries(cache: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
+def prune_ui_cache_entries(
+    cache: dict[str, dict[str, object]],
+) -> dict[str, dict[str, object]]:
     """Return cache entries whose TTL has not expired."""
     now = time.time()
     return {
         key: entry
         for key, entry in cache.items()
-        if isinstance(entry.get("expires_at"), int | float) and float(entry["expires_at"]) > now
+        if isinstance(entry.get("expires_at"), int | float)
+        and float(entry["expires_at"]) > now
     }
 
 
@@ -1323,7 +1457,9 @@ def cache_get(key: str) -> dict[str, object] | None:
     return value if isinstance(value, dict) else None
 
 
-def cache_set(key: str, value: dict[str, object], ttl_seconds: int = UI_CACHE_DEFAULT_TTL_SECONDS) -> None:
+def cache_set(
+    key: str, value: dict[str, object], ttl_seconds: int = UI_CACHE_DEFAULT_TTL_SECONDS
+) -> None:
     """Store a value in the UI cache with a TTL."""
     cache = load_ui_cache()
     ttl = format_cache_ttl(ttl_seconds)
@@ -1338,7 +1474,11 @@ def cache_set(key: str, value: dict[str, object], ttl_seconds: int = UI_CACHE_DE
 def cache_delete(key_prefix: str) -> None:
     """Delete cache entries matching a key or key prefix."""
     cache = load_ui_cache()
-    updated_cache = {key: value for key, value in cache.items() if key != key_prefix and not key.startswith(f"{key_prefix}:")}
+    updated_cache = {
+        key: value
+        for key, value in cache.items()
+        if key != key_prefix and not key.startswith(f"{key_prefix}:")
+    }
     if updated_cache != cache:
         save_ui_cache(updated_cache)
 
@@ -1348,7 +1488,9 @@ def cache_clear() -> None:
     save_ui_cache({})
 
 
-def completed_process_from_cache(command: str, cached_value: dict[str, object]) -> subprocess.CompletedProcess[str]:
+def completed_process_from_cache(
+    command: str, cached_value: dict[str, object]
+) -> subprocess.CompletedProcess[str]:
     """Build a CompletedProcess from a cached command result."""
     return subprocess.CompletedProcess(
         ["bash", "-lc", command],
@@ -1358,7 +1500,9 @@ def completed_process_from_cache(command: str, cached_value: dict[str, object]) 
     )
 
 
-def cache_value_from_completed_process(result: subprocess.CompletedProcess[str]) -> dict[str, object]:
+def cache_value_from_completed_process(
+    result: subprocess.CompletedProcess[str],
+) -> dict[str, object]:
     """Return a JSON-safe cache value from a CompletedProcess."""
     return {
         "returncode": result.returncode,
@@ -1379,7 +1523,7 @@ def build_hhs_envs_command(prefix_filter: str | None) -> str:
     return (
         f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
         f'source "{hhs_home}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
-        f'__hhs_envs{filter_arg}'
+        f"__hhs_envs{filter_arg}"
     )
 
 
@@ -1400,8 +1544,8 @@ def build_hhs_tools_command() -> str:
         'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
         f'export HHS_HOME="{hhs_home}"; '
         'export HHS_MY_OS="$(uname -s)"; '
-        'unset HHS_ACTIVE_DOTFILES; '
-        'shopt -s expand_aliases; '
+        "unset HHS_ACTIVE_DOTFILES; "
+        "shopt -s expand_aliases; "
         f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
         f'source "{hhs_home}/dotfiles/bash/bash_icons.bash"; '
         f'source "{hhs_home}/dotfiles/bash/bash_env.bash"; '
@@ -1451,7 +1595,11 @@ def build_hhs_disk_usage_command(directory: str, top_n: int = 10) -> str:
     hhs_home = homesetup_home()
     safe_top_n = max(1, min(int(top_n), 100))
     expanded_directory = expand_monitor_disk_directory(directory)
-    directory_arg = '"${HHS_HOME}"' if expanded_directory == str(hhs_home) else shlex.quote(expanded_directory)
+    directory_arg = (
+        '"${HHS_HOME}"'
+        if expanded_directory == str(hhs_home)
+        else shlex.quote(expanded_directory)
+    )
     return (
         f'export HHS_HOME="{hhs_home}"; '
         f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
@@ -1470,11 +1618,11 @@ def build_process_monitor_command(metric: str, top_n: int = 10) -> str:
     linux_ps_sort = "pcpu" if metric == "CPU" else "pmem"
     return (
         'if [[ "$(uname -s)" == "Darwin" ]]; then '
-        f'top -l 2 -s 1 -o {darwin_sort} -n {safe_top_n} 2>/dev/null || '
-        f'ps -axo pid,user,%cpu,%mem,comm {ps_sort} 2>/dev/null | head -n {safe_top_n + 1}; '
+        f"top -l 2 -s 1 -o {darwin_sort} -n {safe_top_n} 2>/dev/null || "
+        f"ps -axo pid,user,%cpu,%mem,comm {ps_sort} 2>/dev/null | head -n {safe_top_n + 1}; "
         "else "
-        f'top -b -n 1 -o {linux_sort} -w 512 2>/dev/null || '
-        f'ps -eo pid,user,%cpu,%mem,comm --sort=-{linux_ps_sort} 2>/dev/null | head -n {safe_top_n + 1}; '
+        f"top -b -n 1 -o {linux_sort} -w 512 2>/dev/null || "
+        f"ps -eo pid,user,%cpu,%mem,comm --sort=-{linux_ps_sort} 2>/dev/null | head -n {safe_top_n + 1}; "
         "fi"
     )
 
@@ -1515,8 +1663,8 @@ def build_hhs_logs_command(log_file: str, tail_lines: int = 200) -> str:
         f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
         f'source "{hhs_home}/bin/hhs-functions/bash/hhs-taylor.bash"; '
         f'source "{hhs_home}/bin/apps/bash/hhs-app/functions/built-ins.bash"; '
-        "function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e \"$*\"; return \"${exit_code}\"; }; "
-        "function __hhs() { if [[ \"$1\" == \"logs\" ]]; then shift; logs \"$@\"; else return 127; fi; }; "
+        'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; return "${exit_code}"; }; '
+        'function __hhs() { if [[ "$1" == "logs" ]]; then shift; logs "$@"; else return 127; fi; }; '
         f"__hhs logs -n {safe_tail_lines} {shlex.quote(safe_log_file)}"
     )
 
@@ -1536,15 +1684,15 @@ def build_hhs_ask_execute_command(arguments: list[str]) -> str:
         'export HHS_MY_OS="$(uname -s)"; '
         'export HHS_MY_OS_RELEASE="${HHS_MY_OS_RELEASE:-${HHS_MY_OS}}"; '
         'export HHS_OLLAMA_HISTORY_FILE="${HHS_OLLAMA_HISTORY_FILE:-${HHS_DIR}/.ollama_history}"; '
-        'export HHS_OLLAMA_MD_VIEWER=cat; '
+        "export HHS_OLLAMA_MD_VIEWER=cat; "
         'export APP_NAME="${APP_NAME:-hhs-ui}"; '
-        'export IS_PIPED=0; '
+        "export IS_PIPED=0; "
         f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
         f'source "{hhs_home}/dotfiles/bash/bash_colors.bash"; '
         f'source "{hhs_home}/bin/hhs-functions/bash/hhs-toml.bash"; '
         f'source "{hhs_home}/bin/apps/bash/app-commons.bash"; '
         f'source "{hhs_home}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"; '
-        "function __hhs() { if [[ \"$1\" == \"ask\" && \"$2\" == \"execute\" ]]; then shift 2; execute \"$@\"; else return 127; fi; }; "
+        'function __hhs() { if [[ "$1" == "ask" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
         f"__hhs ask execute {safe_arguments}"
     )
 
@@ -1623,7 +1771,9 @@ def build_hhs_aliases_command() -> str:
     )
 
 
-def build_hhs_services_command(operation: str = "status", service_name: str = "") -> str:
+def build_hhs_services_command(
+    operation: str = "status", service_name: str = ""
+) -> str:
     """Build the Bash command used to run the __hhs_services HomeSetup function."""
     hhs_home = homesetup_home()
     safe_operation = re.sub(r"[^A-Za-z_-]+", "", operation) or "status"
@@ -1634,8 +1784,8 @@ def build_hhs_services_command(operation: str = "status", service_name: str = ""
         'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
         f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
         f'source "{hhs_home}/bin/apps/bash/hhs-app/plugins/services/services.bash"; '
-        "function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e \"$*\"; return \"${exit_code}\"; }; "
-        "function __hhs() { if [[ \"$1\" == \"services\" && \"$2\" == \"execute\" ]]; then shift 2; execute \"$@\"; else return 127; fi; }; "
+        'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; return "${exit_code}"; }; '
+        'function __hhs() { if [[ "$1" == "services" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
         f'__hhs services execute "{safe_operation}" "{safe_service_name}"'
     )
 
@@ -1690,7 +1840,9 @@ def run_hhs_history_stats(top_n: int = 10) -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_hhs_disk_usage(directory: str, top_n: int = 10) -> subprocess.CompletedProcess[str]:
+def run_hhs_disk_usage(
+    directory: str, top_n: int = 10
+) -> subprocess.CompletedProcess[str]:
     """Run the __hhs_du HomeSetup function and return the completed process."""
     return run_bash_command(
         build_hhs_disk_usage_command(directory, top_n),
@@ -1699,7 +1851,9 @@ def run_hhs_disk_usage(directory: str, top_n: int = 10) -> subprocess.CompletedP
     )
 
 
-def run_process_monitor(metric: str, top_n: int = 10) -> subprocess.CompletedProcess[str]:
+def run_process_monitor(
+    metric: str, top_n: int = 10
+) -> subprocess.CompletedProcess[str]:
     """Run the process monitor command and return the completed process."""
     return run_bash_command(
         build_process_monitor_command(metric, top_n),
@@ -1725,7 +1879,9 @@ def run_hhs_process_kill(process_name: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_hhs_logs(log_file: str, tail_lines: int = 200) -> subprocess.CompletedProcess[str]:
+def run_hhs_logs(
+    log_file: str, tail_lines: int = 200
+) -> subprocess.CompletedProcess[str]:
     """Run the __hhs logs command and return the completed process."""
     return run_bash_command(
         build_hhs_logs_command(log_file, tail_lines),
@@ -1781,7 +1937,9 @@ def run_hhs_ask_select_model(
     )
 
 
-def run_ollama_delete_model(model_name: str, close_dialogs: bool = False) -> subprocess.CompletedProcess[str]:
+def run_ollama_delete_model(
+    model_name: str, close_dialogs: bool = False
+) -> subprocess.CompletedProcess[str]:
     """Run the Ollama model deletion command and return the completed process."""
     return run_bash_command(
         build_ollama_delete_model_command(model_name),
@@ -1840,7 +1998,9 @@ def run_hhs_services_quietly() -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_hhs_service_action(operation: str, service_name: str) -> subprocess.CompletedProcess[str]:
+def run_hhs_service_action(
+    operation: str, service_name: str
+) -> subprocess.CompletedProcess[str]:
     """Run a HomeSetup service action command and return the completed process."""
     return run_bash_command(
         build_hhs_services_command(operation, service_name),
@@ -1858,7 +2018,9 @@ def env_filter_pattern(env_filter: str, other_filter: str = "") -> str | None:
     return None
 
 
-def path_row_matches_filter(row: dict[str, str], path_filter: str, other_filter: str = "") -> bool:
+def path_row_matches_filter(
+    row: dict[str, str], path_filter: str, other_filter: str = ""
+) -> bool:
     """Return whether a PATH row matches the selected UI filter."""
     if path_filter == "All":
         return True
@@ -1880,7 +2042,9 @@ def filter_path_rows(
     other_filter: str = "",
 ) -> list[dict[str, str]]:
     """Return PATH rows that match the selected UI filter."""
-    return [row for row in rows if path_row_matches_filter(row, path_filter, other_filter)]
+    return [
+        row for row in rows if path_row_matches_filter(row, path_filter, other_filter)
+    ]
 
 
 def row_matches_text_filter(row: dict[str, str], text_filter: str) -> bool:
@@ -1892,7 +2056,9 @@ def row_matches_text_filter(row: dict[str, str], text_filter: str) -> bool:
     return clean_filter in searchable_value
 
 
-def filter_rows_by_text(rows: list[dict[str, str]], list_filter: str, text_filter: str = "") -> list[dict[str, str]]:
+def filter_rows_by_text(
+    rows: list[dict[str, str]], list_filter: str, text_filter: str = ""
+) -> list[dict[str, str]]:
     """Return rows that match the selected All/Other filter."""
     if list_filter not in ("Other", "Others"):
         return rows
@@ -1948,7 +2114,9 @@ def parse_hhs_dirs(output: str) -> list[dict[str, str]]:
     for line in strip_ansi(output).splitlines():
         match = DIR_LINE_PATTERN.match(line.strip())
         if match:
-            rows.append({"Name": match.group(1).strip(), "Value": match.group(2).strip()})
+            rows.append(
+                {"Name": match.group(1).strip(), "Value": match.group(2).strip()}
+            )
     return rows
 
 
@@ -1975,7 +2143,9 @@ def parse_hhs_aliases(output: str) -> list[dict[str, str]]:
     for line in strip_ansi(output).splitlines():
         match = ALIAS_LINE_PATTERN.match(line.strip())
         if match:
-            rows.append({"Name": match.group(1).strip(), "Value": match.group(2).strip()})
+            rows.append(
+                {"Name": match.group(1).strip(), "Value": match.group(2).strip()}
+            )
     return rows
 
 
@@ -2063,13 +2233,17 @@ def parse_process_monitor(output: str, metric: str) -> list[dict[str, float | st
     """Parse top or ps process output into monitor chart rows."""
     rows: list[dict[str, float | str]] = []
     headers: list[str] = []
-    selected_field = str(TOP_PROCESS_SORT_KEYS.get(metric, TOP_PROCESS_SORT_KEYS["CPU"])["field"])
+    selected_field = str(
+        TOP_PROCESS_SORT_KEYS.get(metric, TOP_PROCESS_SORT_KEYS["CPU"])["field"]
+    )
     for line in strip_ansi(output).splitlines():
         parts = line.split()
         if not parts:
             continue
         normalized_parts = [part.upper() for part in parts]
-        if "PID" in normalized_parts and ("%CPU" in normalized_parts or "CPU" in normalized_parts):
+        if "PID" in normalized_parts and (
+            "%CPU" in normalized_parts or "CPU" in normalized_parts
+        ):
             headers = normalized_parts
             rows = []
             continue
@@ -2084,15 +2258,31 @@ def parse_process_monitor(output: str, metric: str) -> list[dict[str, float | st
         value_index = cpu_index if selected_field == "CPU" else mem_index
         if value_index is None or value_index >= len(parts):
             continue
-        command = " ".join(parts[command_index:]) if command_index == len(headers) - 1 else parts[command_index]
+        command = (
+            " ".join(parts[command_index:])
+            if command_index == len(headers) - 1
+            else parts[command_index]
+        )
         raw_value = parts[value_index]
         rows.append(
             {
                 "PID": parts[pid_index] if pid_index < len(parts) else "",
-                "User": parts[user_index] if user_index is not None and user_index < len(parts) else "",
+                "User": (
+                    parts[user_index]
+                    if user_index is not None and user_index < len(parts)
+                    else ""
+                ),
                 "Command": command,
-                "CPU": parts[cpu_index] if cpu_index is not None and cpu_index < len(parts) else "",
-                "MEM": parts[mem_index] if mem_index is not None and mem_index < len(parts) else "",
+                "CPU": (
+                    parts[cpu_index]
+                    if cpu_index is not None and cpu_index < len(parts)
+                    else ""
+                ),
+                "MEM": (
+                    parts[mem_index]
+                    if mem_index is not None and mem_index < len(parts)
+                    else ""
+                ),
                 "Value": metric_value(raw_value),
                 "ValueLabel": raw_value,
             }
@@ -2294,7 +2484,9 @@ def service_table_key() -> str:
 
 def history_command_table_key() -> str:
     """Return the Streamlit history command dataframe key for the current selection generation."""
-    reset_counter = st.session_state.setdefault(HISTORY_COMMAND_TABLE_RESET_COUNTER_KEY, 0)
+    reset_counter = st.session_state.setdefault(
+        HISTORY_COMMAND_TABLE_RESET_COUNTER_KEY, 0
+    )
     if not isinstance(reset_counter, int):
         reset_counter = 0
         st.session_state[HISTORY_COMMAND_TABLE_RESET_COUNTER_KEY] = reset_counter
@@ -2303,7 +2495,9 @@ def history_command_table_key() -> str:
 
 def history_directory_table_key() -> str:
     """Return the Streamlit history directory dataframe key for the current selection generation."""
-    reset_counter = st.session_state.setdefault(HISTORY_DIRECTORY_TABLE_RESET_COUNTER_KEY, 0)
+    reset_counter = st.session_state.setdefault(
+        HISTORY_DIRECTORY_TABLE_RESET_COUNTER_KEY, 0
+    )
     if not isinstance(reset_counter, int):
         reset_counter = 0
         st.session_state[HISTORY_DIRECTORY_TABLE_RESET_COUNTER_KEY] = reset_counter
@@ -2523,7 +2717,11 @@ def render_read_only_rows(
 
     editor_key = f"{value_key_prefix}_{selected_index}"
     st.session_state[editor_key] = selected_row["Value"]
-    selected_name = selected_row.get("Name") or selected_row.get("Index") or selected_row.get("Value", "")
+    selected_name = (
+        selected_row.get("Name")
+        or selected_row.get("Index")
+        or selected_row.get("Value", "")
+    )
     st.caption(f"Selected: {selected_name}")
     st.text_area(
         selected_label,
@@ -2572,7 +2770,10 @@ def ollama_service_is_up() -> bool:
     result = run_hhs_services_quietly()
     if result.returncode != 0:
         return False
-    return any(row.get("Name", "").strip().lower() == "ollama" and service_is_up(row) for row in parse_hhs_services(result.stdout))
+    return any(
+        row.get("Name", "").strip().lower() == "ollama" and service_is_up(row)
+        for row in parse_hhs_services(result.stdout)
+    )
 
 
 def main_views() -> tuple[str, ...]:
@@ -2601,7 +2802,9 @@ def apply_selected_process_kill(process_name: str) -> None:
     """Kill the selected process name and store the action result."""
     result = run_hhs_process_kill(process_name)
     cache_clear()
-    st.session_state["monitor_process_action_message"] = result.stdout or result.stderr or ""
+    st.session_state["monitor_process_action_message"] = (
+        result.stdout or result.stderr or ""
+    )
     st.session_state["monitor_process_action_succeeded"] = result.returncode == 0
 
 
@@ -2665,7 +2868,9 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
 
 def render_envs_table() -> None:
     """Render environment variables using __hhs_envs."""
-    filter_col, other_filter_col = st.columns(THREE_OPTION_FILTER_COLUMNS, vertical_alignment="bottom")
+    filter_col, other_filter_col = st.columns(
+        THREE_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+    )
     with filter_col:
         env_filter = st.radio(
             "Environment filter",
@@ -2694,7 +2899,9 @@ def render_envs_table() -> None:
 
 def render_paths_table() -> None:
     """Render PATH entries using __hhs_paths."""
-    filter_col, other_filter_col = st.columns(PATH_FILTER_COLUMNS, vertical_alignment="bottom")
+    filter_col, other_filter_col = st.columns(
+        PATH_FILTER_COLUMNS, vertical_alignment="bottom"
+    )
     with filter_col:
         path_filter = st.radio(
             "PATH filter",
@@ -2718,12 +2925,16 @@ def render_paths_table() -> None:
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list PATH entries.")
         return
-    render_path_rows(filter_path_rows(parse_hhs_paths(result.stdout), path_filter, other_filter))
+    render_path_rows(
+        filter_path_rows(parse_hhs_paths(result.stdout), path_filter, other_filter)
+    )
 
 
 def render_dirs_table() -> None:
     """Render saved directories using __hhs_load_dir."""
-    filter_col, other_filter_col = st.columns(TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom")
+    filter_col, other_filter_col = st.columns(
+        TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+    )
     with filter_col:
         dirs_filter = st.radio(
             "DIR filter",
@@ -2758,7 +2969,9 @@ def render_dirs_table() -> None:
 
 def render_cmds_table() -> None:
     """Render saved commands using __hhs_command."""
-    filter_col, other_filter_col = st.columns(TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom")
+    filter_col, other_filter_col = st.columns(
+        TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+    )
     with filter_col:
         cmds_filter = st.radio(
             "COMMAND filter",
@@ -2783,7 +2996,9 @@ def render_cmds_table() -> None:
         st.error(result.stderr or "Unable to list saved commands.")
         return
     render_read_only_rows(
-        filter_rows_by_text(parse_hhs_commands(result.stdout), cmds_filter, other_filter),
+        filter_rows_by_text(
+            parse_hhs_commands(result.stdout), cmds_filter, other_filter
+        ),
         cmd_table_key(),
         CMD_VALUE_EDITOR_KEY_PREFIX,
         "Select a COMMAND row to inspect its value.",
@@ -2793,7 +3008,9 @@ def render_cmds_table() -> None:
 
 def render_aliases_table() -> None:
     """Render custom aliases using __hhs_aliases."""
-    filter_col, other_filter_col = st.columns(TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom")
+    filter_col, other_filter_col = st.columns(
+        TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+    )
     with filter_col:
         alias_filter = st.radio(
             "ALIAS filter",
@@ -2818,7 +3035,9 @@ def render_aliases_table() -> None:
         st.error(result.stderr or "Unable to list custom aliases.")
         return
     render_read_only_rows(
-        filter_rows_by_text(parse_hhs_aliases(result.stdout), alias_filter, other_filter),
+        filter_rows_by_text(
+            parse_hhs_aliases(result.stdout), alias_filter, other_filter
+        ),
         alias_table_key(),
         ALIAS_VALUE_EDITOR_KEY_PREFIX,
         "Select an ALIAS row to inspect its value.",
@@ -2828,7 +3047,9 @@ def render_aliases_table() -> None:
 
 def render_services_table() -> None:
     """Render HomeSetup services using __hhs_services status output."""
-    filter_col, other_filter_col = st.columns(FOUR_OPTION_FILTER_COLUMNS, vertical_alignment="bottom")
+    filter_col, other_filter_col = st.columns(
+        FOUR_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+    )
     with filter_col:
         service_filter = st.radio(
             "SERVICE filter",
@@ -2852,12 +3073,18 @@ def render_services_table() -> None:
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list services.")
         return
-    render_service_rows(filter_service_rows(parse_hhs_services(result.stdout), service_filter, other_filter))
+    render_service_rows(
+        filter_service_rows(
+            parse_hhs_services(result.stdout), service_filter, other_filter
+        )
+    )
 
 
 def render_history_commands_table() -> None:
     """Render shell command history using __hhs_history."""
-    filter_col, other_filter_col = st.columns(TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom")
+    filter_col, other_filter_col = st.columns(
+        TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+    )
     with filter_col:
         history_commands_filter = st.radio(
             "COMMANDS filter",
@@ -2882,7 +3109,9 @@ def render_history_commands_table() -> None:
         st.error(result.stderr or "Unable to list command history.")
         return
     render_read_only_rows(
-        filter_rows_by_text(parse_hhs_history(result.stdout), history_commands_filter, other_filter),
+        filter_rows_by_text(
+            parse_hhs_history(result.stdout), history_commands_filter, other_filter
+        ),
         history_command_table_key(),
         HISTORY_COMMAND_VALUE_EDITOR_KEY_PREFIX,
         "Select a COMMANDS row to inspect its value.",
@@ -2892,7 +3121,9 @@ def render_history_commands_table() -> None:
 
 def render_history_directories_table() -> None:
     """Render directory history using __hhs_dirs."""
-    filter_col, other_filter_col = st.columns(TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom")
+    filter_col, other_filter_col = st.columns(
+        TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+    )
     with filter_col:
         history_directories_filter = st.radio(
             "DIRECTORIES filter",
@@ -2917,7 +3148,11 @@ def render_history_directories_table() -> None:
         st.error(result.stderr or "Unable to list directory history.")
         return
     render_read_only_rows(
-        filter_rows_by_text(parse_hhs_history_dirs(result.stdout), history_directories_filter, other_filter),
+        filter_rows_by_text(
+            parse_hhs_history_dirs(result.stdout),
+            history_directories_filter,
+            other_filter,
+        ),
         history_directory_table_key(),
         HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX,
         "Select a DIRECTORIES row to inspect its value.",
@@ -2927,9 +3162,13 @@ def render_history_directories_table() -> None:
 
 def render_history_stats_chart() -> None:
     """Render command history stats using __hhs_hist_stats."""
-    label_col, input_col, spacer_col = st.columns([0.55, 0.7, 2.75], vertical_alignment="center")
+    label_col, input_col, spacer_col = st.columns(
+        [0.55, 0.7, 2.75], vertical_alignment="center"
+    )
     with label_col:
-        st.markdown('<span class="hhs-inline-form-label">Top N</span>', unsafe_allow_html=True)
+        st.markdown(
+            '<span class="hhs-inline-form-label">Top N</span>', unsafe_allow_html=True
+        )
     with input_col:
         top_n = st.number_input(
             "Top N",
@@ -2945,28 +3184,27 @@ def render_history_stats_chart() -> None:
     if result.returncode != 0:
         st.error(result.stderr or result.stdout or "Unable to list history stats.")
         return
-    rows = sorted(parse_hhs_history_stats(result.stdout), key=lambda row: int(row["Count"]), reverse=True)
+    rows = sorted(
+        parse_hhs_history_stats(result.stdout),
+        key=lambda row: int(row["Count"]),
+        reverse=True,
+    )
     if not rows:
         st.caption("No history stats found.")
         return
-    chart = (
-        alt.Chart(alt.Data(values=rows))
-        .mark_bar(color="#ffb86c")
-        .encode(
-            x=alt.X("Count:Q", title="Count"),
-            y=alt.Y(
-                "Command:N",
-                sort=alt.SortField(field="Count", order="descending"),
-                title="Command",
-            ),
-            tooltip=[
-                alt.Tooltip("Command:N", title="Command"),
-                alt.Tooltip("Count:Q", title="Count"),
-            ],
-        )
-        .properties(height=420)
+    renderBarChart(
+        rows,
+        x=alt.X("Count:Q", title="Count"),
+        y=alt.Y(
+            "Command:N",
+            sort=alt.SortField(field="Count", order="descending"),
+            title="Command",
+        ),
+        tooltip=[
+            alt.Tooltip("Command:N", title="Command"),
+            alt.Tooltip("Count:Q", title="Count"),
+        ],
     )
-    st.altair_chart(chart, width="stretch")
 
 
 def render_monitor_disk_chart() -> None:
@@ -2976,7 +3214,10 @@ def render_monitor_disk_chart() -> None:
         vertical_alignment="center",
     )
     with dir_label_col:
-        st.markdown('<span class="hhs-inline-form-label">Directory</span>', unsafe_allow_html=True)
+        st.markdown(
+            '<span class="hhs-inline-form-label">Directory</span>',
+            unsafe_allow_html=True,
+        )
     with dir_input_col:
         directory = st.text_input(
             "Directory",
@@ -2985,7 +3226,9 @@ def render_monitor_disk_chart() -> None:
             on_change=save_ui_state,
         )
     with top_label_col:
-        st.markdown('<span class="hhs-inline-form-label">Top N</span>', unsafe_allow_html=True)
+        st.markdown(
+            '<span class="hhs-inline-form-label">Top N</span>', unsafe_allow_html=True
+        )
     with top_input_col:
         top_n = st.number_input(
             "Top N",
@@ -2999,45 +3242,46 @@ def render_monitor_disk_chart() -> None:
     selected_directory = directory.strip() or monitor_default_disk_directory()
     result = run_hhs_disk_usage(selected_directory, int(top_n))
     if result.returncode != 0:
-        st.error(strip_ansi(result.stderr or result.stdout or "Unable to load disk usage."))
+        st.error(
+            strip_ansi(result.stderr or result.stdout or "Unable to load disk usage.")
+        )
         return
-    rows = sorted(parse_hhs_disk_usage(result.stdout), key=lambda row: float(row["Bytes"]), reverse=True)
+    rows = sorted(
+        parse_hhs_disk_usage(result.stdout),
+        key=lambda row: float(row["Bytes"]),
+        reverse=True,
+    )
     for row in rows:
         row["Label"] = relative_disk_usage_path(str(row["Path"]), selected_directory)
     if not rows:
         st.caption("No disk usage entries found.")
         return
     st.markdown(f"##### Top {int(top_n)} disk usage at `{selected_directory}`")
-    chart = (
-        alt.Chart(alt.Data(values=rows))
-        .mark_bar(color="#ffb86c")
-        .encode(
-            x=alt.X(
-                "Bytes:Q",
-                title="Size",
-                axis=alt.Axis(
-                    labelExpr=(
-                        "datum.value >= 1099511627776 ? format(datum.value / 1099511627776, '.1f') + ' TB' : "
-                        "datum.value >= 1073741824 ? format(datum.value / 1073741824, '.1f') + ' GB' : "
-                        "datum.value >= 1048576 ? format(datum.value / 1048576, '.1f') + ' MB' : "
-                        "datum.value >= 1024 ? format(datum.value / 1024, '.1f') + ' KB' : "
-                        "format(datum.value, '.0f') + ' B'"
-                    )
-                ),
+    renderBarChart(
+        rows,
+        x=alt.X(
+            "Bytes:Q",
+            title="Size",
+            axis=alt.Axis(
+                labelExpr=(
+                    "datum.value >= 1099511627776 ? format(datum.value / 1099511627776, '.1f') + ' TB' : "
+                    "datum.value >= 1073741824 ? format(datum.value / 1073741824, '.1f') + ' GB' : "
+                    "datum.value >= 1048576 ? format(datum.value / 1048576, '.1f') + ' MB' : "
+                    "datum.value >= 1024 ? format(datum.value / 1024, '.1f') + ' KB' : "
+                    "format(datum.value, '.0f') + ' B'"
+                )
             ),
-            y=alt.Y(
-                "Label:N",
-                sort=alt.SortField(field="Bytes", order="descending"),
-                title="Path",
-            ),
-            tooltip=[
-                alt.Tooltip("Label:N", title="Path"),
-                alt.Tooltip("Size:N", title="Size"),
-            ],
-        )
-        .properties(height=420)
+        ),
+        y=alt.Y(
+            "Label:N",
+            sort=alt.SortField(field="Bytes", order="descending"),
+            title="Path",
+        ),
+        tooltip=[
+            alt.Tooltip("Label:N", title="Path"),
+            alt.Tooltip("Size:N", title="Size"),
+        ],
     )
-    st.altair_chart(chart, width="stretch")
 
 
 def render_process_monitor_chart(metric: str) -> None:
@@ -3045,15 +3289,27 @@ def render_process_monitor_chart(metric: str) -> None:
     st.button("Refresh", key=f"monitor_{metric.lower()}_refresh_button")
     result = run_process_monitor(metric)
     if result.returncode != 0:
-        st.error(strip_ansi(result.stderr or result.stdout or f"Unable to load {metric.lower()} usage."))
+        st.error(
+            strip_ansi(
+                result.stderr
+                or result.stdout
+                or f"Unable to load {metric.lower()} usage."
+            )
+        )
         return
-    rows = sorted(parse_process_monitor(result.stdout, metric), key=lambda row: float(row["Value"]), reverse=True)[:10]
+    rows = sorted(
+        parse_process_monitor(result.stdout, metric),
+        key=lambda row: float(row["Value"]),
+        reverse=True,
+    )[:10]
     if not rows:
         st.caption(f"No {metric.lower()} usage entries found.")
         return
     for row in rows:
         row["Label"] = row["Command"]
-    has_byte_values = metric == "MEM" and any(re.search(r"[A-Za-z]", str(row["ValueLabel"])) for row in rows)
+    has_byte_values = metric == "MEM" and any(
+        re.search(r"[A-Za-z]", str(row["ValueLabel"])) for row in rows
+    )
     axis = (
         alt.Axis(
             labelExpr=(
@@ -3071,27 +3327,23 @@ def render_process_monitor_chart(metric: str) -> None:
     unit_suffix = "" if has_byte_values else " %"
     color = "#ffb86c"
     st.markdown(f"##### Top 10 {title} processes")
-    chart = (
-        alt.Chart(alt.Data(values=rows))
-        .mark_bar(color=color)
-        .encode(
-            x=alt.X("Value:Q", title=f"{title}{unit_suffix}", axis=axis),
-            y=alt.Y(
-                "Label:N",
-                sort=alt.SortField(field="Value", order="descending"),
-                title="Process",
-            ),
-            tooltip=[
-                alt.Tooltip("Command:N", title="Command"),
-                alt.Tooltip("PID:N", title="PID"),
-                alt.Tooltip("User:N", title="User"),
-                alt.Tooltip("CPU:N", title="CPU"),
-                alt.Tooltip("MEM:N", title="MEM"),
-            ],
-        )
-        .properties(height=420)
+    renderBarChart(
+        rows,
+        x=alt.X("Value:Q", title=f"{title}{unit_suffix}", axis=axis),
+        y=alt.Y(
+            "Label:N",
+            sort=alt.SortField(field="Value", order="descending"),
+            title="Process",
+        ),
+        tooltip=[
+            alt.Tooltip("Command:N", title="Command"),
+            alt.Tooltip("PID:N", title="PID"),
+            alt.Tooltip("User:N", title="User"),
+            alt.Tooltip("CPU:N", title="CPU"),
+            alt.Tooltip("MEM:N", title="MEM"),
+        ],
+        color=color,
     )
-    st.altair_chart(chart, width="stretch")
 
 
 def render_monitor_processes_panel() -> None:
@@ -3106,7 +3358,9 @@ def render_monitor_processes_panel() -> None:
 
     label_col, input_col = st.columns([0.55, 3.45], vertical_alignment="center")
     with label_col:
-        st.markdown('<span class="hhs-inline-form-label">Filter</span>', unsafe_allow_html=True)
+        st.markdown(
+            '<span class="hhs-inline-form-label">Filter</span>', unsafe_allow_html=True
+        )
     with input_col:
         process_filter = st.text_input(
             "Filter",
@@ -3117,7 +3371,9 @@ def render_monitor_processes_panel() -> None:
         )
     result = run_hhs_process_list(process_filter)
     if result.returncode != 0:
-        st.error(strip_ansi(result.stderr or result.stdout or "Unable to load processes."))
+        st.error(
+            strip_ansi(result.stderr or result.stdout or "Unable to load processes.")
+        )
         return
     rows = parse_hhs_process_list(result.stdout)
     if not rows:
@@ -3154,9 +3410,14 @@ def render_monitor_logs_panel() -> None:
     selected_log = st.session_state.get("monitor_log_file", "")
     if selected_log not in log_files:
         st.session_state["monitor_log_file"] = log_files[0]
-    label_col, input_col, tail_col = st.columns([0.55, 3.0, 0.45], vertical_alignment="center")
+    label_col, input_col, tail_col = st.columns(
+        [0.55, 3.0, 0.45], vertical_alignment="center"
+    )
     with label_col:
-        st.markdown('<span class="hhs-inline-form-label">Log file</span>', unsafe_allow_html=True)
+        st.markdown(
+            '<span class="hhs-inline-form-label">Log file</span>',
+            unsafe_allow_html=True,
+        )
     with input_col:
         selected_log = st.selectbox(
             "Log file",
@@ -3171,7 +3432,10 @@ def render_monitor_logs_panel() -> None:
             key="monitor_logs_tail",
             on_change=save_ui_state,
         )
-    st.markdown(f'<div class="hhs-log-file-title"><code>{html.escape(selected_log)}</code></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="hhs-log-file-title"><code>{html.escape(selected_log)}</code></div>',
+        unsafe_allow_html=True,
+    )
     if tail_enabled:
         render_monitor_logs_tail(selected_log)
     else:
@@ -3190,7 +3454,11 @@ def render_monitor_logs_once(selected_log: str) -> None:
     if result.returncode != 0:
         st.error(strip_ansi(result.stderr or result.stdout or "Unable to load logs."))
         return
-    renderTerminalPanel(colorize_log_output(result.stdout), css_classes="hhs-log-output", content_is_html=True)
+    renderTerminalPanel(
+        colorize_log_output(result.stdout),
+        css_classes="hhs-log-output",
+        content_is_html=True,
+    )
 
 
 def render_configs_view() -> None:
@@ -3314,9 +3582,15 @@ def render_ai_chat_panel() -> None:
 
     username = current_username()
     model_result = run_hhs_ask_models()
-    ollama_model = parse_current_ollama_model(model_result.stdout) if model_result.returncode == 0 else "unknown"
+    ollama_model = (
+        parse_current_ollama_model(model_result.stdout)
+        if model_result.returncode == 0
+        else "unknown"
+    )
     context_size = ollama_model_context_size(ollama_model)
-    meta_col, context_col, clear_col = st.columns([3.0, 0.55, 0.55], vertical_alignment="center")
+    meta_col, context_col, clear_col = st.columns(
+        [3.0, 0.55, 0.55], vertical_alignment="center"
+    )
     with meta_col:
         st.markdown(
             f"""
@@ -3356,21 +3630,51 @@ def render_ai_chat_panel() -> None:
             message_name = "User"
         avatar = str(avatar_file) if avatar_file.is_file() else None
         with st.chat_message(message_name, avatar=avatar):
-            render_ai_chat_message(message["role"], message["content"], username, ollama_model, context_size)
+            render_ai_chat_message(
+                message["role"],
+                message["content"],
+                username,
+                ollama_model,
+                context_size,
+            )
     if prompt := st.chat_input("Ask Ollama through HomeSetup"):
         st.session_state["ai_chat_messages"].append({"role": "user", "content": prompt})
         save_ui_state()
-        with st.chat_message("User", avatar=str(APP_AI_USER_AVATAR_FILE) if APP_AI_USER_AVATAR_FILE.is_file() else None):
+        with st.chat_message(
+            "User",
+            avatar=(
+                str(APP_AI_USER_AVATAR_FILE)
+                if APP_AI_USER_AVATAR_FILE.is_file()
+                else None
+            ),
+        ):
             render_ai_chat_message("user", prompt, username, ollama_model, context_size)
-        with st.chat_message("Ollama", avatar=str(APP_AI_OLLAMA_AVATAR_FILE) if APP_AI_OLLAMA_AVATAR_FILE.is_file() else None):
+        with st.chat_message(
+            "Ollama",
+            avatar=(
+                str(APP_AI_OLLAMA_AVATAR_FILE)
+                if APP_AI_OLLAMA_AVATAR_FILE.is_file()
+                else None
+            ),
+        ):
             result = run_hhs_ask(prompt)
             if result.returncode != 0:
-                answer = strip_ansi(result.stderr or result.stdout or "Unable to ask Ollama.")
-                render_ai_chat_message("assistant", answer, username, ollama_model, context_size)
+                answer = strip_ansi(
+                    result.stderr or result.stdout or "Unable to ask Ollama."
+                )
+                render_ai_chat_message(
+                    "assistant", answer, username, ollama_model, context_size
+                )
             else:
-                answer = clean_hhs_ask_output(result.stdout) or strip_ansi(result.stdout)
-                render_ai_chat_message("assistant", answer, username, ollama_model, context_size)
-            st.session_state["ai_chat_messages"].append({"role": "assistant", "content": answer})
+                answer = clean_hhs_ask_output(result.stdout) or strip_ansi(
+                    result.stdout
+                )
+                render_ai_chat_message(
+                    "assistant", answer, username, ollama_model, context_size
+                )
+            st.session_state["ai_chat_messages"].append(
+                {"role": "assistant", "content": answer}
+            )
             save_ui_state()
 
 
@@ -3378,9 +3682,14 @@ def style_ai_model_row(row: pd.Series) -> list[str]:
     """Return dataframe row styles for the active Ollama model."""
     status = str(row.get("Status", ""))
     if status == "Active":
-        return ["background-color: rgba(139, 233, 253, 0.18); color: #8be9fd; font-weight: 800;"] * len(row)
+        return [
+            "background-color: rgba(139, 233, 253, 0.18); color: #8be9fd; font-weight: 800;"
+        ] * len(row)
     if status == "Downloaded":
-        return ["color: #4da3ff; font-weight: 800;" if column == "Status" else "" for column in row.index]
+        return [
+            "color: #4da3ff; font-weight: 800;" if column == "Status" else ""
+            for column in row.index
+        ]
     return [""] * len(row)
 
 
@@ -3428,7 +3737,13 @@ def render_ai_settings_panel() -> None:
 
     model_result = run_hhs_ask_models()
     if model_result.returncode != 0:
-        st.error(strip_ansi(model_result.stderr or model_result.stdout or "Unable to load Ollama models."))
+        st.error(
+            strip_ansi(
+                model_result.stderr
+                or model_result.stdout
+                or "Unable to load Ollama models."
+            )
+        )
         return
 
     current_model = parse_current_ollama_model(model_result.stdout)
@@ -3463,13 +3778,18 @@ def render_ai_settings_panel() -> None:
                 "key_prefix": "ai_select_model_button",
                 "on_click": request_ai_model_selection,
                 "disabled": lambda row, _index: row["Name"] == current_model,
-                "args": lambda row, _index: (current_model, row["Name"], str(row.get("Status", ""))),
+                "args": lambda row, _index: (
+                    current_model,
+                    row["Name"],
+                    str(row.get("Status", "")),
+                ),
             },
             {
                 "label": "Delete Model",
                 "key_prefix": "ai_delete_model_button",
                 "on_click": request_ai_model_deletion,
-                "visible": lambda row, _index: str(row.get("Status", "")) in ("Active", "Downloaded"),
+                "visible": lambda row, _index: str(row.get("Status", ""))
+                in ("Active", "Downloaded"),
                 "args": lambda row, _index: (row["Name"], str(row.get("Status", ""))),
             },
         ],
@@ -3558,13 +3878,17 @@ def render_main_view() -> None:
 
 def main() -> None:
     """Configure and render the HomeSetup Streamlit UI."""
-    configure_app_font_theme()
+    selected_theme = persisted_theme_name()
+    configure_app_font_theme(selected_theme)
     st.set_page_config(
         page_title=f"HomeSetup - UI v{VERSION}",
         layout="wide",
     )
-    render_styles()
     restore_ui_state()
+    restore_persisted_theme_selection()
+    render_styles()
+    if st.session_state.get("theme_reload_pending"):
+        render_theme_reload_overlay()
     st.session_state.setdefault("active_view", "Home")
     if st.session_state["active_view"] not in (*VIEWS, AI_VIEW):
         st.session_state["active_view"] = "Home"
@@ -3598,7 +3922,9 @@ def main() -> None:
     if st.session_state["monitor_view"] not in MONITOR_VIEWS:
         st.session_state["monitor_view"] = "DISK"
     st.session_state.setdefault("monitor_process_filter", "")
-    st.session_state.setdefault("monitor_disk_directory", monitor_default_disk_directory())
+    st.session_state.setdefault(
+        "monitor_disk_directory", monitor_default_disk_directory()
+    )
     if not str(st.session_state["monitor_disk_directory"]).strip():
         st.session_state["monitor_disk_directory"] = monitor_default_disk_directory()
     st.session_state.setdefault("monitor_disk_top_n", 10)

@@ -1,0 +1,227 @@
+:root {
+  --hhs-dracula-background: #0f172a;
+  --hhs-dracula-current-line: #1e293b;
+  --hhs-dracula-selection: #334155;
+  --hhs-dracula-foreground: #f8fafc;
+  --hhs-dracula-comment: #94a3b8;
+  --hhs-dracula-cyan: #38bdf8;
+  --hhs-dracula-green: #15803d;
+  --hhs-dracula-orange: #facc15;
+  --hhs-dracula-pink: #ff3045;
+  --hhs-dracula-purple: #2563eb;
+  --hhs-dracula-red: #dc2626;
+  --hhs-dracula-yellow: #facc15;
+  --hhs-dracula-panel: #111827;
+  --hhs-ui-blue: #2563eb;
+}
+
+html,
+body,
+[data-testid="stAppViewContainer"],
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"] {
+  background: var(--hhs-dracula-background) !important;
+  color: var(--hhs-dracula-foreground) !important;
+}
+
+[data-testid="stSidebar"] {
+  background: var(--hhs-dracula-panel) !important;
+  border-right: 1px solid #e5e7eb;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] {
+  background: #f3f4f6;
+}
+
+.hhs-sidebar-clock {
+  color: #64748b;
+}
+
+.st-key-active_view [role="radiogroup"] {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.st-key-active_view [role="radiogroup"] label {
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--hhs-dracula-foreground);
+}
+
+.st-key-active_view [role="radiogroup"] label:hover {
+  color: #ffffff;
+}
+
+.st-key-active_view [role="radiogroup"] label:has(input:checked) {
+  border-bottom-color: #ff3045;
+  color: #ff3045;
+}
+
+.st-key-active_view [role="radiogroup"] label:has(input:checked) p {
+  color: #ff3045;
+}
+
+.hhs-view-heading {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.hhs-view-heading h2 {
+  background: none;
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-inline-form-label {
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-ai-chat-meta,
+.hhs-ai-settings-current-model {
+  color: #64748b;
+}
+
+.hhs-ai-settings-current-model span,
+.hhs-ai-chat-meta span {
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.hhs-ai-settings-current-model strong,
+.hhs-ai-chat-meta .hhs-ai-chat-model,
+.hhs-ai-assistant-text {
+  color: #15803d;
+}
+
+.hhs-ai-selected-model {
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-ai-selected-model strong {
+  color: #2563eb;
+}
+
+.st-key-ai_show_context_button button,
+.st-key-ai_clear_chat_button button,
+.st-key-ai_confirm_clear_button button,
+.st-key-ai_cancel_clear_button button,
+.st-key-ai_confirm_model_select_button button,
+.st-key-ai_cancel_model_select_button button,
+.st-key-ai_confirm_model_delete_button button,
+.st-key-ai_cancel_model_delete_button button,
+div[class*="st-key-ai_select_model_button_"] button,
+div[class*="st-key-ai_delete_model_button_"] button,
+div[class*="st-key-monitor_process_kill_button_"] button {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.hhs-ai-chat-meta strong,
+.hhs-ai-user-text {
+  color: #38bdf8;
+}
+
+.hhs-ai-system-text {
+  color: #facc15;
+}
+
+[data-testid="stChatMessage"]:has(.hhs-ai-user-text) {
+  background: rgba(37, 99, 235, 0.18);
+}
+
+[data-testid="stChatMessage"]:has(.hhs-ai-assistant-text) {
+  background: rgba(21, 128, 61, 0.18);
+}
+
+[data-testid="stChatMessage"]:has(.hhs-ai-system-text) {
+  background: rgba(250, 204, 21, 0.16);
+}
+
+.hhs-sysinfo-output {
+  background: transparent;
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-terminal-panel {
+  background: rgba(15, 23, 42, 0.76);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-log-file-title,
+.hhs-log-file-title code {
+  color: #15803d;
+}
+
+.hhs-log-file-title code {
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.hhs-log-info {
+  color: #15803d;
+}
+
+.hhs-log-debug {
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-log-warn {
+  color: #facc15;
+}
+
+.hhs-log-error {
+  color: #dc2626;
+}
+
+.hhs-log-thread {
+  color: #2563eb;
+}
+
+.hhs-log-fqdn {
+  color: #38bdf8;
+}
+
+.hhs-log-date {
+  color: #ff3045;
+}
+
+.hhs-log-uri {
+  color: #2563eb;
+}
+
+div[class*="st-key-alias_selected_value_"] textarea,
+div[class*="st-key-cmd_selected_value_"] textarea,
+div[class*="st-key-dir_selected_value_"] textarea,
+div[class*="st-key-env_selected_value_"] textarea,
+div[class*="st-key-history_command_selected_value_"] textarea,
+div[class*="st-key-history_directory_selected_value_"] textarea,
+div[class*="st-key-path_selected_value_"] textarea,
+div[class*="st-key-service_selected_value_"] textarea {
+  background: rgba(15, 23, 42, 0.42) !important;
+  border-color: #dc2626 !important;
+  color: var(--hhs-dracula-foreground) !important;
+}
+
+.hhs-tab-loader {
+  background: rgba(15, 23, 42, 0.46);
+}
+
+.hhs-tab-loader-panel {
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22);
+  color: #111827;
+}
+
+.hhs-tab-loader-spinner {
+  border: 3px solid #d1d5db;
+  border-top-color: #2563eb;
+}
+
+.hhs-tab-loader-elapsed {
+  color: #64748b;
+}
+
+.hhs-app-footer {
+  background: var(--hhs-dracula-panel);
+  border-top: 1px solid rgba(148, 163, 184, 0.28);
+  color: var(--hhs-dracula-foreground);
+}

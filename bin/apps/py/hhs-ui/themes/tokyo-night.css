@@ -1,0 +1,227 @@
+:root {
+  --hhs-dracula-background: #1a1b26;
+  --hhs-dracula-current-line: #24283b;
+  --hhs-dracula-selection: #33467c;
+  --hhs-dracula-foreground: #c0caf5;
+  --hhs-dracula-comment: #565f89;
+  --hhs-dracula-cyan: #7dcfff;
+  --hhs-dracula-green: #9ece6a;
+  --hhs-dracula-orange: #ff9e64;
+  --hhs-dracula-pink: #bb9af7;
+  --hhs-dracula-purple: #bb9af7;
+  --hhs-dracula-red: #f7768e;
+  --hhs-dracula-yellow: #e0af68;
+  --hhs-dracula-panel: #16161e;
+  --hhs-ui-blue: #7aa2f7;
+}
+
+html,
+body,
+[data-testid="stAppViewContainer"],
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"] {
+  background: var(--hhs-dracula-background) !important;
+  color: var(--hhs-dracula-foreground) !important;
+}
+
+[data-testid="stSidebar"] {
+  background: var(--hhs-dracula-panel) !important;
+  border-right: 1px solid var(--hhs-dracula-comment);
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] {
+  background: var(--hhs-dracula-current-line);
+}
+
+.hhs-sidebar-clock {
+  color: var(--hhs-dracula-cyan);
+}
+
+.st-key-active_view [role="radiogroup"] {
+  border-bottom: 1px solid var(--hhs-dracula-comment);
+}
+
+.st-key-active_view [role="radiogroup"] label {
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--hhs-dracula-foreground);
+}
+
+.st-key-active_view [role="radiogroup"] label:hover {
+  color: var(--hhs-dracula-cyan);
+}
+
+.st-key-active_view [role="radiogroup"] label:has(input:checked) {
+  border-bottom-color: var(--hhs-dracula-purple);
+  color: var(--hhs-dracula-purple);
+}
+
+.st-key-active_view [role="radiogroup"] label:has(input:checked) p {
+  color: var(--hhs-dracula-purple);
+}
+
+.hhs-view-heading {
+  border-bottom: 1px solid var(--hhs-dracula-comment);
+}
+
+.hhs-view-heading h2 {
+  background: none;
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-inline-form-label {
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-ai-chat-meta,
+.hhs-ai-settings-current-model {
+  color: var(--hhs-dracula-comment);
+}
+
+.hhs-ai-settings-current-model span,
+.hhs-ai-chat-meta span {
+  background: var(--hhs-dracula-current-line);
+}
+
+.hhs-ai-settings-current-model strong,
+.hhs-ai-chat-meta .hhs-ai-chat-model,
+.hhs-ai-assistant-text {
+  color: var(--hhs-dracula-green);
+}
+
+.hhs-ai-selected-model {
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-ai-selected-model strong {
+  color: var(--hhs-ui-blue);
+}
+
+.st-key-ai_show_context_button button,
+.st-key-ai_clear_chat_button button,
+.st-key-ai_confirm_clear_button button,
+.st-key-ai_cancel_clear_button button,
+.st-key-ai_confirm_model_select_button button,
+.st-key-ai_cancel_model_select_button button,
+.st-key-ai_confirm_model_delete_button button,
+.st-key-ai_cancel_model_delete_button button,
+div[class*="st-key-ai_select_model_button_"] button,
+div[class*="st-key-ai_delete_model_button_"] button,
+div[class*="st-key-monitor_process_kill_button_"] button {
+  background: var(--hhs-dracula-current-line);
+  border: 0;
+  color: var(--hhs-dracula-cyan);
+}
+
+.hhs-ai-chat-meta strong,
+.hhs-ai-user-text {
+  color: var(--hhs-dracula-cyan);
+}
+
+.hhs-ai-system-text {
+  color: var(--hhs-dracula-orange);
+}
+
+[data-testid="stChatMessage"]:has(.hhs-ai-user-text) {
+  background: rgba(125, 207, 255, 0.14);
+}
+
+[data-testid="stChatMessage"]:has(.hhs-ai-assistant-text) {
+  background: rgba(158, 206, 106, 0.13);
+}
+
+[data-testid="stChatMessage"]:has(.hhs-ai-system-text) {
+  background: rgba(255, 158, 100, 0.15);
+}
+
+.hhs-sysinfo-output {
+  background: transparent;
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-terminal-panel {
+  background: var(--hhs-dracula-panel);
+  border: 1px solid var(--hhs-dracula-comment);
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-log-file-title,
+.hhs-log-file-title code {
+  color: var(--hhs-dracula-green);
+}
+
+.hhs-log-file-title code {
+  background: var(--hhs-dracula-panel);
+}
+
+.hhs-log-info {
+  color: var(--hhs-dracula-green);
+}
+
+.hhs-log-debug {
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-log-warn {
+  color: var(--hhs-dracula-yellow);
+}
+
+.hhs-log-error {
+  color: var(--hhs-dracula-red);
+}
+
+.hhs-log-thread {
+  color: var(--hhs-dracula-purple);
+}
+
+.hhs-log-fqdn {
+  color: var(--hhs-dracula-cyan);
+}
+
+.hhs-log-date {
+  color: #ff007c;
+}
+
+.hhs-log-uri {
+  color: var(--hhs-ui-blue);
+}
+
+div[class*="st-key-alias_selected_value_"] textarea,
+div[class*="st-key-cmd_selected_value_"] textarea,
+div[class*="st-key-dir_selected_value_"] textarea,
+div[class*="st-key-env_selected_value_"] textarea,
+div[class*="st-key-history_command_selected_value_"] textarea,
+div[class*="st-key-history_directory_selected_value_"] textarea,
+div[class*="st-key-path_selected_value_"] textarea,
+div[class*="st-key-service_selected_value_"] textarea {
+  background: var(--hhs-dracula-panel) !important;
+  border-color: var(--hhs-dracula-red) !important;
+  color: var(--hhs-dracula-foreground) !important;
+}
+
+.hhs-tab-loader {
+  background: var(--hhs-dracula-background);
+}
+
+.hhs-tab-loader-panel {
+  background: var(--hhs-dracula-panel);
+  border: 1px solid var(--hhs-dracula-comment);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.32);
+  color: var(--hhs-dracula-foreground);
+}
+
+.hhs-tab-loader-spinner {
+  border: 3px solid var(--hhs-dracula-current-line);
+  border-top-color: var(--hhs-dracula-purple);
+}
+
+.hhs-tab-loader-elapsed {
+  color: var(--hhs-dracula-comment);
+}
+
+.hhs-app-footer {
+  background: var(--hhs-dracula-panel);
+  border-top: 1px solid var(--hhs-dracula-comment);
+  color: var(--hhs-dracula-foreground);
+}
