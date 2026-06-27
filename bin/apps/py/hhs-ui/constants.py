@@ -60,6 +60,8 @@ PERSISTED_UI_KEYS = (
     "env_other_filter",
     "env_value_overrides",
     "home_view",
+    "home_tools_filter",
+    "home_tools_other_filter",
     "history_commands_filter",
     "history_commands_other_filter",
     "history_directories_filter",

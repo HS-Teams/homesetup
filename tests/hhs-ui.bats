@@ -157,6 +157,16 @@ assert 'class="hhs-footer-logo"' in ui_source
 assert 'class="hhs-footer-logo-link"' in ui_source
 assert 'class="hhs-footer-link"' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
+assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in ui_source
+assert 'href="{working_dir_url}" target="_self">Working dir:' in ui_source
+assert 'def build_open_directory_command' in ui_source
+assert 'def run_open_working_directory' in ui_source
+assert 'def handle_footer_actions' in ui_source
+assert 'open "$target"' in ui_source
+assert 'xdg-open "$target"' in ui_source
+assert 'gio open "$target"' in ui_source
+assert 'sensible-browser "$target"' in ui_source
+assert 'use_cache=False' in ui_source
 assert 'load_app_image_data_uri(APP_AI_HOMESETUP_AVATAR_FILE, "image/png")' in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source
 base_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", base_css).group(1)
@@ -301,6 +311,36 @@ PY
   assert_success
 
   run grep -q 'AI_VIEWS = ("CHAT", "SETTINGS")' "${constants_file}"
+  assert_success
+
+  run grep -q 'HOME_VIEWS = ("System", "Tools")' "${constants_file}"
+  assert_success
+
+  run grep -q '"home_tools_filter"' "${constants_file}"
+  assert_success
+
+  run grep -q '"home_tools_other_filter"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def filter_tool_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="home_tools_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q 'LIST_FILTERS' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="home_tools_other_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="home_tools_table"' "${ui_file}"
+  assert_success
+
+  run grep -q 'checkbox=True' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_label=lambda row, _index: f"Selected: {row.get('"'"'Tool'"'"', '"'"''"'"')}"' "${ui_file}"
   assert_success
 
   run grep -q 'CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")' "${constants_file}"

@@ -22,8 +22,6 @@ from __future__ import annotations
 import hashlib
 import html
 import json
-import os
-import re
 import shlex
 import subprocess
 import textwrap
@@ -31,15 +29,15 @@ import time
 from base64 import b64encode
 from collections.abc import Callable
 from datetime import datetime
-from pathlib import Path
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from constants import *  # noqa: F403
 from streamlit import config as st_config
 
-from constants import *  # noqa: F403
+FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"
 
 
 def load_app_css() -> str:
@@ -49,7 +47,9 @@ def load_app_css() -> str:
 
 def available_theme_options() -> tuple[str, ...]:
     """Return all selectable theme names from the themes folder."""
-    return tuple(sorted(theme.stem for theme in APP_THEME_CSS_FILE.parent.glob("*.css")))
+    return tuple(
+        sorted(theme.stem for theme in APP_THEME_CSS_FILE.parent.glob("*.css"))
+    )
 
 
 def default_theme_name(theme_options: tuple[str, ...] | None = None) -> str:
@@ -513,7 +513,11 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
 
 def render_theme_reload_overlay() -> None:
     """Render the theme loading overlay and reload the browser after a short delay."""
-    theme_name = str(st.session_state.get("theme_reload_name") or st.session_state.get(THEME_SELECTED_KEY) or "")
+    theme_name = str(
+        st.session_state.get("theme_reload_name")
+        or st.session_state.get(THEME_SELECTED_KEY)
+        or ""
+    )
     safe_theme_name = theme_name.strip() or APP_THEME_CSS_FILE.stem
     st.session_state["theme_reload_pending"] = False
     render_preloader(f"Loading theme {safe_theme_name}", transient=False)
@@ -699,7 +703,9 @@ def restore_persisted_theme_selection() -> str:
     """Restore the persisted UI theme into Streamlit session state."""
     selected_theme = validated_theme_name(st.session_state.get(THEME_SELECTED_KEY, ""))
     if not selected_theme:
-        selected_theme = validated_theme_name(load_ui_state().get(THEME_SELECTED_KEY, ""))
+        selected_theme = validated_theme_name(
+            load_ui_state().get(THEME_SELECTED_KEY, "")
+        )
     if not selected_theme:
         selected_theme = default_theme_name()
     st.session_state[THEME_SELECTED_KEY] = selected_theme
@@ -768,6 +774,7 @@ def render_footer() -> None:
     version = homesetup_version()
     working_dir = html.escape(os.getcwd())
     repository_url = html.escape(os.environ.get("HHS_GITHUB_URL", "#"), quote=True)
+    working_dir_url = f"?{FOOTER_OPEN_WORKING_DIR_QUERY_PARAM}=1"
     logo_data_uri = load_app_image_data_uri(APP_AI_HOMESETUP_AVATAR_FILE, "image/png")
     st.markdown(
         f"""
@@ -779,11 +786,35 @@ def render_footer() -> None:
           <span class="hhs-footer-spacer"></span>
           <span class="hhs-footer-glyph"></span>
           <span class="hhs-footer-spacer"></span>
-          <span>Working dir: {working_dir}</span>
+          <a class="hhs-footer-link" href="{working_dir_url}" target="_self">Working dir: {working_dir}</a>
         </footer>
         """,
         unsafe_allow_html=True,
     )
+
+
+def query_param_requested(name: str) -> bool:
+    """Return whether a Streamlit query parameter was requested."""
+    value = st.query_params.get(name)
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    return str(value).lower() in {"1", "true", "yes"}
+
+
+def remove_query_param(name: str) -> None:
+    """Remove a Streamlit query parameter if it exists."""
+    if name in st.query_params:
+        del st.query_params[name]
+
+
+def handle_footer_actions() -> None:
+    """Run footer actions requested through Streamlit query parameters."""
+    if not query_param_requested(FOOTER_OPEN_WORKING_DIR_QUERY_PARAM):
+        return
+    remove_query_param(FOOTER_OPEN_WORKING_DIR_QUERY_PARAM)
+    result = run_open_working_directory()
+    if result.returncode != 0:
+        st.error(result.stderr or "Unable to open working directory.")
 
 
 def render_home_view() -> None:
@@ -1009,11 +1040,38 @@ def render_home_tools_panel() -> None:
     if not rows:
         st.caption("No tool checks found.")
         return
+    filter_col, other_filter_col = st.columns(
+        TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+    )
+    with filter_col:
+        tools_filter = st.radio(
+            "Tools filter",
+            LIST_FILTERS,
+            horizontal=True,
+            index=0,
+            key="home_tools_filter",
+            on_change=save_ui_state,
+        )
+    other_filter = ""
+    if tools_filter == "Other":
+        with other_filter_col:
+            other_filter = st.text_input(
+                "Tools filter text",
+                key="home_tools_other_filter",
+                label_visibility="collapsed",
+                on_change=save_ui_state,
+                placeholder="Type filter text",
+            )
+    filtered_rows = filter_tool_rows(rows, tools_filter, other_filter)
+    if not filtered_rows:
+        st.caption("No tool checks match the current filter.")
+        return
     renderTable(
-        rows,
-        key=None,
-        checkbox=False,
-        table_data=styled_tool_rows(rows),
+        filtered_rows,
+        key="home_tools_table",
+        checkbox=True,
+        selected_label=lambda row, _index: f"Selected: {row.get('Tool', '')}",
+        table_data=styled_tool_rows(filtered_rows),
         height=ENV_TABLE_HEIGHT,
         width=ENV_TABLE_WIDTH,
     )
@@ -1430,11 +1488,12 @@ def run_bash_command(
     loader_message: str,
     close_dialogs: bool = False,
     ttl_seconds: int = UI_CACHE_DEFAULT_TTL_SECONDS,
+    use_cache: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run a Bash command with hash-keyed command-result caching and a preloader."""
     cache_key = command_cache_key(command)
-    cached_value = cache_get(cache_key)
-    if cached_value is not None:
+    cached_value = cache_get(cache_key) if use_cache else None
+    if use_cache and cached_value is not None:
         return completed_process_from_cache(command, cached_value)
 
     setOverlay(True, loader_message, close_dialogs=close_dialogs)
@@ -1446,7 +1505,10 @@ def run_bash_command(
             env=command_env(),
             text=True,
         )
-        cache_set(cache_key, cache_value_from_completed_process(result), ttl_seconds)
+        if use_cache:
+            cache_set(
+                cache_key, cache_value_from_completed_process(result), ttl_seconds
+            )
         return result
     finally:
         setOverlay(False)
@@ -1601,6 +1663,36 @@ def build_hhs_sysinfo_command() -> str:
         f'source "{hhs_home}/dotfiles/bash/bash_commons.bash"; '
         f'source "{hhs_home}/bin/hhs-functions/bash/hhs-sys-utils.bash"; '
         "__hhs_sysinfo"
+    )
+
+
+def build_open_directory_command(directory: str) -> str:
+    """Build a POSIX-shell command that opens a directory in the OS file explorer."""
+    safe_directory = shlex.quote(str(Path(directory).resolve()))
+    return (
+        f"target={safe_directory}; "
+        'if [ "$(uname -s)" = "Darwin" ]; then '
+        'open "$target"; '
+        "elif command -v xdg-open >/dev/null 2>&1; then "
+        'xdg-open "$target"; '
+        "elif command -v gio >/dev/null 2>&1; then "
+        'gio open "$target"; '
+        "elif command -v sensible-browser >/dev/null 2>&1; then "
+        'sensible-browser "$target"; '
+        "else "
+        'printf "%s\\n" "No supported file explorer opener found." >&2; '
+        "exit 127; "
+        "fi"
+    )
+
+
+def run_open_working_directory() -> subprocess.CompletedProcess[str]:
+    """Open the current working directory in the operating system file explorer."""
+    return run_bash_command(
+        build_open_directory_command(os.getcwd()),
+        "Opening working directory...",
+        ttl_seconds=0,
+        use_cache=False,
     )
 
 
@@ -2083,6 +2175,23 @@ def env_filter_pattern(env_filter: str, other_filter: str = "") -> str | None:
         clean_filter = other_filter.strip()
         return clean_filter or None
     return None
+
+
+def row_matches_text_filter(row: dict[str, str], text_filter: str = "") -> bool:
+    """Return whether any row value contains the text filter."""
+    clean_filter = text_filter.strip().lower()
+    if not clean_filter:
+        return True
+    return any(clean_filter in str(value).lower() for value in row.values())
+
+
+def filter_tool_rows(
+    rows: list[dict[str, str]], tools_filter: str = "All", other_filter: str = ""
+) -> list[dict[str, str]]:
+    """Return Home tools rows matching the selected UI filter."""
+    if tools_filter == "Other":
+        return [row for row in rows if row_matches_text_filter(row, other_filter)]
+    return rows
 
 
 def path_row_matches_filter(
@@ -3954,6 +4063,7 @@ def main() -> None:
     restore_ui_state()
     restore_persisted_theme_selection()
     render_styles()
+    handle_footer_actions()
     if st.session_state.get("theme_reload_pending"):
         render_theme_reload_overlay()
     st.session_state.setdefault("active_view", "Home")
@@ -3979,6 +4089,10 @@ def main() -> None:
     st.session_state.setdefault("home_view", "System")
     if st.session_state["home_view"] not in HOME_VIEWS:
         st.session_state["home_view"] = "System"
+    st.session_state.setdefault("home_tools_filter", "All")
+    if st.session_state["home_tools_filter"] not in LIST_FILTERS:
+        st.session_state["home_tools_filter"] = "All"
+    st.session_state.setdefault("home_tools_other_filter", "")
     st.session_state.setdefault("config_view", "ENV")
     if st.session_state["config_view"] not in CONFIG_VIEWS:
         st.session_state["config_view"] = "ENV"
