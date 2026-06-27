@@ -95,16 +95,6 @@ textarea,
   display: none;
 }
 
-[data-testid="stExpandSidebarButton"],
-[data-testid="stSidebarCollapseButton"] button {
-  background: transparent !important;
-  border-left: 0 !important;
-  border-radius: 0 !important;
-  border-right: 0 !important;
-  border-top: 0 !important;
-  box-shadow: none !important;
-}
-
 .hhs-view-heading {
   margin: 0 0 0.75rem;
   padding: 0;
@@ -444,7 +434,10 @@ div[class*="st-key-service_selected_value_"] textarea {
 }
 
 .hhs-footer-glyph {
+  align-items: center;
+  background: transparent;
   display: inline-flex;
+  line-height: 1;
 }
 
 .hhs-footer-spacer {

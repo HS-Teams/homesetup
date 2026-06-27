@@ -61,18 +61,6 @@ body,
   color: #ff3045;
 }
 
-[data-testid="stExpandSidebarButton"],
-[data-testid="stSidebarCollapseButton"] button {
-  border-bottom: 2px solid #ff3045 !important;
-  color: #ff3045 !important;
-}
-
-[data-testid="stExpandSidebarButton"] *,
-[data-testid="stSidebarCollapseButton"] button * {
-  color: #ff3045 !important;
-  fill: currentColor !important;
-}
-
 .hhs-view-heading {
   border-bottom: 1px solid rgba(148, 163, 184, 0.28);
 }
@@ -236,4 +224,8 @@ div[class*="st-key-service_selected_value_"] textarea {
   background: var(--hhs-dracula-panel);
   border-top: 1px solid rgba(148, 163, 184, 0.28);
   color: var(--hhs-dracula-foreground);
+}
+
+.hhs-footer-glyph {
+  color: #ff3045;
 }

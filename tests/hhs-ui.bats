@@ -109,16 +109,21 @@ setup() {
   run grep -q -- '--hhs-dracula-background: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 
-  run grep -q 'stExpandSidebarButton' "${css_file}"
-  assert_success
+  run python3 - <<'PY'
+import re
+from pathlib import Path
 
-  run grep -q 'stSidebarCollapseButton' "${css_file}"
-  assert_success
+ui_source = Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text()
+base_css = Path("bin/apps/py/hhs-ui/streamlit_ui.css").read_text()
+dracula_css = Path("bin/apps/py/hhs-ui/themes/dracula.css").read_text()
 
-  run grep -q 'stExpandSidebarButton' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
-  assert_success
-
-  run grep -q 'border-bottom: 2px solid var(--hhs-dracula-purple)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+assert 'class="hhs-footer-glyph"></span>' in ui_source
+base_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", base_css).group(1)
+theme_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", dracula_css).group(1)
+assert "border-bottom" not in base_block
+assert "border-bottom" not in theme_block
+assert "color: var(--hhs-dracula-purple)" in theme_block
+PY
   assert_success
 
   run grep -q '<style>' "${css_file}"
