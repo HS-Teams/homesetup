@@ -121,13 +121,19 @@ setup() {
   run grep -q 'top: 58px' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-primary-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-sidebar-inline-inset: 20px' "${css_file}"
+  assert_success
+
+  run grep -q 'padding: 0 2rem 0 var(--hhs-sidebar-inline-inset)' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 
   run grep -q -- '--hhs-markdown-table-value: var(--hhs-theme-primary-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-theme-text-color-accent: var(--hhs-success)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-theme-text-color-accent:' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
   assert_success
 
   run grep -q 'color: var(--hhs-markdown-table-header)' "${css_file}"
@@ -148,11 +154,20 @@ base_css = Path("bin/apps/py/hhs-ui/streamlit_ui.css").read_text()
 dracula_css = Path("bin/apps/py/hhs-ui/themes/dracula.css").read_text()
 
 assert 'class="hhs-footer-logo"' in ui_source
+assert 'class="hhs-footer-logo-link"' in ui_source
+assert 'class="hhs-footer-link"' in ui_source
+assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
 assert 'load_app_image_data_uri(APP_AI_HOMESETUP_AVATAR_FILE, "image/png")' in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source
 base_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", base_css).group(1)
+link_block = re.search(r"\.hhs-footer-link,[^{]+\{([^}]*)\}", base_css).group(1)
+logo_link_block = re.search(r"\.hhs-footer-logo-link,[^{]+\{([^}]*)\}", base_css).group(1)
 logo_block = re.search(r"\.hhs-footer-logo\s*\{([^}]*)\}", base_css).group(1)
 theme_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", dracula_css).group(1)
+assert "color: inherit" in link_block
+assert "text-decoration: none !important" in link_block
+assert "filter: brightness(1.2)" in base_css
+assert "filter: none" in logo_link_block
 assert "height:" in logo_block
 assert "width:" in logo_block
 assert "border-bottom" not in base_block

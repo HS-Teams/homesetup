@@ -767,12 +767,15 @@ def render_footer() -> None:
     """Render the HomeSetup UI footer."""
     version = homesetup_version()
     working_dir = html.escape(os.getcwd())
+    repository_url = html.escape(os.environ.get("HHS_GITHUB_URL", "#"), quote=True)
     logo_data_uri = load_app_image_data_uri(APP_AI_HOMESETUP_AVATAR_FILE, "image/png")
     st.markdown(
         f"""
         <footer class="hhs-app-footer">
-          <img class="hhs-footer-logo" src="{logo_data_uri}" alt="" aria-hidden="true">
-          <span>HomeSetup - v{version}</span>
+          <a class="hhs-footer-logo-link" href="{repository_url}" target="_blank" rel="noopener noreferrer" aria-label="HomeSetup repository">
+            <img class="hhs-footer-logo" src="{logo_data_uri}" alt="" aria-hidden="true">
+          </a>
+          <a class="hhs-footer-link" href="{repository_url}" target="_blank" rel="noopener noreferrer">HomeSetup - v{version}</a>
           <span class="hhs-footer-spacer"></span>
           <span class="hhs-footer-glyph"></span>
           <span class="hhs-footer-spacer"></span>

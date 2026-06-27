@@ -3,6 +3,7 @@
   --hhs-bar-chart-height: max(12rem, min(380px, calc(100dvh - var(--hhs-bar-chart-chrome-height) - var(--hhs-footer-guard-height))));
   --hhs-footer-guard-height: 3.5rem;
   --hhs-log-chrome-height: calc(14rem + 128px);
+  --hhs-sidebar-inline-inset: 20px;
   --hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
 }
 
@@ -73,7 +74,7 @@ textarea,
 .hhs-sidebar-clock {
   font-size: 0.85rem;
   font-weight: 650;
-  left: 20px;
+  left: var(--hhs-sidebar-inline-inset);
   position: fixed;
   top: 20px;
   z-index: 1000000;
@@ -84,7 +85,7 @@ textarea,
   font-size: 0.85rem;
   font-weight: 650;
   line-height: 1.35;
-  left: 20px;
+  left: var(--hhs-sidebar-inline-inset);
   position: fixed;
   top: 58px;
   z-index: 1000000;
@@ -455,7 +456,7 @@ div[class*="st-key-service_selected_value_"] textarea {
   gap: 0;
   left: 0;
   min-height: 3.25rem;
-  padding: 0 2rem;
+  padding: 0 2rem 0 var(--hhs-sidebar-inline-inset);
   position: fixed;
   right: 0;
   z-index: 1000000;
@@ -466,6 +467,30 @@ div[class*="st-key-service_selected_value_"] textarea {
   background: transparent;
   display: inline-flex;
   line-height: 1;
+}
+
+.hhs-footer-link,
+.hhs-footer-link:visited,
+.hhs-footer-link:hover,
+.hhs-footer-link:focus {
+  color: inherit;
+  font: inherit;
+  text-decoration: none !important;
+}
+
+.hhs-footer-link:hover,
+.hhs-footer-link:focus {
+  filter: brightness(1.2);
+}
+
+.hhs-footer-logo-link,
+.hhs-footer-logo-link:visited,
+.hhs-footer-logo-link:hover,
+.hhs-footer-logo-link:focus {
+  align-items: center;
+  display: inline-flex;
+  filter: none;
+  text-decoration: none !important;
 }
 
 .hhs-footer-logo {
