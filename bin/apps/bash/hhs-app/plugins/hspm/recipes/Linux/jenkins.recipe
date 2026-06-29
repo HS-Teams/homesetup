@@ -5,17 +5,25 @@ function _about_() {
   return 0
 }
 
+function _depends_() {
+  if [[ "${HHS_MY_OS_PACKMAN}" != 'apt' && "${HHS_MY_OS_PACKMAN}" != 'apt-get' ]]; then
+    __hhs_errcho "hspm.bash: Jenkins recipe requires apt or apt-get"
+    return 1
+  fi
+
+  return 0
+}
+
 function _install_() {
 
-  local ret_val=1 arch keyring_dir source_dir key download_url packages https_tools
+  local ret_val=1 keyring_dir source_dir key source_file download_url packages https_tools
 
-  arch="$(dpkg --print-architecture)"
-  keyring_dir='/usr/share/keyrings'
+  keyring_dir='/etc/apt/keyrings'
   source_dir='/etc/apt/sources.list.d'
-  key="${keyring_dir}/jenkins.asc"
+  key="${keyring_dir}/jenkins-keyring.asc"
   source_file="${source_dir}/jenkins.list"
   download_url='https://pkg.jenkins.io/debian-stable'
-  packages=('jenkins' 'fontconfig' 'openjdk-11-jre')
+  packages=('fontconfig' 'openjdk-21-jre' 'jenkins')
   https_tools=('ca-certificates' 'curl' 'gnupg')
 
   command -v sudo &>/dev/null && SUDO=sudo
@@ -30,7 +38,7 @@ function _install_() {
   # 2. Add Jenkins’s official GPG key:
   echo "2. Add Jenkins’s official key ..."
   if ${SUDO} install -m 0755 -d "${keyring_dir}"; then
-    if curl -fsSL "${download_url}/jenkins.io-2023.key" | ${SUDO} tee "${key}" >/dev/null; then
+    if curl -fsSL "${download_url}/jenkins.io-2026.key" | ${SUDO} tee "${key}" >/dev/null; then
       if ${SUDO} chmod a+r "${key}"; then
         ret_val=0
       fi
@@ -44,7 +52,8 @@ function _install_() {
 
   # 3. Set up jenkins repository:
   echo "3. Set up jenkins repository ..."
-  if ! ${SUDO} echo "deb [arch=${arch} signed-by=${key}] ${download_url} binary/" >"${source_file}"; then
+  if ! printf 'deb [signed-by=%s] %s binary/\n' "${key}" "${download_url}" |
+    ${SUDO} tee "${source_file}" >/dev/null; then
     __hhs_errcho "hspm.bash: unable to set official Jenkins repository"
     return 1
   fi
@@ -64,17 +73,19 @@ function _install_() {
 
 function _uninstall_() {
 
-  local ret_val=1  keyring_dir source_dir key packages
+  local keyring_dir source_dir key source_file packages
 
-  arch="$(dpkg --print-architecture)"
-  keyring_dir='/usr/share/keyrings'
+  keyring_dir='/etc/apt/keyrings'
   source_dir='/etc/apt/sources.list.d'
-  key="${keyring_dir}/jenkins.asc"
+  key="${keyring_dir}/jenkins-keyring.asc"
   source_file="${source_dir}/jenkins.list"
-  download_url='https://pkg.jenkins.io/debian-stable'
-  packages=('jenkins' 'fontconfig' 'openjdk-11-jre')
+  packages=('jenkins')
 
   command -v sudo &>/dev/null && SUDO=sudo
+
+  if command -v systemctl &>/dev/null; then
+    ${SUDO} systemctl stop jenkins &>/dev/null || true
+  fi
 
   echo "Removing packages ${packages[*]} ..."
   if ! ${SUDO} "${HHS_MY_OS_PACKMAN}" -y remove "${packages[@]}"; then

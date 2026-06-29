@@ -10,15 +10,17 @@ function _depends_() {
     __hhs_errcho "hspm.bash: NVM is required to install vue"
     return 1
   fi
+
+  return 0
 }
 
 function _install_() {
-  nvm install vue
+  command -v npm >/dev/null || nvm install --lts
+  npm install -g @vue/cli
   return $?
 }
 
 function _uninstall_() {
-  nvm deactivate vue
-  nvm uninstall vue
+  npm uninstall -g @vue/cli
   return $?
 }

@@ -12,23 +12,27 @@ function _which_() {
 
 function _depends_() {
 
-  local pk_managers
+  if [[ "${HHS_MY_OS_PACKMAN}" != 'apt' && "${HHS_MY_OS_PACKMAN}" != 'apt-get' ]]; then
+    __hhs_errcho "hspm.bash: Adoptium 17 recipe requires apt or apt-get"
+    return 1
+  fi
 
-  pk_managers=('apt-get' 'apt' 'yum' 'dnf')
-  for pkg_man in "${pk_managers[@]}"; do
-    command -v "${pkg_man}" &>/dev/null && return 0
-  done
+  if ! command -v dpkg >/dev/null || [[ ! -r /etc/os-release ]]; then
+    __hhs_errcho "hspm.bash: Adoptium 17 recipe requires dpkg and /etc/os-release"
+    return 1
+  fi
 
-  __hhs_errcho "hspm.bash: no suitable package manager found to install software on this machine. Tried: ${pk_managers[*]}"
-
-  return 1
+  return 0
 }
 
 function _install_() {
 
-  local ret_val=1 arch keyring_dir source_dir key download_url packages https_tools
+  local ret_val=1 arch codename keyring_dir source_dir key source_file download_url packages https_tools
 
   arch="$(dpkg --print-architecture)"
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  codename="${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}"
   keyring_dir='/usr/share/keyrings'
   source_dir='/etc/apt/sources.list.d'
   key="${keyring_dir}/adoptium.gpg"
@@ -38,6 +42,11 @@ function _install_() {
   https_tools=('ca-certificates' 'curl' 'gnupg')
 
   command -v sudo &>/dev/null && SUDO=sudo
+
+  if [[ -z "${codename}" ]]; then
+    __hhs_errcho "hspm.bash: unable to detect OS release codename for Adoptium repository"
+    return 1
+  fi
 
   # 1. Update the apt package index and install packages to allow apt to use a repository over HTTPS:
   echo "1. Update the apt package index and install packages to allow apt to use a repository over HTTPS ..."
@@ -63,8 +72,7 @@ function _install_() {
 
   # 3. Set up adoptium repository:
   echo "3. Set up adoptium repository ..."
-  if ! ${SUDO} echo "deb [arch=${arch} signed-by=${key}] ${download_url}/deb \
-  "$(source /etc/os-release && echo "${VERSION_CODENAME}")" main" |
+  if ! printf 'deb [arch=%s signed-by=%s] %s/deb %s main\n' "${arch}" "${key}" "${download_url}" "${codename}" |
     ${SUDO} tee "${source_file}" >/dev/null; then
     __hhs_errcho "hspm.bash: unable to set official Adoptium repository"
     return 1
@@ -75,7 +83,7 @@ function _install_() {
   if ${SUDO} "${HHS_MY_OS_PACKMAN}" update; then
     # 5. Install packages:
     echo "5. Install packages ..."
-    if ${SUDO} "${HHS_MY_OS_PACKMAN}" -y install temurin-17-jdk; then
+    if ${SUDO} "${HHS_MY_OS_PACKMAN}" -y install "${packages[@]}"; then
       return 0
     fi
   fi
@@ -85,7 +93,7 @@ function _install_() {
 
 function _uninstall_() {
 
-  local ret_val=1 keyring_dir source_dir key packages
+  local keyring_dir source_dir key source_file packages
 
   keyring_dir='/usr/share/keyrings'
   source_dir='/etc/apt/sources.list.d'

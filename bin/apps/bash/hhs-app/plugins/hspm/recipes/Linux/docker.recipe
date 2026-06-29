@@ -5,11 +5,28 @@ function _about_() {
   return 0
 }
 
+function _depends_() {
+  if [[ "${HHS_MY_OS_PACKMAN}" != 'apt' && "${HHS_MY_OS_PACKMAN}" != 'apt-get' ]]; then
+    __hhs_errcho "hspm.bash: Docker recipe requires apt or apt-get"
+    return 1
+  fi
+
+  if ! command -v dpkg >/dev/null || [[ ! -r /etc/os-release ]]; then
+    __hhs_errcho "hspm.bash: Docker recipe requires dpkg and /etc/os-release"
+    return 1
+  fi
+
+  return 0
+}
+
 function _install_() {
 
-  local ret_val=1 arch keyring_dir source_dir key download_url packages https_tools
+  local ret_val=1 arch codename keyring_dir source_dir key source_file download_url packages https_tools
 
   arch="$(dpkg --print-architecture)"
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  codename="${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}"
   keyring_dir='/usr/share/keyrings'
   source_dir='/etc/apt/sources.list.d'
   key="${keyring_dir}/docker.gpg"
@@ -19,6 +36,11 @@ function _install_() {
   https_tools=('ca-certificates' 'curl' 'gnupg')
 
   command -v sudo &>/dev/null && SUDO=sudo
+
+  if [[ -z "${codename}" ]]; then
+    __hhs_errcho "hspm.bash: unable to detect OS release codename for Docker repository"
+    return 1
+  fi
 
   # 1. Execute the following command to uninstall all conflicting packages:
   echo "1. Uninstall all conflicting packages ..."
@@ -50,8 +72,7 @@ function _install_() {
 
   # 4. Set up docker repository:
   echo "4. Set up docker repository ..."
-  if ! ${SUDO} echo "deb [arch=${arch} signed-by=${key}] ${download_url} \
-  "$(source /etc/os-release && echo "${VERSION_CODENAME}")" stable" |
+  if ! printf 'deb [arch=%s signed-by=%s] %s %s stable\n' "${arch}" "${key}" "${download_url}" "${codename}" |
     ${SUDO} tee "${source_file}" >/dev/null; then
     __hhs_errcho "hspm.bash: unable to set official Docker repository"
     return 1
@@ -72,14 +93,13 @@ function _install_() {
 
 function _uninstall_() {
 
-  local ret_val=1 keyring_dir source_dir key packages https_tools
+  local keyring_dir source_dir key source_file packages
 
   keyring_dir='/usr/share/keyrings'
   source_dir='/etc/apt/sources.list.d'
   key="${keyring_dir}/docker.gpg"
   source_file="${source_dir}/docker.list"
   packages=('docker-ce' 'docker-ce-cli' 'containerd.io' 'docker-buildx-plugin' 'docker-compose-plugin')
-  https_tools=('ca-certificates' 'curl' 'gnupg')
 
   command -v sudo &>/dev/null && SUDO=sudo
 

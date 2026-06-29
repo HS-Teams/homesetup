@@ -1836,6 +1836,17 @@ def build_ssh_connect_command(host: str) -> str:
     )
 
 
+def build_ssh_check_command(host: str) -> str:
+    """Build a local command that checks an existing ControlMaster connection."""
+    safe_host = shlex.quote(host)
+    safe_control_path = shlex.quote(ssh_control_path(host))
+    safe_config_option = ssh_config_option()
+    return (
+        f"ssh {safe_config_option} -o BatchMode=yes "
+        f"-o ControlPath={safe_control_path} -O check {safe_host}"
+    )
+
+
 def build_ssh_disconnect_command(host: str) -> str:
     """Build a local command that terminates a ControlMaster connection."""
     safe_host = shlex.quote(host)
@@ -1896,6 +1907,21 @@ def clear_registered_ssh_connection() -> None:
         return
 
 
+def ssh_connection_is_alive(host: str) -> bool:
+    """Return whether the UI-managed ControlMaster connection still responds."""
+    if selected_host_is_local(host):
+        return False
+    result = run_bash_command(
+        build_ssh_check_command(host),
+        f"Checking SSH host {host}...",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        timeout_seconds=5,
+    )
+    return result.returncode == 0
+
+
 def restore_registered_ssh_connection_on_session_start() -> None:
     """Restore a registered SSH connection when a new Streamlit session starts."""
     if st.session_state.get("ssh_connection_restore_checked"):
@@ -1903,6 +1929,9 @@ def restore_registered_ssh_connection_on_session_start() -> None:
     st.session_state["ssh_connection_restore_checked"] = True
     host = registered_ssh_connection_host()
     if not host:
+        return
+    if not ssh_connection_is_alive(host):
+        clear_disconnected_ssh_host(host)
         return
     st.session_state["ssh_connection_status"] = "connected"
     st.session_state["ssh_connection_host"] = host
@@ -1922,6 +1951,18 @@ def effective_bash_command(command: str, force_local: bool = False) -> str:
     ):
         return command
     return build_ssh_wrapped_command(command, host)
+
+
+def command_remote_host(force_local: bool = False) -> str:
+    """Return the connected SSH host that will execute a command, if any."""
+    host = selected_ssh_host()
+    if (
+        force_local
+        or selected_host_is_local(host)
+        or not selected_ssh_host_is_connected(host)
+    ):
+        return ""
+    return host
 
 
 def selected_ssh_host_is_connected(host: str | None = None) -> bool:
@@ -1951,6 +1992,36 @@ def synchronize_selected_ssh_host_with_connection() -> None:
         st.session_state["ssh_host_selector"] = host
         if previous_host != host:
             save_ui_state()
+
+
+def clear_disconnected_ssh_host(host: str) -> None:
+    """Clear stale UI SSH connection state and select the local host."""
+    st.session_state["ssh_connection_status"] = ""
+    st.session_state["ssh_connection_host"] = ""
+    st.session_state["ssh_connection_error"] = ""
+    st.session_state["ssh_connect_pending"] = ""
+    st.session_state["ssh_disconnect_pending"] = ""
+    st.session_state["ssh_host_selected"] = local_hostname()
+    st.session_state["ssh_host_selector"] = local_hostname()
+    clear_registered_ssh_connection()
+    cache_clear()
+    save_ui_state()
+
+
+def ssh_shared_connection_closed(result: subprocess.CompletedProcess[str]) -> bool:
+    """Return whether a failed SSH command reports a closed shared connection."""
+    if result.returncode == 0:
+        return False
+    output = strip_ansi(f"{result.stdout or ''}\n{result.stderr or ''}").lower()
+    return "shared connection to " in output and " closed" in output
+
+
+def handle_remote_command_result(
+    host: str, result: subprocess.CompletedProcess[str]
+) -> None:
+    """Synchronize UI state when a remote command shows the SSH connection closed."""
+    if host and ssh_shared_connection_closed(result) and not ssh_connection_is_alive(host):
+        clear_disconnected_ssh_host(host)
 
 
 def request_ssh_host_connect() -> None:
@@ -2098,6 +2169,7 @@ def run_bash_command(
     timeout_seconds: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a Bash command with hash-keyed command-result caching and a preloader."""
+    remote_host = command_remote_host(force_local=force_local)
     command_to_run = effective_bash_command(command, force_local=force_local)
     effective_timeout = timeout_seconds
     if effective_timeout is None and command_to_run != command:
@@ -2117,18 +2189,21 @@ def run_bash_command(
             text=True,
             timeout=effective_timeout,
         )
-        if use_cache:
+        handle_remote_command_result(remote_host, result)
+        if use_cache and not ssh_shared_connection_closed(result):
             cache_set(
                 cache_key, cache_value_from_completed_process(result), ttl_seconds
             )
         return result
     except subprocess.TimeoutExpired as error:
-        return subprocess.CompletedProcess(
+        result = subprocess.CompletedProcess(
             ["bash", "-lc", command_to_run],
             124,
             error.stdout or "",
             error.stderr or f"Command timed out after {effective_timeout} seconds.",
         )
+        handle_remote_command_result(remote_host, result)
+        return result
     finally:
         set_overlay(False)
 

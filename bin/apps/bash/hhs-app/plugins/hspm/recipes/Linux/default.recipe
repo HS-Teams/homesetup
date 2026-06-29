@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2068
-
 function _about_() {
 
   echo "This is the default recipe and will be used when no recipe is found the specified package"
@@ -10,7 +8,7 @@ function _about_() {
 
 function _which_() {
 
-  if command -v ${@} &>/dev/null; then
+  if command -v "$1" &>/dev/null; then
     return 0
   fi
 
@@ -24,14 +22,16 @@ function _depends_() {
 
 function _install_() {
 
-  command -v sudo &> /dev/null && SUDO=sudo
+  local sudo_cmd=()
+
+  command -v sudo &> /dev/null && sudo_cmd=(sudo)
 
   if [[ ${HHS_MY_OS_PACKMAN} == 'apk' ]]; then
-    if ${SUDO} "${HHS_MY_OS_PACKMAN}" add --no-cache ${@}; then
+    if "${sudo_cmd[@]}" "${HHS_MY_OS_PACKMAN}" add --no-cache "$@"; then
       return 0
     fi
   else
-    if ${SUDO} "${HHS_MY_OS_PACKMAN}" -y install ${@}; then
+    if "${sudo_cmd[@]}" "${HHS_MY_OS_PACKMAN}" -y install "$@"; then
       return 0
     fi
   fi
@@ -41,18 +41,21 @@ function _install_() {
 
 function _uninstall_() {
 
-  command -v sudo &> /dev/null && SUDO=sudo
+  local sudo_cmd=()
+
+  command -v sudo &> /dev/null && sudo_cmd=(sudo)
 
   if [[ ${HHS_MY_OS_PACKMAN} == 'apk' ]]; then
-    if ${SUDO} "${HHS_MY_OS_PACKMAN}" del ${@}; then
+    if "${sudo_cmd[@]}" "${HHS_MY_OS_PACKMAN}" del "$@"; then
       return 0
     fi
-  elif [[ ${HHS_MY_OS_PACKMAN} == 'dnf' ]]; then
-    if ${SUDO} "${HHS_MY_OS_PACKMAN}" remove ${@}; then
+  elif [[ ${HHS_MY_OS_PACKMAN} == 'apt' || ${HHS_MY_OS_PACKMAN} == 'apt-get' ||
+    ${HHS_MY_OS_PACKMAN} == 'dnf' || ${HHS_MY_OS_PACKMAN} == 'yum' ]]; then
+    if "${sudo_cmd[@]}" "${HHS_MY_OS_PACKMAN}" -y remove "$@"; then
       return 0
     fi
   else
-    if ${SUDO} "${HHS_MY_OS_PACKMAN}" uninstall ${@}; then
+    if "${sudo_cmd[@]}" "${HHS_MY_OS_PACKMAN}" uninstall "$@"; then
       return 0
     fi
   fi

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2068
-
 function _which_() {
   if command -v ollama &>/dev/null; then
     return 0
@@ -28,8 +26,12 @@ function _install_() {
 }
 
 function _stop_ollama_() {
+  local sudo_cmd=()
+
+  command -v sudo &>/dev/null && sudo_cmd=(sudo)
+
   if command -v systemctl &>/dev/null; then
-    ${SUDO} systemctl stop ollama &>/dev/null || true
+    "${sudo_cmd[@]}" systemctl stop ollama &>/dev/null || true
   fi
 
   pkill -f 'ollama serve' &>/dev/null || true

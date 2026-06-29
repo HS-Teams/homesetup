@@ -1,22 +1,29 @@
 #!/usr/bin/env bash
 
 function _install_() {
+  local qt_prefix ret
+
   command brew install qt
-  local ret=$?
-  sed -i '' -E -e "s#(^/usr/local/opt/qt/bin$)*##g" -e '/^\s*$/d' "$HHS_PATHS_FILE"
-  echo '/usr/local/opt/qt/bin' >>"$HHS_PATHS_FILE"
-  export PATH="/usr/local/opt/qt/bin:$PATH"
+  ret=$?
+  qt_prefix="$(brew --prefix qt)"
+  sed -i '' -E -e "s#(^${qt_prefix}/bin$)*##g" -e '/^\s*$/d' "$HHS_PATHS_FILE"
+  echo "${qt_prefix}/bin" >>"$HHS_PATHS_FILE"
+  export PATH="${qt_prefix}/bin:$PATH"
   if ! command -v qmake >/dev/null; then return 1; fi
 
   return $ret
 }
 
 function _uninstall_() {
+  local qt_prefix ret
+
+  qt_prefix="$(brew --prefix qt 2>/dev/null || echo '/usr/local/opt/qt')"
   command brew uninstall qt
-  local ret=$?
-  sed -i '' -E -e "s#(^/usr/local/opt/qt/bin$)*##g" -e '/^\s*$/d' "$HHS_PATHS_FILE"
-  export PATH="${PATH//\/usr\/local\/opt\/qt\/bin/}"
+  ret=$?
+  sed -i '' -E -e "s#(^${qt_prefix}/bin$)*##g" -e '/^\s*$/d' "$HHS_PATHS_FILE"
+  PATH="$(printf '%s' "${PATH}" | sed -E -e "s#(^|:)${qt_prefix}/bin(:|$)#:#g" -e 's#^:##' -e 's#:$##')"
+  export PATH
   if command -v qmake >/dev/null; then return 1; fi
 
-  return $?
+  return $ret
 }

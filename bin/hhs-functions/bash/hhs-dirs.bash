@@ -332,6 +332,7 @@ function __hhs_load_dir() {
           done
           echo "${NC}"
           ret_val=0
+          return ${ret_val}
           ;;
         $'')
           # Use mselect to choose from the available saved directories

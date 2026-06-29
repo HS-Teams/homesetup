@@ -80,6 +80,38 @@ setup() {
 }
 
 # TC - 5
+@test "when loading hspm recipes then Bash syntax should be valid" {
+  run bash --noprofile --norc -c '
+    for recipe in "$1"/bin/apps/bash/hhs-app/plugins/hspm/recipes/*/*.recipe; do
+      bash -n "${recipe}" || exit 1
+    done
+  ' -- "${HHS_REPO_DIR}"
+  assert_success
+}
+
+# TC - 6
+@test "when reviewing hspm recipes then known stale recipe targets should be updated" {
+  nvm_recipe_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/recipes/Darwin/nvm.recipe"
+  vue_recipe_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/recipes/Darwin/vue.recipe"
+  jenkins_recipe_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/recipes/Linux/jenkins.recipe"
+
+  run grep -q 'https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.5/install.sh' "${nvm_recipe_file}"
+  assert_success
+
+  run grep -q 'creationix/nvm' "${nvm_recipe_file}"
+  assert_failure
+
+  run grep -q 'npm install -g @vue/cli' "${vue_recipe_file}"
+  assert_success
+
+  run grep -q 'openjdk-21-jre' "${jenkins_recipe_file}"
+  assert_success
+
+  run grep -q 'jenkins.io-2026.key' "${jenkins_recipe_file}"
+  assert_success
+}
+
+# TC - 7
 @test "when hspm install recipe fails then execute should return failure" {
   run bash --noprofile --norc -c '
     set -u
@@ -141,6 +173,27 @@ setup() {
   assert_success
 
   run grep -q -- '--server.port "${HHS_STREAMLIT_UI_PORT}"' "${ui_plugin_file}"
+  assert_success
+}
+
+# TC - 6
+@test "when remote SSH command closes then Streamlit UI should clear stale connection state" {
+  run grep -q 'def ssh_shared_connection_closed' "${ui_file}"
+  assert_success
+
+  run grep -q 'def clear_disconnected_ssh_host' "${ui_file}"
+  assert_success
+
+  run grep -q 'handle_remote_command_result(remote_host, result)' "${ui_file}"
+  assert_success
+
+  run grep -q 'if use_cache and not ssh_shared_connection_closed(result)' "${ui_file}"
+  assert_success
+
+  run grep -q 'not ssh_connection_is_alive(host)' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ssh_host_selected"\] = local_hostname()' "${ui_file}"
   assert_success
 }
 
@@ -1259,6 +1312,28 @@ PY
 
   run grep -q 'def render_aliases_table' "${ui_file}"
   assert_success
+}
+
+@test "when listing saved dirs then hhs load dir should not fall through to alias loading" {
+  run bash --noprofile --norc -c '
+    export HHS_DIR="${1}/hhs"
+    export HHS_SAVED_DIRS_FILE="${HHS_DIR}/.saved_dirs"
+    export HHS_HIGHLIGHT_COLOR=""
+    export WHITE=""
+    export GREEN=""
+    export YELLOW=""
+    export NC=""
+    mkdir -p "${HHS_DIR}" "${1}/project"
+    printf "PROJECT=%s/project\n" "${1}" > "${HHS_SAVED_DIRS_FILE}"
+    function __hhs_errcho() {
+      printf "%s\n" "$*" >&2
+    }
+    source "${2}/bin/hhs-functions/bash/hhs-dirs.bash"
+    __hhs_load_dir -l
+  ' -- "${BATS_TEST_TMPDIR}" "${HHS_REPO_DIR}"
+  assert_success
+  assert_output --partial 'PROJECT'
+  refute_output --partial 'Alias "" not found'
 }
 
 # TC - 19

@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2068
-
 function _about_() {
   echo "This is the default recipe and will be used when no recipe is found the specified package"
   return 0
@@ -8,7 +6,7 @@ function _about_() {
 
 function _which_() {
 
-  if command -v ${@} &>/dev/null || "${HHS_MY_OS_PACKMAN}" info ${@} &>/dev/null; then
+  if command -v "$1" &>/dev/null || "${HHS_MY_OS_PACKMAN}" info "$@" &>/dev/null; then
     return 0
   fi
 
@@ -22,7 +20,7 @@ function _depends_() {
 
 function _install_() {
 
-  if "${HHS_MY_OS_PACKMAN}" install ${@}; then
+  if "${HHS_MY_OS_PACKMAN}" install "$@"; then
     return 0
   fi
 
@@ -31,7 +29,7 @@ function _install_() {
 
 function _uninstall_() {
 
-  if "${HHS_MY_OS_PACKMAN}" uninstall ${@}; then
+  if "${HHS_MY_OS_PACKMAN}" uninstall "$@"; then
     return 0
   fi
 

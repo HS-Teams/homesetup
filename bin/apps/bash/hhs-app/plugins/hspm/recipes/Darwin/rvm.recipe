@@ -2,13 +2,14 @@
 
 function _install_() {
 
-  local ret
+  local ret=1
 
   unset rvm RVM_DIR
   command brew install gnupg
   ret=$?
   if [ $ret -eq 0 ]; then
-    gpg --keyserver hkp://keys.gnupg.net --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3 7D2BAF1CF37B13E2069D6956105BD0E739499BDB
+    gpg --keyserver hkps://keyserver.ubuntu.com \
+      --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3 7D2BAF1CF37B13E2069D6956105BD0E739499BDB
     ret=$?
     if [ $ret -eq 0 ]; then
       curl -sSL https://get.rvm.io | bash -s stable --ruby
@@ -21,12 +22,14 @@ function _install_() {
 
 function _uninstall_() {
 
-  local ret
+  local rvm_dir ret=0
 
+  rvm_dir="${RVM_DIR:-${HOME}/.rvm}"
   unset rvm RVM_DIR
   command brew uninstall gnupg
-  rvm implode
-  [ -d "$RVM_DIR" ] && rm -rf "$RVM_DIR"
+  ret=$?
+  command -v rvm >/dev/null && rvm implode
+  [ -d "$rvm_dir" ] && rm -rf "$rvm_dir"
 
   return $ret
 }

@@ -9,6 +9,8 @@ function _depends_() {
     __hhs_errcho "hspm.bash: NVM is required to install node"
     return 1
   fi
+
+  return 0
 }
 
 function _install_() {
@@ -17,7 +19,7 @@ function _install_() {
 }
 
 function _uninstall_() {
-  nvm deactivate node
+  nvm deactivate
   nvm uninstall node
   return $?
 }

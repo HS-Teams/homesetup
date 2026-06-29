@@ -2,12 +2,12 @@
 
 function _install_docker_() {
 
-  packman="${HHS_MY_OS_PACKMAN}"
+  local packman="${HHS_MY_OS_PACKMAN}"
 
-  if ! which docker &> /dev/null; then
+  if ! command -v docker &> /dev/null; then
     echo -e "${BLUE}Installing Docker ...${NC}"
-    ${packman} install docker docker-buildx docker-compose docker-credential-helper
-    if which docker &> /dev/null; then
+    "${packman}" install docker docker-buildx docker-compose docker-credential-helper
+    if command -v docker &> /dev/null; then
       echo -e "${GREEN}@@@ Successfully installed Docker ${NC}"
       return 0
     else
@@ -22,23 +22,26 @@ function _install_docker_() {
 }
 function _install_colima_() {
 
-  packman="${HHS_MY_OS_PACKMAN}"
+  local packman="${HHS_MY_OS_PACKMAN}"
 
-  if ! which colima &> /dev/null; then
+  if ! command -v colima &> /dev/null; then
     echo -e "${BLUE}Installing Colima ...${NC}"
-    if ${packman} install colima && which colima &> /dev/null; then
+    if "${packman}" install colima && command -v colima &> /dev/null; then
       echo -e "${GREEN}@@@ Successfully installed Colima ${NC}"
     else
       echo -e "${RED}### Failed to install Colima ${NC}"
+      return 1
     fi
   else
     echo -e "${YELLOW}Colima is already installed ...${NC}"
   fi
+
+  return 0
 }
 
 function _which_() {
 
-  if which colima docker &>/dev/null; then
+  if command -v colima &>/dev/null && command -v docker &>/dev/null; then
     return 0
   fi
 
@@ -56,7 +59,8 @@ function _install_() {
   fi
 
   # Configure credentials
-  sed -i'' -e 's|"credsStore": ".*"|"credsStore": "osxkeychain"|g' ~/.docker/config.json
+  [[ -f "${HOME}/.docker/config.json" ]] &&
+    sed -i'' -e 's|"credsStore": ".*"|"credsStore": "osxkeychain"|g' "${HOME}/.docker/config.json"
 
   # Configure plugins
   [[ -d "${HOME}/.docker/cli-plugins" ]] || \mkdir -p "${HOME}/.docker/cli-plugins"
@@ -68,8 +72,8 @@ function _install_() {
 
   # Link plugins
   pushd "${HOME}/.docker/cli-plugins" &> /dev/null || return 1
-  ln -s "$(which docker-compose)" &> /dev/null .
-  ln -s "$(which docker-buildx)" &> /dev/null .
+  command -v docker-compose >/dev/null && ln -s "$(command -v docker-compose)" &> /dev/null .
+  command -v docker-buildx >/dev/null && ln -s "$(command -v docker-buildx)" &> /dev/null .
   popd &> /dev/null || return 1
 
   return 0
