@@ -198,6 +198,24 @@ setup() {
   run grep -q 'Host ({host_kind})' "${ui_file}"
   assert_success
 
+  run grep -q 'def select_ssh_host_from_widget' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ssh_host_selector"' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_change=select_ssh_host_from_widget' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ssh_host_selected"' "${ui_file}"
+  assert_failure
+
+  run grep -q 'ssh_host_connected_display_' "${ui_file}"
+  assert_success
+
+  run grep -q 'disabled=True' "${ui_file}"
+  assert_success
+
   run grep -Fq 'options = ["", local_hostname()]' "${ui_file}"
   assert_failure
 
@@ -736,10 +754,19 @@ PY
   run grep -q 'UI_SSH_CONNECTION_FILE' "${constants_file}"
   assert_success
 
-  run grep -q 'def cleanup_registered_ssh_connection_on_session_start' "${ui_file}"
+  run grep -q 'def restore_registered_ssh_connection_on_session_start' "${ui_file}"
   assert_success
 
-  run grep -q 'cleanup_registered_ssh_connection_on_session_start()' "${ui_file}"
+  run grep -q 'restore_registered_ssh_connection_on_session_start()' "${ui_file}"
+  assert_success
+
+  run grep -q 'ssh_connection_restore_checked' "${ui_file}"
+  assert_success
+
+  run grep -q 'Disconnecting stale SSH host' "${ui_file}"
+  assert_failure
+
+  run grep -q 'st.session_state\["ssh_connection_status"\] = "connected"' "${ui_file}"
   assert_success
 
   run grep -q 'def register_ssh_connection' "${ui_file}"
@@ -767,6 +794,9 @@ PY
   assert_success
 
   run grep -q 'st.session_state\["ssh_host_selected"\] = host' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ssh_host_selector"\] = host' "${ui_file}"
   assert_success
 
   run grep -q 'ssh_connection_host' "${ui_file}"

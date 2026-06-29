@@ -406,11 +406,15 @@ def execute_pending_ai_model_deletion() -> None:
 def render_sidebar() -> None:
     """Render the closeable HomeSetup sidebar."""
     theme_options = available_theme_options()
+    synchronize_selected_ssh_host_with_connection()
     host_options = host_selector_options()
     selected_host = selected_ssh_host()
     if not selected_host:
         st.session_state["ssh_host_selected"] = local_hostname()
         selected_host = selected_ssh_host()
+    connected_host = connected_ssh_host()
+    if connected_host:
+        selected_host = connected_host
     selected_theme = validated_theme_name(
         st.session_state.get(THEME_SELECTED_KEY, ""), theme_options
     )
@@ -427,16 +431,33 @@ def render_sidebar() -> None:
         st.write("")
         host_kind = "Local" if selected_host_is_local() else "SSH"
         st.markdown(f"**Host ({host_kind}):**")
-        st.selectbox(
-            f"Host ({host_kind})",
-            options=host_options,
-            key="ssh_host_selected",
-            label_visibility="collapsed",
-            width="stretch",
-        )
-        if not selected_host_is_local():
+        if connected_host:
+            connected_host_key = hashlib.sha256(
+                connected_host.encode("utf-8")
+            ).hexdigest()[:8]
+            st.selectbox(
+                f"Host ({host_kind})",
+                options=(connected_host,),
+                index=0,
+                key=f"ssh_host_connected_display_{connected_host_key}",
+                label_visibility="collapsed",
+                disabled=True,
+                width="stretch",
+            )
+        else:
+            if st.session_state.get("ssh_host_selector") != selected_host:
+                st.session_state["ssh_host_selector"] = selected_host
+            selected_host = st.selectbox(
+                f"Host ({host_kind})",
+                options=host_options,
+                key="ssh_host_selector",
+                label_visibility="collapsed",
+                on_change=select_ssh_host_from_widget,
+                width="stretch",
+            )
+        if connected_host or not selected_host_is_local():
             st.markdown('<div class="hhs-vspacer"></div>', unsafe_allow_html=True)
-            if selected_ssh_host_is_connected():
+            if connected_host:
                 st.button(
                     "Disconnect",
                     key="ssh_disconnect_button",
@@ -1696,6 +1717,15 @@ def selected_ssh_host() -> str:
     return str(st.session_state.get("ssh_host_selected", "")).strip()
 
 
+def select_ssh_host_from_widget() -> None:
+    """Persist the sidebar host widget selection as the canonical SSH host."""
+    selected_host = str(st.session_state.get("ssh_host_selector", "")).strip()
+    if not selected_host:
+        selected_host = local_hostname()
+    st.session_state["ssh_host_selected"] = selected_host
+    save_ui_state()
+
+
 def selected_host_is_local(host: str | None = None) -> bool:
     """Return whether the selected host should use local command execution."""
     host_name = (host if host is not None else selected_ssh_host()).strip()
@@ -1792,24 +1822,20 @@ def clear_registered_ssh_connection() -> None:
         return
 
 
-def cleanup_registered_ssh_connection_on_session_start() -> None:
-    """Terminate a registered SSH connection when a new Streamlit session starts."""
-    if st.session_state.get("ssh_connection_cleanup_checked"):
+def restore_registered_ssh_connection_on_session_start() -> None:
+    """Restore a registered SSH connection when a new Streamlit session starts."""
+    if st.session_state.get("ssh_connection_restore_checked"):
         return
-    st.session_state["ssh_connection_cleanup_checked"] = True
+    st.session_state["ssh_connection_restore_checked"] = True
     host = registered_ssh_connection_host()
     if not host:
         return
-    run_bash_command(
-        build_ssh_disconnect_command(host),
-        f"Disconnecting stale SSH host {host}...",
-        ttl_seconds=0,
-        use_cache=False,
-        force_local=True,
-        timeout_seconds=10,
-    )
-    clear_registered_ssh_connection()
-    cache_clear()
+    st.session_state["ssh_connection_status"] = "connected"
+    st.session_state["ssh_connection_host"] = host
+    st.session_state["ssh_host_selected"] = host
+    st.session_state["ssh_host_selector"] = host
+    st.session_state["ssh_connection_error"] = ""
+    save_ui_state()
 
 
 def effective_bash_command(command: str, force_local: bool = False) -> str:
@@ -1845,9 +1871,12 @@ def connected_ssh_host() -> str:
 def synchronize_selected_ssh_host_with_connection() -> None:
     """Keep the sidebar host selection aligned with an active SSH connection."""
     host = connected_ssh_host()
-    if host and selected_ssh_host() != host:
+    if host:
+        previous_host = selected_ssh_host()
         st.session_state["ssh_host_selected"] = host
-        save_ui_state()
+        st.session_state["ssh_host_selector"] = host
+        if previous_host != host:
+            save_ui_state()
 
 
 def request_ssh_host_connect() -> None:
@@ -1891,6 +1920,7 @@ def execute_pending_ssh_connection() -> None:
         st.session_state["ssh_connection_status"] = "connected"
         st.session_state["ssh_connection_host"] = host
         st.session_state["ssh_host_selected"] = host
+        st.session_state["ssh_host_selector"] = host
         st.session_state["ssh_connection_error"] = ""
         st.session_state["ssh_connection_dialog_title"] = (
             f"Successfully connected to {host}"
@@ -1924,8 +1954,11 @@ def execute_pending_ssh_disconnection() -> None:
     st.session_state["ssh_connection_host"] = ""
     st.session_state["ssh_connection_error"] = ""
     st.session_state["ssh_connection_dialog_title"] = ""
+    st.session_state["ssh_host_selected"] = local_hostname()
+    st.session_state["ssh_host_selector"] = local_hostname()
     clear_registered_ssh_connection()
     cache_clear()
+    save_ui_state()
 
 
 def clear_ssh_connection_dialog() -> None:
@@ -4795,7 +4828,7 @@ def main() -> None:
     st.session_state.setdefault("ssh_connection_host", "")
     st.session_state.setdefault("ssh_connection_error", "")
     st.session_state.setdefault("ssh_connection_dialog_title", "")
-    cleanup_registered_ssh_connection_on_session_start()
+    restore_registered_ssh_connection_on_session_start()
     synchronize_selected_ssh_host_with_connection()
     if selected_host_is_local():
         st.session_state["ssh_connection_status"] = ""
