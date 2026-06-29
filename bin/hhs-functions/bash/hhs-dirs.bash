@@ -136,10 +136,16 @@ function __hhs_dirs() {
   while IFS= read -r line; do [[ -d "${line}" ]] && results+=("${line}"); done < <(dirs -p -l)
 
   # Deduplicate and sort
-  while IFS= read -r line; do all_dirs+=("$line"); done < <(printf "%s\n" "${results[@]}" | sort -u)
+  while IFS= read -r line; do
+    [[ -n "${line}" ]] && all_dirs+=("$line")
+  done < <(printf "%s\n" "${results[@]}" | sort -u)
   len=${#all_dirs[@]}
 
   if [[ "$1" == "-l" ]]; then
+    if [[ ${len} -eq 0 ]]; then
+      echo "No directories recorded yet"
+      return 0
+    fi
     columns=$(tput cols)
     columns=${columns:-80}
     max_len=$((columns - 10))

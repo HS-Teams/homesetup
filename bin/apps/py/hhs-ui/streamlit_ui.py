@@ -4189,12 +4189,17 @@ def render_history_directories_table() -> None:
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list directory history.")
         return
+    rows = filter_rows_by_text(
+        parse_hhs_history_dirs(result.stdout),
+        history_directories_filter,
+        other_filter,
+    )
+    if not rows:
+        message = strip_ansi(result.stdout).strip() or "No directories recorded yet"
+        st.info(message)
+        return
     render_read_only_rows(
-        filter_rows_by_text(
-            parse_hhs_history_dirs(result.stdout),
-            history_directories_filter,
-            other_filter,
-        ),
+        rows,
         history_directory_table_key(),
         HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX,
         "Selected DIRECTORIES value",

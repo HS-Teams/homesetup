@@ -1336,6 +1336,30 @@ PY
   refute_output --partial 'Alias "" not found'
 }
 
+@test "when listing directory history with no recorded dirs then hhs dirs should print an explicit message" {
+  run bash --noprofile --norc -c '
+    export HHS_DIR="${1}/hhs"
+    export HHS_DIRS_FILE="${HHS_DIR}/.dirs"
+    mkdir -p "${HHS_DIR}"
+    : > "${HHS_DIRS_FILE}"
+    function dirs() {
+      return 0
+    }
+    source "${2}/bin/hhs-functions/bash/hhs-dirs.bash"
+    __hhs_dirs -l
+  ' -- "${BATS_TEST_TMPDIR}" "${HHS_REPO_DIR}"
+  assert_success
+  assert_output --partial 'No directories recorded yet'
+}
+
+@test "when rendering directory history then Streamlit should handle successful empty output" {
+  run grep -q 'message = strip_ansi(result.stdout).strip() or "No directories recorded yet"' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.info(message)' "${ui_file}"
+  assert_success
+}
+
 # TC - 19
 @test "when rendering UI then deprecated table approaches should stay removed" {
   run grep -q 'st.data_editor' "${ui_file}"
