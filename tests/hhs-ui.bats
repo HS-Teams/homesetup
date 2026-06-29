@@ -59,6 +59,64 @@ setup() {
 }
 
 # TC - 4
+@test "when installing Ollama on Linux then hspm should use the current official installer URL" {
+  ollama_recipe_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/recipes/Linux/ollama.recipe"
+
+  run grep -q 'https://ollama.com/install.sh' "${ollama_recipe_file}"
+  assert_success
+
+  run grep -q 'OllamaInstall.sh' "${ollama_recipe_file}"
+  assert_failure
+}
+
+# TC - 5
+@test "when hspm install recipe fails then execute should return failure" {
+  run bash --noprofile --norc -c '
+    set -u
+    export APP_NAME="hhs"
+    export HHS_DIR="${1}/hhs"
+    export HHS_LOG_DIR="${1}/log"
+    export HHS_MY_OS="$(uname -s)"
+    export HHS_MY_OS_RELEASE="test"
+    export HHS_MY_OS_PACKMAN="test-packman"
+    export HHS_DEV_TOOLS=""
+    export HHS_HIGHLIGHT_COLOR=""
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export ORANGE=""
+    export RED=""
+    export WHITE=""
+    export YELLOW=""
+    export OLDIFS="${IFS}"
+    export PLUGINS_DIR="${1}/plugins"
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}" "${PLUGINS_DIR}/hspm/recipes/${HHS_MY_OS}"
+    printf "%s\n" \
+      "function _depends_() { return 0; }" \
+      "function _install_() { return 22; }" \
+      "function _uninstall_() { return 0; }" \
+      "function _which_() { return 1; }" \
+      > "${PLUGINS_DIR}/hspm/recipes/${HHS_MY_OS}/default.recipe"
+    touch "${PLUGINS_DIR}/hspm/catalog.toml"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_errcho() {
+      shift
+      printf "%s\n" "$*" >&2
+    }
+    source "${2}"
+    execute install broken-package
+  ' -- "${BATS_TEST_TMPDIR}" "${hspm_plugin_file}"
+  assert_failure
+  assert_output --partial 'Failed to install "broken-package"'
+}
+
+# TC - 4
 @test "when loading Streamlit UI source then Python syntax should be valid" {
   run python3 -c 'import ast, pathlib; ast.parse(pathlib.Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text())'
   assert_success
@@ -146,7 +204,13 @@ setup() {
   run grep -Fq 'options = [local_hostname()]' "${ui_file}"
   assert_success
 
-  run grep -Fq 'st.session_state["ssh_host_selected"] = local_hostname()' "${ui_file}"
+  run grep -q 'if not selected_host:' "${ui_file}"
+  assert_success
+
+  run grep -q 'state_hosts = (' "${ui_file}"
+  assert_success
+
+  run grep -q 'registered_ssh_connection_host()' "${ui_file}"
   assert_success
 
   run grep -q 'def selected_remote_host_requires_connection' "${ui_file}"
@@ -275,7 +339,8 @@ assert 'class="hhs-footer-logo"' in ui_source
 assert 'class="hhs-footer-logo-link"' in ui_source
 assert 'class="hhs-footer-link"' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
-assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in ui_source
+constants_source = Path("bin/apps/py/hhs-ui/constants.py").read_text()
+assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in constants_source
 assert 'href="{working_dir_url}" target="_self">Working dir:' in ui_source
 assert 'def build_open_directory_command' in ui_source
 assert 'def run_open_working_directory' in ui_source
@@ -509,6 +574,9 @@ PY
   run grep -q 'def render_home_tool_action_dialog' "${ui_file}"
   assert_success
 
+  run grep -q 'def render_terminal_output' "${ui_file}"
+  assert_success
+
   run grep -q 'hhs-home-tool-action-output' "${ui_file}"
   assert_success
 
@@ -689,6 +757,18 @@ PY
   run grep -q 'def selected_ssh_host_is_connected' "${ui_file}"
   assert_success
 
+  run grep -q 'def connected_ssh_host' "${ui_file}"
+  assert_success
+
+  run grep -q 'def synchronize_selected_ssh_host_with_connection' "${ui_file}"
+  assert_success
+
+  run grep -q 'synchronize_selected_ssh_host_with_connection()' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ssh_host_selected"\] = host' "${ui_file}"
+  assert_success
+
   run grep -q 'ssh_connection_host' "${ui_file}"
   assert_success
 
@@ -794,7 +874,48 @@ PY
   run grep -q 'def render_ssh_connection_dialog' "${ui_file}"
   assert_success
 
-  run grep -q 'setOverlay(False)' "${ui_file}"
+  run grep -q 'def clear_ssh_connection_dialog' "${ui_file}"
+  assert_success
+
+  run grep -q 'def dismiss_streamlit_dialog' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'button[aria-label="Close"]' "${ui_file}"
+  assert_success
+
+  run grep -q 'close_button.click()' "${ui_file}"
+  assert_success
+
+  run grep -q '@st.dialog(title, on_dismiss=close_ssh_connection_dialog)' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_dialog()' "${ui_file}"
+  assert_success
+
+  run grep -q 'if render_ssh_connection_dialog()' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+import ast
+from pathlib import Path
+
+tree = ast.parse(Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text())
+for node in ast.walk(tree):
+    if isinstance(node, ast.FunctionDef) and node.name == "render_ssh_connection_dialog":
+        assert "st.stop()" not in ast.unparse(node)
+        break
+else:
+    raise AssertionError("render_ssh_connection_dialog not found")
+PY
+  assert_success
+
+  run grep -q 'return True' "${ui_file}"
+  assert_success
+
+  run grep -q 'dismiss_streamlit_dialog()' "${ui_file}"
+  assert_success
+
+  run grep -q 'set_overlay(False)' "${ui_file}"
   assert_success
 
   run grep -q 'Successfully connected to {host}' "${ui_file}"
@@ -809,7 +930,7 @@ PY
 
 # TC - 11
 @test "when showing command progress then command runner should paint overlay before subprocess" {
-  run grep -q 'def setOverlay(' "${ui_file}"
+  run grep -q 'def set_overlay(' "${ui_file}"
   assert_success
 
   run grep -q 'def close_all_dialogs()' "${ui_file}"
@@ -818,7 +939,7 @@ PY
   run grep -q 'close_all_dialogs()' "${ui_file}"
   assert_success
 
-  run grep -q 'setOverlay(True, loader_message, close_dialogs=close_dialogs)' "${ui_file}"
+  run grep -q 'set_overlay(True, loader_message, close_dialogs=close_dialogs)' "${ui_file}"
   assert_success
 
   run grep -q 'with placeholder.container()' "${ui_file}"
@@ -830,10 +951,10 @@ PY
   run grep -q 'components.html(' "${ui_file}"
   assert_success
 
-  run grep -q 'window.setInterval(renderElapsed, 1000)' "${ui_file}"
+  run grep -q 'window.setInterval(render_elapsed, 1000)' "${ui_file}"
   assert_success
 
-  run grep -q 'setOverlay(False)' "${ui_file}"
+  run grep -q 'set_overlay(False)' "${ui_file}"
   assert_success
 
   run grep -q 'hhs-tab-loader' "${css_file}"
@@ -844,14 +965,14 @@ PY
 }
 
 # TC - 12
-@test "when confirming actions then reusable popDialog component should be used" {
-  run grep -q 'def popDialog(' "${ui_file}"
+@test "when confirming actions then reusable pop_dialog component should be used" {
+  run grep -q 'def pop_dialog(' "${ui_file}"
   assert_success
 
-  run grep -q '@st.dialog(title)' "${ui_file}"
+  run grep -q '@st.dialog(title' "${ui_file}"
   assert_success
 
-  run grep -q 'popDialog(' "${ui_file}"
+  run grep -q 'pop_dialog(' "${ui_file}"
   assert_success
 
   run grep -q 'st.rerun(scope="app")' "${ui_file}"

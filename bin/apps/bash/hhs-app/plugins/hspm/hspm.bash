@@ -118,7 +118,7 @@ function cleanup() {
 # @purpose: HHS plugin required function
 function execute() {
 
-  local cmd args
+  local cmd args exit_code=0
 
   [[ -z "$1" || "$1" == "-h" || "$1" == "--help" ]] && usage 0
   [[ "$1" == "-v" || "$1" == "--version" ]] && version
@@ -143,7 +143,7 @@ function execute() {
       [[ "${#}" -le 0 ]] && usage 1
       for next_recipe in "${@}"; do
         echo ''
-        install_recipe "${next_recipe}"
+        install_recipe "${next_recipe}" || exit_code=2
       done
       echo ''
       ;;
@@ -152,7 +152,7 @@ function execute() {
       [[ "${#}" -le 0 ]] && usage 1
       for next_recipe in "${@}"; do
         echo ''
-        uninstall_recipe "${next_recipe}"
+        uninstall_recipe "${next_recipe}" || exit_code=2
       done
       echo ''
       ;;
@@ -161,7 +161,7 @@ function execute() {
       [[ "${#}" -le 0 ]] && usage 1
       for next_recipe in "${@}"; do
         echo ''
-        reinstall_recipe "${next_recipe}"
+        reinstall_recipe "${next_recipe}" || exit_code=2
       done
       echo ''
       ;;
@@ -182,7 +182,7 @@ function execute() {
   esac
   shopt -u nocasematch
 
-  quit 0
+  quit "${exit_code}"
 }
 
 # @purpose: Add a package to the breadcrumb file
@@ -262,8 +262,10 @@ function install_recipe() {
     echo -e "${GREEN}Installation successful => \"${package}\" ${NC}"
     add_breadcrumb "${package}"
     _which_ "${package}" || echo -e "${YELLOW}WARN: Package \"${package}\" did not provide a known binary!${NC}"
+    return 0
   else
     __hhs_errcho "${PLUGIN_NAME}" "Failed to install \"${package}\"! Please type __hhs logs hspm to find out details\n"
+    return 2
   fi
 }
 
@@ -292,19 +294,22 @@ function uninstall_recipe() {
     echo -e "${GREEN}Uninstallation successful => \"${package}\" ${NC}"
     del_breadcrumb "${package}"
     _which_ "${package}" && echo -e "${YELLOW}WARN: Package \"${package}\" is yet a known binary !${NC}"
+    return 0
   else
     __hhs_errcho "${PLUGIN_NAME}" "Failed to uninstall \"${package}\" ! Please type __hhs logs hspm to find out details\n"
+    return 2
   fi
 }
 
 # purpose: Reinstall the specified app using the uninstallation and installation recipes
 function reinstall_recipe() {
 
-  local package
+  local package exit_code=0
 
   package="${1}"
-  uninstall_recipe "${package}"
-  install_recipe "${package}"
+  uninstall_recipe "${package}" || exit_code=2
+  install_recipe "${package}" || exit_code=2
+  return "${exit_code}"
 }
 
 # @purpose: Install or list all packages previously installed by hspm.

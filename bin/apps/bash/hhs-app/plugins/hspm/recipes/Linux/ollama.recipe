@@ -12,7 +12,7 @@ function _install_() {
   local pkg_url
   local install_script="/tmp/ollama-install.sh"
 
-  pkg_url="https://ollama.com/download/OllamaInstall.sh"
+  pkg_url="https://ollama.com/install.sh"
 
   if curl -fsSL "$pkg_url" -o "$install_script"; then
     chmod +x "$install_script"

@@ -408,8 +408,9 @@ def render_sidebar() -> None:
     theme_options = available_theme_options()
     host_options = host_selector_options()
     selected_host = selected_ssh_host()
-    if selected_host not in host_options:
+    if not selected_host:
         st.session_state["ssh_host_selected"] = local_hostname()
+        selected_host = selected_ssh_host()
     selected_theme = validated_theme_name(
         st.session_state.get(THEME_SELECTED_KEY, ""), theme_options
     )
@@ -520,21 +521,21 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
         """
         <script>
           (() => {
-            const elapsedNodes = window.parent.document.querySelectorAll(".hhs-tab-loader-elapsed");
-            elapsedNodes.forEach((node) => {
+            const elapsed_nodes = window.parent.document.querySelectorAll(".hhs-tab-loader-elapsed");
+            elapsed_nodes.forEach((node) => {
               if (node.dataset.timerStarted === "true") {
                 return;
               }
               node.dataset.timerStarted = "true";
-              const startedAt = Date.now();
-              const renderElapsed = () => {
-                const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-                const minutes = Math.floor(elapsedSeconds / 60);
-                const seconds = String(elapsedSeconds % 60).padStart(2, "0");
+              const started_at = Date.now();
+              const render_elapsed = () => {
+                const elapsed_seconds = Math.max(0, Math.floor((Date.now() - started_at) / 1000));
+                const minutes = Math.floor(elapsed_seconds / 60);
+                const seconds = String(elapsed_seconds % 60).padStart(2, "0");
                 node.textContent = `time elapsed: ${minutes}m:${seconds}s`;
               };
-              renderElapsed();
-              window.setInterval(renderElapsed, 1000);
+              render_elapsed();
+              window.setInterval(render_elapsed, 1000);
             });
           })();
         </script>
@@ -566,7 +567,7 @@ def render_theme_reload_overlay() -> None:
     st.stop()
 
 
-def renderTerminalPanel(
+def render_terminal_output(
     content: str, css_classes: str = "", content_is_html: bool = False
 ) -> None:
     """Render reusable terminal-style output with optional pre-rendered HTML content."""
@@ -1675,6 +1676,15 @@ def ssh_config_hostname(host: str) -> str:
 def host_selector_options() -> tuple[str, ...]:
     """Return local and SSH host options for the sidebar selector."""
     options = [local_hostname()]
+    state_hosts = (
+        st.session_state.get("ssh_host_selected", ""),
+        st.session_state.get("ssh_connection_host", ""),
+        registered_ssh_connection_host(),
+    )
+    for host_value in state_hosts:
+        host = str(host_value).strip()
+        if host and host not in options:
+            options.append(host)
     for host in ssh_config_hosts():
         if host not in options:
             options.append(host)
@@ -1824,6 +1834,22 @@ def selected_ssh_host_is_connected(host: str | None = None) -> bool:
     )
 
 
+def connected_ssh_host() -> str:
+    """Return the active UI-managed SSH host, if one is connected."""
+    host = str(st.session_state.get("ssh_connection_host", "")).strip()
+    if st.session_state.get("ssh_connection_status") == "connected" and host:
+        return host
+    return ""
+
+
+def synchronize_selected_ssh_host_with_connection() -> None:
+    """Keep the sidebar host selection aligned with an active SSH connection."""
+    host = connected_ssh_host()
+    if host and selected_ssh_host() != host:
+        st.session_state["ssh_host_selected"] = host
+        save_ui_state()
+
+
 def request_ssh_host_connect() -> None:
     """Schedule an SSH ControlMaster connection for the selected host."""
     host = selected_ssh_host()
@@ -1864,11 +1890,13 @@ def execute_pending_ssh_connection() -> None:
     if result.returncode == 0:
         st.session_state["ssh_connection_status"] = "connected"
         st.session_state["ssh_connection_host"] = host
+        st.session_state["ssh_host_selected"] = host
         st.session_state["ssh_connection_error"] = ""
         st.session_state["ssh_connection_dialog_title"] = (
             f"Successfully connected to {host}"
         )
         register_ssh_connection(host)
+        save_ui_state()
     else:
         st.session_state["ssh_connection_status"] = "failed"
         st.session_state["ssh_connection_host"] = ""
@@ -1900,29 +1928,62 @@ def execute_pending_ssh_disconnection() -> None:
     cache_clear()
 
 
-def close_ssh_connection_dialog() -> None:
-    """Close the SSH connection result dialog."""
-    set_overlay(False)
+def clear_ssh_connection_dialog() -> None:
+    """Clear the SSH connection result dialog state."""
     st.session_state["ssh_connection_dialog_title"] = ""
 
 
-def render_ssh_connection_dialog() -> None:
+def close_ssh_connection_dialog() -> None:
+    """Close the SSH connection result dialog."""
+    set_overlay(False)
+    synchronize_selected_ssh_host_with_connection()
+    clear_ssh_connection_dialog()
+
+
+def dismiss_streamlit_dialog() -> None:
+    """Dismiss the currently mounted Streamlit dialog in the browser."""
+    components.html(
+        """
+        <script>
+          const doc = window.parent.document;
+          const dialog = doc.querySelector('[data-testid="stDialog"], [role="dialog"]');
+          const close_button = dialog?.querySelector('button[aria-label="Close"]');
+          if (close_button) {
+            close_button.click();
+          } else {
+            doc.dispatchEvent(new KeyboardEvent("keydown", {
+              bubbles: true,
+              cancelable: true,
+              key: "Escape"
+            }));
+          }
+        </script>
+        """,
+        height=0,
+    )
+
+
+def render_ssh_connection_dialog() -> bool:
     """Render the SSH connection result dialog when a connection attempt completes."""
     title = str(st.session_state.get("ssh_connection_dialog_title", "")).strip()
     if not title:
-        return
+        return False
     set_overlay(False)
 
-    @st.dialog(title)
+    @st.dialog(title, on_dismiss=close_ssh_connection_dialog)
     def render_dialog() -> None:
         """Render the selected SSH connection result."""
+        if not str(st.session_state.get("ssh_connection_dialog_title", "")).strip():
+            dismiss_streamlit_dialog()
+            return
         if st.button(
             "Close", key="ssh_connection_dialog_close_button", width="stretch"
         ):
             close_ssh_connection_dialog()
-            st.rerun(scope="app")
+            dismiss_streamlit_dialog()
 
     render_dialog()
+    return True
 
 
 def run_bash_command(
@@ -3264,14 +3325,14 @@ def scroll_to_env_value_editor(editor_key: str) -> None:
         f"""
         <script>
           const selector = {selector!r};
-          const scrollToEditor = () => {{
+          const scroll_to_editor = () => {{
             const target = window.parent.document.querySelector(selector);
             if (target) {{
               target.scrollIntoView({{ behavior: "smooth", block: "center" }});
               target.focus({{ preventScroll: true }});
             }}
           }};
-          window.setTimeout(scrollToEditor, 75);
+          window.setTimeout(scroll_to_editor, 75);
         </script>
         """,
         height=ENV_VALUE_EDITOR_SCROLL_HELPER_HEIGHT,
@@ -3283,26 +3344,26 @@ def scroll_to_ai_model_actions(anchor_id: str) -> None:
     components.html(
         f"""
         <script>
-          const anchorId = {anchor_id!r};
-          const scrollToActions = () => {{
+          const anchor_id = {anchor_id!r};
+          const scroll_to_actions = () => {{
             const doc = window.parent.document;
-            const target = doc.getElementById(anchorId);
+            const target = doc.getElementById(anchor_id);
             const scrollables = () => [
               doc.scrollingElement,
               doc.documentElement,
               doc.body,
               ...Array.from(doc.querySelectorAll("*")).filter((element) => {{
                 const style = window.parent.getComputedStyle(element);
-                const canScroll = /(auto|scroll)/.test(style.overflowY + style.overflow);
-                return canScroll && element.scrollHeight > element.clientHeight;
+                const can_scroll = /(auto|scroll)/.test(style.overflowY + style.overflow);
+                return can_scroll && element.scrollHeight > element.clientHeight;
               }})
             ].filter(Boolean);
-            const scrollBottom = () => {{
-              const scrollHeight = Math.max(
+            const scroll_bottom = () => {{
+              const scroll_height = Math.max(
                 doc.body.scrollHeight,
                 doc.documentElement.scrollHeight
               );
-              window.parent.scrollTo({{ top: scrollHeight, behavior: "auto" }});
+              window.parent.scrollTo({{ top: scroll_height, behavior: "auto" }});
               for (const item of scrollables()) {{
                 item.scrollTop = item.scrollHeight;
               }}
@@ -3311,11 +3372,11 @@ def scroll_to_ai_model_actions(anchor_id: str) -> None:
               }}
             }};
             [0, 50, 150, 300, 600, 1000].forEach((delay) => {{
-              window.setTimeout(scrollBottom, delay);
+              window.setTimeout(scroll_bottom, delay);
             }});
-            window.requestAnimationFrame(scrollBottom);
+            window.requestAnimationFrame(scroll_bottom);
           }};
-          window.setTimeout(scrollToActions, 50);
+          window.setTimeout(scroll_to_actions, 50);
         </script>
         """,
         height=AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT,
@@ -3536,7 +3597,7 @@ def render_home_tool_action_dialog() -> bool:
         """Render the selected Home tool action result."""
         if output:
             render_terminal_output(
-                html.escape(output),
+                output,
                 css_classes="hhs-home-tool-action-output",
             )
         if st.button("Close", key="home_tool_action_close_button", width="stretch"):
@@ -4245,7 +4306,7 @@ def render_monitor_logs_once(selected_log: str) -> None:
     if result.returncode != 0:
         st.error(strip_ansi(result.stderr or result.stdout or "Unable to load logs."))
         return
-    renderTerminalPanel(
+    render_terminal_output(
         colorize_log_output(result.stdout),
         css_classes="hhs-log-output",
         content_is_html=True,
@@ -4735,6 +4796,7 @@ def main() -> None:
     st.session_state.setdefault("ssh_connection_error", "")
     st.session_state.setdefault("ssh_connection_dialog_title", "")
     cleanup_registered_ssh_connection_on_session_start()
+    synchronize_selected_ssh_host_with_connection()
     if selected_host_is_local():
         st.session_state["ssh_connection_status"] = ""
         st.session_state["ssh_connection_host"] = ""
@@ -4743,7 +4805,8 @@ def main() -> None:
         st.session_state["ssh_disconnect_pending"] = ""
     execute_pending_ssh_disconnection()
     execute_pending_ssh_connection()
-    render_ssh_connection_dialog()
+    if render_ssh_connection_dialog():
+        return
     st.session_state.setdefault("home_view", "System")
     if st.session_state["home_view"] not in HOME_VIEWS:
         st.session_state["home_view"] = "System"
