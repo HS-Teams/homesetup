@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import re
 import shlex
 import subprocess
 import textwrap
@@ -36,6 +37,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from constants import *  # noqa: F403
 from streamlit import config as st_config
+
+
+ESCAPED_ANSI_ESCAPE_PATTERN = re.compile(
+    r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
+)
 
 
 def load_app_css() -> str:
@@ -1305,7 +1311,7 @@ def render_document_view() -> None:
 
 def strip_ansi(value: str) -> str:
     """Remove terminal ANSI color escapes from command output."""
-    return ANSI_ESCAPE_PATTERN.sub("", value)
+    return ESCAPED_ANSI_ESCAPE_PATTERN.sub("", ANSI_ESCAPE_PATTERN.sub("", value))
 
 
 def overlaps_existing_range(
@@ -1841,8 +1847,12 @@ def build_ssh_check_command(host: str) -> str:
     safe_host = shlex.quote(host)
     safe_control_path = shlex.quote(ssh_control_path(host))
     safe_config_option = ssh_config_option()
+    ssh_options = (
+        "-o BatchMode=yes -o ConnectTimeout=5 -o ConnectionAttempts=1 "
+        "-o ServerAliveInterval=5 -o ServerAliveCountMax=1"
+    )
     return (
-        f"ssh {safe_config_option} -o BatchMode=yes "
+        f"ssh {safe_config_option} {ssh_options} "
         f"-o ControlPath={safe_control_path} -O check {safe_host}"
     )
 
@@ -1875,10 +1885,14 @@ def build_ssh_wrapped_command(command: str, host: str) -> str:
     safe_host = shlex.quote(host)
     safe_control_path = shlex.quote(ssh_control_path(host))
     safe_config_option = ssh_config_option()
+    ssh_options = (
+        "-o BatchMode=yes -o ConnectTimeout=5 -o ConnectionAttempts=1 "
+        "-o ServerAliveInterval=5 -o ServerAliveCountMax=1"
+    )
     safe_remote_command = shlex.quote(command)
     safe_remote_shell = shlex.quote(f"bash -ic {safe_remote_command}")
     return (
-        f"ssh -tt {safe_config_option} -o BatchMode=yes -o ControlPath={safe_control_path} "
+        f"ssh -tt {safe_config_option} {ssh_options} -o ControlPath={safe_control_path} "
         f"{safe_host} {safe_remote_shell}"
     )
 
@@ -2016,12 +2030,48 @@ def ssh_shared_connection_closed(result: subprocess.CompletedProcess[str]) -> bo
     return "shared connection to " in output and " closed" in output
 
 
+def ssh_output_is_only_shared_close(result: subprocess.CompletedProcess[str]) -> bool:
+    """Return whether failed SSH output only contains the shared-close notice."""
+    if not ssh_shared_connection_closed(result):
+        return False
+    lines = [
+        line.strip().lower()
+        for line in strip_ansi(f"{result.stdout or ''}\n{result.stderr or ''}").splitlines()
+        if line.strip()
+    ]
+    remaining_lines = [
+        line
+        for line in lines
+        if not (
+            line.startswith("shared connection to ")
+            and line.endswith(" closed.")
+        )
+    ]
+    return not remaining_lines
+
+
+def completed_disconnected_ssh_process(
+    command: str, host: str
+) -> subprocess.CompletedProcess[str]:
+    """Build a failed command result for a detected stale SSH connection."""
+    return subprocess.CompletedProcess(
+        ["bash", "-lc", command],
+        255,
+        "",
+        f"Shared connection to {ssh_config_hostname(host)} closed.",
+    )
+
+
 def handle_remote_command_result(
     host: str, result: subprocess.CompletedProcess[str]
-) -> None:
+) -> bool:
     """Synchronize UI state when a remote command shows the SSH connection closed."""
-    if host and ssh_shared_connection_closed(result) and not ssh_connection_is_alive(host):
+    if host and (
+        ssh_output_is_only_shared_close(result) or ssh_shared_connection_closed(result)
+    ):
         clear_disconnected_ssh_host(host)
+        return True
+    return False
 
 
 def request_ssh_host_connect() -> None:
@@ -2177,7 +2227,16 @@ def run_bash_command(
     cache_key = command_cache_key(command_to_run)
     cached_value = cache_get(cache_key) if use_cache else None
     if use_cache and cached_value is not None:
-        return completed_process_from_cache(command_to_run, cached_value)
+        result = completed_process_from_cache(command_to_run, cached_value)
+        if handle_remote_command_result(remote_host, result):
+            st.rerun()
+        return result
+
+    if remote_host and not ssh_connection_is_alive(remote_host):
+        result = completed_disconnected_ssh_process(command_to_run, remote_host)
+        if handle_remote_command_result(remote_host, result):
+            st.rerun()
+        return result
 
     set_overlay(True, loader_message, close_dialogs=close_dialogs)
     try:
@@ -2189,11 +2248,13 @@ def run_bash_command(
             text=True,
             timeout=effective_timeout,
         )
-        handle_remote_command_result(remote_host, result)
+        disconnected = handle_remote_command_result(remote_host, result)
         if use_cache and not ssh_shared_connection_closed(result):
             cache_set(
                 cache_key, cache_value_from_completed_process(result), ttl_seconds
             )
+        if disconnected:
+            st.rerun()
         return result
     except subprocess.TimeoutExpired as error:
         result = subprocess.CompletedProcess(
@@ -2202,7 +2263,8 @@ def run_bash_command(
             error.stdout or "",
             error.stderr or f"Command timed out after {effective_timeout} seconds.",
         )
-        handle_remote_command_result(remote_host, result)
+        if handle_remote_command_result(remote_host, result):
+            st.rerun()
         return result
     finally:
         set_overlay(False)

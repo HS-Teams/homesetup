@@ -187,10 +187,22 @@ setup() {
   run grep -q 'handle_remote_command_result(remote_host, result)' "${ui_file}"
   assert_success
 
+  run grep -q 'result = completed_process_from_cache(command_to_run, cached_value)' "${ui_file}"
+  assert_success
+
   run grep -q 'if use_cache and not ssh_shared_connection_closed(result)' "${ui_file}"
   assert_success
 
-  run grep -q 'not ssh_connection_is_alive(host)' "${ui_file}"
+  run grep -q 'if remote_host and not ssh_connection_is_alive(remote_host)' "${ui_file}"
+  assert_success
+
+  run grep -q 'completed_disconnected_ssh_process(command_to_run, remote_host)' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.rerun()' "${ui_file}"
+  assert_success
+
+  run grep -q 'ConnectTimeout=5' "${ui_file}"
   assert_success
 
   run grep -q 'st.session_state\["ssh_host_selected"\] = local_hostname()' "${ui_file}"
@@ -1357,6 +1369,35 @@ PY
   assert_success
 
   run grep -q 'st.info(message)' "${ui_file}"
+  assert_success
+}
+
+@test "when parsing saved dirs then escaped ANSI sequences should be stripped" {
+  run python3 - <<'PY'
+import re
+
+ANSI_ESCAPE_PATTERN = re.compile(
+    r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[()][A-Za-z0-9])"
+)
+ESCAPED_ANSI_ESCAPE_PATTERN = re.compile(
+    r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
+)
+DIR_LINE_PATTERN = re.compile(r"^(.+?)\.{2,}\s+(?:|=>)\s+'?(.*?)'?$")
+
+def strip_ansi(value):
+    return ESCAPED_ANSI_ESCAPE_PATTERN.sub("", ANSI_ESCAPE_PATTERN.sub("", value))
+
+def parse_hhs_dirs(output):
+    rows = []
+    for line in strip_ansi(output).splitlines():
+        match = DIR_LINE_PATTERN.match(line.strip())
+        if match:
+            rows.append({"Name": match.group(1).strip(), "Value": match.group(2).strip()})
+    return rows
+
+rows = parse_hhs_dirs(r"\033[0;36mAKS\033[0;97m......................................  '/tmp/aks'")
+assert rows == [{"Name": "AKS", "Value": "/tmp/aks"}], rows
+PY
   assert_success
 }
 
