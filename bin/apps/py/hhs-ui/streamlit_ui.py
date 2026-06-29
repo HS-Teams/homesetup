@@ -37,8 +37,6 @@ import streamlit.components.v1 as components
 from constants import *  # noqa: F403
 from streamlit import config as st_config
 
-FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"
-
 
 def load_app_css() -> str:
     """Load the HomeSetup Streamlit UI stylesheet."""
@@ -587,9 +585,17 @@ def close_all_dialogs() -> None:
     st.session_state["ai_model_select_pending"] = None
     st.session_state["ai_model_delete_pending"] = None
     st.session_state["home_tool_action_execute_pending"] = None
+    st.session_state["ssh_connection_dialog_title"] = ""
+    st.session_state.pop("home_tool_action_operation", None)
+    st.session_state.pop("home_tool_action_name", None)
+    st.session_state.pop("home_tool_action_message", None)
+    st.session_state.pop("home_tool_action_succeeded", None)
+    st.session_state.pop("home_tool_tldr_name", None)
+    st.session_state.pop("home_tool_tldr_output", None)
+    st.session_state.pop("home_tool_tldr_succeeded", None)
 
 
-def setOverlay(
+def set_overlay(
     active: bool,
     message: str = "Loading...",
     transient: bool = False,
@@ -613,7 +619,7 @@ def setOverlay(
         placeholder.empty()
 
 
-def popDialog(
+def pop_dialog(
     title: str,
     message: str,
     confirm_key: str,
@@ -952,7 +958,7 @@ def render_selected_item_text(text: str) -> None:
     render_selected_item(f"{label}:", value.strip())
 
 
-def renderTable(
+def render_table(
     rows: list[dict[str, str]],
     key: str | None,
     empty_hint: str = "Select a row to interact",
@@ -1055,7 +1061,7 @@ def bar_chart_container_height() -> str:
     return "container"
 
 
-def renderBarChart(
+def render_bar_chart(
     rows: list[dict[str, object]],
     x: alt.X,
     y: alt.Y,
@@ -1108,8 +1114,9 @@ def table_action_args(
 def render_home_tools_panel() -> None:
     """Render HomeSetup development tool checks on the Home view."""
     execute_pending_home_tool_action()
-    render_home_tool_action_dialog()
-    render_home_tool_tldr_dialog()
+    home_tool_action_dialog_opened = render_home_tool_action_dialog()
+    if not home_tool_action_dialog_opened:
+        render_home_tool_tldr_dialog()
 
     result = run_hhs_tools()
     if result.returncode != 0:
@@ -1145,7 +1152,7 @@ def render_home_tools_panel() -> None:
     if not filtered_rows:
         st.caption("No tool checks match the current filter.")
         return
-    renderTable(
+    render_table(
         filtered_rows,
         key=home_tools_table_key(),
         checkbox=True,
@@ -1895,7 +1902,7 @@ def execute_pending_ssh_disconnection() -> None:
 
 def close_ssh_connection_dialog() -> None:
     """Close the SSH connection result dialog."""
-    setOverlay(False)
+    set_overlay(False)
     st.session_state["ssh_connection_dialog_title"] = ""
 
 
@@ -1904,12 +1911,14 @@ def render_ssh_connection_dialog() -> None:
     title = str(st.session_state.get("ssh_connection_dialog_title", "")).strip()
     if not title:
         return
-    setOverlay(False)
+    set_overlay(False)
 
     @st.dialog(title)
     def render_dialog() -> None:
         """Render the selected SSH connection result."""
-        if st.button("Close", key="ssh_connection_dialog_close_button", width="stretch"):
+        if st.button(
+            "Close", key="ssh_connection_dialog_close_button", width="stretch"
+        ):
             close_ssh_connection_dialog()
             st.rerun(scope="app")
 
@@ -1935,7 +1944,7 @@ def run_bash_command(
     if use_cache and cached_value is not None:
         return completed_process_from_cache(command_to_run, cached_value)
 
-    setOverlay(True, loader_message, close_dialogs=close_dialogs)
+    set_overlay(True, loader_message, close_dialogs=close_dialogs)
     try:
         result = subprocess.run(
             ["bash", "-lc", command_to_run],
@@ -1958,7 +1967,8 @@ def run_bash_command(
             error.stderr or f"Command timed out after {effective_timeout} seconds.",
         )
     finally:
-        setOverlay(False)
+        set_overlay(False)
+
 
 def load_ui_cache() -> dict[str, dict[str, object]]:
     """Load the UI cache file and lazily prune expired entries."""
@@ -3315,7 +3325,7 @@ def scroll_to_ai_model_actions(anchor_id: str) -> None:
 def render_env_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable read-only environment variable rows."""
     rows = apply_env_value_overrides(rows)
-    _, selected_row = renderTable(
+    _, selected_row = render_table(
         rows,
         key=env_table_key(),
         height=ENV_TABLE_HEIGHT,
@@ -3342,7 +3352,7 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
 def render_path_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable editable PATH rows."""
     rows = apply_path_value_overrides(rows)
-    selected_index, selected_row = renderTable(
+    selected_index, selected_row = render_table(
         rows,
         key=path_table_key(),
         height=PATH_TABLE_HEIGHT,
@@ -3374,7 +3384,7 @@ def render_read_only_rows(
     empty_caption: str = "Select a row to interact",
 ) -> None:
     """Render selectable read-only configuration rows."""
-    selected_index, selected_row = renderTable(
+    selected_index, selected_row = render_table(
         rows,
         key=table_key,
         empty_hint=empty_caption,
@@ -3460,6 +3470,7 @@ def reset_service_table_selection() -> None:
 
 def apply_selected_tool_action(operation: str, tool_name: str) -> None:
     """Schedule the selected Home tool install/uninstall action."""
+    close_home_tool_tldr_dialog()
     st.session_state["home_tool_action_execute_pending"] = {
         "operation": operation,
         "tool_name": tool_name,
@@ -3477,6 +3488,7 @@ def execute_pending_home_tool_action() -> None:
 
     result = run_hhs_tool_action(operation, tool_name)
     cache_clear()
+    close_home_tool_tldr_dialog()
     st.session_state["home_tool_action_operation"] = operation
     st.session_state["home_tool_action_name"] = tool_name
     st.session_state["home_tool_action_message"] = result.stdout or result.stderr or ""
@@ -3500,14 +3512,21 @@ def close_home_tool_action_dialog() -> None:
     st.session_state.pop("home_tool_action_succeeded", None)
 
 
-def render_home_tool_action_dialog() -> None:
+def ssh_connection_dialog_is_open() -> bool:
+    """Return whether the SSH connection result dialog is currently requested."""
+    return bool(str(st.session_state.get("ssh_connection_dialog_title", "")).strip())
+
+
+def render_home_tool_action_dialog() -> bool:
     """Render the selected Home tool action result dialog when requested."""
     tool_name = str(st.session_state.get("home_tool_action_name", "")).strip()
-    if not tool_name:
-        return
+    if not tool_name or ssh_connection_dialog_is_open():
+        return False
 
     operation = str(st.session_state.get("home_tool_action_operation", "")).strip()
-    output = strip_ansi(str(st.session_state.get("home_tool_action_message", ""))).strip()
+    output = strip_ansi(
+        str(st.session_state.get("home_tool_action_message", ""))
+    ).strip()
     succeeded = bool(st.session_state.get("home_tool_action_succeeded", False))
     status = "succeeded" if succeeded else "failed"
     title = f"{home_tool_action_noun(operation)} of {tool_name} {status}"
@@ -3525,10 +3544,12 @@ def render_home_tool_action_dialog() -> None:
             st.rerun(scope="app")
 
     render_dialog()
+    return True
 
 
 def apply_selected_tool_tldr(tool_name: str) -> None:
     """Load TLDR output for the selected Home tool and open its dialog."""
+    close_home_tool_action_dialog()
     result = run_tool_tldr(tool_name)
     st.session_state["home_tool_tldr_name"] = tool_name
     st.session_state["home_tool_tldr_output"] = result.stdout or result.stderr or ""
@@ -3542,11 +3563,11 @@ def close_home_tool_tldr_dialog() -> None:
     st.session_state.pop("home_tool_tldr_succeeded", None)
 
 
-def render_home_tool_tldr_dialog() -> None:
+def render_home_tool_tldr_dialog() -> bool:
     """Render the selected Home tool TLDR output dialog when requested."""
     tool_name = str(st.session_state.get("home_tool_tldr_name", "")).strip()
-    if not tool_name:
-        return
+    if not tool_name or ssh_connection_dialog_is_open():
+        return False
 
     output = strip_ansi(str(st.session_state.get("home_tool_tldr_output", ""))).strip()
     succeeded = bool(st.session_state.get("home_tool_tldr_succeeded", False))
@@ -3563,6 +3584,7 @@ def render_home_tool_tldr_dialog() -> None:
             st.rerun(scope="app")
 
     render_dialog()
+    return True
 
 
 def apply_selected_service_action(operation: str, service_name: str) -> None:
@@ -3605,7 +3627,7 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
         else:
             st.error(strip_ansi(action_message))
 
-    _, selected_row = renderTable(
+    _, selected_row = render_table(
         rows,
         key=service_table_key(),
         action_hint="",
@@ -3962,7 +3984,7 @@ def render_history_stats_chart() -> None:
     if not rows:
         st.caption("No history stats found.")
         return
-    renderBarChart(
+    render_bar_chart(
         rows,
         x=alt.X("Count:Q", title="Count"),
         y=alt.Y(
@@ -4027,7 +4049,7 @@ def render_monitor_disk_chart() -> None:
         st.caption("No disk usage entries found.")
         return
     st.markdown(f"##### Top {int(top_n)} disk usage at `{selected_directory}`")
-    renderBarChart(
+    render_bar_chart(
         rows,
         x=alt.X(
             "Bytes:Q",
@@ -4097,7 +4119,7 @@ def render_process_monitor_chart(metric: str) -> None:
     unit_suffix = "" if has_byte_values else " %"
     color = "#ffb86c"
     st.markdown(f"##### Top 10 {title} processes")
-    renderBarChart(
+    render_bar_chart(
         rows,
         x=alt.X("Value:Q", title=f"{title}{unit_suffix}", axis=axis),
         y=alt.Y(
@@ -4150,7 +4172,7 @@ def render_monitor_processes_panel() -> None:
         st.caption("No processes found.")
         return
 
-    _, selected_row = renderTable(
+    _, selected_row = render_table(
         rows,
         key=PROCESS_TABLE_KEY,
         height=ENV_TABLE_HEIGHT,
@@ -4339,7 +4361,7 @@ def render_monitor_view() -> None:
 def render_ai_chat_panel() -> None:
     """Render the HomeSetup Ollama chat panel."""
     if st.session_state.get("ai_clear_chat_pending", False):
-        popDialog(
+        pop_dialog(
             title="Confirm chat clear",
             message="Clear the chat and reset AI context entirely?",
             confirm_key="ai_confirm_clear_button",
@@ -4464,7 +4486,7 @@ def style_ai_model_row(row: pd.Series) -> list[str]:
 
 def render_ai_model_select_dialog(old_model: str, new_model: str) -> None:
     """Render the AI model selection confirmation dialog."""
-    popDialog(
+    pop_dialog(
         title="Confirm model change",
         message=f"Change active model from '{old_model}' to '{new_model}'?",
         confirm_key="ai_confirm_model_select_button",
@@ -4476,7 +4498,7 @@ def render_ai_model_select_dialog(old_model: str, new_model: str) -> None:
 
 def render_ai_model_delete_dialog(model_name: str) -> None:
     """Render the AI model deletion confirmation dialog."""
-    popDialog(
+    pop_dialog(
         title="Confirm model deletion",
         message=f"Delete Ollama model '{model_name}'?",
         confirm_key="ai_confirm_model_delete_button",
@@ -4531,7 +4553,7 @@ def render_ai_settings_panel() -> None:
         st.caption("No Ollama models found.")
         return
 
-    selected_index, selected_row = renderTable(
+    selected_index, selected_row = render_table(
         rows,
         key=ai_model_table_key(),
         use_container_width=True,

@@ -1,0 +1,230 @@
+/*
+    Gradle Streamlit extension
+
+    Created: 29th June, 2026
+    License: MIT - Please refer to <https://opensource.org/licenses/MIT>
+    Copyright (c) 2026, HomeSetup team
+*/
+
+def resolveExecutable = { String commandName, String envVarName = null, List<String> fallbackCandidates = [] ->
+  String envValue = envVarName ? System.getenv(envVarName) : null
+  if (envValue?.trim()) {
+    File explicitPath = file(envValue.trim())
+    if (explicitPath.exists() && explicitPath.canExecute()) {
+      return explicitPath.absolutePath
+    }
+    return envValue.trim()
+  }
+
+  boolean windows = System.getProperty('os.name').toLowerCase().contains('windows')
+  List<String> suffixes = windows ? ['.exe', '.cmd', '.bat', ''] : ['']
+  List<String> pathEntries = (System.getenv('PATH') ?: '').tokenize(File.pathSeparator)
+
+  for (String dir : pathEntries) {
+    for (String suffix : suffixes) {
+      File candidate = new File(dir, "${commandName}${suffix}")
+      if (candidate.exists() && candidate.canExecute()) {
+        return candidate.absolutePath
+      }
+    }
+  }
+
+  String fallback = fallbackCandidates.find { String candidatePath ->
+    File candidateFile = file(candidatePath)
+    candidateFile.exists() && candidateFile.canExecute()
+  }
+  return fallback ?: commandName
+}
+
+def streamlitScriptFile = file("$rootDir/bin/apps/py/hhs-ui/streamlit_ui.py")
+def streamlitPidFilePath = file("$buildDir/streamlit/streamlit.pid")
+def streamlitLogFilePath = file("$buildDir/streamlit/streamlit.log")
+def streamlitHostValue = '127.0.0.1'
+def streamlitPortValue = '18501'
+def streamlitExecutablePath = resolveExecutable(
+    'streamlit',
+    'STREAMLIT_BIN',
+    ['/opt/homebrew/bin/streamlit', '/usr/local/bin/streamlit']
+)
+
+ext {
+  streamlitScript = streamlitScriptFile
+  streamlitPidFile = streamlitPidFilePath
+  streamlitLogFile = streamlitLogFilePath
+  streamlitHost = streamlitHostValue
+  streamlitPort = streamlitPortValue
+  streamlitExecutable = streamlitExecutablePath
+}
+
+def readPid = { File pidFile ->
+  if (!pidFile.exists()) {
+    return null
+  }
+  String pidValue = pidFile.text.trim()
+  pidValue.isLong() ? pidValue.toLong() : null
+}
+
+def processHandle = { Long pid ->
+  pid ? ProcessHandle.of(pid).orElse(null) : null
+}
+
+def optionValue = { List<String> arguments, String optionName ->
+  int optionIndex = arguments.findIndexOf { String argument -> argument == optionName }
+  if (optionIndex >= 0 && optionIndex + 1 < arguments.size()) {
+    return arguments[optionIndex + 1]
+  }
+
+  String optionPrefix = "${optionName}="
+  String optionWithValue = arguments.find { String argument -> argument.startsWith(optionPrefix) }
+  optionWithValue ? optionWithValue.substring(optionPrefix.length()) : null
+}
+
+def streamlitProcessDetails = { ProcessHandle handle ->
+  ProcessHandle.Info info = handle.info()
+  String command = info.command().orElse('')
+  List<String> arguments = (info.arguments().orElse([] as String[])) as List<String>
+  String fallbackCommandLine = ([command] + arguments).findAll { String value -> value }.join(' ')
+  String commandLine = info.commandLine().orElse(fallbackCommandLine)
+  String searchableCommandLine = (commandLine ?: fallbackCommandLine).toLowerCase()
+  String commandName = command ? new File(command).name.toLowerCase() : ''
+  boolean isStreamlitCommand = commandName.startsWith('streamlit')
+  boolean isPythonStreamlitModule = arguments.contains('-m') && arguments.contains('streamlit')
+  boolean runsStreamlit = searchableCommandLine.contains('streamlit run')
+      || searchableCommandLine.contains('/streamlit ')
+      || searchableCommandLine.contains(' streamlit ')
+
+  if (!isStreamlitCommand && !isPythonStreamlitModule && !runsStreamlit) {
+    return null
+  }
+
+  String address = optionValue(arguments, '--server.address') ?: '127.0.0.1'
+  String port = optionValue(arguments, '--server.port') ?: streamlitPortValue
+  String starter = info.user().orElse('unknown')
+
+  [
+      endpoint: "${address}:${port}",
+      pid: handle.pid(),
+      starter: starter,
+      commandLine: commandLine ?: fallbackCommandLine
+  ]
+}
+
+def runningStreamlitProcesses = {
+  List<Map<String, Object>> instances = []
+  ProcessHandle.allProcesses().forEach { ProcessHandle handle ->
+    Map<String, Object> details = streamlitProcessDetails(handle)
+    if (details) {
+      instances.add(details)
+    }
+  }
+  instances.sort { Map<String, Object> left, Map<String, Object> right ->
+    left.endpoint == right.endpoint
+        ? left.pid <=> right.pid
+        : left.endpoint <=> right.endpoint
+  }
+}
+
+/**
+ * Starts the local Streamlit UI server.
+ */
+tasks.register('startUi') {
+  group = 'app'
+  description = 'Start the local Streamlit UI server'
+
+  doLast {
+    if (!streamlitScriptFile.exists()) {
+      throw new GradleException("Streamlit script not found: ${streamlitScriptFile}")
+    }
+
+    Long existingPid = readPid(streamlitPidFilePath)
+    ProcessHandle existingProcess = processHandle(existingPid)
+    if (existingProcess?.isAlive()) {
+      println "Streamlit UI is already running at http://${streamlitHostValue}:${streamlitPortValue}"
+      return
+    }
+
+    streamlitPidFilePath.parentFile.mkdirs()
+    streamlitLogFilePath.parentFile.mkdirs()
+    streamlitPidFilePath.delete()
+
+    if (streamlitExecutablePath == 'streamlit') {
+      throw new GradleException('Streamlit executable not found. Install Streamlit or set STREAMLIT_BIN to the executable path.')
+    }
+
+    Process process = new ProcessBuilder(
+        streamlitExecutablePath,
+        'run',
+        streamlitScriptFile.absolutePath,
+        '--server.address',
+        streamlitHostValue,
+        '--server.port',
+        streamlitPortValue,
+        '--server.headless',
+        'true'
+    )
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .redirectOutput(ProcessBuilder.Redirect.appendTo(streamlitLogFilePath))
+        .start()
+
+    streamlitPidFilePath.text = process.pid().toString()
+    sleep(1500)
+
+    if (!process.isAlive()) {
+      streamlitPidFilePath.delete()
+      throw new GradleException("Streamlit failed to start. Check ${streamlitLogFilePath}")
+    }
+
+    println "Streamlit UI started at http://${streamlitHostValue}:${streamlitPortValue}"
+    println "Logs: ${streamlitLogFilePath}"
+  }
+}
+
+/**
+ * Stops the local Streamlit UI server.
+ */
+tasks.register('stopUi') {
+  group = 'app'
+  description = 'Stop the local Streamlit UI server'
+
+  doLast {
+    Long pid = readPid(streamlitPidFilePath)
+    ProcessHandle process = processHandle(pid)
+    if (!process?.isAlive()) {
+      streamlitPidFilePath.delete()
+      println 'Streamlit UI is not running'
+      return
+    }
+
+    process.destroy()
+    process.onExit().get(5, java.util.concurrent.TimeUnit.SECONDS)
+    streamlitPidFilePath.delete()
+    println "Stopped Streamlit UI on http://${streamlitHostValue}:${streamlitPortValue}"
+  }
+}
+
+/**
+ * Shows whether the local Streamlit UI server is running.
+ */
+tasks.register('statusUi') {
+  group = 'app'
+  description = 'Show the local Streamlit UI server status'
+
+  doLast {
+    List<Map<String, Object>> instances = runningStreamlitProcesses()
+    if (instances) {
+      instances.each { Map<String, Object> instance ->
+        String commandLine = instance.commandLine ? " [${instance.commandLine}]" : ''
+        println "${instance.endpoint} -> ${instance.pid} (${instance.starter})${commandLine}"
+      }
+      return
+    }
+
+    if (streamlitPidFilePath.exists()) {
+      println "Streamlit UI is not running; stale PID file: ${streamlitPidFilePath}"
+      return
+    }
+
+    println 'Streamlit UI is not running'
+  }
+}

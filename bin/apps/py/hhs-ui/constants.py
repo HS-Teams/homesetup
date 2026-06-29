@@ -198,3 +198,4 @@ DOCUMENTS = {
     "README": ("README", "README.md"),
     "HANDBOOK": ("Handbook", "docs/handbook/handbook.md"),
 }
+FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"
