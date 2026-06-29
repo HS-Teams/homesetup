@@ -15,7 +15,13 @@ function _install_() {
   return 1
 }
 
+function _stop_ollama_() {
+  brew services stop ollama &>/dev/null || true
+  pkill -f 'ollama serve' &>/dev/null || true
+}
+
 function _uninstall_() {
+  _stop_ollama_
   if brew uninstall ollama; then
     return 0
   fi

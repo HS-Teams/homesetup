@@ -27,8 +27,17 @@ function _install_() {
   return 1
 }
 
+function _stop_ollama_() {
+  if command -v systemctl &>/dev/null; then
+    ${SUDO} systemctl stop ollama &>/dev/null || true
+  fi
+
+  pkill -f 'ollama serve' &>/dev/null || true
+}
+
 function _uninstall_() {
   if command -v ollama &>/dev/null; then
+    _stop_ollama_
     ollama uninstall
     return 0
   fi

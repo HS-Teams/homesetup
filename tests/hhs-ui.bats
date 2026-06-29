@@ -61,12 +61,22 @@ setup() {
 # TC - 4
 @test "when installing Ollama on Linux then hspm should use the current official installer URL" {
   ollama_recipe_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/recipes/Linux/ollama.recipe"
+  ollama_darwin_recipe_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/recipes/Darwin/ollama.recipe"
 
   run grep -q 'https://ollama.com/install.sh' "${ollama_recipe_file}"
   assert_success
 
   run grep -q 'OllamaInstall.sh' "${ollama_recipe_file}"
   assert_failure
+
+  run grep -q 'systemctl stop ollama' "${ollama_recipe_file}"
+  assert_success
+
+  run grep -q "pkill -f 'ollama serve'" "${ollama_recipe_file}"
+  assert_success
+
+  run grep -q 'brew services stop ollama' "${ollama_darwin_recipe_file}"
+  assert_success
 }
 
 # TC - 5
@@ -916,7 +926,7 @@ PY
   run grep -q 'close_button.click()' "${ui_file}"
   assert_success
 
-  run grep -q '@st.dialog(title, on_dismiss=close_ssh_connection_dialog)' "${ui_file}"
+  run grep -q 'close_callback=close_ssh_connection_dialog' "${ui_file}"
   assert_success
 
   run grep -q 'render_dialog()' "${ui_file}"
@@ -999,13 +1009,57 @@ PY
   run grep -q 'def pop_dialog(' "${ui_file}"
   assert_success
 
-  run grep -q '@st.dialog(title' "${ui_file}"
+  run grep -q 'def queue_dialog_callback' "${ui_file}"
   assert_success
 
-  run grep -q 'pop_dialog(' "${ui_file}"
+  run grep -q 'def execute_pending_dialog_callback' "${ui_file}"
+  assert_success
+
+  run grep -q 'def handle_dialog_button_click' "${ui_file}"
+  assert_success
+
+  run grep -q 'def handle_dialog_dismiss' "${ui_file}"
+  assert_success
+
+  run grep -q 'execute_pending_dialog_callback()' "${ui_file}"
+  assert_success
+
+  run grep -q '@st.dialog(title, dismissible=dismissible, on_dismiss=on_dismiss)' "${ui_file}"
+  assert_success
+
+  run grep -q 'handle_dialog_button_click(' "${ui_file}"
+  assert_success
+
+  run grep -q 'queue_dialog_callback(callback)' "${ui_file}"
+  assert_success
+
+  run grep -q '_hhs_dialog_button_dismissal' "${ui_file}"
+  assert_success
+
+  run grep -q 'handle_dialog_dismiss(dismiss_callback)' "${ui_file}"
+  assert_success
+
+  run grep -q 'dismiss_streamlit_dialog()' "${ui_file}"
+  assert_success
+
+  run grep -q 'close_callback=close_home_tool_action_dialog' "${ui_file}"
+  assert_success
+
+  run grep -q 'close_callback=close_home_tool_tldr_dialog' "${ui_file}"
+  assert_success
+
+  run grep -q 'close_callback=close_ssh_connection_dialog' "${ui_file}"
   assert_success
 
   run grep -q 'st.rerun(scope="app")' "${ui_file}"
+  assert_failure
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+ui_source = Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text()
+assert ui_source.count("@st.dialog(") == 1
+PY
   assert_success
 
   run grep -q 'st.warning("Clear the chat and reset AI context entirely?")' "${ui_file}"
@@ -1051,6 +1105,15 @@ PY
   assert_success
 
   run grep -q 'build_hhs_ask_execute_command(\["-s", model_name\])' "${ui_file}"
+  assert_success
+
+  run grep -q 'def hhs_ask_timeout_seconds' "${ui_file}"
+  assert_success
+
+  run grep -q 'return 180 if connected_ssh_host() else 90' "${ui_file}"
+  assert_success
+
+  run grep -q 'timeout_seconds=hhs_ask_timeout_seconds()' "${ui_file}"
   assert_success
 
   run grep -q 'def parse_ollama_model_rows' "${ui_file}"

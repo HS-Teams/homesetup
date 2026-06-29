@@ -603,6 +603,8 @@ def render_terminal_output(
 
 def close_all_dialogs() -> None:
     """Close every Streamlit dialog or inline confirmation controlled by this UI."""
+    st.session_state.pop("_hhs_dialog_pending_callback", None)
+    st.session_state.pop("_hhs_dialog_button_dismissal", None)
     st.session_state["ai_clear_chat_pending"] = False
     st.session_state["ai_model_select_pending"] = None
     st.session_state["ai_model_delete_pending"] = None
@@ -641,33 +643,100 @@ def set_overlay(
         placeholder.empty()
 
 
+def queue_dialog_callback(callback: Callable[[], None] | None) -> None:
+    """Queue a dialog button callback for execution after the dialog is dismissed."""
+    if callback:
+        st.session_state["_hhs_dialog_pending_callback"] = callback
+
+
+def execute_pending_dialog_callback() -> None:
+    """Run one dialog callback that was queued before the dialog was dismissed."""
+    callback = st.session_state.pop("_hhs_dialog_pending_callback", None)
+    if callable(callback):
+        callback()
+
+
+def handle_dialog_button_click(
+    callback: Callable[[], None] | None = None,
+    close_callback: Callable[[], None] | None = None,
+) -> None:
+    """Dismiss the active dialog and defer the button callback until after dismissal."""
+    if close_callback:
+        close_callback()
+    queue_dialog_callback(callback)
+    st.session_state["_hhs_dialog_button_dismissal"] = True
+    dismiss_streamlit_dialog()
+
+
+def handle_dialog_dismiss(callback: Callable[[], None] | None = None) -> None:
+    """Run native dialog-dismiss cleanup unless dismissal came from a dialog button."""
+    if st.session_state.pop("_hhs_dialog_button_dismissal", False):
+        return
+    if callback:
+        callback()
+
+
 def pop_dialog(
     title: str,
-    message: str,
-    confirm_key: str,
-    cancel_key: str,
-    on_confirm: Callable[[], None],
-    on_cancel: Callable[[], None],
+    message: str = "",
+    confirm_key: str = "",
+    cancel_key: str = "",
+    on_confirm: Callable[[], None] | None = None,
+    on_cancel: Callable[[], None] | None = None,
     confirm_label: str = "Confirm",
     cancel_label: str = "Cancel",
-) -> None:
-    """Render a reusable confirmation dialog with app-rerun-safe actions."""
+    buttons: tuple[dict[str, object], ...] | None = None,
+    body: Callable[[], None] | None = None,
+    close_callback: Callable[[], None] | None = None,
+    dismissible: bool = True,
+) -> bool:
+    """Render a reusable dialog that defers button callbacks until after dismissal."""
+    dialog_buttons = buttons
+    if dialog_buttons is None:
+        dialog_buttons = (
+            {
+                "label": confirm_label,
+                "key": confirm_key,
+                "callback": on_confirm,
+            },
+            {
+                "label": cancel_label,
+                "key": cancel_key,
+                "callback": on_cancel,
+            },
+        )
 
-    @st.dialog(title)
+    dismiss_callback = close_callback or on_cancel
+    on_dismiss = (
+        (lambda: handle_dialog_dismiss(dismiss_callback))
+        if dismiss_callback
+        else "rerun"
+    )
+
+    @st.dialog(title, dismissible=dismissible, on_dismiss=on_dismiss)
     def render_dialog() -> None:
-        """Render the configured confirmation dialog content."""
-        st.write(message)
-        confirm_col, cancel_col = st.columns(2)
-        with confirm_col:
-            if st.button(confirm_label, key=confirm_key, width="stretch"):
-                on_confirm()
-                st.rerun(scope="app")
-        with cancel_col:
-            if st.button(cancel_label, key=cancel_key, width="stretch"):
-                on_cancel()
-                st.rerun(scope="app")
+        """Render the configured dialog content and deferred-action buttons."""
+        if body:
+            body()
+        elif message:
+            st.write(message)
+        visible_buttons = [button for button in dialog_buttons if button.get("key")]
+        if not visible_buttons:
+            return
+        columns = st.columns(len(visible_buttons))
+        for column, button in zip(columns, visible_buttons):
+            label = str(button.get("label", "Close"))
+            key = str(button.get("key", ""))
+            callback = button.get("callback")
+            with column:
+                if st.button(label, key=key, width="stretch"):
+                    handle_dialog_button_click(
+                        callback if callable(callback) else None,
+                        close_callback=close_callback,
+                    )
 
     render_dialog()
+    return True
 
 
 def homesetup_version() -> str:
@@ -1620,6 +1689,11 @@ def command_env() -> dict[str, str]:
     }
 
 
+def hhs_ask_timeout_seconds() -> int:
+    """Return the timeout for an Ollama prompt based on the selected host."""
+    return 180 if connected_ssh_host() else 90
+
+
 def local_hostname() -> str:
     """Return the local host name shown by the sidebar host selector."""
     return os.uname().nodename.strip() or "localhost"
@@ -2002,21 +2076,16 @@ def render_ssh_connection_dialog() -> bool:
     if not title:
         return False
     set_overlay(False)
-
-    @st.dialog(title, on_dismiss=close_ssh_connection_dialog)
-    def render_dialog() -> None:
-        """Render the selected SSH connection result."""
-        if not str(st.session_state.get("ssh_connection_dialog_title", "")).strip():
-            dismiss_streamlit_dialog()
-            return
-        if st.button(
-            "Close", key="ssh_connection_dialog_close_button", width="stretch"
-        ):
-            close_ssh_connection_dialog()
-            dismiss_streamlit_dialog()
-
-    render_dialog()
-    return True
+    return pop_dialog(
+        title=title,
+        buttons=(
+            {
+                "label": "Close",
+                "key": "ssh_connection_dialog_close_button",
+            },
+        ),
+        close_callback=close_ssh_connection_dialog,
+    )
 
 
 def run_bash_command(
@@ -2636,6 +2705,7 @@ def run_hhs_ask(message: str) -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_ask_command(message),
         "Asking Ollama...",
+        timeout_seconds=hhs_ask_timeout_seconds(),
     )
 
 
@@ -3625,20 +3695,25 @@ def render_home_tool_action_dialog() -> bool:
     status = "succeeded" if succeeded else "failed"
     title = f"{home_tool_action_noun(operation)} of {tool_name} {status}"
 
-    @st.dialog(title)
-    def render_dialog() -> None:
-        """Render the selected Home tool action result."""
+    def render_body() -> None:
+        """Render the selected Home tool action result body."""
         if output:
             render_terminal_output(
                 output,
                 css_classes="hhs-home-tool-action-output",
             )
-        if st.button("Close", key="home_tool_action_close_button", width="stretch"):
-            close_home_tool_action_dialog()
-            st.rerun(scope="app")
 
-    render_dialog()
-    return True
+    return pop_dialog(
+        title=title,
+        body=render_body,
+        buttons=(
+            {
+                "label": "Close",
+                "key": "home_tool_action_close_button",
+            },
+        ),
+        close_callback=close_home_tool_action_dialog,
+    )
 
 
 def apply_selected_tool_tldr(tool_name: str) -> None:
@@ -3666,19 +3741,24 @@ def render_home_tool_tldr_dialog() -> bool:
     output = strip_ansi(str(st.session_state.get("home_tool_tldr_output", ""))).strip()
     succeeded = bool(st.session_state.get("home_tool_tldr_succeeded", False))
 
-    @st.dialog(f"TLDR: {tool_name}")
-    def render_dialog() -> None:
-        """Render the selected Home tool TLDR result."""
+    def render_body() -> None:
+        """Render the selected Home tool TLDR result body."""
         if succeeded:
             st.code(output or "No TLDR output found.", language="text")
         else:
             st.error(output or f"Unable to load TLDR for {tool_name}.")
-        if st.button("Close", key="home_tool_tldr_close_button", width="stretch"):
-            close_home_tool_tldr_dialog()
-            st.rerun(scope="app")
 
-    render_dialog()
-    return True
+    return pop_dialog(
+        title=f"TLDR: {tool_name}",
+        body=render_body,
+        buttons=(
+            {
+                "label": "Close",
+                "key": "home_tool_tldr_close_button",
+            },
+        ),
+        close_callback=close_home_tool_tldr_dialog,
+    )
 
 
 def apply_selected_service_action(operation: str, service_name: str) -> None:
@@ -4893,6 +4973,7 @@ def main() -> None:
     st.session_state.setdefault("history_stats_top_n", 10)
     if not isinstance(st.session_state["history_stats_top_n"], int):
         st.session_state["history_stats_top_n"] = 10
+    execute_pending_dialog_callback()
     render_sidebar()
     render_main_view()
     render_footer()
