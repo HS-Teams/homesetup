@@ -39,8 +39,8 @@ VIEW_LABELS = {
     "Services": " Services",
     "Monitor": " Monitor",
     "History": " History",
-    SSH_VIEW: " SSH",
-    AI_VIEW: " AI",
+    SSH_VIEW: " SSH",
+    AI_VIEW: " AI",
 }
 AI_VIEWS = ("CHAT", "SETTINGS")
 HOME_VIEWS = ("System", "Tools")

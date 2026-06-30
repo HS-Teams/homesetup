@@ -801,10 +801,10 @@ PY
   run grep -q '"History": " History"' "${constants_file}"
   assert_success
 
-  run grep -q 'SSH_VIEW: " SSH"' "${constants_file}"
+  run grep -q 'SSH_VIEW: " SSH"' "${constants_file}"
   assert_success
 
-  run grep -q 'AI_VIEW: " AI"' "${constants_file}"
+  run grep -q 'AI_VIEW: " AI"' "${constants_file}"
   assert_success
 
   run grep -q 'AI_VIEWS = ("CHAT", "SETTINGS")' "${constants_file}"
