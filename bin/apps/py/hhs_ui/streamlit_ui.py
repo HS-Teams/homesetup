@@ -3998,6 +3998,11 @@ def main_views() -> tuple[str, ...]:
     return views
 
 
+def main_view_label(view: str) -> str:
+    """Return the display label for a main view tab."""
+    return hhs_ui.VIEW_LABELS.get(view, view)
+
+
 def reset_service_table_selection() -> None:
     """Reset the service dataframe selection for the next rerun."""
     reset_counter = st.session_state.setdefault(
@@ -5268,7 +5273,7 @@ def render_main_view() -> None:
         horizontal=True,
         key="active_view",
         label_visibility="collapsed",
-        format_func=str.upper,
+        format_func=main_view_label,
         on_change=save_ui_state,
     )
     if active_view == "Home":

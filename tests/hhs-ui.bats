@@ -780,6 +780,27 @@ PY
   run grep -q 'SSH_VIEW = "SSH"' "${constants_file}"
   assert_success
 
+  run grep -q '"Home": " Home"' "${constants_file}"
+  assert_success
+
+  run grep -q '"Configs": " Configs"' "${constants_file}"
+  assert_success
+
+  run grep -q '"Services": " Services"' "${constants_file}"
+  assert_success
+
+  run grep -q '"Monitor": " Monitor"' "${constants_file}"
+  assert_success
+
+  run grep -q '"History": " History"' "${constants_file}"
+  assert_success
+
+  run grep -q 'SSH_VIEW: " SSH"' "${constants_file}"
+  assert_success
+
+  run grep -q 'AI_VIEW: " AI"' "${constants_file}"
+  assert_success
+
   run grep -q 'AI_VIEWS = ("CHAT", "SETTINGS")' "${constants_file}"
   assert_success
 
@@ -836,6 +857,15 @@ PY
 
   run grep -q 'SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"' "${constants_file}"
   assert_success
+
+  run grep -q 'def main_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'format_func=main_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'format_func=str.upper' "${ui_file}"
+  assert_failure
 
   run grep -q 'checkbox=True' "${ui_file}"
   assert_success

@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.73"
+VERSION = "0.0.74"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -33,6 +33,15 @@ APP_CSS = ""
 VIEWS = ("Home", "Configs", "Services", "Monitor", "History")
 AI_VIEW = "AI"
 SSH_VIEW = "SSH"
+VIEW_LABELS = {
+    "Home": " Home",
+    "Configs": " Configs",
+    "Services": " Services",
+    "Monitor": " Monitor",
+    "History": " History",
+    SSH_VIEW: " SSH",
+    AI_VIEW: " AI",
+}
 AI_VIEWS = ("CHAT", "SETTINGS")
 HOME_VIEWS = ("System", "Tools")
 CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")

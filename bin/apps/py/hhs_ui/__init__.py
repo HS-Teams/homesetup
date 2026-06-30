@@ -106,6 +106,7 @@ try:
         UI_SSH_CONNECTION_FILE,
         UI_STATE_FILE,
         VERSION,
+        VIEW_LABELS,
         VIEWS,
     )
 except ImportError:
@@ -214,6 +215,7 @@ except ImportError:
         UI_SSH_CONNECTION_FILE,
         UI_STATE_FILE,
         VERSION,
+        VIEW_LABELS,
         VIEWS,
     )
 
@@ -321,5 +323,6 @@ __all__ = (
     "UI_SSH_CONNECTION_FILE",
     "UI_STATE_FILE",
     "VERSION",
+    "VIEW_LABELS",
     "VIEWS",
 )
