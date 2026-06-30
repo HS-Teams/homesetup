@@ -49,27 +49,39 @@ N/A
 
 #### **Examples**
 
-`__hhs ui help`
+`__hhs execute ui help`
 
 **Output**
 
 ```bash
-usage: __hhs ui [options]
+usage: __hhs execute ui [command] [options]
 
-  HomeSetup Streamlit UI launcher v0.0.2.
+  HomeSetup Streamlit UI launcher v0.0.3.
+
+    commands:
+      start                      : Start the UI if it is not already running.
+      status                     : Show whether the UI is running.
+      stop                       : Stop the running UI process.
+      restart                    : Stop and start the UI.
 
     options:
       -h | --help                : Display this help message.
       -v | --version             : Display current plugin version.
 
     arguments:
-      args                       : Optional arguments passed to Streamlit.
+      args                       : Optional arguments passed to Streamlit start/restart.
 
     examples:
-      Launch HomeSetup UI:
-        => __hhs ui
-      Launch HomeSetup UI with Streamlit arguments:
-        => HHS_STREAMLIT_UI_PORT=18502 __hhs ui
+      Open HomeSetup UI, starting it first if needed:
+        => __hhs execute ui
+      Start HomeSetup UI without restarting an existing process:
+        => __hhs execute ui start
+      Restart HomeSetup UI:
+        => __hhs execute ui restart
+      Show HomeSetup UI status:
+        => __hhs execute ui status
+      Launch HomeSetup UI on another port:
+        => HHS_STREAMLIT_UI_PORT=18502 __hhs execute ui
 
   Notes:
     - The HomeSetup Python virtual environment must be active.
@@ -82,12 +94,12 @@ usage: __hhs ui [options]
 
 #### **Purpose**
 
-Launch the HomeSetup Streamlit UI or open the existing server if the configured port is already accepting connections.
-The launcher runs `bin/apps/py/hhs-ui/streamlit_ui.py` with `python3 -m streamlit`.
+Open the HomeSetup Streamlit UI, starting it first if the configured port is not already accepting connections.
+The launcher runs `bin/apps/py/hhs_ui/streamlit_ui.py` with `python3 -m streamlit`.
 
 #### **Returns**
 
-**0** if the UI is launched or opened; **non-zero** otherwise.
+**0** if the UI is started or opened; **non-zero** otherwise.
 
 #### **Parameters**
 
@@ -95,7 +107,7 @@ The launcher runs `bin/apps/py/hhs-ui/streamlit_ui.py` with `python3 -m streamli
 
 #### **Examples**
 
-`__hhs ui`
+`__hhs execute ui`
 
 **Output**
 
@@ -104,6 +116,54 @@ Starting HomeSetup UI on port 18501...
 HomeSetup UI started with PID: 12345
 HomeSetup UI is running at http://localhost:18501
 ```
+
+------
+
+### "start"
+
+#### **Purpose**
+
+Start the HomeSetup Streamlit UI if it is not already running. This command does not restart an existing process.
+
+#### **Examples**
+
+`__hhs execute ui start`
+
+------
+
+### "status"
+
+#### **Purpose**
+
+Show whether the HomeSetup Streamlit UI is running on the configured port.
+
+#### **Examples**
+
+`__hhs execute ui status`
+
+------
+
+### "stop"
+
+#### **Purpose**
+
+Stop the running HomeSetup Streamlit UI process.
+
+#### **Examples**
+
+`__hhs execute ui stop`
+
+------
+
+### "restart"
+
+#### **Purpose**
+
+Stop and start the HomeSetup Streamlit UI. Use this command when a running UI must be refreshed.
+
+#### **Examples**
+
+`__hhs execute ui restart`
 
 ------
 
@@ -140,4 +200,4 @@ The UI uses the bundled Droid Sans Mono Nerd Font and a Dracula-based Streamlit 
 render consistently in tables and status fields.
 
 Selection state, active tabs, filters, and editable ENV/PATH overrides are restored from
-`bin/apps/py/hhs-ui/.streamlit-ui-state`.
+`bin/apps/py/hhs_ui/.streamlit-ui-state`.

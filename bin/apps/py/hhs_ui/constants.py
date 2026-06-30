@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.69"
+VERSION = "0.0.72"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -35,6 +35,13 @@ AI_VIEW = "AI"
 AI_VIEWS = ("CHAT", "SETTINGS")
 HOME_VIEWS = ("System", "Tools")
 CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")
+CONFIG_VIEW_LABELS = {
+    "ENV": "ENV. VARs.",
+    "PATH": "PATHs",
+    "DIR": "SAVED DIRs",
+    "CMD": "SAVED CMDs",
+    "ALIAS": "ALIASES",
+}
 HISTORY_VIEWS = ("COMMANDS", "DIRECTORIES", "STATS")
 MONITOR_VIEWS = ("DISK", "MEM", "CPU", "PROCESSES", "LOGS")
 ENV_FILTERS = ("All", "HHS", "Other")
@@ -101,6 +108,9 @@ ANSI_ESCAPE_PATTERN = re.compile(
 ALIAS_LINE_PATTERN = re.compile(r"^(.+?)\.{2,}\s+(?:|=>)\s+'?(.*?)'?$")
 COMMAND_LINE_PATTERN = re.compile(
     r"^\((\d+)\)\s+(.+?)\.{2,}\s+(?:|=>)\s+'?(.*?)'?(?:\.\.\.)?$"
+)
+ESCAPED_ANSI_ESCAPE_PATTERN = re.compile(
+    r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
 )
 DIR_LINE_PATTERN = re.compile(r"^(.+?)\.{2,}\s+(?:|=>)\s+'?(.*?)'?$")
 ENV_LINE_PATTERN = re.compile(r"^([A-Za-z0-9_]+)\s+\.{2,}\s+(?:|=>)\s+(.*)$")

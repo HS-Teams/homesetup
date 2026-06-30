@@ -17,9 +17,9 @@ load test_helper
 load_bats_libs
 
 setup() {
-  ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs-ui/streamlit_ui.py"
-  constants_file="${HHS_REPO_DIR}/bin/apps/py/hhs-ui/constants.py"
-  css_file="${HHS_REPO_DIR}/bin/apps/py/hhs-ui/streamlit_ui.css"
+  ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.py"
+  constants_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/constants.py"
+  css_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.css"
   ask_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"
   hspm_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"
   ui_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/ui.bash"
@@ -160,7 +160,19 @@ setup() {
 
 # TC - 4
 @test "when loading Streamlit UI source then Python syntax should be valid" {
-  run python3 -c 'import ast, pathlib; ast.parse(pathlib.Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text())'
+  run python3 -c 'import ast, pathlib; ast.parse(pathlib.Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())'
+  assert_success
+
+  run grep -q '^import os$' "${ui_file}"
+  assert_success
+
+  run grep -q '^from pathlib import Path$' "${ui_file}"
+  assert_success
+
+  run grep -q '^import sys$' "${ui_file}"
+  assert_success
+
+  run grep -q 'sys.path.insert(0, str(Path(__file__).resolve().parents\[1\]))' "${ui_file}"
   assert_success
 }
 
@@ -174,6 +186,178 @@ setup() {
 
   run grep -q -- '--server.port "${HHS_STREAMLIT_UI_PORT}"' "${ui_plugin_file}"
   assert_success
+
+  run grep -q 'PYTHONPATH="${HHS_HOME}/bin/apps/py:${PYTHONPATH:-}"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'usage: ${APP_NAME} execute ${PLUGIN_NAME} \[command\] \[options\]' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q '${APP_NAME} execute ${PLUGIN_NAME} restart' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'case "${1:-open}" in' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'restart_ui "$@"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'ui_port_pids' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q '\[\[ "$1" == "execute" \]\] && shift' "${ui_plugin_file}"
+  assert_success
+}
+
+@test "when executing UI plugin commands then lifecycle subcommands route explicitly" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { return 0; }
+    function __hhs_open() { printf "open:%s\n" "$1"; }
+    source "${3}"
+    function is_ui_running() { [[ "${UI_RUNNING:-0}" == "1" ]]; }
+    function start_ui() { printf "start:%s\n" "$*"; }
+    function stop_ui() { printf "stop\n"; }
+    function status_ui() { printf "status\n"; }
+    function launch_ui() { printf "launch:%s\n" "$*"; }
+    execute
+    execute execute restart --flag
+    execute start --flag
+    execute status
+    execute stop
+    execute restart --flag
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_line --index 0 'launch:'
+  assert_line --index 1 'stop'
+  assert_line --index 2 'launch:--flag'
+  assert_line --index 3 'start:--flag'
+  assert_line --index 4 'status'
+  assert_line --index 5 'stop'
+  assert_line --index 6 'stop'
+  assert_line --index 7 'launch:--flag'
+}
+
+@test "when starting an already running UI then browser is opened without restart" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { return 0; }
+    function __hhs_open() { printf "open:%s\n" "$1"; }
+    source "${3}"
+    function is_ui_running() { return 0; }
+    start_ui
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_output --partial 'HomeSetup UI is already running'
+  assert_output --partial 'HomeSetup UI is running at http://localhost:28501'
+}
+
+@test "when restarting UI then launch path opens the browser after stop" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { return 0; }
+    function __hhs_open() { printf "open:%s\n" "$1"; }
+    source "${3}"
+    function stop_ui() { printf "stop\n"; }
+    function launch_ui() { printf "launch:%s\n" "$*"; open_ui; }
+    restart_ui --flag
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_line --index 0 'stop'
+  assert_line --index 1 'launch:--flag'
+  assert_output --partial 'HomeSetup UI is running at http://localhost:28501'
+}
+
+@test "when stopping UI then listener PID on configured port is included" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { [[ "$1" == "lsof" ]] && return 1; return 0; }
+    function __hhs_open() { return 0; }
+    function kill() {
+      if [[ "$1" == "-0" ]]; then
+        return 0
+      fi
+      printf "kill:%s\n" "$1"
+      UI_RUNNING="0"
+      return 0
+    }
+    source "${3}"
+    function is_ui_running() { [[ "${UI_RUNNING:-1}" == "1" ]]; }
+    function ui_pids() { return 0; }
+    function ui_port_pids() { printf "12345\n"; }
+    stop_ui
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_output --partial 'Stopping HomeSetup UI process 12345'
+  assert_output --partial 'kill:12345'
 }
 
 # TC - 6
@@ -225,7 +409,7 @@ setup() {
   run test -s "${css_file}"
   assert_success
 
-  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
   assert_success
 
   run grep -q 'APP_CSS_FILE = APP_DIR / "streamlit_ui.css"' "${constants_file}"
@@ -237,10 +421,10 @@ setup() {
   run grep -q -- '--hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-theme-background-color: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-theme-background-color: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-background: var(--hhs-theme-background-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-background: var(--hhs-theme-background-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 
   run grep -q 'def css_custom_properties' "${ui_file}"
@@ -384,13 +568,13 @@ setup() {
   run grep -q 'min-height: 2.55rem' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-markdown-table-value: var(--hhs-theme-primary-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-markdown-table-value: var(--hhs-theme-primary-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-theme-text-color-accent:' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-theme-text-color-accent:' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 
   run grep -q 'color: var(--hhs-markdown-table-header)' "${css_file}"
@@ -414,25 +598,25 @@ setup() {
   run grep -q 'color: var(--hhs-selected-item-value)' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-selected-item-label: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-selected-item-label: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-selected-item-value: var(--hhs-success)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-selected-item-value: var(--hhs-success)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 
   run python3 - <<'PY'
 import re
 from pathlib import Path
 
-ui_source = Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text()
-base_css = Path("bin/apps/py/hhs-ui/streamlit_ui.css").read_text()
-dracula_css = Path("bin/apps/py/hhs-ui/themes/dracula.css").read_text()
+ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+base_css = Path("bin/apps/py/hhs_ui/streamlit_ui.css").read_text()
+dracula_css = Path("bin/apps/py/hhs_ui/themes/dracula.css").read_text()
 
 assert 'class="hhs-footer-logo"' in ui_source
 assert 'class="hhs-footer-logo-link"' in ui_source
 assert 'class="hhs-footer-link"' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
-constants_source = Path("bin/apps/py/hhs-ui/constants.py").read_text()
+constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
 assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in constants_source
 assert 'href="{working_dir_url}" target="_self">Working dir:' in ui_source
 assert 'def build_open_directory_command' in ui_source
@@ -443,7 +627,7 @@ assert 'xdg-open "$target"' in ui_source
 assert 'gio open "$target"' in ui_source
 assert 'sensible-browser "$target"' in ui_source
 assert 'use_cache=False' in ui_source
-assert 'load_app_image_data_uri(APP_AI_HOMESETUP_AVATAR_FILE, "image/png")' in ui_source
+assert 'hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"' in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source
 base_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", base_css).group(1)
 link_block = re.search(r"\.hhs-footer-link,[^{]+\{([^}]*)\}", base_css).group(1)
@@ -478,7 +662,7 @@ import tempfile
 import types
 from pathlib import Path
 
-app_dir = Path("bin/apps/py/hhs-ui").resolve()
+app_dir = Path("bin/apps/py/hhs_ui").resolve()
 sys.path.insert(0, str(app_dir))
 
 streamlit = types.ModuleType("streamlit")
@@ -539,16 +723,16 @@ homesetup-css
 }
 tokyo-night-css
 """, encoding="utf-8")
-    ui.APP_THEME_CSS_FILE = themes_dir / "dracula.css"
-    ui.UI_STATE_FILE = tmp_path / "hhs-dir" / ".streamlit-ui-state"
+    ui.hhs_ui.APP_THEME_CSS_FILE = themes_dir / "dracula.css"
+    ui.hhs_ui.UI_STATE_FILE = tmp_path / "hhs-dir" / ".streamlit-ui-state"
 
     ui.persist_theme_selection("tokyo-night")
-    assert json.loads(ui.UI_STATE_FILE.read_text(encoding="utf-8"))["theme_selected"] == "tokyo-night"
+    assert json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))["theme_selected"] == "tokyo-night"
 
     streamlit.session_state.clear()
     streamlit.session_state["active_view"] = "Home"
     ui.save_ui_state()
-    assert json.loads(ui.UI_STATE_FILE.read_text(encoding="utf-8"))["theme_selected"] == "tokyo-night"
+    assert json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))["theme_selected"] == "tokyo-night"
 
     streamlit.session_state.clear()
     ui.restore_ui_state()
@@ -604,7 +788,7 @@ PY
   run grep -q 'key="home_tools_filter"' "${ui_file}"
   assert_success
 
-  run grep -q 'LIST_FILTERS' "${ui_file}"
+  run grep -q 'hhs_ui.LIST_FILTERS' "${ui_file}"
   assert_success
 
   run grep -q 'key="home_tools_other_filter"' "${ui_file}"
@@ -718,7 +902,7 @@ PY
   run python3 - <<'PY'
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text()
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 old_labels = (
     "Tools filter",
     "Tools filter text",
@@ -755,6 +939,36 @@ PY
   run grep -q 'CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")' "${constants_file}"
   assert_success
 
+  run grep -q '"ENV": "ENV. VARs."' "${constants_file}"
+  assert_success
+
+  run grep -q '"PATH": "PATHs"' "${constants_file}"
+  assert_success
+
+  run grep -q '"DIR": "SAVED DIRs"' "${constants_file}"
+  assert_success
+
+  run grep -q '"CMD": "SAVED CMDs"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ALIAS": "ALIASES"' "${constants_file}"
+  assert_success
+
+  run grep -q 'format_func=config_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'globals().get(' "${ui_file}"
+  assert_failure
+
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q 'from constants import \*' "${ui_file}"
+  assert_failure
+
+  run grep -q '^import hhs_ui$' "${ui_file}"
+  assert_success
+
   run grep -q 'HISTORY_VIEWS = ("COMMANDS", "DIRECTORIES", "STATS")' "${constants_file}"
   assert_success
 
@@ -774,7 +988,7 @@ PY
 import ast
 from pathlib import Path
 
-tree = ast.parse(Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text())
+tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
 violations = []
 parents = {}
 
@@ -1004,7 +1218,7 @@ PY
 import ast
 from pathlib import Path
 
-tree = ast.parse(Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text())
+tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
 for node in ast.walk(tree):
     if isinstance(node, ast.FunctionDef) and node.name == "render_ssh_connection_dialog":
         assert "st.stop()" not in ast.unparse(node)
@@ -1065,7 +1279,7 @@ PY
   run grep -q 'hhs-tab-loader' "${css_file}"
   assert_success
 
-  run grep -q 'background: var(--hhs-background)' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q 'background: var(--hhs-background)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 }
 
@@ -1122,7 +1336,7 @@ PY
   run python3 - <<'PY'
 from pathlib import Path
 
-ui_source = Path("bin/apps/py/hhs-ui/streamlit_ui.py").read_text()
+ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 assert ui_source.count("@st.dialog(") == 1
 PY
   assert_success
@@ -1148,13 +1362,13 @@ PY
   run grep -q 'APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"' "${constants_file}"
   assert_success
 
-  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/assets/images/user.png"
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/images/user.png"
   assert_success
 
-  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/assets/images/ollama.png"
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/images/ollama.png"
   assert_success
 
-  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/assets/images/homesetup.png"
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/images/homesetup.png"
   assert_success
 
   run grep -q 'build_hhs_ask_execute_command(\["-k", message\])' "${ui_file}"
@@ -1241,7 +1455,7 @@ PY
   run grep -q 'color: #4da3ff' "${ui_file}"
   assert_success
 
-  run grep -q -- '--hhs-model-accent: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs-ui/themes/dracula.css"
+  run grep -q -- '--hhs-model-accent: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 }
 
@@ -1397,6 +1611,50 @@ def parse_hhs_dirs(output):
 
 rows = parse_hhs_dirs(r"\033[0;36mAKS\033[0;97m......................................  '/tmp/aks'")
 assert rows == [{"Name": "AKS", "Value": "/tmp/aks"}], rows
+PY
+  assert_success
+}
+
+@test "when rendering table rows then path values are visually abbreviated with env vars" {
+  run python3 - "${ui_file}" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def env_path_aliases()")
+end = source.index("def render_table(")
+namespace = {"os": os, "re": re}
+exec(source[start:end], namespace)
+
+os.environ.clear()
+os.environ.update(
+    {
+        "HOME": "/Users/hjunior",
+        "HHS_HOME": "/Users/hjunior/HomeSetup",
+        "HHS_DIR": "/Users/hjunior/.config/hhs",
+        "PATH": "/bin:/usr/bin",
+        "PLAIN": "not-a-path",
+    }
+)
+
+rows = [
+    {"Name": "Repo", "Value": "/Users/hjunior/HomeSetup/bin"},
+    {"Name": "Config", "Value": "/Users/hjunior/.config/hhs/log/app.log"},
+    {"Name": "Other", "Value": "/opt/tool"},
+    {
+        "Name": "List",
+        "Value": "/Users/hjunior/HomeSetup/bin:/Users/hjunior/.config/hhs/bin",
+    },
+]
+
+display_rows = namespace["display_table_rows"](rows)
+assert display_rows[0]["Value"] == "${HHS_HOME}/bin", display_rows
+assert display_rows[1]["Value"] == "${HHS_DIR}/log/app.log", display_rows
+assert display_rows[2]["Value"] == "/opt/tool", display_rows
+assert display_rows[3]["Value"] == "${HHS_HOME}/bin:${HHS_DIR}/bin", display_rows
+assert rows[0]["Value"] == "/Users/hjunior/HomeSetup/bin", rows
 PY
   assert_success
 }

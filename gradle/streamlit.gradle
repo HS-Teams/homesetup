@@ -36,7 +36,7 @@ def resolveExecutable = { String commandName, String envVarName = null, List<Str
   return fallback ?: commandName
 }
 
-def streamlitScriptFile = file("$rootDir/bin/apps/py/hhs-ui/streamlit_ui.py")
+def streamlitScriptFile = file("$rootDir/bin/apps/py/hhs_ui/streamlit_ui.py")
 def streamlitPidFilePath = file("$buildDir/streamlit/streamlit.pid")
 def streamlitLogFilePath = file("$buildDir/streamlit/streamlit.log")
 def streamlitHostValue = '127.0.0.1'
