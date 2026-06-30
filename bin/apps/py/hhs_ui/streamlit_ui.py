@@ -935,7 +935,8 @@ def render_footer() -> None:
     ):
         remote_status_markup = (
             f'<span class="hhs-footer-remote-status">'
-            f"Connected to remote: {connected_host}</span>"
+            f'<span class="hhs-footer-glyph"></span>'
+            f"<span>Connected to remote: {connected_host}</span></span>"
         )
     logo_data_uri = load_app_image_data_uri(
         hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"

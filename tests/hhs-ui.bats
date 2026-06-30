@@ -616,6 +616,7 @@ assert 'class="hhs-footer-logo"' in ui_source
 assert 'class="hhs-footer-logo-link"' in ui_source
 assert 'class="hhs-footer-link"' in ui_source
 assert 'class="hhs-footer-remote-status"' in ui_source
+assert 'class="hhs-footer-glyph"></span>' in ui_source
 assert 'Connected to remote: {connected_host}' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
 constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
@@ -643,11 +644,12 @@ assert "filter: none" in logo_link_block
 assert "height:" in logo_block
 assert "width:" in logo_block
 assert ".hhs-footer-remote-status" in base_css
-assert "color: var(--hhs-success)" in base_css
+assert "color: var(--hhs-warning)" in base_css
 assert "margin-left: auto" in base_css
 assert "border-bottom" not in base_block
 assert "border-bottom" not in theme_block
 assert "color: var(--hhs-primary)" in theme_block
+assert ".hhs-footer-remote-status" in dracula_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in dracula_css
 assert "border-color: var(--hhs-primary)" in dracula_css
 PY

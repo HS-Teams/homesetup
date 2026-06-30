@@ -594,9 +594,11 @@ div[class*="st-key-service_selected_value_"] textarea {
 }
 
 .hhs-footer-remote-status {
-  color: var(--hhs-success);
+  align-items: center;
+  color: var(--hhs-warning);
   display: inline-flex;
   font-weight: 750;
+  gap: 0.4rem;
   margin-left: auto;
   white-space: nowrap;
 }

@@ -259,3 +259,7 @@ div[class*="st-key-service_selected_value_"] textarea {
 .hhs-footer-glyph {
   color: var(--hhs-primary);
 }
+
+.hhs-footer-remote-status {
+  color: var(--hhs-warning);
+}
