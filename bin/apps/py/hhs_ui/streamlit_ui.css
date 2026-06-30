@@ -592,3 +592,11 @@ div[class*="st-key-service_selected_value_"] textarea {
   flex: 0 0 20px;
   width: 20px;
 }
+
+.hhs-footer-remote-status {
+  color: var(--hhs-success);
+  display: inline-flex;
+  font-weight: 750;
+  margin-left: auto;
+  white-space: nowrap;
+}

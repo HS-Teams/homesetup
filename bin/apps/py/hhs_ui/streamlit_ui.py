@@ -925,6 +925,18 @@ def render_footer() -> None:
     working_dir = html.escape(os.getcwd())
     repository_url = html.escape(os.environ.get("HHS_GITHUB_URL", "#"), quote=True)
     working_dir_url = f"?{hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM}=1"
+    connected_host = html.escape(
+        str(st.session_state.get("ssh_connection_host", "")).strip()
+    )
+    remote_status_markup = ""
+    if (
+        str(st.session_state.get("ssh_connection_status", "")).strip() == "connected"
+        and connected_host
+    ):
+        remote_status_markup = (
+            f'<span class="hhs-footer-remote-status">'
+            f"Connected to remote: {connected_host}</span>"
+        )
     logo_data_uri = load_app_image_data_uri(
         hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"
     )
@@ -939,6 +951,7 @@ def render_footer() -> None:
           <span class="hhs-footer-glyph"></span>
           <span class="hhs-footer-spacer"></span>
           <a class="hhs-footer-link" href="{working_dir_url}" target="_self">Working dir: {working_dir}</a>
+          {remote_status_markup}
         </footer>
         """,
         unsafe_allow_html=True,
@@ -2177,9 +2190,7 @@ def execute_pending_ssh_connection() -> None:
         st.session_state["ssh_host_selected"] = host
         st.session_state["ssh_host_selector"] = host
         st.session_state["ssh_connection_error"] = ""
-        st.session_state["ssh_connection_dialog_title"] = (
-            f"Successfully connected to {host}"
-        )
+        st.session_state["ssh_connection_dialog_title"] = ""
         register_ssh_connection(host)
         save_ui_state()
     else:
