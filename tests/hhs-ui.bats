@@ -1245,10 +1245,22 @@ PY
   run grep -q 'def build_ssh_tunnels_command' "${ui_file}"
   assert_success
 
+  run grep -q 'ssh {safe_config_option} -G {safe_host}' "${ui_file}"
+  assert_success
+
   run grep -q 'def run_ssh_tunnels' "${ui_file}"
   assert_success
 
   run grep -q 'def parse_ssh_tunnels' "${ui_file}"
+  assert_success
+
+  run grep -q 'def parse_ssh_config_tunnels' "${ui_file}"
+  assert_success
+
+  run grep -q 'def annotate_ssh_tunnel_statuses' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_tunnel_status_cell_style' "${ui_file}"
   assert_success
 
   run grep -q 'def render_ssh_view' "${ui_file}"
@@ -1273,25 +1285,66 @@ namespace = {
     "Path": Path,
     "re": re,
     "shlex": shlex,
+    "ssh_config_file": lambda: Path.home() / ".ssh" / "config",
     "strip_ansi": lambda value: value,
 }
-exec(source[start:end], namespace)
+exec("from __future__ import annotations\n" + source[start:end], namespace)
 
 rows = namespace["parse_ssh_tunnels"](
     """
+    __HHS_SSH_CONFIG__
+    host homeselect
+    hostname 10.0.0.5
+    localforward 15432 127.0.0.1:5432
+    remoteforward 0.0.0.0:9000 127.0.0.1:9000
+    dynamicforward 127.0.0.1:1080
+    __HHS_SSH_PROCESSES__
     100 ssh -N -L 8080:localhost:80 user@example.com
     101 /usr/bin/ssh -N -R0.0.0.0:9000:127.0.0.1:9000 remote
     102 ssh -N -D 127.0.0.1:1080 remote
     103 ssh -MNf remote
-    """
+    """,
+    "homeselect",
 )
 
 assert rows == [
     {
         "Type": "Local",
+        "Bind": "15432",
+        "Destination": "127.0.0.1:5432",
+        "SSH Host": "homeselect",
+        "Source": "Config",
+        "Status": "",
+        "PID": "",
+        "Command": str(Path.home() / ".ssh" / "config"),
+    },
+    {
+        "Type": "Remote",
+        "Bind": "0.0.0.0:9000",
+        "Destination": "127.0.0.1:9000",
+        "SSH Host": "homeselect",
+        "Source": "Config",
+        "Status": "",
+        "PID": "",
+        "Command": str(Path.home() / ".ssh" / "config"),
+    },
+    {
+        "Type": "Dynamic",
+        "Bind": "127.0.0.1:1080",
+        "Destination": "SOCKS",
+        "SSH Host": "homeselect",
+        "Source": "Config",
+        "Status": "",
+        "PID": "",
+        "Command": str(Path.home() / ".ssh" / "config"),
+    },
+    {
+        "Type": "Local",
         "Bind": "8080",
         "Destination": "localhost:80",
         "SSH Host": "user@example.com",
+        "Source": "Process",
+        "Status": "",
         "PID": "100",
         "Command": "ssh -N -L 8080:localhost:80 user@example.com",
     },
@@ -1300,6 +1353,8 @@ assert rows == [
         "Bind": "0.0.0.0:9000",
         "Destination": "127.0.0.1:9000",
         "SSH Host": "remote",
+        "Source": "Process",
+        "Status": "",
         "PID": "101",
         "Command": "/usr/bin/ssh -N -R0.0.0.0:9000:127.0.0.1:9000 remote",
     },
@@ -1308,10 +1363,17 @@ assert rows == [
         "Bind": "127.0.0.1:1080",
         "Destination": "SOCKS",
         "SSH Host": "remote",
+        "Source": "Process",
+        "Status": "",
         "PID": "102",
         "Command": "ssh -N -D 127.0.0.1:1080 remote",
     },
 ], rows
+
+assert namespace["split_bind_address"]("127.0.0.1:1080") == ("127.0.0.1", 1080)
+assert namespace["split_bind_address"]("15432") == ("127.0.0.1", 15432)
+assert namespace["ssh_tunnel_status_cell_style"]("Reachable").endswith("#50fa7b;")
+assert namespace["ssh_tunnel_status_cell_style"]("Not reachable").endswith("#ff5555;")
 PY
   assert_success
 

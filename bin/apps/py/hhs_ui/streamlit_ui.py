@@ -26,6 +26,7 @@ import json
 import os
 import re
 import shlex
+import socket
 import subprocess
 import sys
 import textwrap
@@ -2519,9 +2520,16 @@ def build_open_directory_command(directory: str) -> str:
     )
 
 
-def build_ssh_tunnels_command() -> str:
-    """Build a local command that lists active SSH tunnel process commands."""
-    return "ps -axo pid=,command= 2>/dev/null || true"
+def build_ssh_tunnels_command(host: str) -> str:
+    """Build a local command that lists configured and active SSH tunnel data."""
+    safe_host = shlex.quote(host)
+    safe_config_option = ssh_config_option()
+    return (
+        'printf "%s\\n" "__HHS_SSH_CONFIG__"; '
+        f"ssh {safe_config_option} -G {safe_host} 2>/dev/null || true; "
+        'printf "%s\\n" "__HHS_SSH_PROCESSES__"; '
+        "ps -axo pid=,command= 2>/dev/null || true"
+    )
 
 
 def run_open_working_directory() -> subprocess.CompletedProcess[str]:
@@ -2912,10 +2920,10 @@ def run_hhs_process_kill(process_name: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_ssh_tunnels() -> subprocess.CompletedProcess[str]:
+def run_ssh_tunnels(host: str) -> subprocess.CompletedProcess[str]:
     """Run the local SSH tunnel listing command and return the completed process."""
     return run_bash_command(
-        build_ssh_tunnels_command(),
+        build_ssh_tunnels_command(host),
         "Loading SSH tunnels...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
         force_local=True,
@@ -3252,6 +3260,19 @@ def ssh_forward_spec_parts(spec: str, dynamic: bool = False) -> tuple[str, str]:
     return spec, ""
 
 
+def ssh_config_forward_parts(
+    parts: list[str], dynamic: bool = False
+) -> tuple[str, str]:
+    """Return display bind and destination values from SSH config forward values."""
+    if not parts:
+        return "", ""
+    if dynamic:
+        return parts[0], "SOCKS"
+    if len(parts) >= 2:
+        return parts[0], parts[1]
+    return ssh_forward_spec_parts(parts[0])
+
+
 def ssh_process_host(args: list[str]) -> str:
     """Return the destination host argument for a parsed SSH command."""
     options_with_values = {
@@ -3292,6 +3313,28 @@ def ssh_process_host(args: list[str]) -> str:
     return ""
 
 
+def ssh_tunnel_row(
+    forward_type: str,
+    bind: str,
+    destination: str,
+    ssh_host: str,
+    source: str,
+    pid: str = "",
+    command: str = "",
+) -> dict[str, str]:
+    """Return one SSH tunnel table row."""
+    return {
+        "Type": forward_type,
+        "Bind": bind,
+        "Destination": destination,
+        "SSH Host": ssh_host,
+        "Source": source,
+        "Status": "",
+        "PID": pid,
+        "Command": command,
+    }
+
+
 def append_ssh_forward_row(
     rows: list[dict[str, str]],
     pid: str,
@@ -3309,15 +3352,42 @@ def append_ssh_forward_row(
     forward_type = forward_types.get(option, option)
     bind, destination = ssh_forward_spec_parts(spec, dynamic=option == "-D")
     rows.append(
-        {
-            "Type": forward_type,
-            "Bind": bind,
-            "Destination": destination,
-            "SSH Host": ssh_host,
-            "PID": pid,
-            "Command": command,
-        }
+        ssh_tunnel_row(
+            forward_type, bind, destination, ssh_host, "Process", pid, command
+        )
     )
+
+
+def parse_ssh_config_tunnels(output: str, host: str) -> list[dict[str, str]]:
+    """Parse SSH tunnel and port-forward rows from resolved OpenSSH config output."""
+    rows: list[dict[str, str]] = []
+    forward_types = {
+        "localforward": "Local",
+        "remoteforward": "Remote",
+        "dynamicforward": "Dynamic",
+    }
+    for raw_line in strip_ansi(output).splitlines():
+        parts = raw_line.strip().split()
+        if not parts:
+            continue
+        keyword = parts[0].lower()
+        if keyword not in forward_types:
+            continue
+        dynamic = keyword == "dynamicforward"
+        bind, destination = ssh_config_forward_parts(parts[1:], dynamic=dynamic)
+        if not bind:
+            continue
+        rows.append(
+            ssh_tunnel_row(
+                forward_types[keyword],
+                bind,
+                destination,
+                host,
+                "Config",
+                command=str(ssh_config_file()),
+            )
+        )
+    return rows
 
 
 def parse_ssh_tunnel_process(pid: str, command: str) -> list[dict[str, str]]:
@@ -3343,15 +3413,158 @@ def parse_ssh_tunnel_process(pid: str, command: str) -> list[dict[str, str]]:
     return rows
 
 
-def parse_ssh_tunnels(output: str) -> list[dict[str, str]]:
-    """Parse active SSH tunnel and port-forward process rows."""
-    rows: list[dict[str, str]] = []
+def merge_ssh_tunnel_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return SSH tunnel rows merged by forwarding endpoint."""
+    merged: dict[tuple[str, str, str, str], dict[str, str]] = {}
+    for row in rows:
+        key = (
+            row.get("Type", ""),
+            row.get("Bind", ""),
+            row.get("Destination", ""),
+            row.get("SSH Host", ""),
+        )
+        if key not in merged:
+            merged[key] = dict(row)
+            continue
+        existing = merged[key]
+        sources = {
+            source.strip()
+            for source in (existing.get("Source", ""), row.get("Source", ""))
+            if source.strip()
+        }
+        existing["Source"] = ", ".join(sorted(sources))
+        if row.get("PID"):
+            existing["PID"] = row["PID"]
+        if row.get("Command") and row.get("Source") == "Process":
+            existing["Command"] = row["Command"]
+    return list(merged.values())
+
+
+def parse_ssh_tunnels(output: str, host: str = "") -> list[dict[str, str]]:
+    """Parse configured and active SSH tunnel and port-forward rows."""
+    config_lines: list[str] = []
+    process_lines: list[str] = []
+    section = "process"
     for line in strip_ansi(output).splitlines():
+        if line.strip() == "__HHS_SSH_CONFIG__":
+            section = "config"
+            continue
+        if line.strip() == "__HHS_SSH_PROCESSES__":
+            section = "process"
+            continue
+        if section == "config":
+            config_lines.append(line)
+        else:
+            process_lines.append(line)
+
+    rows: list[dict[str, str]] = []
+    rows.extend(parse_ssh_config_tunnels("\n".join(config_lines), host) if host else [])
+    for line in process_lines:
         match = re.match(r"^\s*(\d+)\s+(.+?)\s*$", line)
         if not match:
             continue
         rows.extend(parse_ssh_tunnel_process(match.group(1), match.group(2)))
-    return rows
+    return merge_ssh_tunnel_rows(rows)
+
+
+def normalized_bind_host(host: str) -> str:
+    """Return a reachable host name for a tunnel bind address."""
+    clean_host = host.strip().strip("[]")
+    if clean_host in {"", "*", "0.0.0.0", "::", "::0"}:
+        return "127.0.0.1"
+    return clean_host
+
+
+def split_bind_address(bind: str) -> tuple[str, int | None]:
+    """Return host and port from a tunnel bind value."""
+    clean_bind = bind.strip()
+    if not clean_bind:
+        return "127.0.0.1", None
+    if clean_bind.startswith("[") and "]:" in clean_bind:
+        host, port = clean_bind[1:].split("]:", 1)
+        return normalized_bind_host(host), int(port) if port.isdigit() else None
+    if ":" in clean_bind:
+        host, port = clean_bind.rsplit(":", 1)
+        return normalized_bind_host(host), int(port) if port.isdigit() else None
+    return "127.0.0.1", int(clean_bind) if clean_bind.isdigit() else None
+
+
+def local_port_is_reachable(host: str, port: int | None) -> bool:
+    """Return whether a local TCP host and port accepts connections."""
+    if port is None:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=0.35):
+            return True
+    except OSError:
+        return False
+
+
+def build_port_reachability_command(host: str, port: int) -> str:
+    """Build a shell command that checks whether a TCP port is reachable."""
+    safe_host = shlex.quote(host)
+    safe_port = shlex.quote(str(port))
+    return (
+        f"host={safe_host}; port={safe_port}; "
+        "if command -v nc >/dev/null 2>&1; then "
+        'nc -z -w 1 "$host" "$port"; '
+        "else "
+        'bash -c "</dev/tcp/${host}/${port}" >/dev/null 2>&1; '
+        "fi"
+    )
+
+
+def remote_port_is_reachable(host: str, port: int | None) -> bool:
+    """Return whether a remote TCP host and port accepts connections."""
+    if port is None:
+        return False
+    result = run_bash_command(
+        build_port_reachability_command(host, port),
+        "Checking SSH tunnel status...",
+        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        timeout_seconds=3,
+    )
+    return result.returncode == 0
+
+
+def ssh_tunnel_is_reachable(row: dict[str, str]) -> bool:
+    """Return whether an SSH tunnel row currently accepts connections."""
+    host, port = split_bind_address(row.get("Bind", ""))
+    if row.get("Type", "").lower() == "remote":
+        return remote_port_is_reachable(host, port)
+    return local_port_is_reachable(host, port)
+
+
+def annotate_ssh_tunnel_statuses(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return SSH tunnel rows with a reachable/not reachable status value."""
+    annotated_rows: list[dict[str, str]] = []
+    for row in rows:
+        annotated_row = dict(row)
+        annotated_row["Status"] = (
+            "Reachable" if ssh_tunnel_is_reachable(row) else "Not reachable"
+        )
+        annotated_rows.append(annotated_row)
+    return annotated_rows
+
+
+def ssh_tunnel_status_cell_style(value: object) -> str:
+    """Return the dataframe cell style for SSH tunnel status values."""
+    value_text = str(value).strip().lower()
+    base_style = "font-weight: 800;"
+    if value_text == "reachable":
+        return f"{base_style} color: #50fa7b;"
+    if value_text == "not reachable":
+        return f"{base_style} color: #ff5555;"
+    return base_style
+
+
+def styled_ssh_tunnel_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
+    """Return SSH tunnel rows with styled Status cells."""
+    dataframe = pd.DataFrame(display_table_rows(rows))
+    styler = dataframe.style
+    if "Status" in dataframe:
+        styler = styler.map(ssh_tunnel_status_cell_style, subset=["Status"])
+    return styler
 
 
 def parse_hhs_history(output: str) -> list[dict[str, str]]:
@@ -4879,20 +5092,30 @@ def render_ssh_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    result = run_ssh_tunnels()
+    result = run_ssh_tunnels(host)
     if result.returncode != 0:
         st.error(result.stderr or "Unable to load SSH tunnels.")
         return
-    rows = parse_ssh_tunnels(result.stdout)
-    headers = ["Type", "Bind", "Destination", "SSH Host", "PID", "Command"]
-    table_data = pd.DataFrame(display_table_rows(rows), columns=headers)
+    rows = annotate_ssh_tunnel_statuses(parse_ssh_tunnels(result.stdout, host))
+    headers = [
+        "Type",
+        "Bind",
+        "Destination",
+        "SSH Host",
+        "Source",
+        "Status",
+        "PID",
+        "Command",
+    ]
     render_table(
         rows,
         key=hhs_ui.SSH_TUNNEL_TABLE_KEY,
         headers=headers,
         checkbox=False,
         height=hhs_ui.ENV_TABLE_HEIGHT,
-        table_data=table_data,
+        table_data=(
+            styled_ssh_tunnel_rows(rows) if rows else pd.DataFrame(columns=headers)
+        ),
     )
     if not rows:
         st.caption("No active SSH tunnels or port forwards were found.")
