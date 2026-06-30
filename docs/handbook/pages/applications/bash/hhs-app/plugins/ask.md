@@ -71,6 +71,7 @@ usage: hhs ask <question> [options]
       -h | --help                      : Show this help message and exit.
       -v | --version                   : Show version and exit.
       -c | --context                   : Show current Ollama context (history) and exit.
+      -i | --ingest [file]             : Set Ollama context from a text-based file and exit.
       -r | --reset                     : Reset history before executing (fresh new session) and exit.
       -m | --models                    : List available Ollama models and exit.
       -s | --select-model [model_name] : Select the Ollama model to use.

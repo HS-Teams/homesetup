@@ -436,6 +436,18 @@ setup() {
   run grep -q 'class="hhs-sidebar-title"' "${ui_file}"
   assert_success
 
+  run grep -q 'def render_sidebar_title' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_sidebar_title()' "${ui_file}"
+  assert_success
+
+  run grep -q 'class="hhs-sidebar-title-logo"' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"' "${ui_file}"
+  assert_success
+
   run grep -q 'color: var(--hhs-theme-text-color)' "${css_file}"
   assert_success
 
@@ -449,6 +461,18 @@ setup() {
   assert_success
 
   run grep -q 'padding: 0 2rem 0 var(--hhs-sidebar-inline-inset)' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-sidebar-title-logo' "${css_file}"
+  assert_success
+
+  run grep -q 'height: 24px' "${css_file}"
+  assert_success
+
+  run grep -q 'width: 24px' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-right: 0.45rem' "${css_file}"
   assert_success
 
   run grep -q 'host_kind = "Local" if selected_host_is_local() else "SSH"' "${ui_file}"
@@ -611,20 +635,55 @@ from pathlib import Path
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs_ui/streamlit_ui.css").read_text()
 dracula_css = Path("bin/apps/py/hhs_ui/themes/dracula.css").read_text()
+homesetup_css = Path("bin/apps/py/hhs_ui/themes/homesetup.css").read_text()
+tokyo_night_css = Path("bin/apps/py/hhs_ui/themes/tokyo-night.css").read_text()
 
 assert 'class="hhs-footer-logo"' in ui_source
 assert 'class="hhs-footer-logo-link"' in ui_source
-assert 'class="hhs-footer-link"' in ui_source
+assert 'hhs-footer-link' in ui_source
+assert 'class="hhs-footer-shell-status"' in ui_source
+assert 'os.environ.get("HHS_MY_SHELL", "").strip().upper()' in ui_source
 assert 'class="hhs-footer-remote-status"' in ui_source
+footer_template = ui_source.split('<footer class="hhs-app-footer">', 1)[1].split('</footer>', 1)[0]
+assert 'status_group_markup = (' in ui_source
+assert 'f"{remote_status_markup}{shell_status_markup}"' in ui_source
+assert "{status_group_markup}" in footer_template
+assert "st.html(" in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source
-assert 'Connected to remote: {connected_host}' in ui_source
+assert 'Connected to remote  {connected_host_display}' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
 constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
 assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in constants_source
-assert 'href="{working_dir_url}" target="_self">Working dir:' in ui_source
+assert 'FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"' in constants_source
+assert '"updater_last_check_epoch"' in constants_source
+assert '"updater_last_check_output"' in constants_source
+assert '"updater_update_available"' in constants_source
+assert 'class="hhs-footer-link hhs-footer-repository-link"' in ui_source
+assert 'class="hhs-footer-link hhs-footer-working-dir-link"' in ui_source
+assert 'class="hhs-footer-working-dir-value"' in ui_source
+assert 'href="{working_dir_url}" target="_self">Working dir: <span class="hhs-footer-working-dir-value">' in ui_source
+assert 'class="hhs-footer-version-group"' in ui_source
+assert 'class="hhs-footer-update-link"' in ui_source
+assert 'href="{update_url}" target="_self"' in ui_source
+assert '' in ui_source
 assert 'def build_open_directory_command' in ui_source
 assert 'def run_open_working_directory' in ui_source
+assert 'def build_hhs_updater_command' in ui_source
+assert 'def run_hhs_updater_check' in ui_source
+assert 'def run_hhs_updater_update' in ui_source
+assert 'def updater_output_has_updates' in ui_source
+assert 'def updater_check_due' in ui_source
+assert 'def store_updater_check_result' in ui_source
+assert 'def execute_due_updater_check' in ui_source
+assert 'execute_due_updater_check()' in ui_source
+assert '__hhs updater execute "{safe_operation}"' in ui_source
+assert 'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")";' in ui_source
+assert 'printf "y\\\\n" | ' in ui_source
 assert 'def handle_footer_actions' in ui_source
+assert 'def push_floating_status' in ui_source
+assert 'def render_floating_status' in ui_source
+assert 'render_floating_status()' in ui_source
+assert 'class="hhs-floating-status ' in ui_source
 assert 'open "$target"' in ui_source
 assert 'xdg-open "$target"' in ui_source
 assert 'gio open "$target"' in ui_source
@@ -636,6 +695,9 @@ base_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", base_css).group(1)
 link_block = re.search(r"\.hhs-footer-link,[^{]+\{([^}]*)\}", base_css).group(1)
 logo_link_block = re.search(r"\.hhs-footer-logo-link,[^{]+\{([^}]*)\}", base_css).group(1)
 logo_block = re.search(r"\.hhs-footer-logo\s*\{([^}]*)\}", base_css).group(1)
+shell_status_block = re.search(r"\.hhs-footer-shell-status\s*\{([^}]*)\}", base_css).group(1)
+remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", base_css).group(1)
+status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
 theme_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", dracula_css).group(1)
 assert "color: inherit" in link_block
 assert "text-decoration: none !important" in link_block
@@ -643,13 +705,58 @@ assert "filter: brightness(1.2)" in base_css
 assert "filter: none" in logo_link_block
 assert "height:" in logo_block
 assert "width:" in logo_block
+assert ".hhs-footer-shell-status" in base_css
 assert ".hhs-footer-remote-status" in base_css
+assert ".hhs-footer-status-group" in base_css
+assert ".hhs-footer-repository-link:hover" in base_css
+assert ".hhs-footer-working-dir-link:hover" in base_css
+assert ".hhs-footer-working-dir-value" in base_css
+assert "color: var(--hhs-secondary)" in base_css
+assert "text-decoration: underline !important" in base_css
+assert ".hhs-footer-version-group" in base_css
+assert "align-items: baseline" in base_css
+assert ".hhs-footer-update-link" in base_css
+assert "top: -0.42em" in base_css
+assert ".hhs-floating-status" in base_css
+assert "hhs-floating-status-hide" in base_css
+assert ".hhs-floating-status-kind-info" in base_css
+assert ".hhs-floating-status-kind-warn" in base_css
+assert ".hhs-floating-status-kind-error" in base_css
+assert "var(--hhs-theme-footer-status-info-color)" in base_css
+assert "var(--hhs-theme-footer-status-warn-color)" in base_css
+assert "var(--hhs-theme-footer-status-error-color)" in base_css
+assert "font-size: var(--hhs-theme-footer-status-text-size)" in base_css
+assert "border-top: 1px solid var(--hhs-floating-status-color)" in base_css
+assert "border-bottom: 1px solid" in base_css
+assert "justify-content: center" in base_css
+assert "text-align: center" in base_css
+assert "bottom: 3.25rem" in base_css
+assert "left: 0" in base_css
+assert "right: 0" in base_css
+assert "min-height: 1.85em" in base_css
+assert "padding: 0.32em 2rem 0.32em var(--hhs-sidebar-inline-inset)" in base_css
+assert "animation-delay: var(--hhs-floating-status-timeout, 4s)" in base_css
 assert "color: var(--hhs-warning)" in base_css
-assert "margin-left: auto" in base_css
+assert "margin-left: auto" in status_group_block
+assert "gap: 1.25rem" in status_group_block
+assert "margin-left" not in shell_status_block
+assert "margin-left" not in remote_status_block
 assert "border-bottom" not in base_block
 assert "border-bottom" not in theme_block
 assert "color: var(--hhs-primary)" in theme_block
 assert ".hhs-footer-remote-status" in dracula_css
+assert "--hhs-theme-footer-status-info-color" in dracula_css
+assert "--hhs-theme-footer-status-warn-color" in dracula_css
+assert "--hhs-theme-footer-status-error-color" in dracula_css
+assert "--hhs-theme-footer-status-text-size" in dracula_css
+assert "--hhs-theme-footer-status-info-color" in homesetup_css
+assert "--hhs-theme-footer-status-warn-color" in homesetup_css
+assert "--hhs-theme-footer-status-error-color" in homesetup_css
+assert "--hhs-theme-footer-status-text-size" in homesetup_css
+assert "--hhs-theme-footer-status-info-color" in tokyo_night_css
+assert "--hhs-theme-footer-status-warn-color" in tokyo_night_css
+assert "--hhs-theme-footer-status-error-color" in tokyo_night_css
+assert "--hhs-theme-footer-status-text-size" in tokyo_night_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in dracula_css
 assert "border-color: var(--hhs-primary)" in dracula_css
 PY
@@ -780,7 +887,25 @@ PY
   run grep -q 'SSH_VIEW = "SSH"' "${constants_file}"
   assert_success
 
+  run grep -q 'def parse_ssh_config_ports' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_config_port' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_connection_display' "${ui_file}"
+  assert_success
+
+  run grep -q 'return f"{ssh_config_hostname(clean_host)}:{ssh_config_port(clean_host)}"' "${ui_file}"
+  assert_success
+
   run grep -q 'import importlib' "${ui_file}"
+  assert_success
+
+  run grep -q 'import hhs_ui.constants as hhs_ui_constants' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui_constants = importlib.reload(hhs_ui_constants)' "${ui_file}"
   assert_success
 
   run grep -q 'hhs_ui = importlib.reload(hhs_ui)' "${ui_file}"
@@ -807,10 +932,37 @@ PY
   run grep -q 'AI_VIEW: " AI"' "${constants_file}"
   assert_success
 
-  run grep -q 'AI_VIEWS = ("CHAT", "SETTINGS")' "${constants_file}"
+  run grep -q 'AI_VIEWS = ("CHAT", "CONTEXT", "SETTINGS")' "${constants_file}"
+  assert_success
+
+  run grep -q '"CHAT": " Chat"' "${constants_file}"
+  assert_success
+
+  run grep -q '"CONTEXT": " Context"' "${constants_file}"
+  assert_success
+
+  run grep -q '"SETTINGS": " Settings"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def ai_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'format_func=ai_view_label' "${ui_file}"
   assert_success
 
   run grep -q 'HOME_VIEWS = ("System", "Tools")' "${constants_file}"
+  assert_success
+
+  run grep -q '"System": " System"' "${constants_file}"
+  assert_success
+
+  run grep -q '"Tools": " Tools"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def home_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'format_func=home_view_label' "${ui_file}"
   assert_success
 
   run grep -q '"home_tools_filter"' "${constants_file}"
@@ -1000,19 +1152,19 @@ PY
   run grep -q 'CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")' "${constants_file}"
   assert_success
 
-  run grep -q '"ENV": "ENV. VARs."' "${constants_file}"
+  run grep -q '"ENV": " Environment"' "${constants_file}"
   assert_success
 
-  run grep -q '"PATH": "PATHs"' "${constants_file}"
+  run grep -q '"PATH": " Paths"' "${constants_file}"
   assert_success
 
-  run grep -q '"DIR": "SAVED DIRs"' "${constants_file}"
+  run grep -q '"DIR": " Saved Dirs"' "${constants_file}"
   assert_success
 
-  run grep -q '"CMD": "SAVED CMDs"' "${constants_file}"
+  run grep -q '"CMD": "ﮒ Saved Cmds"' "${constants_file}"
   assert_success
 
-  run grep -q '"ALIAS": "ALIASES"' "${constants_file}"
+  run grep -q '"ALIAS": " Aliases"' "${constants_file}"
   assert_success
 
   run grep -q 'format_func=config_view_label' "${ui_file}"
@@ -1033,7 +1185,43 @@ PY
   run grep -q 'HISTORY_VIEWS = ("COMMANDS", "DIRECTORIES", "STATS")' "${constants_file}"
   assert_success
 
+  run grep -q '"COMMANDS": " Commands"' "${constants_file}"
+  assert_success
+
+  run grep -q '"DIRECTORIES": " Directories"' "${constants_file}"
+  assert_success
+
+  run grep -q '"STATS": " Stats"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def history_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'format_func=history_view_label' "${ui_file}"
+  assert_success
+
   run grep -q 'MONITOR_VIEWS = ("DISK", "MEM", "CPU", "PROCESSES", "LOGS")' "${constants_file}"
+  assert_success
+
+  run grep -q '"DISK": " Disks"' "${constants_file}"
+  assert_success
+
+  run grep -q '"CPU": " Cpu"' "${constants_file}"
+  assert_success
+
+  run grep -q '"MEM": " Memory"' "${constants_file}"
+  assert_success
+
+  run grep -q '"PROCESSES": " Processes"' "${constants_file}"
+  assert_success
+
+  run grep -q '"LOGS": " Logs"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def monitor_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'format_func=monitor_view_label' "${ui_file}"
   assert_success
 
   run grep -q 'SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")' "${constants_file}"
@@ -1459,6 +1647,36 @@ PY
   run grep -q 'set_overlay(False)' "${ui_file}"
   assert_success
 
+  run grep -q 'f"Connected to remote  {ssh_connection_display(host)}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'push_floating_status(f"Failed to connect to remote: {host}", "error")' "${ui_file}"
+  assert_success
+
+  run grep -q 'push_floating_status("Opened working directory.", "info")' "${ui_file}"
+  assert_success
+
+  run grep -q 'push_floating_status("AI chat history cleared.", "info")' "${ui_file}"
+  assert_success
+
+  run grep -q 'push_floating_status(f"Selected AI model: {new_model}", "info")' "${ui_file}"
+  assert_success
+
+  run grep -q 'push_floating_status(f"Deleted AI model: {model_name}", "info")' "${ui_file}"
+  assert_success
+
+  run grep -q 'push_floating_status(f"Loaded TLDR: {tool_name}", "info")' "${ui_file}"
+  assert_success
+
+  run grep -q 'push_floating_status(f"Killed process: {process_name}", "info")' "${ui_file}"
+  assert_success
+
+  run grep -q 'kind_aliases = {"success": "info", "warning": "warn"}' "${ui_file}"
+  assert_success
+
+  run grep -q 'clean_kind not in {"info", "warn", "error"}' "${ui_file}"
+  assert_success
+
   run grep -q 'Successfully connected to {host}' "${ui_file}"
   assert_failure
 
@@ -1475,6 +1693,24 @@ PY
 # TC - 11
 @test "when showing command progress then command runner should paint overlay before subprocess" {
   run grep -q 'def set_overlay(' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_footer_visibility_script' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_footer_visibility_script(hidden=True)' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_footer_visibility_script(hidden=False)' "${ui_file}"
+  assert_success
+
+  run grep -q 'window.parent.document.querySelector(".hhs-app-footer")' "${ui_file}"
+  assert_success
+
+  run grep -q 'footer.style.visibility' "${ui_file}"
+  assert_success
+
+  run grep -q 'footer.style.pointerEvents' "${ui_file}"
   assert_success
 
   run grep -q 'def close_all_dialogs()' "${ui_file}"
@@ -1558,6 +1794,12 @@ PY
   run grep -q 'st.rerun(scope="app")' "${ui_file}"
   assert_failure
 
+  run grep -q '" README"' "${ui_file}"
+  assert_success
+
+  run grep -q '" HANDBOOK"' "${ui_file}"
+  assert_success
+
   run python3 - <<'PY'
 from pathlib import Path
 
@@ -1605,8 +1847,136 @@ PY
   run grep -q 'build_hhs_ask_execute_command(\["-r"\])' "${ui_file}"
   assert_success
 
+  run grep -q 'build_hhs_ask_execute_command(\["-i", file_path\])' "${ui_file}"
+  assert_success
+
   run grep -q 'build_hhs_ask_execute_command(\["-m"\])' "${ui_file}"
   assert_success
+
+  run grep -q 'def render_ai_context_panel' "${ui_file}"
+  assert_success
+
+  run grep -q 'def refresh_ai_context' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ingest_ai_context_upload' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_ask_ingest' "${ui_file}"
+  assert_success
+
+  run grep -q 'AI_CONTEXT_UPLOAD_TYPES = (' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.file_uploader(' "${ui_file}"
+  assert_success
+
+  run grep -q 'type=AI_CONTEXT_UPLOAD_TYPES' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ai_context_upload"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ai_ingest_context_button"' "${ui_file}"
+  assert_success
+
+  run grep -q '" Ingest"' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+refresh_body = ui_source.split("def refresh_ai_context", 1)[1].split("\ndef ", 1)[0]
+context_body = ui_source.split("def render_ai_context_panel", 1)[1].split("\ndef ", 1)[0]
+assert "run_hhs_ask_context()" in refresh_body
+assert "run_hhs_ask_context()" not in context_body
+PY
+  assert_success
+
+  run grep -q 'key="ai_refresh_context_button"' "${ui_file}"
+  assert_success
+
+  run grep -q '" Refresh"' "${ui_file}"
+  assert_success
+
+  run grep -q 'label_col, upload_col, ingest_col, refresh_col = st.columns(' "${ui_file}"
+  assert_success
+
+  run grep -q '\[2.2, 1.0, 0.4, 0.4\], vertical_alignment="center"' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ai_context_output"\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ai_context_error"\]' "${ui_file}"
+  assert_success
+
+  run grep -q '"ai_context_output"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ai_context_error"' "${constants_file}"
+  assert_success
+
+  run grep -q 'st.session_state.setdefault("ai_context_output", "")' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state.setdefault("ai_context_error", "")' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.markdown("### There is. no context yet to display")' "${ui_file}"
+  assert_success
+
+  run grep -q 'elif ai_view == "CONTEXT"' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_ai_context_panel()' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_terminal_output(context_output)' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ai_show_context_button"' "${ui_file}"
+  assert_failure
+
+  run grep -q 'show_ai_chat_context' "${ui_file}"
+  assert_failure
+
+  run grep -q '" Clear"' "${ui_file}"
+  assert_success
+
+  run grep -q 'run_hhs_ask_reset(close_dialogs=True)' "${ui_file}"
+  assert_success
+
+  run grep -q -- '-i|--ingest' "${ask_file}"
+  assert_success
+
+  run grep -q 'function ingest_context' "${ask_file}"
+  assert_success
+
+  run grep -q 'is_text_context_file' "${ask_file}"
+  assert_success
+
+  run grep -Fq '(${ctx} * 0.7)/1' "${ask_file}"
+  assert_success
+
+  run grep -q -- '-r|--reset) clear_context' "${ask_file}"
+  assert_success
+
+  run grep -q 'disabled=not st.session_state\["ai_chat_messages"\]' "${ui_file}"
+  assert_failure
+
+  run grep -q 'st.markdown("### There is. no chat yet to display")' "${ui_file}"
+  assert_success
+
+  run grep -q 'meta_col, clear_col = st.columns(\[3.6, 0.4\], vertical_alignment="center")' "${ui_file}"
+  assert_success
+
+  run grep -q '.st-key-ai_show_context_button button' "${css_file}"
+  assert_failure
+
+  run grep -q '.st-key-ai_clear_chat_button button' "${css_file}"
+  assert_failure
 
   run grep -q 'build_hhs_ask_execute_command(\["-s", model_name\])' "${ui_file}"
   assert_success
@@ -1881,6 +2251,28 @@ assert display_rows[2]["Value"] == "/opt/tool", display_rows
 assert display_rows[3]["Value"] == "${HHS_HOME}/bin:${HHS_DIR}/bin", display_rows
 assert rows[0]["Value"] == "/Users/hjunior/HomeSetup/bin", rows
 PY
+  assert_success
+}
+
+@test "when checking updates then updater should refresh installed version from .VERSION" {
+  local updater_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/updater/updater.bash"
+
+  run grep -q 'refresh_hhs_version' "${updater_file}"
+  assert_success
+
+  run grep -q 'HHS_VERSION="$(grep -m 1 . "${version_file}")"' "${updater_file}"
+  assert_success
+
+  run grep -q 'export HHS_VERSION' "${updater_file}"
+  assert_success
+
+  run grep -q 'cmd="$1"' "${updater_file}"
+  assert_success
+
+  run grep -q 'refresh_hhs_version' "${updater_file}"
+  assert_success
+
+  run grep -q 'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")";' "${ui_file}"
   assert_success
 }
 

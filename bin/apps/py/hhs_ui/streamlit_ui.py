@@ -29,6 +29,7 @@ import shlex
 import socket
 import subprocess
 import sys
+import tempfile
 import textwrap
 import time
 from base64 import b64encode
@@ -44,8 +45,44 @@ from streamlit import config as st_config
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import hhs_ui
+import hhs_ui.constants as hhs_ui_constants
 
+hhs_ui_constants = importlib.reload(hhs_ui_constants)
 hhs_ui = importlib.reload(hhs_ui)
+
+UPDATER_CHECK_INTERVAL_SECONDS = 7 * 24 * 60 * 60
+AI_CONTEXT_UPLOAD_TYPES = (
+    "txt",
+    "md",
+    "markdown",
+    "csv",
+    "tsv",
+    "json",
+    "jsonl",
+    "yaml",
+    "yml",
+    "toml",
+    "ini",
+    "conf",
+    "cfg",
+    "log",
+    "xml",
+    "html",
+    "css",
+    "js",
+    "ts",
+    "py",
+    "sh",
+    "bash",
+    "zsh",
+    "java",
+    "kt",
+    "go",
+    "rs",
+    "rb",
+    "php",
+    "sql",
+)
 
 
 def load_app_css() -> str:
@@ -242,6 +279,22 @@ def render_sidebar_clock() -> None:
     )
 
 
+def render_sidebar_title() -> None:
+    """Render the sidebar HomeSetup title with the app logo."""
+    logo_data_uri = load_app_image_data_uri(
+        hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"
+    )
+    st.markdown(
+        f"""
+        <div class="hhs-sidebar-title">
+          <img class="hhs-sidebar-title-logo" src="{logo_data_uri}" alt="" aria-hidden="true">
+          <span>HomeSetup - UI v{html.escape(hhs_ui.VERSION)}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def document_details(document_key: str) -> tuple[str, Path]:
     """Return the display title and file path for a document key."""
     title, relative_path = hhs_ui.DOCUMENTS.get(
@@ -269,10 +322,14 @@ def close_document_view() -> None:
 
 def clear_ai_chat_history() -> None:
     """Reset the backend ask history and clear the current AI chat history."""
-    run_hhs_ask_reset(close_dialogs=True)
+    result = run_hhs_ask_reset(close_dialogs=True)
     cache_clear()
     st.session_state["ai_chat_messages"] = []
     st.session_state["ai_clear_chat_pending"] = False
+    if result.returncode == 0:
+        push_floating_status("AI chat history cleared.", "info")
+    else:
+        push_floating_status("Unable to clear AI chat history.", "error")
     save_ui_state()
 
 
@@ -301,16 +358,62 @@ def cancel_ai_chat_clear_confirmation() -> None:
     st.session_state["ai_clear_chat_pending"] = False
 
 
-def show_ai_chat_context() -> None:
-    """Append the current backend ask context as a HomeSetup chat message."""
+def refresh_ai_context() -> None:
+    """Fetch and store the current backend ask context for the Context tab."""
     result = run_hhs_ask_context()
     output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
-    message = (
-        strip_ansi(output or "No Ollama context available.").strip()
-        or "No Ollama context available."
+    clean_output = strip_ansi(output or "").strip()
+    st.session_state["ai_context_output"] = (
+        clean_output or "No Ollama context available."
     )
-    st.session_state["ai_chat_messages"].append({"role": "system", "content": message})
+    st.session_state["ai_context_error"] = (
+        "" if result.returncode == 0 else clean_output or "Unable to load Ollama context."
+    )
     save_ui_state()
+
+
+def uploaded_context_suffix(file_name: str) -> str:
+    """Return a safe suffix for an uploaded AI context file."""
+    suffix = Path(file_name).suffix.lower()
+    if suffix.lstrip(".") in AI_CONTEXT_UPLOAD_TYPES:
+        return suffix
+    return ".txt"
+
+
+def ingest_ai_context_upload(uploaded_file: object) -> None:
+    """Ingest an uploaded text file into the backend ask context."""
+    if uploaded_file is None:
+        st.session_state["ai_context_error"] = "Choose a text file to ingest."
+        save_ui_state()
+        return
+
+    file_name = str(getattr(uploaded_file, "name", "context.txt"))
+    with tempfile.NamedTemporaryFile(
+        "wb",
+        delete=False,
+        prefix="hhs-ai-context-",
+        suffix=uploaded_context_suffix(file_name),
+    ) as tmp_file:
+        tmp_file.write(uploaded_file.getvalue())
+        tmp_path = tmp_file.name
+
+    try:
+        result = run_hhs_ask_ingest(tmp_path)
+        output = strip_ansi(result.stdout or result.stderr or "").strip()
+        if result.returncode != 0:
+            st.session_state["ai_context_error"] = output or "Unable to ingest context."
+            st.session_state["ai_context_output"] = ""
+            push_floating_status(st.session_state["ai_context_error"], "error")
+            return
+        st.session_state["ai_context_error"] = ""
+        refresh_ai_context()
+        push_floating_status(output or f"Ingested context: {file_name}", "info")
+    finally:
+        try:
+            Path(tmp_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+        save_ui_state()
 
 
 def request_ai_model_selection(
@@ -352,10 +455,15 @@ def execute_pending_ai_model_selection() -> None:
             st.session_state["ai_model_select_error"] = strip_ansi(
                 result.stderr or result.stdout or "Unable to select model."
             )
+            push_floating_status(
+                st.session_state["ai_model_select_error"],
+                "error",
+            )
         else:
             st.session_state["ai_model_select_error"] = ""
             cache_clear()
             reset_ai_model_table_selection()
+            push_floating_status(f"Selected AI model: {new_model}", "info")
     st.session_state["ai_model_select_execute_pending"] = None
     save_ui_state()
 
@@ -395,9 +503,14 @@ def execute_pending_ai_model_deletion() -> None:
             st.session_state["ai_model_delete_error"] = strip_ansi(
                 result.stderr or result.stdout or "Unable to delete model."
             )
+            push_floating_status(
+                st.session_state["ai_model_delete_error"],
+                "error",
+            )
         else:
             st.session_state["ai_model_delete_error"] = ""
             cache_clear()
+            push_floating_status(f"Deleted AI model: {model_name}", "info")
             if model_status == "Active":
                 fallback_model = first_downloaded_ollama_model(
                     run_hhs_ask_models().stdout, excluded_model=model_name
@@ -411,6 +524,15 @@ def execute_pending_ai_model_deletion() -> None:
                             fallback_result.stderr
                             or fallback_result.stdout
                             or "Unable to select fallback model."
+                        )
+                        push_floating_status(
+                            st.session_state["ai_model_delete_error"],
+                            "error",
+                        )
+                    else:
+                        push_floating_status(
+                            f"Selected fallback AI model: {fallback_model}",
+                            "info",
                         )
             reset_ai_model_table_selection()
     st.session_state["ai_model_delete_execute_pending"] = None
@@ -438,10 +560,7 @@ def render_sidebar() -> None:
     previous_theme = st.session_state.get("theme_last_seen", selected_theme)
     with st.sidebar:
         render_sidebar_clock()
-        st.markdown(
-            f'<div class="hhs-sidebar-title">HomeSetup - UI v{html.escape(hhs_ui.VERSION)}</div>',
-            unsafe_allow_html=True,
-        )
+        render_sidebar_title()
         st.write("")
         host_kind = "Local" if selected_host_is_local() else "SSH"
         st.markdown(f"**Host ({host_kind}):**")
@@ -519,14 +638,14 @@ def render_sidebar() -> None:
             )
         else:
             st.button(
-                "README",
+                " README",
                 key="readme_open_button",
                 on_click=open_document_view,
                 args=("README",),
                 width="stretch",
             )
             st.button(
-                "HANDBOOK",
+                " HANDBOOK",
                 key="handbook_open_button",
                 on_click=open_document_view,
                 args=("HANDBOOK",),
@@ -536,6 +655,7 @@ def render_sidebar() -> None:
 
 def render_preloader(message: str = "Loading...", transient: bool = True) -> None:
     """Render a full-page overlay preloader."""
+    render_footer_visibility_script(hidden=True)
     safe_message = html.escape(message)
     loader_class = (
         "hhs-tab-loader hhs-tab-loader-transient" if transient else "hhs-tab-loader"
@@ -573,6 +693,29 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
               window.setInterval(render_elapsed, 1000);
             });
           })();
+        </script>
+        """,
+        height=0,
+    )
+
+
+def render_footer_visibility_script(hidden: bool) -> None:
+    """Hide or restore the already-mounted footer in the browser document."""
+    footer_visibility = "hidden" if hidden else ""
+    footer_opacity = "0" if hidden else ""
+    footer_pointer_events = "none" if hidden else ""
+    components.html(
+        f"""
+        <script>
+          (() => {{
+            const footer = window.parent.document.querySelector(".hhs-app-footer");
+            if (!footer) {{
+              return;
+            }}
+            footer.style.visibility = "{footer_visibility}";
+            footer.style.opacity = "{footer_opacity}";
+            footer.style.pointerEvents = "{footer_pointer_events}";
+          }})();
         </script>
         """,
         height=0,
@@ -655,6 +798,7 @@ def set_overlay(
     placeholder = st.session_state.pop(placeholder_key, None)
     if placeholder is not None:
         placeholder.empty()
+    render_footer_visibility_script(hidden=False)
 
 
 def queue_dialog_callback(callback: Callable[[], None] | None) -> None:
@@ -923,43 +1067,118 @@ def save_ui_state() -> None:
     hhs_ui.UI_STATE_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def push_floating_status(
+    message: str, kind: str = "info", timeout_seconds: float = 4.0
+) -> None:
+    """Store a compact floating status message for the next render."""
+    clean_message = strip_ansi(str(message)).strip()
+    if not clean_message:
+        return
+    kind_aliases = {"success": "info", "warning": "warn"}
+    clean_kind = kind_aliases.get(kind, kind)
+    if clean_kind not in {"info", "warn", "error"}:
+        clean_kind = "info"
+    st.session_state["_hhs_floating_status"] = {
+        "message": clean_message,
+        "kind": clean_kind,
+        "timeout_seconds": max(1.0, min(float(timeout_seconds), 30.0)),
+        "created_at": time.time(),
+    }
+
+
+def floating_status_glyph(kind: str) -> str:
+    """Return the glyph used by the floating status component."""
+    return {
+        "info": "",
+        "error": "",
+        "warn": "",
+    }.get(kind, "")
+
+
+def render_floating_status() -> None:
+    """Render the compact floating status component above the footer."""
+    status = st.session_state.get("_hhs_floating_status")
+    if not isinstance(status, dict):
+        return
+    message = html.escape(str(status.get("message", "")).strip())
+    if not message:
+        return
+    kind = str(status.get("kind", "info"))
+    timeout = float(status.get("timeout_seconds", 4.0))
+    created_at = float(status.get("created_at", time.time()))
+    if time.time() - created_at > timeout + 1.0:
+        st.session_state.pop("_hhs_floating_status", None)
+        return
+    glyph = html.escape(floating_status_glyph(kind))
+    st.markdown(
+        f"""
+        <div class="hhs-floating-status hhs-floating-status-kind-{html.escape(kind)}"
+             style="--hhs-floating-status-timeout: {timeout:.2f}s;">
+          <span class="hhs-floating-status-glyph">{glyph}</span>
+          <span class="hhs-floating-status-message">{message}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_footer() -> None:
     """Render the HomeSetup UI footer."""
     version = homesetup_version()
     working_dir = html.escape(os.getcwd())
     repository_url = html.escape(os.environ.get("HHS_GITHUB_URL", "#"), quote=True)
     working_dir_url = f"?{hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM}=1"
-    connected_host = html.escape(
-        str(st.session_state.get("ssh_connection_host", "")).strip()
-    )
+    update_url = f"?{hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM}=1"
+    updater_markup = ""
+    if bool(st.session_state.get("updater_update_available", False)):
+        updater_markup = (
+            f'<a class="hhs-footer-update-link" href="{update_url}" target="_self" '
+            'title="Update HomeSetup" aria-label="Update HomeSetup"></a>'
+        )
+    shell_name = html.escape(os.environ.get("HHS_MY_SHELL", "").strip().upper())
+    shell_status_markup = ""
+    if shell_name:
+        shell_status_markup = (
+            f'<span class="hhs-footer-shell-status">'
+            f'<span class="hhs-footer-glyph"></span>'
+            f"<span>{shell_name}</span></span>"
+        )
+    connected_host = str(st.session_state.get("ssh_connection_host", "")).strip()
     remote_status_markup = ""
     if (
         str(st.session_state.get("ssh_connection_status", "")).strip() == "connected"
         and connected_host
     ):
+        connected_host_display = html.escape(ssh_connection_display(connected_host))
         remote_status_markup = (
             f'<span class="hhs-footer-remote-status">'
             f'<span class="hhs-footer-glyph"></span>'
-            f"<span>Connected to remote: {connected_host}</span></span>"
+            f"<span>Connected to remote  {connected_host_display}</span></span>"
         )
+    status_group_markup = (
+        f'<span class="hhs-footer-status-group">'
+        f"{remote_status_markup}{shell_status_markup}"
+        f"</span>"
+    )
     logo_data_uri = load_app_image_data_uri(
         hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"
     )
-    st.markdown(
+    st.html(
         f"""
         <footer class="hhs-app-footer">
           <a class="hhs-footer-logo-link" href="{repository_url}" target="_blank" rel="noopener noreferrer" aria-label="HomeSetup repository">
             <img class="hhs-footer-logo" src="{logo_data_uri}" alt="" aria-hidden="true">
           </a>
-          <a class="hhs-footer-link" href="{repository_url}" target="_blank" rel="noopener noreferrer">HomeSetup - v{version}</a>
+          <span class="hhs-footer-version-group">
+            <a class="hhs-footer-link hhs-footer-repository-link" href="{repository_url}" target="_blank" rel="noopener noreferrer">HomeSetup - v{version}</a>{updater_markup}
+          </span>
           <span class="hhs-footer-spacer"></span>
           <span class="hhs-footer-glyph"></span>
           <span class="hhs-footer-spacer"></span>
-          <a class="hhs-footer-link" href="{working_dir_url}" target="_self">Working dir: {working_dir}</a>
-          {remote_status_markup}
+          <a class="hhs-footer-link hhs-footer-working-dir-link" href="{working_dir_url}" target="_self">Working dir: <span class="hhs-footer-working-dir-value">{working_dir}</span></a>
+          {status_group_markup}
         </footer>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -979,12 +1198,32 @@ def remove_query_param(name: str) -> None:
 
 def handle_footer_actions() -> None:
     """Run footer actions requested through Streamlit query parameters."""
-    if not query_param_requested(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM):
-        return
-    remove_query_param(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM)
-    result = run_open_working_directory()
-    if result.returncode != 0:
-        st.error(result.stderr or "Unable to open working directory.")
+    if query_param_requested(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM):
+        remove_query_param(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM)
+        result = run_hhs_updater_update()
+        output = strip_ansi(result.stdout or result.stderr or "").strip()
+        if result.returncode != 0:
+            message = output or "Unable to update HomeSetup."
+            push_floating_status(message, "error")
+            st.error(message)
+        else:
+            st.session_state["updater_last_check_epoch"] = time.time()
+            st.session_state["updater_last_check_output"] = (
+                output or "HomeSetup update command completed."
+            )
+            st.session_state["updater_update_available"] = False
+            save_ui_state()
+            push_floating_status("HomeSetup update command completed.", "info")
+
+    if query_param_requested(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM):
+        remove_query_param(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM)
+        result = run_open_working_directory()
+        if result.returncode != 0:
+            message = result.stderr or "Unable to open working directory."
+            push_floating_status(message, "error")
+            st.error(message)
+        else:
+            push_floating_status("Opened working directory.", "info")
 
 
 def render_home_view() -> None:
@@ -1001,6 +1240,7 @@ def render_home_view() -> None:
         "Home view",
         options=hhs_ui.HOME_VIEWS,
         default=st.session_state["home_view"],
+        format_func=home_view_label,
         key="home_view",
         label_visibility="collapsed",
         on_change=save_ui_state,
@@ -1011,6 +1251,11 @@ def render_home_view() -> None:
         render_home_system_panel()
     elif home_view == "Tools":
         render_home_tools_panel()
+
+
+def home_view_label(home_view: str) -> str:
+    """Return the display label for a Home view key."""
+    return hhs_ui.HOME_VIEW_LABELS.get(home_view, home_view)
 
 
 def render_home_system_panel() -> None:
@@ -1394,6 +1639,69 @@ def strip_ansi(value: str) -> str:
     return hhs_ui.ESCAPED_ANSI_ESCAPE_PATTERN.sub(
         "", hhs_ui.ANSI_ESCAPE_PATTERN.sub("", value)
     )
+
+
+def updater_output_has_updates(output: str) -> bool:
+    """Return whether updater command output reports available updates."""
+    clean_output = strip_ansi(output).lower()
+    no_update_markers = (
+        "up-to-date",
+        "up to date",
+        "already latest",
+        "latest version",
+        "no update",
+        "no updates",
+    )
+    if any(marker in clean_output for marker in no_update_markers):
+        return False
+    update_markers = (
+        "updates available",
+        "update available",
+        "new version",
+        "repository:",
+    )
+    return any(marker in clean_output for marker in update_markers)
+
+
+def updater_check_due(now: float | None = None) -> bool:
+    """Return whether the persisted updater check is missing or older than seven days."""
+    last_output = str(st.session_state.get("updater_last_check_output", "")).strip()
+    if not last_output:
+        return True
+    try:
+        last_check_epoch = float(
+            st.session_state.get("updater_last_check_epoch", 0) or 0
+        )
+    except (TypeError, ValueError):
+        return True
+    if last_check_epoch <= 0:
+        return True
+    current_time = time.time() if now is None else now
+    return current_time - last_check_epoch >= UPDATER_CHECK_INTERVAL_SECONDS
+
+
+def store_updater_check_result(result: subprocess.CompletedProcess[str]) -> None:
+    """Persist the latest updater check output and update-availability flag."""
+    output = strip_ansi(f"{result.stdout or ''}\n{result.stderr or ''}").strip()
+    if not output:
+        output = "No HomeSetup updater output."
+    if result.returncode == 0:
+        st.session_state["updater_last_check_epoch"] = time.time()
+        st.session_state["updater_last_check_output"] = output
+        st.session_state["updater_update_available"] = updater_output_has_updates(output)
+        save_ui_state()
+        return
+    push_floating_status(output or "Unable to check HomeSetup updates.", "warn")
+
+
+def execute_due_updater_check() -> None:
+    """Run the updater check once when the persisted check state is stale."""
+    if bool(st.session_state.get("updater_check_attempted", False)):
+        return
+    if not updater_check_due():
+        return
+    st.session_state["updater_check_attempted"] = True
+    store_updater_check_result(run_hhs_updater_check())
 
 
 def overlaps_existing_range(
@@ -1833,6 +2141,30 @@ def parse_ssh_config_hostnames(config_text: str) -> dict[str, str]:
     return hostnames
 
 
+def parse_ssh_config_ports(config_text: str) -> dict[str, str]:
+    """Return concrete SSH Host aliases mapped to their configured Port."""
+    ports: dict[str, str] = {}
+    active_hosts: list[str] = []
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if not parts:
+            continue
+        keyword = parts[0].lower()
+        if keyword == "host":
+            active_hosts = [
+                host for host in parts[1:] if not any(char in host for char in "*?!")
+            ]
+            continue
+        if keyword == "port" and len(parts) > 1:
+            port = parts[1]
+            for host in active_hosts:
+                ports[host] = port
+    return ports
+
+
 def ssh_config_hosts() -> tuple[str, ...]:
     """Return concrete SSH Host aliases configured in ~/.ssh/config."""
     config_file = ssh_config_file()
@@ -1854,6 +2186,24 @@ def ssh_config_hostname(host: str) -> str:
     except OSError:
         return host
     return hostnames.get(host, host)
+
+
+def ssh_config_port(host: str) -> str:
+    """Return the configured Port for an SSH Host alias."""
+    config_file = ssh_config_file()
+    if not config_file.exists():
+        return "22"
+    try:
+        ports = parse_ssh_config_ports(config_file.read_text(encoding="utf-8"))
+    except OSError:
+        return "22"
+    return ports.get(host, "22")
+
+
+def ssh_connection_display(host: str) -> str:
+    """Return the connected SSH host display value."""
+    clean_host = host.strip()
+    return f"{ssh_config_hostname(clean_host)}:{ssh_config_port(clean_host)}"
 
 
 def host_selector_options() -> tuple[str, ...]:
@@ -2199,6 +2549,10 @@ def execute_pending_ssh_connection() -> None:
         st.session_state["ssh_host_selector"] = host
         st.session_state["ssh_connection_error"] = ""
         st.session_state["ssh_connection_dialog_title"] = ""
+        push_floating_status(
+            f"Connected to remote  {ssh_connection_display(host)}",
+            "info",
+        )
         register_ssh_connection(host)
         save_ui_state()
     else:
@@ -2208,6 +2562,7 @@ def execute_pending_ssh_connection() -> None:
             result.stderr or result.stdout or f"Unable to connect to SSH host {host}."
         )
         st.session_state["ssh_connection_dialog_title"] = f"Failed to connect to {host}"
+        push_floating_status(f"Failed to connect to remote: {host}", "error")
 
 
 def execute_pending_ssh_disconnection() -> None:
@@ -2523,6 +2878,23 @@ def build_open_directory_command(directory: str) -> str:
     )
 
 
+def build_hhs_updater_command(operation: str) -> str:
+    """Build the Bash command used to run the HomeSetup updater plug-in."""
+    safe_operation = re.sub(r"[^A-Za-z_-]+", "", operation) or "check"
+    update_prefix = 'printf "y\\n" | ' if safe_operation == "update" else ""
+    return (
+        'export HHS_DIR="${HHS_DIR}"; '
+        'export HHS_HOME="${HHS_HOME}"; '
+        'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
+        'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/updater/updater.bash"; '
+        'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; return "${exit_code}"; }; '
+        'function __hhs() { if [[ "$1" == "updater" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
+        f'{update_prefix}__hhs updater execute "{safe_operation}"'
+    )
+
+
 def build_ssh_tunnels_command(host: str) -> str:
     """Build a local command that lists configured and active SSH tunnel data."""
     safe_host = shlex.quote(host)
@@ -2542,6 +2914,30 @@ def run_open_working_directory() -> subprocess.CompletedProcess[str]:
         "Opening working directory...",
         ttl_seconds=0,
         use_cache=False,
+    )
+
+
+def run_hhs_updater_check() -> subprocess.CompletedProcess[str]:
+    """Run the HomeSetup updater check command locally."""
+    return run_bash_command(
+        build_hhs_updater_command("check"),
+        "Checking HomeSetup updates...",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        timeout_seconds=45,
+    )
+
+
+def run_hhs_updater_update() -> subprocess.CompletedProcess[str]:
+    """Run the HomeSetup updater update command locally."""
+    return run_bash_command(
+        build_hhs_updater_command("update"),
+        "Updating HomeSetup...",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        timeout_seconds=600,
     )
 
 
@@ -2739,6 +3135,11 @@ def build_hhs_ask_context_command() -> str:
 def build_hhs_ask_reset_command() -> str:
     """Build the Bash command used to reset the current Ollama ask context."""
     return build_hhs_ask_execute_command(["-r"])
+
+
+def build_hhs_ask_ingest_command(file_path: str) -> str:
+    """Build the Bash command used to ingest the current Ollama ask context."""
+    return build_hhs_ask_execute_command(["-i", file_path])
 
 
 def build_hhs_ask_models_command() -> str:
@@ -2967,6 +3368,15 @@ def run_hhs_ask_reset(close_dialogs: bool = False) -> subprocess.CompletedProces
         build_hhs_ask_reset_command(),
         "Resetting Ollama context...",
         close_dialogs=close_dialogs,
+    )
+
+
+def run_hhs_ask_ingest(file_path: str) -> subprocess.CompletedProcess[str]:
+    """Run the __hhs ask ingest command and return the completed process."""
+    return run_bash_command(
+        build_hhs_ask_ingest_command(file_path),
+        "Ingesting Ollama context...",
+        use_cache=False,
     )
 
 
@@ -4276,6 +4686,16 @@ def execute_pending_home_tool_action() -> None:
     st.session_state["home_tool_action_name"] = tool_name
     st.session_state["home_tool_action_message"] = result.stdout or result.stderr or ""
     st.session_state["home_tool_action_succeeded"] = result.returncode == 0
+    if result.returncode == 0:
+        push_floating_status(
+            f"{home_tool_action_noun(operation)} completed: {tool_name}",
+            "info",
+        )
+    else:
+        push_floating_status(
+            f"{home_tool_action_noun(operation)} failed: {tool_name}",
+            "error",
+        )
 
 
 def home_tool_action_noun(operation: str) -> str:
@@ -4342,6 +4762,10 @@ def apply_selected_tool_tldr(tool_name: str) -> None:
     st.session_state["home_tool_tldr_name"] = tool_name
     st.session_state["home_tool_tldr_output"] = result.stdout or result.stderr or ""
     st.session_state["home_tool_tldr_succeeded"] = result.returncode == 0
+    if result.returncode == 0:
+        push_floating_status(f"Loaded TLDR: {tool_name}", "info")
+    else:
+        push_floating_status(f"Unable to load TLDR: {tool_name}", "error")
 
 
 def close_home_tool_tldr_dialog() -> None:
@@ -4386,6 +4810,16 @@ def apply_selected_service_action(operation: str, service_name: str) -> None:
     cache_clear()
     st.session_state["service_action_message"] = result.stdout or result.stderr or ""
     st.session_state["service_action_succeeded"] = result.returncode == 0
+    if result.returncode == 0:
+        push_floating_status(
+            f"Service {operation} completed: {service_name}",
+            "info",
+        )
+    else:
+        push_floating_status(
+            f"Service {operation} failed: {service_name}",
+            "error",
+        )
     reset_service_table_selection()
 
 
@@ -4397,6 +4831,10 @@ def apply_selected_process_kill(process_name: str) -> None:
         result.stdout or result.stderr or ""
     )
     st.session_state["monitor_process_action_succeeded"] = result.returncode == 0
+    if result.returncode == 0:
+        push_floating_status(f"Killed process: {process_name}", "info")
+    else:
+        push_floating_status(f"Unable to kill process: {process_name}", "error")
 
 
 def styled_service_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
@@ -5060,7 +5498,7 @@ def render_configs_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2>Configurations</h2>
+          <h2>Dotfiles Configurations</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -5093,13 +5531,18 @@ def render_service_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2>Services</h2>
+          <h2>System Services</h2>
         </section>
         """,
         unsafe_allow_html=True,
     )
     st.write("")
     render_services_table()
+
+
+def monitor_view_label(monitor_view: str) -> str:
+    """Return the display label for a Monitor view key."""
+    return hhs_ui.MONITOR_VIEW_LABELS.get(monitor_view, monitor_view)
 
 
 def render_ssh_view() -> None:
@@ -5109,7 +5552,7 @@ def render_ssh_view() -> None:
         f"""
         <section class="hhs-view-heading">
           <h2>SSH</h2>
-          <p>Connected to remote: {html.escape(host)}</p>
+          <p>Connected to remote  {html.escape(ssh_connection_display(host))}</p>
         </section>
         """,
         unsafe_allow_html=True,
@@ -5140,6 +5583,11 @@ def render_ssh_view() -> None:
         st.caption("No active SSH tunnels or port forwards were found.")
 
 
+def history_view_label(history_view: str) -> str:
+    """Return the display label for a History view key."""
+    return hhs_ui.HISTORY_VIEW_LABELS.get(history_view, history_view)
+
+
 def render_history_view() -> None:
     """Render the command and directory history view."""
     st.markdown(
@@ -5154,6 +5602,7 @@ def render_history_view() -> None:
         "History view",
         options=hhs_ui.HISTORY_VIEWS,
         default=st.session_state["history_view"],
+        format_func=history_view_label,
         key="history_view",
         label_visibility="collapsed",
         on_change=save_ui_state,
@@ -5173,7 +5622,7 @@ def render_monitor_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2>Monitor</h2>
+          <h2>Activity Monitor</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -5182,6 +5631,7 @@ def render_monitor_view() -> None:
         "Monitor view",
         options=hhs_ui.MONITOR_VIEWS,
         default=st.session_state["monitor_view"],
+        format_func=monitor_view_label,
         key="monitor_view",
         label_visibility="collapsed",
         on_change=save_ui_state,
@@ -5221,9 +5671,7 @@ def render_ai_chat_panel() -> None:
         else "unknown"
     )
     context_size = ollama_model_context_size(ollama_model)
-    meta_col, context_col, clear_col = st.columns(
-        [3.0, 0.55, 0.55], vertical_alignment="center"
-    )
+    meta_col, clear_col = st.columns([3.6, 0.4], vertical_alignment="center")
     with meta_col:
         st.markdown(
             f"""
@@ -5234,23 +5682,16 @@ def render_ai_chat_panel() -> None:
             """,
             unsafe_allow_html=True,
         )
-    with context_col:
-        st.button(
-            "Context",
-            key="ai_show_context_button",
-            help="Show current Ollama context",
-            on_click=show_ai_chat_context,
-            width="stretch",
-        )
     with clear_col:
         st.button(
-            "Clear",
+            " Clear",
             key="ai_clear_chat_button",
-            help="Clear chat history",
+            help="Clear chat and context",
             on_click=request_ai_chat_clear_confirmation,
-            disabled=not st.session_state["ai_chat_messages"],
             width="stretch",
         )
+    if not st.session_state["ai_chat_messages"]:
+        st.markdown("### There is. no chat yet to display")
     for message in st.session_state["ai_chat_messages"]:
         if message["role"] == "assistant":
             avatar_file = hhs_ui.APP_AI_OLLAMA_AVATAR_FILE
@@ -5324,6 +5765,48 @@ def style_ai_model_row(row: pd.Series) -> list[str]:
             for column in row.index
         ]
     return [""] * len(row)
+
+
+def render_ai_context_panel() -> None:
+    """Render the current HomeSetup Ollama context output."""
+    label_col, upload_col, ingest_col, refresh_col = st.columns(
+        [2.2, 1.0, 0.4, 0.4], vertical_alignment="center"
+    )
+    with label_col:
+        st.markdown("### AI Context")
+    with upload_col:
+        uploaded_context = st.file_uploader(
+            "Ingest context",
+            type=AI_CONTEXT_UPLOAD_TYPES,
+            key="ai_context_upload",
+            label_visibility="collapsed",
+        )
+    with ingest_col:
+        if st.button(
+            " Ingest",
+            key="ai_ingest_context_button",
+            help="Ingest uploaded text into Ollama context",
+            width="stretch",
+        ):
+            ingest_ai_context_upload(uploaded_context)
+    with refresh_col:
+        st.button(
+            " Refresh",
+            key="ai_refresh_context_button",
+            help="Refresh current Ollama context",
+            on_click=refresh_ai_context,
+            width="stretch",
+        )
+
+    context_error = str(st.session_state.get("ai_context_error", "")).strip()
+    context_output = str(st.session_state.get("ai_context_output", "")).strip()
+    if context_error:
+        st.error(context_error)
+        return
+    if not context_output:
+        st.markdown("### There is. no context yet to display")
+        return
+    render_terminal_output(context_output)
 
 
 def render_ai_model_select_dialog(old_model: str, new_model: str) -> None:
@@ -5441,7 +5924,12 @@ def render_ai_settings_panel() -> None:
     if st.session_state.get("ai_model_select_error"):
         st.error(st.session_state["ai_model_select_error"])
     if st.session_state.get("ai_model_delete_error"):
-        st.error(st.session_state["ai_model_delete_error"])
+            st.error(st.session_state["ai_model_delete_error"])
+
+
+def ai_view_label(ai_view: str) -> str:
+    """Return the display label for an AI view key."""
+    return hhs_ui.AI_VIEW_LABELS.get(ai_view, ai_view)
 
 
 def render_ai_view() -> None:
@@ -5465,6 +5953,7 @@ def render_ai_view() -> None:
         "AI view",
         options=hhs_ui.AI_VIEWS,
         default=st.session_state["ai_view"],
+        format_func=ai_view_label,
         key="ai_view",
         label_visibility="collapsed",
         on_change=save_ui_state,
@@ -5473,6 +5962,8 @@ def render_ai_view() -> None:
     st.write("")
     if ai_view == "CHAT":
         render_ai_chat_panel()
+    elif ai_view == "CONTEXT":
+        render_ai_context_panel()
     elif ai_view == "SETTINGS":
         render_ai_settings_panel()
 
@@ -5547,8 +6038,12 @@ def main() -> None:
     )
     restore_ui_state()
     restore_persisted_theme_selection()
+    st.session_state.setdefault("updater_last_check_epoch", 0.0)
+    st.session_state.setdefault("updater_last_check_output", "")
+    st.session_state.setdefault("updater_update_available", False)
     render_styles()
     handle_footer_actions()
+    execute_due_updater_check()
     if st.session_state.get("theme_reload_pending"):
         render_theme_reload_overlay()
     st.session_state.setdefault("active_view", "Home")
@@ -5569,6 +6064,8 @@ def main() -> None:
     st.session_state.setdefault("ai_model_delete_pending", None)
     st.session_state.setdefault("ai_model_delete_execute_pending", None)
     st.session_state.setdefault("ai_model_delete_error", "")
+    st.session_state.setdefault("ai_context_output", "")
+    st.session_state.setdefault("ai_context_error", "")
     st.session_state.setdefault("ai_view", "CHAT")
     if st.session_state["ai_view"] not in hhs_ui.AI_VIEWS:
         st.session_state["ai_view"] = "CHAT"
@@ -5650,6 +6147,7 @@ def main() -> None:
     execute_pending_dialog_callback()
     render_sidebar()
     render_main_view()
+    render_floating_status()
     render_footer()
 
 

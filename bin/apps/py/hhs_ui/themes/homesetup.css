@@ -12,6 +12,10 @@
   --hhs-theme-text-color-accent: var(--hhs-success);
   --hhs-theme-base-radius: 0.4rem;
   --hhs-theme-button-radius: 0.25rem;
+  --hhs-theme-footer-status-info-color: #38bdf8;
+  --hhs-theme-footer-status-warn-color: #facc15;
+  --hhs-theme-footer-status-error-color: #dc2626;
+  --hhs-theme-footer-status-text-size: 0.84rem;
   --hhs-theme-show-widget-border: true;
   --hhs-theme-show-sidebar-border: true;
   --hhs-background: var(--hhs-theme-background-color);
@@ -128,8 +132,6 @@ body,
   color: #2563eb;
 }
 
-.st-key-ai_show_context_button button,
-.st-key-ai_clear_chat_button button,
 .st-key-ai_confirm_clear_button button,
 .st-key-ai_cancel_clear_button button,
 .st-key-ai_confirm_model_select_button button,

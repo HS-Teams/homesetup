@@ -19,7 +19,7 @@ VERSION=1.0.0
 
 # Namespace cleanup
 UNSETS=(
-  help version cleanup execute update_hhs stamp_next_update is_updated update_check do_update
+  help version cleanup execute refresh_hhs_version update_hhs stamp_next_update is_updated update_check do_update
 )
 
 [[ -s "${HHS_DIR}/bin/app-commons.bash" ]] && source "${HHS_DIR}/bin/app-commons.bash"
@@ -89,6 +89,8 @@ function execute() {
   shift
   args=("$@")
 
+  refresh_hhs_version
+
   \shopt -s nocasematch
   case "${cmd}" in
     check)
@@ -107,6 +109,16 @@ function execute() {
   \shopt -u nocasematch
 
   quit 0
+}
+
+# @purpose: Refresh the installed HomeSetup version from the current installation.
+refresh_hhs_version() {
+  local version_file="${HHS_HOME}/.VERSION"
+
+  if [[ -s "${version_file}" ]]; then
+    HHS_VERSION="$(grep -m 1 . "${version_file}")"
+    export HHS_VERSION
+  fi
 }
 
 # @purpose: Check whether the repository version is greater than installed version.
@@ -136,6 +148,8 @@ update_hhs() {
 
   local repo_ver re ai_enabled
   local VERSION_URL='https://github.com/HS-Teams/homesetup/blob/master/.VERSION'
+
+  refresh_hhs_version
 
   if [[ -n "${HHS_VERSION}" ]]; then
     clear

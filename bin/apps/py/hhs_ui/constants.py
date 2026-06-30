@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.75"
+VERSION = "0.0.76"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -42,18 +42,39 @@ VIEW_LABELS = {
     SSH_VIEW: " SSH",
     AI_VIEW: " AI",
 }
-AI_VIEWS = ("CHAT", "SETTINGS")
+AI_VIEWS = ("CHAT", "CONTEXT", "SETTINGS")
+AI_VIEW_LABELS = {
+    "CHAT": " Chat",
+    "CONTEXT": " Context",
+    "SETTINGS": " Settings",
+}
 HOME_VIEWS = ("System", "Tools")
+HOME_VIEW_LABELS = {
+    "System": " System",
+    "Tools": " Tools",
+}
 CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")
 CONFIG_VIEW_LABELS = {
-    "ENV": "ENV. VARs.",
-    "PATH": "PATHs",
-    "DIR": "SAVED DIRs",
-    "CMD": "SAVED CMDs",
-    "ALIAS": "ALIASES",
+    "ENV": " Environment",
+    "PATH": " Paths",
+    "DIR": " Saved Dirs",
+    "CMD": "ﮒ Saved Cmds",
+    "ALIAS": " Aliases",
 }
 HISTORY_VIEWS = ("COMMANDS", "DIRECTORIES", "STATS")
+HISTORY_VIEW_LABELS = {
+    "COMMANDS": " Commands",
+    "DIRECTORIES": " Directories",
+    "STATS": " Stats",
+}
 MONITOR_VIEWS = ("DISK", "MEM", "CPU", "PROCESSES", "LOGS")
+MONITOR_VIEW_LABELS = {
+    "DISK": " Disks",
+    "CPU": " Cpu",
+    "MEM": " Memory",
+    "PROCESSES": " Processes",
+    "LOGS": " Logs",
+}
 ENV_FILTERS = ("All", "HHS", "Other")
 LIST_FILTERS = ("All", "Other")
 HISTORY_FILTERS = ("All", "Others")
@@ -66,6 +87,8 @@ PERSISTED_UI_KEYS = (
     "active_view",
     "ai_chat_messages",
     "ai_clear_chat_execute_pending",
+    "ai_context_error",
+    "ai_context_output",
     "ai_model_delete_execute_pending",
     "ai_model_select_execute_pending",
     "ai_view",
@@ -101,6 +124,9 @@ PERSISTED_UI_KEYS = (
     "service_filter",
     "service_other_filter",
     "theme_selected",
+    "updater_last_check_epoch",
+    "updater_last_check_output",
+    "updater_update_available",
 )
 PERSISTED_UI_KEY_PREFIXES = (
     "alias_selected_value_",
@@ -220,3 +246,4 @@ DOCUMENTS = {
     "HANDBOOK": ("Handbook", "docs/handbook/handbook.md"),
 }
 FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"
+FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"

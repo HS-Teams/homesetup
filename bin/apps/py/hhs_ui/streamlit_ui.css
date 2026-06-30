@@ -128,7 +128,9 @@ textarea,
 }
 
 .hhs-sidebar-title {
+  align-items: center;
   color: var(--hhs-theme-text-color);
+  display: inline-flex;
   font-size: 0.85rem;
   font-weight: 650;
   line-height: 1.35;
@@ -138,6 +140,15 @@ textarea,
   z-index: 1000000;
   border-bottom: 2px solid var(--hhs-theme-text-color);
   padding-bottom: 0.6rem;
+}
+
+.hhs-sidebar-title-logo {
+  display: inline-flex;
+  flex: 0 0 24px;
+  height: 24px;
+  margin-right: 0.45rem;
+  object-fit: contain;
+  width: 24px;
 }
 
 .st-key-active_view [role="radiogroup"] {
@@ -261,8 +272,6 @@ div[data-testid="stNumberInput"] {
   width: 100%;
 }
 
-.st-key-ai_show_context_button,
-.st-key-ai_clear_chat_button,
 .st-key-ai_confirm_clear_button,
 .st-key-ai_cancel_clear_button,
 .st-key-ai_confirm_model_select_button,
@@ -276,8 +285,6 @@ div[data-testid="stNumberInput"] {
   width: 6.75rem;
 }
 
-.st-key-ai_show_context_button button,
-.st-key-ai_clear_chat_button button,
 .st-key-ai_confirm_clear_button button,
 .st-key-ai_cancel_clear_button button,
 .st-key-ai_confirm_model_select_button button,
@@ -532,6 +539,68 @@ div[class*="st-key-service_selected_value_"] textarea {
   }
 }
 
+@keyframes hhs-floating-status-hide {
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+    visibility: hidden;
+  }
+}
+
+.hhs-floating-status {
+  align-items: center;
+  animation: hhs-floating-status-hide 0.22s ease-out forwards;
+  animation-delay: var(--hhs-floating-status-timeout, 4s);
+  background: color-mix(
+    in srgb,
+    var(--hhs-floating-status-color) 16%,
+    var(--hhs-panel)
+  );
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--hhs-floating-status-color) 38%, transparent);
+  border-top: 1px solid var(--hhs-floating-status-color);
+  bottom: 3.25rem;
+  color: var(--hhs-floating-status-color);
+  display: flex;
+  font-size: var(--hhs-theme-footer-status-text-size);
+  font-weight: 750;
+  gap: 0.42rem;
+  justify-content: center;
+  left: 0;
+  line-height: 1;
+  min-height: 1.85em;
+  overflow: hidden;
+  padding: 0.32em 2rem 0.32em var(--hhs-sidebar-inline-inset);
+  position: fixed;
+  right: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 1000001;
+}
+
+.hhs-floating-status-kind-info {
+  --hhs-floating-status-color: var(--hhs-theme-footer-status-info-color);
+}
+
+.hhs-floating-status-kind-warn {
+  --hhs-floating-status-color: var(--hhs-theme-footer-status-warn-color);
+}
+
+.hhs-floating-status-kind-error {
+  --hhs-floating-status-color: var(--hhs-theme-footer-status-error-color);
+}
+
+.hhs-floating-status-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hhs-floating-status-glyph {
+  display: inline-flex;
+  line-height: 1;
+}
+
 .hhs-app-footer {
   align-items: center;
   bottom: 0;
@@ -568,6 +637,57 @@ div[class*="st-key-service_selected_value_"] textarea {
   filter: brightness(1.2);
 }
 
+.hhs-footer-version-group {
+  align-items: baseline;
+  display: inline-flex;
+  flex: 0 0 auto;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.hhs-footer-repository-link:hover,
+.hhs-footer-repository-link:focus,
+.hhs-footer-working-dir-link:hover,
+.hhs-footer-working-dir-link:focus {
+  text-decoration: underline !important;
+  text-underline-offset: 0.2em;
+}
+
+.hhs-footer-working-dir-link {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hhs-footer-working-dir-value {
+  color: var(--hhs-secondary);
+}
+
+.hhs-footer-update-link,
+.hhs-footer-update-link:visited,
+.hhs-footer-update-link:hover,
+.hhs-footer-update-link:focus {
+  color: var(--hhs-warning);
+  display: inline-flex;
+  flex: 0 0 auto;
+  filter: none;
+  font: inherit;
+  font-size: 0.72em;
+  font-weight: 800;
+  line-height: 1;
+  margin-left: 0.28rem;
+  position: relative;
+  text-decoration: none !important;
+  top: -0.42em;
+}
+
+.hhs-footer-update-link:hover,
+.hhs-footer-update-link:focus {
+  filter: brightness(1.2);
+}
+
 .hhs-footer-logo-link,
 .hhs-footer-logo-link:visited,
 .hhs-footer-logo-link:hover,
@@ -593,12 +713,29 @@ div[class*="st-key-service_selected_value_"] textarea {
   width: 20px;
 }
 
+.hhs-footer-status-group {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 1.25rem;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.hhs-footer-shell-status {
+  align-items: center;
+  color: var(--hhs-secondary);
+  display: inline-flex;
+  font-weight: 750;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
 .hhs-footer-remote-status {
   align-items: center;
   color: var(--hhs-warning);
   display: inline-flex;
   font-weight: 750;
   gap: 0.4rem;
-  margin-left: auto;
   white-space: nowrap;
 }

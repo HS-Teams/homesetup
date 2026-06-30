@@ -18,7 +18,7 @@ VERSION="1.0.0"
 
 # Namespace cleanup
 UNSETS=(
-  help version cleanup execute show_context clear_context show_models start_ollama select_ollama_model ensure_ollama
+  help version cleanup execute show_context clear_context is_text_context_file ingest_context show_models start_ollama select_ollama_model ensure_ollama
 )
 
 # Usage message
@@ -37,6 +37,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <question> [options]
       -h | --help                      : Show this help message and exit.
       -v | --version                   : Show version and exit.
       -c | --context                   : Show current Ollama context (history) and exit.
+      -i | --ingest [file]             : Set Ollama context from a text-based file and exit.
       -r | --reset                     : Reset history before executing (fresh new session) and exit.
       -m | --models                    : List available Ollama models and exit.
       -s | --select-model [model_name] : Select the Ollama model to use.
@@ -50,8 +51,10 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <question> [options]
         => ${APP_NAME} ${PLUGIN_NAME} "Summarize the release notes"
       Show available models:
         => ${APP_NAME} ${PLUGIN_NAME} --models
+      Ingest context from a Markdown file:
+        => ${APP_NAME} ${PLUGIN_NAME} --ingest notes.md
       Reset history before asking:
-        => ${APP_NAME} ${PLUGIN_NAME} --reset "List my pending tasks"
+        => ${APP_NAME} ${PLUGIN_NAME} --reset
 
     exit status:
       (0) Success
@@ -184,6 +187,60 @@ function clear_context() {
   quit 0 "${ORANGE}✨ Ollama history file not found${NC}"
 }
 
+# @purpose: Return whether a file looks like supported text context.
+function is_text_context_file() {
+  local file_path="${1}" mime extension
+
+  extension="$(printf "%s" "${file_path##*.}" | tr '[:upper:]' '[:lower:]')"
+  case "${extension}" in
+    txt|md|markdown|csv|tsv|json|jsonl|yaml|yml|toml|ini|conf|cfg|log|xml|html|css|js|ts|py|sh|bash|zsh|java|kt|go|rs|rb|php|sql)
+      return 0
+    ;;
+  esac
+
+  mime="$(file -b --mime-type "${file_path}" 2>/dev/null || true)"
+  [[ "${mime}" == text/* || "${mime}" == "application/json" || "${mime}" == "application/xml" ]]
+}
+
+# @purpose: Set ollama history file (context) from a text-based file.
+function ingest_context() {
+  local file_path="${1}" tmp source_size max_context_bytes
+
+  [[ -n "${file_path}" ]] || usage 1 "Missing context file for --ingest."
+  [[ -f "${file_path}" ]] || quit 1 "Context file not found: ${file_path}"
+  [[ -r "${file_path}" ]] || quit 1 "Context file is not readable: ${file_path}"
+  is_text_context_file "${file_path}" || quit 1 "Only text-based context files are supported."
+
+  mkdir -p "$(dirname "${HHS_OLLAMA_HISTORY_FILE}")" || quit 2 "Unable to prepare ollama history directory"
+  tmp="$(mktemp /tmp/hhs-ollama-ingest.XXXXXX)" || quit 2 "Unable to prepare ingest file"
+  max_context_bytes=$((kb_size * 1024))
+  source_size=$(stat -c %s "${file_path}" 2>/dev/null || wc -c < "${file_path}")
+
+  {
+    echo "# Current Ask context"
+    echo
+    echo "## Started: $(date +%F)"
+    echo
+    echo "### [$(date '+%H:%M')] User:"
+    echo "Ingested context from: ${file_path}"
+    echo
+    echo '```text'
+    if [[ "${source_size}" -gt "${max_context_bytes}" ]]; then
+      head -c "${max_context_bytes}" "${file_path}"
+      echo
+      echo
+      echo "[Context truncated to 70% of ${OLLAMA_MODEL} context window; 30% reserved for questions.]"
+    else
+      cat "${file_path}"
+    fi
+    echo
+    echo '```'
+  } > "${tmp}" || quit 2 "Unable to prepare ingested context"
+
+  mv "${tmp}" "${HHS_OLLAMA_HISTORY_FILE}" || quit 2 "Unable to set ollama context"
+  quit 0 "${GREEN}✨ Ollama context ingested from ${file_path}${NC}"
+}
+
 # @purpose: Ensure ollama history uses the expected Markdown heading hierarchy
 function ensure_context_header() {
   local tmp
@@ -284,7 +341,7 @@ function get_context_window() {
       exit
     }' <<<"$(< "${HHS_HOME}"/bin/apps/bash/hhs-app/plugins/ask/ollama-models.md)"
   )"
-  printf "%d:%d" "${ctx}" "$(printf "%s" "(${ctx} * 0.6)/1" | bc)"
+  printf "%d:%d" "${ctx}" "$(printf "%s" "(${ctx} * 0.7)/1" | bc)"
 }
 
 # Ensure history file size limit fits within context window
@@ -318,6 +375,7 @@ function execute() {
     -h|--help) usage 0 ;;
     -v|--version) version ;;
     -c|--context) show_context ;;
+    -i|--ingest) shift; ingest_context "$1" ;;
     -r|--reset) clear_context ;;
     -m|--models) show_models ;;
     -s|--select-model) shift; select_ollama_model "$@";;
