@@ -780,6 +780,12 @@ PY
   run grep -q 'SSH_VIEW = "SSH"' "${constants_file}"
   assert_success
 
+  run grep -q 'import importlib' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui = importlib.reload(hhs_ui)' "${ui_file}"
+  assert_success
+
   run grep -q '"Home": " Home"' "${constants_file}"
   assert_success
 

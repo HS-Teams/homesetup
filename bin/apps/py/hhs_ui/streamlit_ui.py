@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import importlib
 import json
 import os
 import re
@@ -42,6 +43,8 @@ from streamlit import config as st_config
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import hhs_ui
+
+hhs_ui = importlib.reload(hhs_ui)
 
 
 def load_app_css() -> str:
