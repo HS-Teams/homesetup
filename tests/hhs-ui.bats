@@ -1263,6 +1263,21 @@ PY
   run grep -q 'def ssh_tunnel_status_cell_style' "${ui_file}"
   assert_success
 
+  run grep -q 'def display_ssh_tunnel_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'headers = \["Local Port", "Remote Host:Port", "Status", "Link"\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'column_config: dict\[str, object\] | None = None' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.column_config.LinkColumn' "${ui_file}"
+  assert_success
+
+  run grep -F -q 'display_text=r"http://(127\.0\.0\.1:\d+)"' "${ui_file}"
+  assert_success
+
   run grep -q 'def render_ssh_view' "${ui_file}"
   assert_success
 
@@ -1374,6 +1389,17 @@ assert namespace["split_bind_address"]("127.0.0.1:1080") == ("127.0.0.1", 1080)
 assert namespace["split_bind_address"]("15432") == ("127.0.0.1", 15432)
 assert namespace["ssh_tunnel_status_cell_style"]("Reachable").endswith("#50fa7b;")
 assert namespace["ssh_tunnel_status_cell_style"]("Not reachable").endswith("#ff5555;")
+display_rows = namespace["display_ssh_tunnel_rows"](
+    [{"Bind": "15432", "Destination": "127.0.0.1:5432", "Status": "Reachable"}]
+)
+assert display_rows == [
+    {
+        "Local Port": "15432",
+        "Remote Host:Port": "127.0.0.1:5432",
+        "Status": "Reachable",
+        "Link": "http://127.0.0.1:15432",
+    }
+], display_rows
 PY
   assert_success
 

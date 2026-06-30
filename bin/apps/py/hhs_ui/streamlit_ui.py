@@ -1147,6 +1147,7 @@ def render_table(
     selected_label_html: bool = False,
     action_buttons: list[dict[str, object]] | None = None,
     action_column_weights: list[float] | None = None,
+    column_config: dict[str, object] | None = None,
 ) -> tuple[int | None, dict[str, str] | None]:
     """Render a reusable HomeSetup table and return the selected row."""
     rendered_data = table_data if table_data is not None else display_table_rows(rows)
@@ -1160,6 +1161,8 @@ def render_table(
         dataframe_args["key"] = key
     if headers is not None:
         dataframe_args["column_order"] = headers
+    if column_config is not None:
+        dataframe_args["column_config"] = column_config
     if height is not None:
         dataframe_args["height"] = table_height(height)
     if use_container_width:
@@ -3547,6 +3550,25 @@ def annotate_ssh_tunnel_statuses(rows: list[dict[str, str]]) -> list[dict[str, s
     return annotated_rows
 
 
+def ssh_tunnel_link(bind: str) -> str:
+    """Return the local loopback link value for a tunnel bind value."""
+    _, port = split_bind_address(bind)
+    return f"http://127.0.0.1:{port}" if port is not None else ""
+
+
+def display_ssh_tunnel_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return SSH tunnel rows shaped for the visible table columns."""
+    return [
+        {
+            "Local Port": row.get("Bind", ""),
+            "Remote Host:Port": row.get("Destination", ""),
+            "Status": row.get("Status", ""),
+            "Link": ssh_tunnel_link(row.get("Bind", "")),
+        }
+        for row in rows
+    ]
+
+
 def ssh_tunnel_status_cell_style(value: object) -> str:
     """Return the dataframe cell style for SSH tunnel status values."""
     value_text = str(value).strip().lower()
@@ -3560,7 +3582,7 @@ def ssh_tunnel_status_cell_style(value: object) -> str:
 
 def styled_ssh_tunnel_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
     """Return SSH tunnel rows with styled Status cells."""
-    dataframe = pd.DataFrame(display_table_rows(rows))
+    dataframe = pd.DataFrame(display_table_rows(display_ssh_tunnel_rows(rows)))
     styler = dataframe.style
     if "Status" in dataframe:
         styler = styler.map(ssh_tunnel_status_cell_style, subset=["Status"])
@@ -5097,16 +5119,7 @@ def render_ssh_view() -> None:
         st.error(result.stderr or "Unable to load SSH tunnels.")
         return
     rows = annotate_ssh_tunnel_statuses(parse_ssh_tunnels(result.stdout, host))
-    headers = [
-        "Type",
-        "Bind",
-        "Destination",
-        "SSH Host",
-        "Source",
-        "Status",
-        "PID",
-        "Command",
-    ]
+    headers = ["Local Port", "Remote Host:Port", "Status", "Link"]
     render_table(
         rows,
         key=hhs_ui.SSH_TUNNEL_TABLE_KEY,
@@ -5116,6 +5129,12 @@ def render_ssh_view() -> None:
         table_data=(
             styled_ssh_tunnel_rows(rows) if rows else pd.DataFrame(columns=headers)
         ),
+        column_config={
+            "Link": st.column_config.LinkColumn(
+                "Link",
+                display_text=r"http://(127\.0\.0\.1:\d+)",
+            )
+        },
     )
     if not rows:
         st.caption("No active SSH tunnels or port forwards were found.")
