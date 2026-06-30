@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.72"
+VERSION = "0.0.73"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -32,6 +32,7 @@ UI_CACHE_DEFAULT_TTL_SECONDS = UI_CACHE_NORMAL_TTL_SECONDS
 APP_CSS = ""
 VIEWS = ("Home", "Configs", "Services", "Monitor", "History")
 AI_VIEW = "AI"
+SSH_VIEW = "SSH"
 AI_VIEWS = ("CHAT", "SETTINGS")
 HOME_VIEWS = ("System", "Tools")
 CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")
@@ -197,6 +198,7 @@ PATH_VALUE_OVERRIDES_KEY = "path_value_overrides"
 SERVICE_TABLE_KEY = "service_vars_table"
 SERVICE_TABLE_RESET_COUNTER_KEY = "service_vars_table_reset_counter"
 SERVICE_VALUE_EDITOR_KEY_PREFIX = "service_selected_value"
+SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"
 TWO_OPTION_FILTER_COLUMNS = [0.75, 3.25]
 THREE_OPTION_FILTER_COLUMNS = [1.1, 2.9]
 FOUR_OPTION_FILTER_COLUMNS = [1.75, 2.25]

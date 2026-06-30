@@ -2516,6 +2516,11 @@ def build_open_directory_command(directory: str) -> str:
     )
 
 
+def build_ssh_tunnels_command() -> str:
+    """Build a local command that lists active SSH tunnel process commands."""
+    return "ps -axo pid=,command= 2>/dev/null || true"
+
+
 def run_open_working_directory() -> subprocess.CompletedProcess[str]:
     """Open the current working directory in the operating system file explorer."""
     return run_bash_command(
@@ -2904,6 +2909,16 @@ def run_hhs_process_kill(process_name: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def run_ssh_tunnels() -> subprocess.CompletedProcess[str]:
+    """Run the local SSH tunnel listing command and return the completed process."""
+    return run_bash_command(
+        build_ssh_tunnels_command(),
+        "Loading SSH tunnels...",
+        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        force_local=True,
+    )
+
+
 def run_hhs_logs(
     log_file: str, tail_lines: int = 200
 ) -> subprocess.CompletedProcess[str]:
@@ -3204,6 +3219,135 @@ def parse_hhs_services(output: str) -> list[dict[str, str]]:
                     "Value": f"{match.group(3).strip()} {match.group(4).strip()}",
                 }
             )
+    return rows
+
+
+def split_ssh_command(command: str) -> list[str]:
+    """Return shell tokens for an SSH process command."""
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return command.split()
+
+
+def ssh_command_executable_name(args: list[str]) -> str:
+    """Return the executable name from a parsed SSH command."""
+    if not args:
+        return ""
+    return Path(args[0]).name
+
+
+def ssh_forward_spec_parts(spec: str, dynamic: bool = False) -> tuple[str, str]:
+    """Return display bind and destination values for an SSH forward spec."""
+    if dynamic:
+        return spec, "SOCKS"
+    parts = spec.split(":")
+    if len(parts) >= 4:
+        return ":".join(parts[:-2]), ":".join(parts[-2:])
+    if len(parts) == 3:
+        return parts[0], ":".join(parts[1:])
+    return spec, ""
+
+
+def ssh_process_host(args: list[str]) -> str:
+    """Return the destination host argument for a parsed SSH command."""
+    options_with_values = {
+        "-B",
+        "-b",
+        "-c",
+        "-D",
+        "-E",
+        "-e",
+        "-F",
+        "-I",
+        "-i",
+        "-J",
+        "-L",
+        "-l",
+        "-m",
+        "-O",
+        "-o",
+        "-p",
+        "-Q",
+        "-R",
+        "-S",
+        "-W",
+        "-w",
+    }
+    index = 1
+    while index < len(args):
+        value = args[index]
+        if value == "--":
+            return args[index + 1] if index + 1 < len(args) else ""
+        if value in options_with_values:
+            index += 2
+            continue
+        if value.startswith("-"):
+            index += 1
+            continue
+        return value
+    return ""
+
+
+def append_ssh_forward_row(
+    rows: list[dict[str, str]],
+    pid: str,
+    command: str,
+    ssh_host: str,
+    option: str,
+    spec: str,
+) -> None:
+    """Append one SSH forwarding row parsed from a process command."""
+    forward_types = {
+        "-L": "Local",
+        "-R": "Remote",
+        "-D": "Dynamic",
+    }
+    forward_type = forward_types.get(option, option)
+    bind, destination = ssh_forward_spec_parts(spec, dynamic=option == "-D")
+    rows.append(
+        {
+            "Type": forward_type,
+            "Bind": bind,
+            "Destination": destination,
+            "SSH Host": ssh_host,
+            "PID": pid,
+            "Command": command,
+        }
+    )
+
+
+def parse_ssh_tunnel_process(pid: str, command: str) -> list[dict[str, str]]:
+    """Parse SSH tunnel and port-forward rows from one process command."""
+    args = split_ssh_command(command)
+    if ssh_command_executable_name(args) != "ssh":
+        return []
+    rows: list[dict[str, str]] = []
+    ssh_host = ssh_process_host(args)
+    index = 1
+    while index < len(args):
+        value = args[index]
+        if value in ("-L", "-R", "-D"):
+            if index + 1 < len(args):
+                append_ssh_forward_row(
+                    rows, pid, command, ssh_host, value, args[index + 1]
+                )
+            index += 2
+            continue
+        if len(value) > 2 and value[:2] in ("-L", "-R", "-D"):
+            append_ssh_forward_row(rows, pid, command, ssh_host, value[:2], value[2:])
+        index += 1
+    return rows
+
+
+def parse_ssh_tunnels(output: str) -> list[dict[str, str]]:
+    """Parse active SSH tunnel and port-forward process rows."""
+    rows: list[dict[str, str]] = []
+    for line in strip_ansi(output).splitlines():
+        match = re.match(r"^\s*(\d+)\s+(.+?)\s*$", line)
+        if not match:
+            continue
+        rows.extend(parse_ssh_tunnel_process(match.group(1), match.group(2)))
     return rows
 
 
@@ -3846,7 +3990,12 @@ def ollama_service_is_up() -> bool:
 
 def main_views() -> tuple[str, ...]:
     """Return the visible main view names for the current service state."""
-    return (*hhs_ui.VIEWS, hhs_ui.AI_VIEW) if ollama_service_is_up() else hhs_ui.VIEWS
+    views = hhs_ui.VIEWS
+    if connected_ssh_host():
+        views = (*views, hhs_ui.SSH_VIEW)
+    if ollama_service_is_up():
+        views = (*views, hhs_ui.AI_VIEW)
+    return views
 
 
 def reset_service_table_selection() -> None:
@@ -4710,6 +4859,37 @@ def render_service_view() -> None:
     render_services_table()
 
 
+def render_ssh_view() -> None:
+    """Render the SSH tunnel and port-forward view."""
+    host = connected_ssh_host()
+    st.markdown(
+        f"""
+        <section class="hhs-view-heading">
+          <h2>SSH</h2>
+          <p>Connected to remote: {html.escape(host)}</p>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    result = run_ssh_tunnels()
+    if result.returncode != 0:
+        st.error(result.stderr or "Unable to load SSH tunnels.")
+        return
+    rows = parse_ssh_tunnels(result.stdout)
+    headers = ["Type", "Bind", "Destination", "SSH Host", "PID", "Command"]
+    table_data = pd.DataFrame(display_table_rows(rows), columns=headers)
+    render_table(
+        rows,
+        key=hhs_ui.SSH_TUNNEL_TABLE_KEY,
+        headers=headers,
+        checkbox=False,
+        height=hhs_ui.ENV_TABLE_HEIGHT,
+        table_data=table_data,
+    )
+    if not rows:
+        st.caption("No active SSH tunnels or port forwards were found.")
+
+
 def render_history_view() -> None:
     """Render the command and directory history view."""
     st.markdown(
@@ -5097,6 +5277,8 @@ def render_main_view() -> None:
         render_configs_view()
     elif active_view == "Services":
         render_service_view()
+    elif active_view == hhs_ui.SSH_VIEW:
+        render_ssh_view()
     elif active_view == "History":
         render_history_view()
     elif active_view == "Monitor":
@@ -5120,7 +5302,11 @@ def main() -> None:
     if st.session_state.get("theme_reload_pending"):
         render_theme_reload_overlay()
     st.session_state.setdefault("active_view", "Home")
-    if st.session_state["active_view"] not in (*hhs_ui.VIEWS, hhs_ui.AI_VIEW):
+    if st.session_state["active_view"] not in (
+        *hhs_ui.VIEWS,
+        hhs_ui.SSH_VIEW,
+        hhs_ui.AI_VIEW,
+    ):
         st.session_state["active_view"] = "Home"
     st.session_state.setdefault("ai_chat_messages", [])
     if not isinstance(st.session_state["ai_chat_messages"], list):

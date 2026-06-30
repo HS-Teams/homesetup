@@ -777,6 +777,9 @@ PY
   run grep -q 'AI_VIEW = "AI"' "${constants_file}"
   assert_success
 
+  run grep -q 'SSH_VIEW = "SSH"' "${constants_file}"
+  assert_success
+
   run grep -q 'AI_VIEWS = ("CHAT", "SETTINGS")' "${constants_file}"
   assert_success
 
@@ -817,6 +820,21 @@ PY
   assert_success
 
   run grep -q 'reset_home_tools_table_selection()' "${ui_file}"
+  assert_success
+
+  run grep -q 'if connected_ssh_host():' "${ui_file}"
+  assert_success
+
+  run grep -q 'views = (\*views, hhs_ui.SSH_VIEW)' "${ui_file}"
+  assert_success
+
+  run grep -q 'elif active_view == hhs_ui.SSH_VIEW:' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_ssh_view()' "${ui_file}"
+  assert_success
+
+  run grep -q 'SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"' "${constants_file}"
   assert_success
 
   run grep -q 'checkbox=True' "${ui_file}"
@@ -1186,6 +1204,79 @@ PY
   assert_success
 
   run grep -q 'force_local: bool = False' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_ssh_tunnels_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_ssh_tunnels' "${ui_file}"
+  assert_success
+
+  run grep -q 'def parse_ssh_tunnels' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_ssh_view' "${ui_file}"
+  assert_success
+
+  run grep -q 'key=hhs_ui.SSH_TUNNEL_TABLE_KEY' "${ui_file}"
+  assert_success
+
+  run grep -q 'checkbox=False' "${ui_file}"
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+import re
+import shlex
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def split_ssh_command(")
+end = source.index("def parse_hhs_history(")
+namespace = {
+    "Path": Path,
+    "re": re,
+    "shlex": shlex,
+    "strip_ansi": lambda value: value,
+}
+exec(source[start:end], namespace)
+
+rows = namespace["parse_ssh_tunnels"](
+    """
+    100 ssh -N -L 8080:localhost:80 user@example.com
+    101 /usr/bin/ssh -N -R0.0.0.0:9000:127.0.0.1:9000 remote
+    102 ssh -N -D 127.0.0.1:1080 remote
+    103 ssh -MNf remote
+    """
+)
+
+assert rows == [
+    {
+        "Type": "Local",
+        "Bind": "8080",
+        "Destination": "localhost:80",
+        "SSH Host": "user@example.com",
+        "PID": "100",
+        "Command": "ssh -N -L 8080:localhost:80 user@example.com",
+    },
+    {
+        "Type": "Remote",
+        "Bind": "0.0.0.0:9000",
+        "Destination": "127.0.0.1:9000",
+        "SSH Host": "remote",
+        "PID": "101",
+        "Command": "/usr/bin/ssh -N -R0.0.0.0:9000:127.0.0.1:9000 remote",
+    },
+    {
+        "Type": "Dynamic",
+        "Bind": "127.0.0.1:1080",
+        "Destination": "SOCKS",
+        "SSH Host": "remote",
+        "PID": "102",
+        "Command": "ssh -N -D 127.0.0.1:1080 remote",
+    },
+], rows
+PY
   assert_success
 
   run grep -q 'timeout_seconds: int | None = None' "${ui_file}"
