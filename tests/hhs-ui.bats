@@ -1076,6 +1076,45 @@ PY
   run grep -q 'key="home_tools_other_filter"' "${ui_file}"
   assert_success
 
+  run grep -q 'TWO_OPTION_FILTER_COLUMNS = \[0.75, 3.25\]' "${constants_file}"
+  assert_success
+
+  run grep -q 'THREE_OPTION_FILTER_COLUMNS = \[1.1, 2.9\]' "${constants_file}"
+  assert_success
+
+  run grep -q 'FOUR_OPTION_FILTER_COLUMNS = \[1.75, 2.25\]' "${constants_file}"
+  assert_success
+
+  run grep -q 'PATH_FILTER_COLUMNS = \[2.25, 1.75\]' "${constants_file}"
+  assert_success
+
+  run grep -q -- '--hhs-inline-control-gap: 0.45rem' "${css_file}"
+  assert_success
+
+  run grep -q 'gap: var(--hhs-inline-control-gap)' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-env_other_filter)' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[data-testid="stColumn"\]:first-child' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[data-testid="stColumn"\]:last-child' "${css_file}"
+  assert_success
+
+  run grep -q 'flex: 0 0 auto !important' "${css_file}"
+  assert_success
+
+  run grep -q 'flex: 0 1 18rem !important' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-left: -1rem !important' "${css_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.THREE_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"' "${ui_file}"
+  assert_success
+
   run grep -q 'HOME_TOOLS_TABLE_KEY = "home_tools_table"' "${constants_file}"
   assert_success
 
@@ -1136,6 +1175,9 @@ PY
   run grep -q '"ﰸ"' "${ui_file}"
   assert_success
 
+  run grep -q '""' "${ui_file}"
+  assert_success
+
   run grep -q 'help="Edit"' "${ui_file}"
   assert_success
 
@@ -1151,7 +1193,13 @@ PY
   run grep -q 'f"{value}:"' "${ui_file}"
   assert_success
 
-  run grep -q '\[1, 0.08\]' "${ui_file}"
+  run grep -q 'def render_selected_table_actions' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_action_buttons: list' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_actions=visible_selected_actions' "${ui_file}"
   assert_success
 
   run grep -q 'help="Cancel edit"' "${ui_file}"
@@ -1160,7 +1208,69 @@ PY
   run grep -q 'def cancel_selected_item_edit' "${ui_file}"
   assert_success
 
+  run grep -q 'reset_selection: Callable\[\[\], None\] | None = None' "${ui_file}"
+  assert_success
+
+  run grep -q 'args=(editing_key, edit_key, reset_selection)' "${ui_file}"
+  assert_success
+
+  run grep -q 'def execute_selected_table_action' "${ui_file}"
+  assert_success
+
+  run grep -q 'callback(\*callback_args)' "${ui_file}"
+  assert_success
+
+  run grep -q 'reset_selection=reset_env_table_selection' "${ui_file}"
+  assert_success
+
+  run grep -q 'reset_selection=reset_path_table_selection' "${ui_file}"
+  assert_success
+
+  run grep -q 'reset_selection=reset_ai_model_table_selection' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+import ast
+from pathlib import Path
+
+tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
+functions = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+for function_name in ("apply_selected_env_editor_value", "apply_selected_path_editor_value"):
+    function = functions[function_name]
+    reset_calls = [
+        node.func.id
+        for node in ast.walk(function)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id.startswith("reset_")
+    ]
+    if reset_calls:
+        raise SystemExit(f"{function_name} should keep table selection checked")
+PY
+  assert_success
+
   run grep -q 'div\[class\*="_selected_editing_"\] button' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="st-key-env_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="st-key-ai_delete_model_button_"\]\[class\*="_selected"\] button' "${css_file}"
+  assert_success
+
+  run grep -q 'width: 2rem' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-env_add_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-env_add_button' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-top: 1.55rem' "${css_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-danger) !important' "${css_file}"
   assert_success
 
   run grep -q '\[data-testid="stTextInput"\]' "${css_file}"
@@ -2302,7 +2412,13 @@ PY
   run grep -q 'on_click=apply_env_add_form_value' "${ui_file}"
   assert_success
 
+  run grep -q '""' "${ui_file}"
+  assert_success
+
   run grep -q 'on_click": apply_env_delete' "${ui_file}"
+  assert_success
+
+  run grep -q '"glyph": ""' "${ui_file}"
   assert_success
 
   run grep -q 'def render_path_rows' "${ui_file}"

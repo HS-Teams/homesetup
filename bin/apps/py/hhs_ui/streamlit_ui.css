@@ -2,7 +2,9 @@
   --hhs-bar-chart-chrome-height: calc(14rem + 172px);
   --hhs-bar-chart-height: max(12rem, min(380px, calc(100dvh - var(--hhs-bar-chart-chrome-height) - var(--hhs-footer-guard-height))));
   --hhs-footer-guard-height: 3.5rem;
+  --hhs-inline-control-gap: 0.45rem;
   --hhs-log-chrome-height: calc(14rem + 128px);
+  --hhs-danger: #dc2626;
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
   --hhs-sidebar-inline-inset: 20px;
@@ -69,7 +71,7 @@ textarea,
 .hhs-selected-item-line {
   align-items: baseline;
   display: inline-flex;
-  gap: 0.45rem;
+  gap: var(--hhs-inline-control-gap);
   max-width: 100%;
 }
 
@@ -93,8 +95,50 @@ div[class*="_selected_editing_"] button {
   border-radius: 4px;
   font-size: 0.9rem;
   font-weight: 800;
-  min-height: 2.5rem;
-  padding: 0.1rem 0.25rem;
+  height: 2rem;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  width: 2rem;
+}
+
+div[class*="st-key-env_delete_button_"][class*="_selected"],
+div[class*="st-key-ai_delete_model_button_"][class*="_selected"] {
+  margin: 0;
+}
+
+div[class*="st-key-env_delete_button_"][class*="_selected"] button,
+div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
+  align-items: center;
+  border-radius: 4px;
+  color: var(--hhs-danger) !important;
+  display: inline-flex;
+  font-size: 0.9rem;
+  font-weight: 800;
+  height: 2rem;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  width: 2rem;
+}
+
+.st-key-env_add_button {
+  margin-top: 1.55rem;
+}
+
+.st-key-env_add_button button {
+  align-items: center;
+  border-radius: 4px;
+  display: inline-flex;
+  font-size: 0.9rem;
+  font-weight: 800;
+  height: 2rem;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  width: 2rem;
 }
 
 div[class*="st-key-alias_selected_value_"] [data-testid="stTextInput"],
@@ -107,7 +151,7 @@ div[class*="st-key-path_selected_value_"] [data-testid="stTextInput"],
 div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] {
   align-items: center;
   display: grid;
-  gap: 0.45rem;
+  gap: var(--hhs-inline-control-gap);
   grid-template-columns: max-content minmax(0, 1fr);
 }
 
@@ -486,6 +530,46 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 .st-key-path_other_filter,
 .st-key-service_other_filter {
   max-width: 18rem;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) {
+  gap: var(--hhs-inline-control-gap) !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:first-child {
+  flex: 0 0 auto !important;
+  min-width: max-content !important;
+  width: auto !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:last-child {
+  flex: 0 1 18rem !important;
+  margin-left: -1rem !important;
+  width: 18rem !important;
 }
 
 .st-key-alias_other_filter input,

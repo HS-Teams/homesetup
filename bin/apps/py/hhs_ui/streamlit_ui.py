@@ -1349,11 +1349,17 @@ def enable_selected_item_edit(
         st.session_state[edit_key] = edit_value
 
 
-def cancel_selected_item_edit(editing_key: str, edit_key: str | None = None) -> None:
-    """Cancel inline editing for the current selected table row."""
+def cancel_selected_item_edit(
+    editing_key: str,
+    edit_key: str | None = None,
+    reset_selection: Callable[[], None] | None = None,
+) -> None:
+    """Cancel inline editing and clear the current selected table row."""
     st.session_state[editing_key] = False
     if edit_key:
         st.session_state.pop(edit_key, None)
+    if reset_selection:
+        reset_selection()
 
 
 def selected_label_parts(text: str) -> tuple[str, str]:
@@ -1425,18 +1431,25 @@ def render_selected_table_item(
     edit_max_chars: int | None = None,
     edit_on_change: Callable[..., None] | None = None,
     edit_args: tuple[object, ...] = (),
+    reset_selection: Callable[[], None] | None = None,
+    selected_actions: list[dict[str, object]] | None = None,
 ) -> None:
     """Render the normalized selected table row summary and optional editor."""
     editing_key = selected_item_editing_key(table_key, selected_index)
     is_editing = bool(st.session_state.get(editing_key, False)) and editable
     if editable and edit_key is not None:
         st.session_state.setdefault(edit_key, edit_value)
+    visible_actions = selected_actions or []
+    action_weights = [0.035] * (1 + len(visible_actions))
 
     if is_editing and edit_key is not None:
-        value_col, action_col = st.columns(
-            [1, 0.08], vertical_alignment="center", gap="small", width="stretch"
+        columns = st.columns(
+            [1, *action_weights],
+            vertical_alignment="center",
+            gap="small",
+            width="stretch",
         )
-        with value_col:
+        with columns[0]:
             st.text_input(
                 f"{value}:",
                 key=edit_key,
@@ -1445,24 +1458,40 @@ def render_selected_table_item(
                 placeholder=edit_label,
                 args=edit_args,
             )
-        with action_col:
+        with columns[1]:
             st.button(
                 "ﰸ",
                 key=f"{editing_key}_cancel_button",
                 help="Cancel edit",
                 on_click=cancel_selected_item_edit,
-                args=(editing_key, edit_key),
+                args=(editing_key, edit_key, reset_selection),
                 width="stretch",
             )
+        render_selected_table_actions(visible_actions, columns[2:], selected_index)
         return
 
     if editable:
-        value_col, action_col = st.columns(
-            [1, 0.08], vertical_alignment="center", gap="small", width="stretch"
+        columns = st.columns(
+            [1, *action_weights],
+            vertical_alignment="center",
+            gap="small",
+            width="stretch",
         )
+        value_col = columns[0]
+        action_cols = columns[1:]
     else:
-        value_col = st.container()
-        action_col = None
+        if visible_actions:
+            columns = st.columns(
+                [1, *[0.035] * len(visible_actions)],
+                vertical_alignment="center",
+                gap="small",
+                width="stretch",
+            )
+            value_col = columns[0]
+            action_cols = columns[1:]
+        else:
+            value_col = st.container()
+            action_cols = []
     with value_col:
         st.markdown(
             (
@@ -1473,8 +1502,8 @@ def render_selected_table_item(
             ),
             unsafe_allow_html=True,
         )
-    if action_col is not None:
-        with action_col:
+    if editable and action_cols:
+        with action_cols[0]:
             st.button(
                 "",
                 key=f"{editing_key}_button",
@@ -1483,6 +1512,46 @@ def render_selected_table_item(
                 args=(editing_key, edit_key, edit_value),
                 width="stretch",
             )
+        render_selected_table_actions(visible_actions, action_cols[1:], selected_index)
+    elif action_cols:
+        render_selected_table_actions(visible_actions, action_cols, selected_index)
+
+
+def render_selected_table_actions(
+    actions: list[dict[str, object]],
+    columns: list[object],
+    selected_index: int,
+) -> None:
+    """Render selected-row glyph action buttons beside edit controls."""
+    for column, action in zip(columns, actions):
+        label = str(action.get("glyph", action.get("label", "")))
+        key_prefix = str(action.get("key_prefix", label.lower().replace(" ", "_")))
+        with column:
+            st.button(
+                label,
+                disabled=bool(action.get("disabled", False)),
+                help=action.get("help") or str(action.get("label", "")),
+                key=f"{key_prefix}_{selected_index}_selected",
+                on_click=execute_selected_table_action,
+                args=(
+                    action.get("reset_selection"),
+                    action.get("on_click"),
+                    tuple(action.get("args", ())),
+                ),
+                width=str(action.get("width", "stretch")),
+            )
+
+
+def execute_selected_table_action(
+    reset_selection: Callable[[], None] | None,
+    callback: Callable[..., None] | None,
+    callback_args: tuple[object, ...],
+) -> None:
+    """Run a selected-row action and optionally clear the table selection first."""
+    if reset_selection:
+        reset_selection()
+    if callback:
+        callback(*callback_args)
 
 
 def env_path_aliases() -> list[tuple[str, str]]:
@@ -1552,6 +1621,8 @@ def render_table(
     selected_edit_args: Callable[[dict[str, str], int], tuple[object, ...]]
     | tuple[object, ...]
     | None = None,
+    reset_selection: Callable[[], None] | None = None,
+    selected_action_buttons: list[dict[str, object]] | None = None,
     action_buttons: list[dict[str, object]] | None = None,
     action_column_weights: list[float] | None = None,
     column_config: dict[str, object] | None = None,
@@ -1594,6 +1665,9 @@ def render_table(
 
     selected_index = selected_rows[0]
     selected_row = rows[selected_index]
+    visible_selected_actions = selected_table_actions(
+        selected_action_buttons or [], selected_row, selected_index, reset_selection
+    )
     if action_hint:
         st.caption(action_hint)
     if selected_label is not None:
@@ -1622,6 +1696,8 @@ def render_table(
             edit_args=table_edit_args(
                 selected_edit_args, selected_row, selected_index
             ),
+            reset_selection=reset_selection,
+            selected_actions=visible_selected_actions,
         )
 
     visible_actions = [
@@ -1649,6 +1725,27 @@ def render_table(
                 )
 
     return selected_index, selected_row
+
+
+def selected_table_actions(
+    actions: list[dict[str, object]],
+    row: dict[str, str],
+    index: int,
+    reset_selection: Callable[[], None] | None = None,
+) -> list[dict[str, object]]:
+    """Return selected-row table actions with row-specific values resolved."""
+    resolved_actions = []
+    for action in actions:
+        if not table_action_visible(action, row, index):
+            continue
+        resolved_action = {
+            **action,
+            "disabled": table_action_disabled(action, row, index),
+            "args": table_action_args(action, row, index),
+            "reset_selection": reset_selection,
+        }
+        resolved_actions.append(resolved_action)
+    return resolved_actions
 
 
 def table_height(height: int) -> int:
@@ -1732,7 +1829,7 @@ def render_home_tools_panel() -> None:
         st.caption("No tool checks found.")
         return
     filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         tools_filter = st.radio(
@@ -4683,13 +4780,11 @@ def apply_selected_path_value(old_path: str, new_path: str) -> None:
 def apply_selected_env_editor_value(name: str, editor_key: str) -> None:
     """Export the current selected environment editor value."""
     apply_selected_env_value(name, str(st.session_state.get(editor_key, "")))
-    reset_env_table_selection()
 
 
 def apply_selected_path_editor_value(old_path: str, editor_key: str) -> None:
     """Export the current selected PATH editor value."""
     apply_selected_path_value(old_path, str(st.session_state.get(editor_key, "")))
-    reset_path_table_selection()
 
 
 def scroll_to_env_value_editor(editor_key: str) -> None:
@@ -4776,9 +4871,11 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
             row["Name"],
             env_value_editor_key(row["Name"]),
         ),
-        action_buttons=[
+        reset_selection=reset_env_table_selection,
+        selected_action_buttons=[
             {
                 "label": "Delete",
+                "glyph": "",
                 "key_prefix": "env_delete_button",
                 "on_click": apply_env_delete,
                 "args": lambda row, _index: (row["Name"],),
@@ -4806,6 +4903,7 @@ def render_path_rows(rows: list[dict[str, str]]) -> None:
             row["Value"],
             path_value_editor_key(index),
         ),
+        reset_selection=reset_path_table_selection,
     )
 
 
@@ -5107,6 +5205,7 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
         height=hhs_ui.ENV_TABLE_HEIGHT,
         width=hhs_ui.ENV_TABLE_WIDTH,
         selected_label=lambda row, _index: f"Selected: {row['Name']}",
+        reset_selection=reset_ai_model_table_selection,
         action_buttons=[
             {
                 "label": "Start",
@@ -5146,7 +5245,7 @@ def render_envs_table() -> None:
             st.error(strip_ansi(action_message))
 
     name_col, value_col, action_col = st.columns(
-        [1.25, 2.25, 0.75], vertical_alignment="bottom"
+        [1.25, 4.0, 0.2], vertical_alignment="center"
     )
     with name_col:
         st.text_input(
@@ -5165,15 +5264,16 @@ def render_envs_table() -> None:
     env_add_name = str(st.session_state.get("env_add_name", "")).strip()
     with action_col:
         st.button(
-            "Add",
+            "",
             key="env_add_button",
             disabled=not env_add_name,
+            help="Add",
             on_click=apply_env_add_form_value,
             width="stretch",
         )
 
     filter_col, other_filter_col = st.columns(
-        hhs_ui.THREE_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+        hhs_ui.THREE_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         env_filter = st.radio(
@@ -5194,6 +5294,7 @@ def render_envs_table() -> None:
                 on_change=save_ui_state,
                 placeholder="Type filter text",
             )
+
     result = run_hhs_envs(env_filter_pattern(env_filter, other_filter))
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list environment variables.")
@@ -5204,7 +5305,7 @@ def render_envs_table() -> None:
 def render_paths_table() -> None:
     """Render PATH entries using __hhs_paths."""
     filter_col, other_filter_col = st.columns(
-        hhs_ui.PATH_FILTER_COLUMNS, vertical_alignment="bottom"
+        hhs_ui.PATH_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         path_filter = st.radio(
@@ -5237,7 +5338,7 @@ def render_paths_table() -> None:
 def render_dirs_table() -> None:
     """Render saved directories using __hhs_load_dir."""
     filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         dirs_filter = st.radio(
@@ -5272,7 +5373,7 @@ def render_dirs_table() -> None:
 def render_cmds_table() -> None:
     """Render saved commands using __hhs_command."""
     filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         cmds_filter = st.radio(
@@ -5309,7 +5410,7 @@ def render_cmds_table() -> None:
 def render_aliases_table() -> None:
     """Render custom aliases using __hhs_aliases."""
     filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         alias_filter = st.radio(
@@ -5345,7 +5446,7 @@ def render_aliases_table() -> None:
 def render_services_table() -> None:
     """Render HomeSetup services using __hhs_services status output."""
     filter_col, other_filter_col = st.columns(
-        hhs_ui.FOUR_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+        hhs_ui.FOUR_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         service_filter = st.radio(
@@ -5380,7 +5481,7 @@ def render_services_table() -> None:
 def render_history_commands_table() -> None:
     """Render shell command history using __hhs_history."""
     filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         history_commands_filter = st.radio(
@@ -5417,7 +5518,7 @@ def render_history_commands_table() -> None:
 def render_history_directories_table() -> None:
     """Render directory history using __hhs_dirs."""
     filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
+        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         history_directories_filter = st.radio(
@@ -6172,8 +6273,11 @@ def render_ai_settings_panel() -> None:
                     str(row.get("Status", "")),
                 ),
             },
+        ],
+        selected_action_buttons=[
             {
                 "label": "Delete Model",
+                "glyph": "",
                 "key_prefix": "ai_delete_model_button",
                 "on_click": request_ai_model_deletion,
                 "visible": lambda row, _index: str(row.get("Status", ""))
@@ -6181,7 +6285,7 @@ def render_ai_settings_panel() -> None:
                 "args": lambda row, _index: (row["Name"], str(row.get("Status", ""))),
             },
         ],
-        action_column_weights=[1, 1, 2],
+        action_column_weights=[1],
     )
     if selected_index is not None:
         actions_anchor_id = f"hhs-ai-model-actions-{selected_index}"
