@@ -116,12 +116,16 @@ Display statistics about commands in history.
 usage: __hhs_envs [options] [regex_filters]
 
     Options:
-      -e : Edit current HHS_ENV_FILE.
+      -a, --add <NAME=VALUE>    Add or edit a custom environment variable.
+      -e, --edit                Edit current HHS_ENV_FILE.
+      -r, --del <NAME>          Delete a custom environment variable.
+      --reveal                  Show secret values (not masked).
+      -h, --help                Show this help message.
 ```
 
 ##### **Purpose**
 
-Display all environment variables using filter.
+Display and manage custom environment variables using filters.
 
 ##### **Returns**
 
@@ -129,7 +133,9 @@ Display all environment variables using filter.
 
 ##### **Parameters**
 
-  - $1 _Optional_ : If -e is present, edit the env file, otherwise a case-insensitive filter to be used when listing.
+  - $1 _Optional_ : The operation flag, filter, or reveal option.
+  - $2 _Optional_ : The environment variable name for add/delete operations.
+  - $3 _Optional_ : The environment variable value for add operations.
 
 ##### **Examples**
 

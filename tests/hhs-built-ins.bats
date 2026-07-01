@@ -20,6 +20,11 @@ setup_file() {
   fi
 }
 
+setup() {
+  export HHS_ENV_FILE="${BATS_TEST_TMPDIR}/.env"
+  export HHS_DIR="${BATS_TEST_TMPDIR}"
+}
+
 # TC - 1
 @test "when-showing-help-then-do-should-print-usage" {
   run __hhs_do --help
@@ -61,4 +66,103 @@ setup_file() {
   [[ "${command_lines[3]}" == "omega" ]]
   assert_output --partial "Command failed on iteration 1:"
   assert_output --partial "Command failed on iteration 2:"
+}
+
+# TC - 5
+@test "when-adding-env-var-then-env-file-should-contain-export" {
+  run __hhs_envs --add "HHS_TEST_ENV=custom value"
+  assert_success
+  assert_output --partial "Environment variable saved: \"HHS_TEST_ENV\""
+  run grep -qx 'export HHS_TEST_ENV="custom value"' "${HHS_ENV_FILE}"
+  assert_success
+}
+
+# TC - 6
+@test "when-adding-existing-env-var-then-env-file-should-update-it" {
+  printf '%s\n' 'HHS_TEST_ENV=old' 'export OTHER_ENV="keep"' > "${HHS_ENV_FILE}"
+
+  run __hhs_envs -a "HHS_TEST_ENV=new value"
+  assert_success
+  run grep -qx 'export HHS_TEST_ENV="new value"' "${HHS_ENV_FILE}"
+  assert_success
+  run grep -q '^HHS_TEST_ENV=old$' "${HHS_ENV_FILE}"
+  assert_failure
+}
+
+# TC - 7
+@test "when-deleting-env-var-then-env-file-should-remove-it" {
+  printf '%s\n' 'export HHS_TEST_ENV="old"' 'export OTHER_ENV="keep"' > "${HHS_ENV_FILE}"
+
+  run __hhs_envs --del HHS_TEST_ENV
+  assert_success
+  assert_output --partial "Environment variable removed: \"HHS_TEST_ENV\""
+  run grep -q 'HHS_TEST_ENV' "${HHS_ENV_FILE}"
+  assert_failure
+  run grep -qx 'export OTHER_ENV="keep"' "${HHS_ENV_FILE}"
+  assert_success
+}
+
+# TC - 8
+@test "when-adding-env-var-with-assignment-token-then-env-file-should-contain-export" {
+  run __hhs_envs --add HHS_TEST_ENV=custom
+  assert_success
+  run grep -qx 'export HHS_TEST_ENV="custom"' "${HHS_ENV_FILE}"
+  assert_success
+}
+
+# TC - 9
+@test "when-adding-env-var-with-name-equals-value-tokens-then-envs-should-fail" {
+  run __hhs_envs --add HHS_TEST_ENV = custom
+  assert_failure
+  assert_output --partial "Use NAME=VALUE format."
+}
+
+# TC - 10
+@test "when-adding-env-var-with-name-equals-prefix-then-envs-should-fail" {
+  run __hhs_envs --add HHS_TEST_ENV= custom
+  assert_failure
+  assert_output --partial "Use NAME=VALUE format."
+}
+
+# TC - 11
+@test "when-adding-env-var-with-equals-value-token-then-envs-should-fail" {
+  run __hhs_envs --add HHS_TEST_ENV =custom
+  assert_failure
+  assert_output --partial "Use NAME=VALUE format."
+}
+
+# TC - 12
+@test "when-updating-env-var-with-interactive-mv-alias-then-envs-should-not-prompt" {
+  printf '%s\n' 'export HHS_TEST_ENV="old"' > "${HHS_ENV_FILE}"
+  shopt -s expand_aliases
+  alias mv='mv -iv'
+
+  run __hhs_envs --add HHS_TEST_ENV=new
+  assert_success
+  refute_output --partial "overwrite"
+  run grep -qx 'export HHS_TEST_ENV="new"' "${HHS_ENV_FILE}"
+  assert_success
+}
+
+# TC - 13
+@test "when-deleting-missing-env-var-then-envs-should-fail" {
+  run __hhs_envs --del HHS_MISSING_ENV
+  assert_failure
+  assert_output --partial "Environment variable not found: \"HHS_MISSING_ENV\""
+}
+
+# TC - 14
+@test "when-adding-invalid-env-var-then-envs-should-fail" {
+  run __hhs_envs --add 1INVALID=value
+  assert_failure
+  assert_output --partial "Invalid environment variable name: \"1INVALID\""
+}
+
+# TC - 15
+@test "when-editing-env-file-with-long-option-then-envs-should-open-editor" {
+  export EDITOR=true
+
+  run __hhs_envs --edit
+  assert_success
+  [[ -f "${HHS_ENV_FILE}" ]]
 }

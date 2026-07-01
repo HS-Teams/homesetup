@@ -3026,9 +3026,28 @@ def build_hhs_envs_command(prefix_filter: str | None) -> str:
     """Build the Bash command used to run the __hhs_envs HomeSetup function."""
     filter_arg = f' "{prefix_filter}"' if prefix_filter else ""
     return (
+        'export HHS_DIR="${HHS_DIR}"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
         f"__hhs_envs{filter_arg}"
+    )
+
+
+def build_hhs_env_action_command(
+    operation: str, name: str, value: str = ""
+) -> str:
+    """Build the Bash command used to add, edit, or delete a custom environment value."""
+    safe_operation = "del" if operation == "del" else "add"
+    safe_name = shlex.quote(name)
+    if safe_operation == "del":
+        action_args = f"--del {safe_name}"
+    else:
+        action_args = f"--add {shlex.quote(f'{name}={value}')}"
+    return (
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
+        f"__hhs_envs {action_args}"
     )
 
 
@@ -3403,6 +3422,18 @@ def run_hhs_envs(prefix_filter: str | None) -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_envs_command(prefix_filter),
         "Loading environment variables...",
+    )
+
+
+def run_hhs_env_action(
+    operation: str, name: str, value: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run a persistent custom environment variable action."""
+    return run_bash_command(
+        build_hhs_env_action_command(operation, name, value),
+        "Updating environment variables...",
+        ttl_seconds=0,
+        use_cache=False,
     )
 
 
@@ -4597,10 +4628,45 @@ def apply_path_value_overrides(rows: list[dict[str, str]]) -> list[dict[str, str
 
 
 def apply_selected_env_value(name: str, value: str) -> None:
-    """Export a selected environment value and store it for table rerenders."""
-    os.environ[name] = value
-    env_value_overrides()[name] = value
+    """Persist a selected environment value and store it for table rerenders."""
+    result = run_hhs_env_action("add", name, value)
+    cache_clear()
+    st.session_state["env_action_message"] = result.stdout or result.stderr or ""
+    st.session_state["env_action_succeeded"] = result.returncode == 0
+    if result.returncode == 0:
+        os.environ[name] = value
+        env_value_overrides()[name] = value
+        push_floating_status(f"Saved environment variable: {name}", "info")
+    else:
+        push_floating_status(f"Unable to save environment variable: {name}", "error")
     save_ui_state()
+
+
+def apply_env_delete(name: str) -> None:
+    """Delete a custom environment value and reset the table selection."""
+    result = run_hhs_env_action("del", name)
+    cache_clear()
+    st.session_state["env_action_message"] = result.stdout or result.stderr or ""
+    st.session_state["env_action_succeeded"] = result.returncode == 0
+    if result.returncode == 0:
+        os.environ.pop(name, None)
+        env_value_overrides().pop(name, None)
+        push_floating_status(f"Deleted environment variable: {name}", "info")
+    else:
+        push_floating_status(f"Unable to delete environment variable: {name}", "error")
+    reset_env_table_selection()
+    save_ui_state()
+
+
+def apply_env_add_form_value() -> None:
+    """Persist the current custom environment form value."""
+    name = str(st.session_state.get("env_add_name", "")).strip()
+    value = str(st.session_state.get("env_add_value", ""))
+    if not name:
+        return
+    apply_selected_env_value(name, value)
+    st.session_state["env_add_name"] = ""
+    st.session_state["env_add_value"] = ""
 
 
 def apply_selected_path_value(old_path: str, new_path: str) -> None:
@@ -4692,7 +4758,7 @@ def scroll_to_ai_model_actions(anchor_id: str) -> None:
 
 
 def render_env_rows(rows: list[dict[str, str]]) -> None:
-    """Render selectable read-only environment variable rows."""
+    """Render selectable editable environment variable rows."""
     rows = apply_env_value_overrides(rows)
     render_table(
         rows,
@@ -4710,6 +4776,14 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
             row["Name"],
             env_value_editor_key(row["Name"]),
         ),
+        action_buttons=[
+            {
+                "label": "Delete",
+                "key_prefix": "env_delete_button",
+                "on_click": apply_env_delete,
+                "args": lambda row, _index: (row["Name"],),
+            },
+        ],
     )
 
 
@@ -5063,6 +5137,41 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
 
 def render_envs_table() -> None:
     """Render environment variables using __hhs_envs."""
+    action_message = st.session_state.pop("env_action_message", "")
+    action_succeeded = st.session_state.pop("env_action_succeeded", None)
+    if action_message:
+        if action_succeeded:
+            st.success(strip_ansi(action_message))
+        else:
+            st.error(strip_ansi(action_message))
+
+    name_col, value_col, action_col = st.columns(
+        [1.25, 2.25, 0.75], vertical_alignment="bottom"
+    )
+    with name_col:
+        st.text_input(
+            "Name",
+            key="env_add_name",
+            on_change=save_ui_state,
+            placeholder="CUSTOM_ENV",
+        )
+    with value_col:
+        st.text_input(
+            "Value",
+            key="env_add_value",
+            on_change=save_ui_state,
+            placeholder="Optional value",
+        )
+    env_add_name = str(st.session_state.get("env_add_name", "")).strip()
+    with action_col:
+        st.button(
+            "Add",
+            key="env_add_button",
+            disabled=not env_add_name,
+            on_click=apply_env_add_form_value,
+            width="stretch",
+        )
+
     filter_col, other_filter_col = st.columns(
         hhs_ui.THREE_OPTION_FILTER_COLUMNS, vertical_alignment="bottom"
     )

@@ -178,13 +178,15 @@ function __hhs_defs() {
   return ${ret_val}
 }
 
-# @function: Display all environment variables using filters.
-# @param $1 [Opt] : If -e is present, edit the env file.
-# @param $* [Opt] : Filter string(s). Use -r to reveal secret values.
+# @function: Display and manage custom environment variables using filters.
+# @param $1 [Opt] : The operation flag, filter, or reveal option.
+# @param $2 [Opt] : The environment variable name for add/delete operations.
+# @param $3 [Opt] : The environment variable value for add operations.
 function __hhs_envs() {
 
   local pad pad_len filters name value ret_val=0 columns col_offset=8 env_var
-  local name_lc reveal_secrets=false
+  local name_lc reveal_secrets=false action="" env_name="" env_value="" tmp_file="" escaped_value="" awk_status=0
+  local add_arg_count=0
 
   HHS_ENV_FILE=${HHS_ENV_FILE:-$HHS_DIR/.env}
   touch "${HHS_ENV_FILE}"
@@ -194,17 +196,84 @@ function __hhs_envs() {
     echo "usage: ${FUNCNAME[0]} [options] [regex_filters]"
     echo ''
     echo '    Options: '
-    echo '      -e            Edit current HHS_ENV_FILE.'
-    echo '      -r, --reveal  Show secret values (not masked).'
-    echo '      -h, --help    Show this help message.'
+    echo '      -a, --add <NAME=VALUE>    Add or edit a custom environment variable.'
+    echo '      -e, --edit                Edit current HHS_ENV_FILE.'
+    echo '      -r, --del <NAME>          Delete a custom environment variable.'
+    echo '      --reveal                  Show secret values (not masked).'
+    echo '      -h, --help                Show this help message.'
     return 1
   fi
 
-  [[ "$1" == "-e" ]] && { __hhs_edit "${HHS_ENV_FILE}"; return $?; }
+  case "$1" in
+    -a|--add)
+      action="add"
+      env_name="$2"
+      add_arg_count=$#
+      ;;
+    -e|--edit)
+      __hhs_edit "${HHS_ENV_FILE}"
+      return $?
+      ;;
+    -r|--del)
+      action="delete"
+      env_name="$2"
+      ;;
+  esac
+
+  if [[ -n "${action}" ]]; then
+    if [[ "${action}" == "add" ]]; then
+      if [[ ${add_arg_count} -ne 2 || "${env_name}" != *=* ]]; then
+        __hhs_errcho "${FUNCNAME[0]}" "Use NAME=VALUE format."
+        return 1
+      fi
+      env_value="${env_name#*=}"
+      env_name="${env_name%%=*}"
+    fi
+
+    if [[ -z "${env_name}" ]]; then
+      __hhs_errcho "${FUNCNAME[0]}" "Missing environment variable name."
+      return 1
+    elif [[ ! "${env_name}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+      __hhs_errcho "${FUNCNAME[0]}" "Invalid environment variable name: \"${env_name}\""
+      return 1
+    fi
+
+    tmp_file="${HHS_ENV_FILE}.$$"
+    awk -v name="${env_name}" -v require_match="$([[ "${action}" == "delete" ]] && echo "1")" '
+      $0 ~ "^[[:space:]]*(export[[:space:]]+)?" name "=" { found = 1; next }
+      { print }
+      END { if (require_match == "1" && ! found) exit 2 }
+    ' "${HHS_ENV_FILE}" > "${tmp_file}"
+    awk_status=$?
+    if [[ ${awk_status} -eq 2 ]]; then
+      \rm -f "${tmp_file}"
+      __hhs_errcho "${FUNCNAME[0]}" "Environment variable not found: \"${env_name}\""
+      return 1
+    elif [[ ${awk_status} -ne 0 ]]; then
+      \rm -f "${tmp_file}"
+      return 1
+    fi
+
+    if [[ "${action}" == "add" ]]; then
+      escaped_value="${env_value//\\/\\\\}"
+      escaped_value="${escaped_value//\"/\\\"}"
+      escaped_value="${escaped_value//\$/\\\$}"
+      escaped_value="${escaped_value//\`/\\\`}"
+      printf 'export %s="%s"\n' "${env_name}" "${escaped_value}" >> "${tmp_file}" || return 1
+      export "${env_name}=${env_value}"
+      echo -e "${YELLOW}Environment variable saved: ${WHITE}\"${env_name}\"${NC}"
+    else
+      unset "${env_name}"
+      echo -e "${YELLOW}Environment variable removed: ${WHITE}\"${env_name}\"${NC}"
+    fi
+
+    \mv -f "${tmp_file}" "${HHS_ENV_FILE}"
+    return $?
+  fi
 
   for arg in "$@"; do
     case "$arg" in
-      -r|--reveal) reveal_secrets=true; shift ;;
+      --reveal) reveal_secrets=true; shift ;;
     esac
   done
 

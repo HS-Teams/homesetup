@@ -2290,6 +2290,21 @@ PY
   run grep -q 'def render_env_rows' "${ui_file}"
   assert_success
 
+  run grep -q 'def build_hhs_env_action_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_env_action' "${ui_file}"
+  assert_success
+
+  run grep -q -- '--del {safe_name}' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click=apply_env_add_form_value' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click": apply_env_delete' "${ui_file}"
+  assert_success
+
   run grep -q 'def render_path_rows' "${ui_file}"
   assert_success
 
