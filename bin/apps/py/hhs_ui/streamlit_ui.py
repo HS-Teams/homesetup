@@ -710,17 +710,46 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
 def render_footer_visibility_script(hidden: bool) -> None:
     """Hide or restore the already-mounted footer in the browser document."""
     class_action = "add" if hidden else "remove"
+    sequence_key = "_hhs_footer_visibility_sequence"
+    sequence = st.session_state.setdefault(sequence_key, 0)
+    if not isinstance(sequence, int):
+        sequence = 0
+    sequence += 1
+    st.session_state[sequence_key] = sequence
+    retry_script = (
+        """
+            if (!hidden) {
+              [0, 50, 150, 300, 600].forEach((delay) => {
+                window.setTimeout(apply_visibility, delay);
+              });
+              window.requestAnimationFrame(apply_visibility);
+            }
+        """
+        if not hidden
+        else ""
+    )
     components.html(
         f"""
         <script>
           (() => {{
             const doc = window.parent.document;
-            doc.documentElement.classList.{class_action}("hhs-footer-hidden");
-            doc.querySelectorAll(".hhs-app-footer").forEach((footer) => {{
-              footer.style.visibility = "";
-              footer.style.opacity = "";
-              footer.style.pointerEvents = "";
-            }});
+            const sequence = {sequence};
+            const hidden = {str(hidden).lower()};
+            const apply_visibility = () => {{
+              const current_sequence = Number(doc.documentElement.dataset.hhsFooterVisibilitySequence || "0");
+              if (sequence < current_sequence) {{
+                return;
+              }}
+              doc.documentElement.dataset.hhsFooterVisibilitySequence = String(sequence);
+              doc.documentElement.classList.{class_action}("hhs-footer-hidden");
+              doc.querySelectorAll(".hhs-app-footer").forEach((footer) => {{
+                footer.style.visibility = "";
+                footer.style.opacity = "";
+                footer.style.pointerEvents = "";
+              }});
+            }};
+            apply_visibility();
+            {retry_script}
           }})();
         </script>
         """,

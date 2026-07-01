@@ -1979,6 +1979,21 @@ PY
   run grep -q 'hhs-footer-hidden' "${ui_file}"
   assert_success
 
+  run grep -q '_hhs_footer_visibility_sequence' "${ui_file}"
+  assert_success
+
+  run grep -q 'dataset.hhsFooterVisibilitySequence' "${ui_file}"
+  assert_success
+
+  run grep -q 'sequence < current_sequence' "${ui_file}"
+  assert_success
+
+  run grep -q 'window.setTimeout(apply_visibility, delay)' "${ui_file}"
+  assert_success
+
+  run grep -q 'window.requestAnimationFrame(apply_visibility)' "${ui_file}"
+  assert_success
+
   run grep -q 'doc.querySelectorAll(".hhs-app-footer")' "${ui_file}"
   assert_success
 
