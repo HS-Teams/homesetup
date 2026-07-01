@@ -36,6 +36,7 @@ from base64 import b64encode
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import TypeVar
 
 import altair as alt
 import pandas as pd
@@ -83,6 +84,7 @@ AI_CONTEXT_UPLOAD_TYPES = (
     "php",
     "sql",
 )
+TableControlsResult = TypeVar("TableControlsResult")
 
 
 def load_app_css() -> str:
@@ -1842,6 +1844,81 @@ def table_action_args(
     return tuple(args) if isinstance(args, tuple | list) else (args,)
 
 
+def render_table_controls_panel(
+    render_controls: Callable[[], TableControlsResult],
+) -> TableControlsResult:
+    """Render table filters and entry controls inside the shared foldable panel."""
+    with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):
+        return render_controls()
+
+
+def render_table_filter_controls(
+    options: tuple[str, ...],
+    key: str,
+    other_key: str,
+    columns: list[float],
+    index: int = 0,
+    other_options: tuple[str, ...] = ("Other", "Others"),
+    placeholder: str = "Type filter text",
+) -> tuple[str, str]:
+    """Render normalized table filter controls and return the selected filter text."""
+    filter_col, other_filter_col = st.columns(
+        columns, vertical_alignment="bottom", gap="small"
+    )
+    with filter_col:
+        selected_filter = st.radio(
+            "Filters",
+            options,
+            horizontal=True,
+            index=index,
+            key=key,
+            on_change=save_ui_state,
+        )
+
+    other_filter = ""
+    if selected_filter in other_options:
+        with other_filter_col:
+            other_filter = st.text_input(
+                "Filters",
+                key=other_key,
+                label_visibility="collapsed",
+                on_change=save_ui_state,
+                placeholder=placeholder,
+            )
+    return selected_filter, other_filter
+
+
+def render_env_add_controls() -> None:
+    """Render the environment variable new-entry controls."""
+    name_col, value_col, action_col = st.columns(
+        [1.25, 4.0, 0.2], vertical_alignment="center"
+    )
+    with name_col:
+        st.text_input(
+            "Name",
+            key="env_add_name",
+            on_change=save_ui_state,
+            placeholder="CUSTOM_ENV",
+        )
+    with value_col:
+        st.text_input(
+            "Value",
+            key="env_add_value",
+            on_change=save_ui_state,
+            placeholder="Optional value",
+        )
+    env_add_name = str(st.session_state.get("env_add_name", "")).strip()
+    with action_col:
+        st.button(
+            "",
+            key="env_add_button",
+            disabled=not env_add_name,
+            help="Add",
+            on_click=apply_env_add_form_value,
+            width="stretch",
+        )
+
+
 def render_home_tools_panel() -> None:
     """Render HomeSetup development tool checks on the Home view."""
     execute_pending_home_tool_action()
@@ -1857,28 +1934,14 @@ def render_home_tools_panel() -> None:
     if not rows:
         st.caption("No tool checks found.")
         return
-    filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
-    )
-    with filter_col:
-        tools_filter = st.radio(
-            "Filters",
+    tools_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
             hhs_ui.LIST_FILTERS,
-            horizontal=True,
-            index=0,
-            key="home_tools_filter",
-            on_change=save_ui_state,
+            "home_tools_filter",
+            "home_tools_other_filter",
+            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
-    other_filter = ""
-    if tools_filter == "Other":
-        with other_filter_col:
-            other_filter = st.text_input(
-                "Filters",
-                key="home_tools_other_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type filter text",
-            )
+    )
     filtered_rows = filter_tool_rows(rows, tools_filter, other_filter)
     if not filtered_rows:
         st.caption("No tool checks match the current filter.")
@@ -5273,56 +5336,18 @@ def render_envs_table() -> None:
         else:
             st.error(strip_ansi(action_message))
 
-    name_col, value_col, action_col = st.columns(
-        [1.25, 4.0, 0.2], vertical_alignment="center"
-    )
-    with name_col:
-        st.text_input(
-            "Name",
-            key="env_add_name",
-            on_change=save_ui_state,
-            placeholder="CUSTOM_ENV",
-        )
-    with value_col:
-        st.text_input(
-            "Value",
-            key="env_add_value",
-            on_change=save_ui_state,
-            placeholder="Optional value",
-        )
-    env_add_name = str(st.session_state.get("env_add_name", "")).strip()
-    with action_col:
-        st.button(
-            "",
-            key="env_add_button",
-            disabled=not env_add_name,
-            help="Add",
-            on_click=apply_env_add_form_value,
-            width="stretch",
+    def render_env_controls() -> tuple[str, str]:
+        """Render environment table controls and return the selected filter."""
+        render_env_add_controls()
+        return render_table_filter_controls(
+            hhs_ui.ENV_FILTERS,
+            "env_filter",
+            "env_other_filter",
+            hhs_ui.THREE_OPTION_FILTER_COLUMNS,
+            index=1,
         )
 
-    filter_col, other_filter_col = st.columns(
-        hhs_ui.THREE_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
-    )
-    with filter_col:
-        env_filter = st.radio(
-            "Filters",
-            hhs_ui.ENV_FILTERS,
-            horizontal=True,
-            index=1,
-            key="env_filter",
-            on_change=save_ui_state,
-        )
-    other_filter = ""
-    if env_filter == "Other":
-        with other_filter_col:
-            other_filter = st.text_input(
-                "Filters",
-                key="env_other_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type filter text",
-            )
+    env_filter, other_filter = render_table_controls_panel(render_env_controls)
 
     result = run_hhs_envs(env_filter_pattern(env_filter, other_filter))
     if result.returncode != 0:
@@ -5333,28 +5358,14 @@ def render_envs_table() -> None:
 
 def render_paths_table() -> None:
     """Render PATH entries using __hhs_paths."""
-    filter_col, other_filter_col = st.columns(
-        hhs_ui.PATH_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
-    )
-    with filter_col:
-        path_filter = st.radio(
-            "Filters",
+    path_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
             hhs_ui.PATH_FILTERS,
-            horizontal=True,
-            index=0,
-            key="path_filter",
-            on_change=save_ui_state,
+            "path_filter",
+            "path_other_filter",
+            hhs_ui.PATH_FILTER_COLUMNS,
         )
-    other_filter = ""
-    if path_filter == "Other":
-        with other_filter_col:
-            other_filter = st.text_input(
-                "Filters",
-                key="path_other_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type filter text",
-            )
+    )
     result = run_hhs_paths()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list PATH entries.")
@@ -5366,28 +5377,14 @@ def render_paths_table() -> None:
 
 def render_dirs_table() -> None:
     """Render saved directories using __hhs_load_dir."""
-    filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
-    )
-    with filter_col:
-        dirs_filter = st.radio(
-            "Filters",
+    dirs_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
             hhs_ui.LIST_FILTERS,
-            horizontal=True,
-            index=0,
-            key="dirs_filter",
-            on_change=save_ui_state,
+            "dirs_filter",
+            "dirs_other_filter",
+            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
-    other_filter = ""
-    if dirs_filter == "Other":
-        with other_filter_col:
-            other_filter = st.text_input(
-                "Filters",
-                key="dirs_other_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type filter text",
-            )
+    )
     result = run_hhs_dirs()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list saved directories.")
@@ -5401,28 +5398,14 @@ def render_dirs_table() -> None:
 
 def render_cmds_table() -> None:
     """Render saved commands using __hhs_command."""
-    filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
-    )
-    with filter_col:
-        cmds_filter = st.radio(
-            "Filters",
+    cmds_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
             hhs_ui.LIST_FILTERS,
-            horizontal=True,
-            index=0,
-            key="cmds_filter",
-            on_change=save_ui_state,
+            "cmds_filter",
+            "cmds_other_filter",
+            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
-    other_filter = ""
-    if cmds_filter == "Other":
-        with other_filter_col:
-            other_filter = st.text_input(
-                "Filters",
-                key="cmds_other_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type filter text",
-            )
+    )
     result = run_hhs_commands()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list saved commands.")
@@ -5438,28 +5421,14 @@ def render_cmds_table() -> None:
 
 def render_aliases_table() -> None:
     """Render custom aliases using __hhs_aliases."""
-    filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
-    )
-    with filter_col:
-        alias_filter = st.radio(
-            "Filters",
+    alias_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
             hhs_ui.LIST_FILTERS,
-            horizontal=True,
-            index=0,
-            key="alias_filter",
-            on_change=save_ui_state,
+            "alias_filter",
+            "alias_other_filter",
+            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
-    other_filter = ""
-    if alias_filter == "Other":
-        with other_filter_col:
-            other_filter = st.text_input(
-                "Filters",
-                key="alias_other_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type filter text",
-            )
+    )
     result = run_hhs_aliases()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list custom aliases.")
@@ -5474,28 +5443,14 @@ def render_aliases_table() -> None:
 
 def render_services_table() -> None:
     """Render HomeSetup services using __hhs_services status output."""
-    filter_col, other_filter_col = st.columns(
-        hhs_ui.FOUR_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
-    )
-    with filter_col:
-        service_filter = st.radio(
-            "Filters",
+    service_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
             hhs_ui.SERVICE_FILTERS,
-            horizontal=True,
-            index=0,
-            key="service_filter",
-            on_change=save_ui_state,
+            "service_filter",
+            "service_other_filter",
+            hhs_ui.FOUR_OPTION_FILTER_COLUMNS,
         )
-    other_filter = ""
-    if service_filter == "Other":
-        with other_filter_col:
-            other_filter = st.text_input(
-                "Filters",
-                key="service_other_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type filter text",
-            )
+    )
     result = run_hhs_services()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list services.")
@@ -5509,28 +5464,14 @@ def render_services_table() -> None:
 
 def render_history_commands_table() -> None:
     """Render shell command history using __hhs_history."""
-    filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
-    )
-    with filter_col:
-        history_commands_filter = st.radio(
-            "Filters",
+    history_commands_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
             hhs_ui.HISTORY_FILTERS,
-            horizontal=True,
-            index=0,
-            key="history_commands_filter",
-            on_change=save_ui_state,
+            "history_commands_filter",
+            "history_commands_other_filter",
+            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
-    other_filter = ""
-    if history_commands_filter == "Others":
-        with other_filter_col:
-            other_filter = st.text_input(
-                "Filters",
-                key="history_commands_other_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type filter text",
-            )
+    )
     result = run_hhs_history()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list command history.")
@@ -5546,28 +5487,14 @@ def render_history_commands_table() -> None:
 
 def render_history_directories_table() -> None:
     """Render directory history using __hhs_dirs."""
-    filter_col, other_filter_col = st.columns(
-        hhs_ui.TWO_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"
-    )
-    with filter_col:
-        history_directories_filter = st.radio(
-            "Filters",
+    history_directories_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
             hhs_ui.HISTORY_FILTERS,
-            horizontal=True,
-            index=0,
-            key="history_directories_filter",
-            on_change=save_ui_state,
+            "history_directories_filter",
+            "history_directories_other_filter",
+            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
-    other_filter = ""
-    if history_directories_filter == "Others":
-        with other_filter_col:
-            other_filter = st.text_input(
-                "Filters",
-                key="history_directories_other_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type filter text",
-            )
+    )
     result = run_hhs_history_dirs()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list directory history.")
@@ -5790,19 +5717,24 @@ def render_monitor_processes_panel() -> None:
         else:
             st.error(strip_ansi(action_message))
 
-    label_col, input_col = st.columns([0.55, 3.45], vertical_alignment="center")
-    with label_col:
-        st.markdown(
-            '<span class="hhs-inline-form-label">Filters</span>', unsafe_allow_html=True
-        )
-    with input_col:
-        process_filter = st.text_input(
-            "Filters",
-            key="monitor_process_filter",
-            label_visibility="collapsed",
-            on_change=save_ui_state,
-            placeholder="Type process filter",
-        )
+    def render_process_controls() -> str:
+        """Render process table controls and return the filter text."""
+        label_col, input_col = st.columns([0.55, 3.45], vertical_alignment="center")
+        with label_col:
+            st.markdown(
+                '<span class="hhs-inline-form-label">Filters</span>',
+                unsafe_allow_html=True,
+            )
+        with input_col:
+            return st.text_input(
+                "Filters",
+                key="monitor_process_filter",
+                label_visibility="collapsed",
+                on_change=save_ui_state,
+                placeholder="Type process filter",
+            )
+
+    process_filter = render_table_controls_panel(render_process_controls)
     result = run_hhs_process_list(process_filter)
     if result.returncode != 0:
         st.error(

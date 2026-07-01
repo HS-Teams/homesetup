@@ -1067,13 +1067,37 @@ PY
   run grep -q 'def filter_tool_rows' "${ui_file}"
   assert_success
 
-  run grep -q 'key="home_tools_filter"' "${ui_file}"
+  run grep -q '"home_tools_filter"' "${ui_file}"
   assert_success
 
   run grep -q 'hhs_ui.LIST_FILTERS' "${ui_file}"
   assert_success
 
-  run grep -q 'key="home_tools_other_filter"' "${ui_file}"
+  run grep -q '"home_tools_other_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q 'TABLE_CONTROLS_PANEL_TITLE = "Filters & Controls"' "${constants_file}"
+  assert_success
+
+  run grep -q 'TABLE_CONTROLS_PANEL_TITLE' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q 'def render_table_controls_panel' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True)' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_table_filter_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_env_add_controls' "${ui_file}"
+  assert_success
+
+  run grep -q '\[data-testid="stExpander"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'border-color: var(--hhs-theme-border-color)' "${css_file}"
   assert_success
 
   run grep -q 'TWO_OPTION_FILTER_COLUMNS = \[0.75, 3.25\]' "${constants_file}"
@@ -1112,7 +1136,7 @@ PY
   run grep -q 'margin-left: -1rem !important' "${css_file}"
   assert_success
 
-  run grep -q 'hhs_ui.THREE_OPTION_FILTER_COLUMNS, vertical_alignment="bottom", gap="small"' "${ui_file}"
+  run grep -q 'hhs_ui.THREE_OPTION_FILTER_COLUMNS' "${ui_file}"
   assert_success
 
   run grep -q 'HOME_TOOLS_TABLE_KEY = "home_tools_table"' "${constants_file}"
@@ -2370,7 +2394,10 @@ PY
   run grep -q 'def render_monitor_processes_panel' "${ui_file}"
   assert_success
 
-  run grep -q 'key="monitor_process_filter"' "${ui_file}"
+  run grep -q '"monitor_process_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_table_controls_panel(render_process_controls)' "${ui_file}"
   assert_success
 }
 
@@ -2425,6 +2452,12 @@ PY
   assert_success
 
   run grep -q 'on_click=apply_env_add_form_value' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_table_controls_panel(render_env_controls)' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_table_filter_controls' "${ui_file}"
   assert_success
 
   run grep -q '""' "${ui_file}"

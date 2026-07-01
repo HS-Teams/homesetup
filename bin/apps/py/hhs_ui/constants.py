@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.82"
+VERSION = "0.0.83"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -80,6 +80,7 @@ LIST_FILTERS = ("All", "Other")
 HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
 SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")
+TABLE_CONTROLS_PANEL_TITLE = "Filters & Controls"
 THEME_SELECTED_KEY = "theme_selected"
 AI_CODE_BLOCK_WRAP_COLUMNS = 96
 PROCESS_TABLE_KEY = "monitor_process_table"

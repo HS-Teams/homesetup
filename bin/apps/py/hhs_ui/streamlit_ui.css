@@ -520,6 +520,19 @@ div[class*="st-key-monitor_process_kill_button_"] button {
   padding: 0.15rem 0.35rem;
 }
 
+[data-testid="stExpander"] {
+  margin-bottom: var(--hhs-inline-control-gap);
+}
+
+[data-testid="stExpander"] details {
+  border-color: var(--hhs-theme-border-color);
+  border-radius: var(--hhs-theme-base-radius);
+}
+
+[data-testid="stExpander"] summary p {
+  font-weight: 800;
+}
+
 .st-key-alias_other_filter,
 .st-key-cmds_other_filter,
 .st-key-dirs_other_filter,
