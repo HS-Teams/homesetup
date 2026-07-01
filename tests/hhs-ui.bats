@@ -448,6 +448,24 @@ setup() {
   run grep -q 'hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"' "${ui_file}"
   assert_success
 
+  run grep -q 'class="hhs-sidebar-clock-glyph"></span>' "${ui_file}"
+  assert_success
+
+  run grep -q '.hhs-sidebar-clock-glyph' "${css_file}"
+  assert_success
+
+  run grep -q 'flex: 0 0 24px' "${css_file}"
+  assert_success
+
+  run grep -q 'justify-content: center' "${css_file}"
+  assert_success
+
+  run grep -q 'width: 24px' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-right: 0.45rem' "${css_file}"
+  assert_success
+
   run grep -q 'color: var(--hhs-theme-text-color)' "${css_file}"
   assert_success
 
@@ -556,10 +574,10 @@ setup() {
   run grep -q 'UI_CACHE_FILE = Path(os.environ.get("HHS_CACHE_DIR"' "${constants_file}"
   assert_failure
 
-  run grep -q '"Connect"' "${ui_file}"
+  run grep -q '"ﮣ Connect"' "${ui_file}"
   assert_success
 
-  run grep -q '"Disconnect"' "${ui_file}"
+  run grep -q '"ﮤ Disconnect"' "${ui_file}"
   assert_success
 
   run grep -q 'key="ssh_connect_button"' "${ui_file}"
@@ -627,6 +645,18 @@ setup() {
 
   run grep -q -- '--hhs-selected-item-value: var(--hhs-success)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
+
+  run grep -q -- '--hhs-theme-primary-color: var(' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/pastel-powerline.css"
+  assert_failure
+
+  run grep -q -- '--hhs-theme-link-color: var(' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/pastel-powerline.css"
+  assert_failure
+
+  run grep -Eq -- '--hhs-theme-[^:]+: var\(' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/pastel-powerline.css"
+  assert_failure
+
+  run grep -Eq -- '--hhs-theme-[^:]+: var\(' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/jetpack.css"
+  assert_failure
 
   run python3 - <<'PY'
 import re
@@ -930,6 +960,27 @@ PY
   assert_success
 
   run grep -q 'AI_VIEW: " AI"' "${constants_file}"
+  assert_success
+
+  run grep -q '<h2> Informational</h2>' "${ui_file}"
+  assert_success
+
+  run grep -q '<h2> Dotfiles Configurations</h2>' "${ui_file}"
+  assert_success
+
+  run grep -q '<h2> System Services</h2>' "${ui_file}"
+  assert_success
+
+  run grep -q '<h2> Activity Monitor</h2>' "${ui_file}"
+  assert_success
+
+  run grep -q '<h2> History</h2>' "${ui_file}"
+  assert_success
+
+  run grep -q '<h2> SSH</h2>' "${ui_file}"
+  assert_success
+
+  run grep -q '<h2> Ask Ollama HomeSetup AI</h2>' "${ui_file}"
   assert_success
 
   run grep -q 'AI_VIEWS = ("CHAT", "CONTEXT", "SETTINGS")' "${constants_file}"
@@ -1704,13 +1755,22 @@ PY
   run grep -q 'render_footer_visibility_script(hidden=False)' "${ui_file}"
   assert_success
 
-  run grep -q 'window.parent.document.querySelector(".hhs-app-footer")' "${ui_file}"
+  run grep -q 'doc.documentElement.classList' "${ui_file}"
   assert_success
 
-  run grep -q 'footer.style.visibility' "${ui_file}"
+  run grep -q 'hhs-footer-hidden' "${ui_file}"
   assert_success
 
-  run grep -q 'footer.style.pointerEvents' "${ui_file}"
+  run grep -q 'doc.querySelectorAll(".hhs-app-footer")' "${ui_file}"
+  assert_success
+
+  run grep -q '.hhs-footer-hidden .hhs-app-footer' "${css_file}"
+  assert_success
+
+  run grep -q 'visibility: hidden !important' "${css_file}"
+  assert_success
+
+  run grep -q 'pointer-events: none !important' "${css_file}"
   assert_success
 
   run grep -q 'def close_all_dialogs()' "${ui_file}"
@@ -1946,6 +2006,12 @@ PY
   assert_success
 
   run grep -q 'run_hhs_ask_reset(close_dialogs=True)' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ai_context_output"\] = ""' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ai_context_error"\] = ""' "${ui_file}"
   assert_success
 
   run grep -q -- '-i|--ingest' "${ask_file}"

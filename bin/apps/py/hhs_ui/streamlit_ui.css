@@ -119,12 +119,23 @@ textarea,
 }
 
 .hhs-sidebar-clock {
+  align-items: center;
+  display: inline-flex;
   font-size: 0.85rem;
   font-weight: 650;
   left: var(--hhs-sidebar-inline-inset);
   position: fixed;
   top: 20px;
   z-index: 1000000;
+}
+
+.hhs-sidebar-clock-glyph {
+  display: inline-flex;
+  flex: 0 0 24px;
+  justify-content: center;
+  line-height: 1;
+  margin-right: 0.45rem;
+  width: 24px;
 }
 
 .hhs-sidebar-title {
@@ -614,6 +625,12 @@ div[class*="st-key-service_selected_value_"] textarea {
   position: fixed;
   right: 0;
   z-index: 1000000;
+}
+
+.hhs-footer-hidden .hhs-app-footer {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
 }
 
 .hhs-footer-glyph {

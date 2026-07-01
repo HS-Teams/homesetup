@@ -273,8 +273,14 @@ def format_datetime(value: datetime) -> str:
 
 def render_sidebar_clock() -> None:
     """Render the current datetime above the sidebar title."""
+    current_date = html.escape(format_datetime(datetime.now()))
     st.markdown(
-        f'<div class="hhs-sidebar-clock">{html.escape(format_datetime(datetime.now()))}</div>',
+        f"""
+        <div class="hhs-sidebar-clock">
+          <span class="hhs-sidebar-clock-glyph"></span>
+          <span>{current_date}</span>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -325,6 +331,8 @@ def clear_ai_chat_history() -> None:
     result = run_hhs_ask_reset(close_dialogs=True)
     cache_clear()
     st.session_state["ai_chat_messages"] = []
+    st.session_state["ai_context_output"] = ""
+    st.session_state["ai_context_error"] = ""
     st.session_state["ai_clear_chat_pending"] = False
     if result.returncode == 0:
         push_floating_status("AI chat history cleared.", "info")
@@ -592,14 +600,14 @@ def render_sidebar() -> None:
             st.markdown('<div class="hhs-vspacer"></div>', unsafe_allow_html=True)
             if connected_host:
                 st.button(
-                    "Disconnect",
+                    "ﮤ Disconnect",
                     key="ssh_disconnect_button",
                     on_click=request_ssh_host_disconnection,
                     width="stretch",
                 )
             else:
                 st.button(
-                    "Connect",
+                    "ﮣ Connect",
                     key="ssh_connect_button",
                     on_click=request_ssh_host_connect,
                     width="stretch",
@@ -701,20 +709,18 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
 
 def render_footer_visibility_script(hidden: bool) -> None:
     """Hide or restore the already-mounted footer in the browser document."""
-    footer_visibility = "hidden" if hidden else ""
-    footer_opacity = "0" if hidden else ""
-    footer_pointer_events = "none" if hidden else ""
+    class_action = "add" if hidden else "remove"
     components.html(
         f"""
         <script>
           (() => {{
-            const footer = window.parent.document.querySelector(".hhs-app-footer");
-            if (!footer) {{
-              return;
-            }}
-            footer.style.visibility = "{footer_visibility}";
-            footer.style.opacity = "{footer_opacity}";
-            footer.style.pointerEvents = "{footer_pointer_events}";
+            const doc = window.parent.document;
+            doc.documentElement.classList.{class_action}("hhs-footer-hidden");
+            doc.querySelectorAll(".hhs-app-footer").forEach((footer) => {{
+              footer.style.visibility = "";
+              footer.style.opacity = "";
+              footer.style.pointerEvents = "";
+            }});
           }})();
         </script>
         """,
@@ -1231,7 +1237,7 @@ def render_home_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2>Informational</h2>
+          <h2> Informational</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -5498,7 +5504,7 @@ def render_configs_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2>Dotfiles Configurations</h2>
+          <h2> Dotfiles Configurations</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -5531,7 +5537,7 @@ def render_service_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2>System Services</h2>
+          <h2> System Services</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -5551,7 +5557,7 @@ def render_ssh_view() -> None:
     st.markdown(
         f"""
         <section class="hhs-view-heading">
-          <h2>SSH</h2>
+          <h2> SSH</h2>
           <p>Connected to remote  {html.escape(ssh_connection_display(host))}</p>
         </section>
         """,
@@ -5593,7 +5599,7 @@ def render_history_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2>History</h2>
+          <h2> History</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -5622,7 +5628,7 @@ def render_monitor_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2>Activity Monitor</h2>
+          <h2> Activity Monitor</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -5944,7 +5950,7 @@ def render_ai_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2>Ask Ollama HomeSetup AI</h2>
+          <h2> Ask Ollama HomeSetup AI</h2>
         </section>
         """,
         unsafe_allow_html=True,

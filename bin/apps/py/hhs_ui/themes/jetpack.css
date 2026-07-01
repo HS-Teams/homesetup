@@ -1,0 +1,338 @@
+:root {
+  --hhs-theme-base: dark;
+
+  /* Starship Jetpack-inspired terminal palette */
+  --hhs-jetpack-yellow: #ffd866;
+  --hhs-jetpack-purple: #ab9df2;
+  --hhs-jetpack-green: #a9dc76;
+  --hhs-jetpack-blue: #78dce8;
+  --hhs-jetpack-magenta: #ff6188;
+  --hhs-jetpack-red: #ff6188;
+  --hhs-jetpack-cyan: #78dce8;
+  --hhs-jetpack-white: #fcfcfa;
+  --hhs-jetpack-dim: #939293;
+
+  --hhs-theme-primary-color: #ffd866;
+  --hhs-theme-background-color: #19181f;
+  --hhs-theme-secondary-background-color: #221f2b;
+  --hhs-theme-text-color: #fcfcfa;
+  --hhs-theme-link-color: #78dce8;
+  --hhs-theme-border-color: rgba(171, 157, 242, 0.46);
+  --hhs-theme-dataframe-border-color: rgba(171, 157, 242, 0.46);
+  --hhs-theme-dataframe-header-background-color: #221f2b;
+  --hhs-theme-code-background-color: #14131a;
+  --hhs-theme-text-color-accent: #ffd866;
+  --hhs-theme-base-radius: 0.4rem;
+  --hhs-theme-button-radius: 0.25rem;
+  --hhs-theme-footer-status-info-color: #78dce8;
+  --hhs-theme-footer-status-warn-color: #ffd866;
+  --hhs-theme-footer-status-error-color: #ff6188;
+  --hhs-theme-footer-status-text-size: 0.84rem;
+  --hhs-theme-show-widget-border: true;
+  --hhs-theme-show-sidebar-border: true;
+
+  --hhs-background: var(--hhs-theme-background-color);
+  --hhs-current-line: var(--hhs-theme-secondary-background-color);
+  --hhs-selection: var(--hhs-jetpack-purple);
+  --hhs-foreground: var(--hhs-theme-text-color);
+  --hhs-comment: var(--hhs-theme-border-color);
+  --hhs-secondary: var(--hhs-theme-link-color);
+  --hhs-success: var(--hhs-jetpack-green);
+  --hhs-chart-accent: var(--hhs-jetpack-yellow);
+  --hhs-highlight: var(--hhs-jetpack-purple);
+  --hhs-primary: var(--hhs-theme-primary-color);
+  --hhs-danger: var(--hhs-jetpack-red);
+  --hhs-warning: var(--hhs-jetpack-yellow);
+  --hhs-panel: var(--hhs-theme-code-background-color);
+  --hhs-model-accent: var(--hhs-jetpack-purple);
+  --hhs-markdown-table-header: var(--hhs-theme-text-color);
+  --hhs-markdown-table-value: var(--hhs-theme-text-color-accent);
+  --hhs-selected-item-label: var(--hhs-theme-text-color);
+  --hhs-selected-item-value: var(--hhs-jetpack-yellow);
+  --hhs-bar-chart-color: var(--hhs-chart-accent);
+}
+
+html,
+body,
+[data-testid="stAppViewContainer"],
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"] {
+  background: var(--hhs-background) !important;
+  color: var(--hhs-foreground) !important;
+}
+
+[data-testid="stSidebar"] {
+  background: var(--hhs-panel) !important;
+  border-right: 1px solid rgba(171, 157, 242, 0.54);
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] {
+  background: rgba(33, 24, 44, 0.82);
+  border: 1px solid rgba(255, 97, 136, 0.22);
+}
+
+.hhs-sidebar-clock {
+  color: var(--hhs-jetpack-blue);
+}
+
+.st-key-active_view [role="radiogroup"] {
+  border-bottom: 1px solid rgba(255, 97, 136, 0.28);
+}
+
+.st-key-active_view [role="radiogroup"] label {
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--hhs-foreground);
+}
+
+.st-key-active_view [role="radiogroup"] label:hover {
+  color: var(--hhs-jetpack-magenta);
+}
+
+.st-key-active_view [role="radiogroup"] label:has(input:checked) {
+  border-bottom-color: var(--hhs-jetpack-purple);
+  color: var(--hhs-jetpack-purple);
+}
+
+.st-key-active_view [role="radiogroup"] label:has(input:checked) p {
+  color: var(--hhs-jetpack-purple);
+}
+
+.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"] {
+  border-color: var(--hhs-primary) !important;
+  color: var(--hhs-primary) !important;
+}
+
+.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"] * {
+  color: var(--hhs-primary) !important;
+  fill: currentColor !important;
+}
+
+.hhs-view-heading {
+  border-bottom: 1px solid rgba(255, 97, 136, 0.3);
+}
+
+.hhs-view-heading h2 {
+  background: none;
+  color: var(--hhs-foreground);
+}
+
+.hhs-inline-form-label {
+  color: var(--hhs-foreground);
+}
+
+.hhs-ai-chat-meta,
+.hhs-ai-settings-current-model {
+  color: var(--hhs-jetpack-blue);
+}
+
+.hhs-ai-settings-current-model span,
+.hhs-ai-chat-meta span {
+  background: rgba(171, 157, 242, 0.22);
+}
+
+.hhs-ai-settings-current-model strong,
+.hhs-ai-chat-meta .hhs-ai-chat-model,
+.hhs-ai-assistant-text {
+  color: var(--hhs-jetpack-green);
+}
+
+.hhs-ai-selected-model {
+  color: var(--hhs-foreground);
+}
+
+.hhs-ai-selected-model strong {
+  color: var(--hhs-jetpack-yellow);
+}
+
+.st-key-ai_confirm_clear_button button,
+.st-key-ai_cancel_clear_button button,
+.st-key-ai_confirm_model_select_button button,
+.st-key-ai_cancel_model_select_button button,
+.st-key-ai_confirm_model_delete_button button,
+.st-key-ai_cancel_model_delete_button button,
+div[class*="st-key-ai_select_model_button_"] button,
+div[class*="st-key-ai_delete_model_button_"] button,
+div[class*="st-key-monitor_process_kill_button_"] button {
+  background: var(--hhs-jetpack-yellow);
+  border-color: var(--hhs-jetpack-yellow);
+  color: var(--hhs-jetpack-white);
+}
+
+.hhs-ai-chat-meta strong,
+.hhs-ai-user-text {
+  color: var(--hhs-jetpack-blue);
+}
+
+.hhs-ai-system-text {
+  color: var(--hhs-jetpack-magenta);
+}
+
+[data-testid="stChatMessage"]:has(.hhs-ai-user-text) {
+  background: rgba(120, 220, 232, 0.16);
+  border-left: 4px solid var(--hhs-jetpack-blue);
+}
+
+[data-testid="stChatMessage"]:has(.hhs-ai-assistant-text) {
+  background: rgba(169, 220, 118, 0.16);
+  border-left: 4px solid var(--hhs-jetpack-green);
+}
+
+[data-testid="stChatMessage"]:has(.hhs-ai-system-text) {
+  background: rgba(255, 97, 136, 0.16);
+  border-left: 4px solid var(--hhs-jetpack-magenta);
+}
+
+.hhs-sysinfo-output {
+  background: transparent;
+  color: var(--hhs-foreground);
+}
+
+.hhs-terminal-panel {
+  background: rgba(20, 19, 26, 0.88);
+  border: 1px solid rgba(255, 97, 136, 0.3);
+  color: var(--hhs-foreground);
+}
+
+.hhs-log-file-title,
+.hhs-log-file-title code {
+  color: var(--hhs-jetpack-green);
+}
+
+.hhs-log-file-title code {
+  background: rgba(171, 157, 242, 0.22);
+}
+
+.hhs-log-info {
+  color: var(--hhs-jetpack-green);
+}
+
+.hhs-log-debug {
+  color: var(--hhs-foreground);
+}
+
+.hhs-log-warn {
+  color: var(--hhs-jetpack-magenta);
+}
+
+.hhs-log-error {
+  color: var(--hhs-danger);
+}
+
+.hhs-log-thread {
+  color: var(--hhs-jetpack-yellow);
+}
+
+.hhs-log-fqdn {
+  color: var(--hhs-jetpack-blue);
+}
+
+.hhs-log-date {
+  color: var(--hhs-jetpack-purple);
+}
+
+.hhs-log-uri {
+  color: var(--hhs-jetpack-yellow);
+}
+
+div[class*="st-key-alias_selected_value_"] textarea,
+div[class*="st-key-cmd_selected_value_"] textarea,
+div[class*="st-key-dir_selected_value_"] textarea,
+div[class*="st-key-env_selected_value_"] textarea,
+div[class*="st-key-history_command_selected_value_"] textarea,
+div[class*="st-key-history_directory_selected_value_"] textarea,
+div[class*="st-key-path_selected_value_"] textarea,
+div[class*="st-key-service_selected_value_"] textarea {
+  background: rgba(20, 19, 26, 0.72) !important;
+  border-color: var(--hhs-jetpack-purple) !important;
+  color: var(--hhs-foreground) !important;
+}
+
+.hhs-tab-loader {
+  background: rgba(25, 24, 31, 0.62);
+}
+
+.hhs-tab-loader-panel {
+  background: var(--hhs-jetpack-white);
+  border: 1px solid rgba(171, 157, 242, 0.38);
+  box-shadow: 0 20px 45px rgba(25, 24, 31, 0.28);
+  color: #14131a;
+}
+
+.hhs-tab-loader-spinner {
+  border: 3px solid rgba(171, 157, 242, 0.22);
+  border-top-color: var(--hhs-jetpack-yellow);
+}
+
+.hhs-tab-loader-elapsed {
+  color: var(--hhs-jetpack-dim);
+}
+
+.hhs-app-footer {
+  background: var(--hhs-panel);
+  border-top: 1px solid rgba(255, 97, 136, 0.28);
+  color: var(--hhs-foreground);
+}
+
+.hhs-footer-glyph {
+  color: var(--hhs-jetpack-purple);
+}
+
+.hhs-footer-remote-status {
+  color: var(--hhs-warning);
+}
+
+/* Optional Jetpack primitives for custom prompt badges/segments */
+.hhs-jetpack {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  border-radius: var(--hhs-theme-button-radius);
+  color: var(--hhs-jetpack-white);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.hhs-jetpack-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: 0 0.72rem;
+  border: 1px solid rgba(171, 157, 242, 0.35);
+  background: rgba(34, 31, 43, 0.88);
+}
+
+.hhs-jetpack-character {
+  color: var(--hhs-jetpack-yellow);
+}
+
+.hhs-jetpack-error-character {
+  color: var(--hhs-jetpack-purple);
+}
+
+.hhs-jetpack-directory {
+  color: var(--hhs-jetpack-blue);
+}
+
+.hhs-jetpack-git {
+  color: var(--hhs-jetpack-blue);
+}
+
+.hhs-jetpack-status-added {
+  color: var(--hhs-jetpack-green);
+}
+
+.hhs-jetpack-status-deleted,
+.hhs-jetpack-status-error {
+  color: var(--hhs-jetpack-red);
+}
+
+.hhs-jetpack-language {
+  color: var(--hhs-jetpack-yellow);
+}
+
+.hhs-jetpack-time,
+.hhs-jetpack-duration {
+  color: var(--hhs-jetpack-dim);
+}
