@@ -574,6 +574,48 @@ setup() {
   run grep -q 'UI_CACHE_FILE = Path(os.environ.get("HHS_CACHE_DIR"' "${constants_file}"
   assert_failure
 
+  run grep -q 'UI_CACHE_REALTIME_TTL_SECONDS = 15' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_CACHE_NORMAL_TTL_SECONDS = 300' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900' "${constants_file}"
+  assert_success
+
+  run python3 - <<'PY'
+import ast
+from pathlib import Path
+
+tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
+mutation_wrappers = {
+    "run_hhs_process_kill",
+    "run_hhs_ask_reset",
+    "run_hhs_ask_select_model",
+    "run_ollama_delete_model",
+    "run_hhs_service_action",
+}
+seen = set()
+
+for node in ast.walk(tree):
+    if not isinstance(node, ast.FunctionDef) or node.name not in mutation_wrappers:
+        continue
+    for call in ast.walk(node):
+        if not isinstance(call, ast.Call):
+            continue
+        if not isinstance(call.func, ast.Name) or call.func.id != "run_bash_command":
+            continue
+        use_cache = next((kw.value for kw in call.keywords if kw.arg == "use_cache"), None)
+        if not isinstance(use_cache, ast.Constant) or use_cache.value is not False:
+            raise SystemExit(f"{node.name} must pass use_cache=False")
+        seen.add(node.name)
+
+missing = mutation_wrappers - seen
+if missing:
+    raise SystemExit("missing mutation wrappers: " + ", ".join(sorted(missing)))
+PY
+  assert_success
+
   run grep -q '"ﮣ Connect"' "${ui_file}"
   assert_success
 
@@ -1273,6 +1315,18 @@ PY
   assert_success
 
   run grep -q 'format_func=monitor_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'def normalized_monitor_disk_top_n' "${ui_file}"
+  assert_success
+
+  run grep -q 'return 10' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="monitor_disk_top_n_input"' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_change=handle_monitor_disk_top_n_change' "${ui_file}"
   assert_success
 
   run grep -q 'SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")' "${constants_file}"

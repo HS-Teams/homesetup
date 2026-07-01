@@ -918,6 +918,25 @@ def monitor_default_disk_directory() -> str:
     return str(homesetup_home())
 
 
+def normalized_monitor_disk_top_n(value: object) -> int:
+    """Return a valid monitor disk Top N value."""
+    try:
+        top_n = int(value)
+    except (TypeError, ValueError):
+        return 10
+    if top_n < 1 or top_n > 100:
+        return 10
+    return top_n
+
+
+def handle_monitor_disk_top_n_change() -> None:
+    """Persist the monitor disk Top N widget value."""
+    st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
+        st.session_state.get("monitor_disk_top_n_input")
+    )
+    save_ui_state()
+
+
 def hhs_log_dir() -> Path:
     """Return the HomeSetup log directory used by monitor logs."""
     return Path(
@@ -3327,6 +3346,7 @@ def run_hhs_process_kill(process_name: str) -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_process_kill_command(process_name),
         "Killing process...",
+        use_cache=False,
     )
 
 
@@ -3374,6 +3394,7 @@ def run_hhs_ask_reset(close_dialogs: bool = False) -> subprocess.CompletedProces
         build_hhs_ask_reset_command(),
         "Resetting Ollama context...",
         close_dialogs=close_dialogs,
+        use_cache=False,
     )
 
 
@@ -3405,6 +3426,7 @@ def run_hhs_ask_select_model(
         build_hhs_ask_select_model_command(model_name),
         loader_message,
         close_dialogs=close_dialogs,
+        use_cache=False,
     )
 
 
@@ -3416,6 +3438,7 @@ def run_ollama_delete_model(
         build_ollama_delete_model_command(model_name),
         "Deleting model...",
         close_dialogs=close_dialogs,
+        use_cache=False,
     )
 
 
@@ -3476,6 +3499,7 @@ def run_hhs_service_action(
     return run_bash_command(
         build_hhs_services_command(operation, service_name),
         f"{operation.capitalize()}ing service...",
+        use_cache=False,
     )
 
 
@@ -5243,6 +5267,12 @@ def render_history_stats_chart() -> None:
 
 def render_monitor_disk_chart() -> None:
     """Render disk usage monitor data using __hhs_du."""
+    st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
+        st.session_state.get("monitor_disk_top_n")
+    )
+    st.session_state["monitor_disk_top_n_input"] = st.session_state[
+        "monitor_disk_top_n"
+    ]
     dir_label_col, dir_input_col, top_label_col, top_input_col, spacer_col = st.columns(
         [0.85, 3.25, 0.55, 0.95, 0.15],
         vertical_alignment="center",
@@ -5269,9 +5299,9 @@ def render_monitor_disk_chart() -> None:
             min_value=1,
             max_value=100,
             step=1,
-            key="monitor_disk_top_n",
+            key="monitor_disk_top_n_input",
             label_visibility="collapsed",
-            on_change=save_ui_state,
+            on_change=handle_monitor_disk_top_n_change,
         )
     selected_directory = directory.strip() or monitor_default_disk_directory()
     result = run_hhs_disk_usage(selected_directory, int(top_n))
@@ -6122,8 +6152,9 @@ def main() -> None:
     if not str(st.session_state["monitor_disk_directory"]).strip():
         st.session_state["monitor_disk_directory"] = monitor_default_disk_directory()
     st.session_state.setdefault("monitor_disk_top_n", 10)
-    if not isinstance(st.session_state["monitor_disk_top_n"], int):
-        st.session_state["monitor_disk_top_n"] = 10
+    st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
+        st.session_state.get("monitor_disk_top_n")
+    )
     st.session_state.setdefault("monitor_log_file", "")
     st.session_state.setdefault("monitor_logs_tail", True)
     st.session_state.setdefault("alias_filter", "All")

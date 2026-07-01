@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.76"
+VERSION = "0.0.77"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -26,8 +26,8 @@ UI_SSH_CONNECTION_FILE = (
     Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-ssh-connection"
 )
 UI_CACHE_REALTIME_TTL_SECONDS = 15
-UI_CACHE_NORMAL_TTL_SECONDS = 60
-UI_CACHE_LOW_CHANGE_TTL_SECONDS = 120
+UI_CACHE_NORMAL_TTL_SECONDS = 300
+UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900
 UI_CACHE_DEFAULT_TTL_SECONDS = UI_CACHE_NORMAL_TTL_SECONDS
 APP_CSS = ""
 VIEWS = ("Home", "Configs", "Services", "Monitor", "History")
