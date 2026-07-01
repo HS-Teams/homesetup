@@ -1004,7 +1004,7 @@ PY
   run grep -q 'AI_VIEW: " AI"' "${constants_file}"
   assert_success
 
-  run grep -q '<h2> Informational</h2>' "${ui_file}"
+  run grep -q '<h2> System</h2>' "${ui_file}"
   assert_success
 
   run grep -q '<h2> Dotfiles Configurations</h2>' "${ui_file}"
@@ -1046,7 +1046,7 @@ PY
   run grep -q 'HOME_VIEWS = ("System", "Tools")' "${constants_file}"
   assert_success
 
-  run grep -q '"System": " System"' "${constants_file}"
+  run grep -q '"System": " Summary"' "${constants_file}"
   assert_success
 
   run grep -q '"Tools": " Tools"' "${constants_file}"
@@ -1253,6 +1253,15 @@ PY
   run grep -q 'reset_selection=reset_path_table_selection' "${ui_file}"
   assert_success
 
+  run grep -q 'reset_selection=reset_dir_table_selection' "${ui_file}"
+  assert_success
+
+  run grep -q 'reset_selection=reset_cmd_table_selection' "${ui_file}"
+  assert_success
+
+  run grep -q 'reset_selection=reset_alias_table_selection' "${ui_file}"
+  assert_success
+
   run grep -q 'reset_selection=reset_ai_model_table_selection' "${ui_file}"
   assert_success
 
@@ -1262,7 +1271,13 @@ from pathlib import Path
 
 tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
 functions = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
-for function_name in ("apply_selected_env_editor_value", "apply_selected_path_editor_value"):
+for function_name in (
+    "apply_selected_env_editor_value",
+    "apply_selected_path_editor_value",
+    "apply_selected_dir_editor_value",
+    "apply_selected_cmd_editor_value",
+    "apply_selected_alias_editor_value",
+):
     function = functions[function_name]
     reset_calls = [
         node.func.id
@@ -1282,20 +1297,56 @@ PY
   run grep -q 'div\[class\*="st-key-env_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
   assert_success
 
+  run grep -q 'div\[class\*="st-key-path_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="st-key-dir_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="st-key-cmd_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="st-key-alias_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
+  assert_success
+
   run grep -q 'div\[class\*="st-key-ai_delete_model_button_"\]\[class\*="_selected"\] button' "${css_file}"
   assert_success
 
   run grep -q 'width: 2rem' "${css_file}"
   assert_success
 
-  run grep -q '.st-key-env_add_button button' "${css_file}"
+  run grep -q '.st-key-env_add_submit' "${css_file}"
   assert_success
 
-  run grep -q '.st-key-env_add_button' "${css_file}"
+  run grep -q '.st-key-path_add_submit' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-path_folder_picker_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-dir_add_submit' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-dir_folder_picker_button button' "${css_file}"
   assert_success
 
   run grep -q 'margin-top: 1.55rem' "${css_file}"
   assert_success
+
+  run grep -q '\[1.25, 4.05, 0.012, 0.15\], vertical_alignment="center"' "${ui_file}"
+  assert_success
+
+  run grep -q '.st-key-cmd_add_submit' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-alias_add_submit' "${css_file}"
+  assert_success
+
+  run grep -q 'display: none' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-env_add_button' "${css_file}"
+  assert_failure
 
   run grep -q 'color: var(--hhs-danger) !important' "${css_file}"
   assert_success
@@ -1955,19 +2006,28 @@ PY
   run grep -q 'push_floating_status("AI chat history cleared.", "info")' "${ui_file}"
   assert_success
 
-  run grep -q 'push_floating_status(f"Selected AI model: {new_model}", "info")' "${ui_file}"
+  run grep -q 'status_message or f"Selected AI model: {new_model}"' "${ui_file}"
   assert_success
 
-  run grep -q 'push_floating_status(f"Deleted AI model: {model_name}", "info")' "${ui_file}"
+  run grep -q 'status_message or f"Deleted AI model: {model_name}"' "${ui_file}"
   assert_success
 
   run grep -q 'push_floating_status(f"Loaded TLDR: {tool_name}", "info")' "${ui_file}"
   assert_success
 
-  run grep -q 'push_floating_status(f"Killed process: {process_name}", "info")' "${ui_file}"
+  run grep -q 'status_message or f"Killed process: {process_name}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'status_message or f"Service {operation} completed: {service_name}"' "${ui_file}"
   assert_success
 
   run grep -q 'kind_aliases = {"success": "info", "warning": "warn"}' "${ui_file}"
+  assert_success
+
+  run grep -q 'def clean_command_status_message' "${ui_file}"
+  assert_success
+
+  run grep -q 'clean_message = clean_command_status_message(str(message))' "${ui_file}"
   assert_success
 
   run grep -q 'clean_kind not in {"info", "warn", "error"}' "${ui_file}"
@@ -2067,6 +2127,12 @@ PY
 # TC - 12
 @test "when confirming actions then reusable pop_dialog component should be used" {
   run grep -q 'def pop_dialog(' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_folder_picker_dialog' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_folder_picker_dialog()' "${ui_file}"
   assert_success
 
   run grep -q 'def queue_dialog_callback' "${ui_file}"
@@ -2451,7 +2517,61 @@ PY
   run grep -q 'def run_hhs_env_action' "${ui_file}"
   assert_success
 
+  run grep -q 'def build_hhs_path_action_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_path_action' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_dir_action_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_dir_action' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_command_action_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_command_action' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_alias_action_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_alias_action' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"__hhs_paths {action_args}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'action_args = f"-a {safe_path}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'action_args = f"-r {safe_path}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"__hhs_save_dir {action_args}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"__hhs_command {action_args}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"__hhs_aliases {action_args}"' "${ui_file}"
+  assert_success
+
   run grep -q -- "-a {shlex.quote(f'{name}={value}')}" "${ui_file}"
+  assert_success
+
+  run grep -q 'safe_path = shlex.quote(path_value)' "${ui_file}"
+  assert_success
+
+  run grep -q 'action_args = f"{shlex.quote(value)} {safe_name}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'action_args = f"-a {safe_name} {shlex.quote(value)}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"-r {safe_name}" if operation == "del" else f"{safe_name} {shlex.quote(value)}"' "${ui_file}"
   assert_success
 
   run grep -q 'apply_selected_env_value(name, str(st.session_state.get(editor_key, "")))' "${ui_file}"
@@ -2460,26 +2580,149 @@ PY
   run grep -q -- '--del {safe_name}' "${ui_file}"
   assert_success
 
-  run grep -q 'on_click=apply_env_add_form_value' "${ui_file}"
+  run grep -q 'apply_env_add_form_value' "${ui_file}"
   assert_success
 
-  run grep -q 'placeholder="Custom Variable"' "${ui_file}"
+  run grep -q 'with st.form(f"{key_prefix}_add_form", border=False)' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.form_submit_button(' "${ui_file}"
+  assert_success
+
+  run grep -q 'key=f"{key_prefix}_add_submit"' "${ui_file}"
+  assert_success
+
+  run grep -q 'env_add_button' "${ui_file}"
+  assert_failure
+
+  run grep -q '"Custom Variable"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_path_add_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_dir_add_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'def request_folder_picker' "${ui_file}"
+  assert_success
+
+  run grep -q 'def apply_folder_picker_selection' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["_hhs_folder_picker_selected_dir"\] = child_directories\[0\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.container(key="folder_picker_action_grid")' "${ui_file}"
+  assert_success
+
+  run grep -q '""' "${ui_file}"
+  assert_success
+
+  run grep -q '""' "${ui_file}"
+  assert_success
+
+  run grep -q '""' "${ui_file}"
+  assert_success
+
+  run grep -q '"ﰸ"' "${ui_file}"
+  assert_success
+
+  run grep -q '" Parent"' "${ui_file}"
+  assert_failure
+
+  run grep -q '"label": " Select"' "${ui_file}"
+  assert_failure
+
+  run grep -q 'buttons=()' "${ui_file}"
+  assert_success
+
+  run grep -q '.st-key-folder_picker_select_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-folder_picker_action_grid,' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-folder_picker_action_grid \[data-testid="stVerticalBlock"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'grid-auto-flow: column' "${css_file}"
+  assert_success
+
+  run grep -q 'grid-template-columns: repeat(4, 2rem)' "${css_file}"
+  assert_success
+
+  run grep -q 'min-width: 2rem' "${css_file}"
+  assert_success
+
+  run grep -q 'justify-content: center' "${css_file}"
+  assert_success
+
+  run grep -q '"Include .dot-folders"' "${ui_file}"
+  assert_success
+
+  run grep -q '_hhs_folder_picker_include_dot_folders' "${ui_file}"
+  assert_success
+
+  run grep -q 'include_dot_folders or not path.name.startswith(".")' "${ui_file}"
+  assert_success
+
+  run grep -q '_hhs_folder_picker_on_select' "${ui_file}"
+  assert_failure
+
+  run grep -q 'key=f"{key_prefix}_folder_picker_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'name_col, value_col, _spacer_col, folder_col = st.columns(' "${ui_file}"
+  assert_success
+
+  run grep -q '\[1.25, 4.05, 0.012, 0.15\], vertical_alignment="center"' "${ui_file}"
+  assert_success
+
+  run grep -q 'value_group_col.columns(' "${ui_file}"
+  assert_failure
+
+  run grep -q '\[1, 0.012, 0.035\], vertical_alignment="center"' "${ui_file}"
+  assert_failure
+
+  run grep -q 'value_group_col = st.columns' "${ui_file}"
+  assert_failure
+
+  run grep -q 'args=(f"{key_prefix}_add_value", value_placeholder)' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_cmd_add_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_alias_add_controls' "${ui_file}"
   assert_success
 
   run grep -q 'render_table_controls_panel(render_env_controls)' "${ui_file}"
   assert_success
 
+  run grep -q 'render_table_controls_panel(render_path_controls)' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_table_controls_panel(render_dir_controls)' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_table_controls_panel(render_cmd_controls)' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_table_controls_panel(render_alias_controls)' "${ui_file}"
+  assert_success
+
   run grep -q 'render_table_filter_controls' "${ui_file}"
   assert_success
 
-  run grep -q 'status_message = strip_ansi(result.stdout or result.stderr or "").strip()' "${ui_file}"
+  run grep -q 'status_message = clean_command_status_message(' "${ui_file}"
   assert_success
 
   run grep -q 'env_action_message' "${ui_file}"
   assert_failure
 
   run grep -q '""' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'on_click": apply_env_delete' "${ui_file}"
   assert_success
@@ -2488,6 +2731,15 @@ PY
   assert_success
 
   run grep -q 'def render_path_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_dir_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_cmd_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_alias_rows' "${ui_file}"
   assert_success
 
   run grep -q 'def render_dirs_table' "${ui_file}"
@@ -2508,6 +2760,30 @@ PY
   run grep -q 'selected_edit_key=lambda _row, index: path_value_editor_key(index)' "${ui_file}"
   assert_success
 
+  run grep -q 'selected_edit_key=lambda _row, index: dir_value_editor_key(index)' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_edit_folder_picker=True' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_edit_key=lambda _row, index: cmd_value_editor_key(index)' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_edit_key=lambda _row, index: alias_value_editor_key(index)' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click": apply_path_delete' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click": apply_dir_delete' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click": apply_cmd_delete' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click": apply_alias_delete' "${ui_file}"
+  assert_success
+
   run grep -q 'selected_value: Callable\[\[dict\[str, str\], int\], str\] | None = None' "${ui_file}"
   assert_success
 
@@ -2520,6 +2796,71 @@ from pathlib import Path
 
 tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
 functions = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+required_refresh_calls = {
+    "execute_pending_ai_model_selection": "refresh_ai_model_listing",
+    "execute_pending_ai_model_deletion": "refresh_ai_model_listing",
+    "apply_selected_env_value": "refresh_env_listing",
+    "apply_env_delete": "refresh_env_listing",
+    "apply_selected_path_value": "refresh_path_listing",
+    "apply_path_delete": "refresh_path_listing",
+    "apply_selected_dir_value": "refresh_dir_listing",
+    "apply_dir_delete": "refresh_dir_listing",
+    "apply_selected_cmd_value": "refresh_cmd_listing",
+    "apply_cmd_delete": "refresh_cmd_listing",
+    "apply_selected_alias_value": "refresh_alias_listing",
+    "apply_alias_delete": "refresh_alias_listing",
+    "execute_pending_home_tool_action": "refresh_home_tools_listing",
+    "apply_selected_service_action": "refresh_service_listing",
+    "apply_selected_process_kill": "refresh_process_listing",
+}
+for function_name, refresh_name in required_refresh_calls.items():
+    function = functions[function_name]
+    if not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == refresh_name
+        for node in ast.walk(function)
+    ):
+        raise SystemExit(f"{function_name} should call {refresh_name}")
+
+required_add_success_clears = {
+    "apply_env_add_form_value": ("apply_selected_env_value", "clear_add_form_fields"),
+    "apply_path_add_form_value": ("apply_selected_path_value", "clear_add_form_fields"),
+    "apply_dir_add_form_value": ("apply_selected_dir_value", "clear_add_form_fields"),
+    "apply_cmd_add_form_value": ("apply_selected_cmd_value", "clear_add_form_fields"),
+    "apply_alias_add_form_value": ("apply_selected_alias_value", "clear_add_form_fields"),
+}
+for function_name, (apply_name, clear_name) in required_add_success_clears.items():
+    function = functions[function_name]
+    if not any(
+        isinstance(node, ast.If)
+        and isinstance(node.test, ast.Call)
+        and isinstance(node.test.func, ast.Name)
+        and node.test.func.id == apply_name
+        and any(
+            isinstance(body_node, ast.Call)
+            and isinstance(body_node.func, ast.Name)
+            and body_node.func.id == clear_name
+            for body_node in ast.walk(ast.Module(body=node.body, type_ignores=[]))
+        )
+        for node in ast.walk(function)
+    ):
+        raise SystemExit(f"{function_name} should clear fields after {apply_name} succeeds")
+
+required_delete_command_fragments = {
+    "build_hhs_env_action_command": "--del {safe_name}",
+    "build_hhs_path_action_command": "-r {safe_path}",
+    "build_hhs_dir_action_command": "-r {safe_name}",
+    "build_hhs_command_action_command": "-r {safe_name}",
+    "build_hhs_alias_action_command": "-r {safe_name}",
+}
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+for function_name, expected_fragment in required_delete_command_fragments.items():
+    function = functions[function_name]
+    lines = source.splitlines()[function.lineno - 1:function.end_lineno]
+    if expected_fragment not in "\n".join(lines):
+        raise SystemExit(f"{function_name} should use delete flag fragment: {expected_fragment}")
+
 read_only = functions["render_read_only_rows"]
 if any(
     isinstance(node, ast.Call)

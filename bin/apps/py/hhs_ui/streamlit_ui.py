@@ -377,7 +377,9 @@ def refresh_ai_context() -> None:
         clean_output or "No Ollama context available."
     )
     st.session_state["ai_context_error"] = (
-        "" if result.returncode == 0 else clean_output or "Unable to load Ollama context."
+        ""
+        if result.returncode == 0
+        else clean_output or "Unable to load Ollama context."
     )
     save_ui_state()
 
@@ -461,9 +463,12 @@ def execute_pending_ai_model_selection() -> None:
             "Downloading model..." if not model_status else "Selecting Ollama model..."
         )
         result = run_hhs_ask_select_model(new_model, loader_message, close_dialogs=True)
+        status_message = clean_command_status_message(
+            result.stdout or result.stderr or ""
+        )
         if result.returncode != 0:
             st.session_state["ai_model_select_error"] = strip_ansi(
-                result.stderr or result.stdout or "Unable to select model."
+                status_message or "Unable to select model."
             )
             push_floating_status(
                 st.session_state["ai_model_select_error"],
@@ -472,8 +477,11 @@ def execute_pending_ai_model_selection() -> None:
         else:
             st.session_state["ai_model_select_error"] = ""
             cache_clear()
+            refresh_ai_model_listing()
             reset_ai_model_table_selection()
-            push_floating_status(f"Selected AI model: {new_model}", "info")
+            push_floating_status(
+                status_message or f"Selected AI model: {new_model}", "info"
+            )
     st.session_state["ai_model_select_execute_pending"] = None
     save_ui_state()
 
@@ -509,9 +517,12 @@ def execute_pending_ai_model_deletion() -> None:
     model_status = str(pending.get("status", "")).strip()
     if model_name:
         result = run_ollama_delete_model(model_name, close_dialogs=True)
+        status_message = clean_command_status_message(
+            result.stdout or result.stderr or ""
+        )
         if result.returncode != 0:
             st.session_state["ai_model_delete_error"] = strip_ansi(
-                result.stderr or result.stdout or "Unable to delete model."
+                status_message or "Unable to delete model."
             )
             push_floating_status(
                 st.session_state["ai_model_delete_error"],
@@ -520,28 +531,35 @@ def execute_pending_ai_model_deletion() -> None:
         else:
             st.session_state["ai_model_delete_error"] = ""
             cache_clear()
-            push_floating_status(f"Deleted AI model: {model_name}", "info")
+            model_result = refresh_ai_model_listing()
+            push_floating_status(
+                status_message or f"Deleted AI model: {model_name}", "info"
+            )
             if model_status == "Active":
                 fallback_model = first_downloaded_ollama_model(
-                    run_hhs_ask_models().stdout, excluded_model=model_name
+                    model_result.stdout, excluded_model=model_name
                 )
                 if fallback_model:
                     fallback_result = run_hhs_ask_select_model(
                         fallback_model, close_dialogs=True
                     )
+                    fallback_status = strip_ansi(
+                        fallback_result.stdout or fallback_result.stderr or ""
+                    ).strip()
                     if fallback_result.returncode != 0:
                         st.session_state["ai_model_delete_error"] = strip_ansi(
-                            fallback_result.stderr
-                            or fallback_result.stdout
-                            or "Unable to select fallback model."
+                            fallback_status or "Unable to select fallback model."
                         )
                         push_floating_status(
                             st.session_state["ai_model_delete_error"],
                             "error",
                         )
                     else:
+                        cache_clear()
+                        refresh_ai_model_listing()
                         push_floating_status(
-                            f"Selected fallback AI model: {fallback_model}",
+                            fallback_status
+                            or f"Selected fallback AI model: {fallback_model}",
                             "info",
                         )
             reset_ai_model_table_selection()
@@ -934,6 +952,194 @@ def pop_dialog(
     return True
 
 
+def folder_picker_start_directory(value: str = "") -> str:
+    """Return the best existing directory to open in the folder picker."""
+    raw_value = str(value or "").strip() or os.getcwd()
+    expanded_value = os.path.expandvars(os.path.expanduser(raw_value))
+    candidate = Path(expanded_value)
+    if candidate.is_file():
+        candidate = candidate.parent
+    if not candidate.is_dir():
+        candidate = Path.home()
+    return str(candidate.resolve())
+
+
+def folder_picker_child_directories(
+    directory: str, include_dot_folders: bool = False
+) -> list[str]:
+    """Return readable child directories for the folder picker."""
+    current_directory = Path(folder_picker_start_directory(directory))
+    try:
+        return [
+            str(path.resolve())
+            for path in sorted(
+                current_directory.iterdir(),
+                key=lambda item: (not item.is_dir(), item.name.lower()),
+            )
+            if path.is_dir() and (include_dot_folders or not path.name.startswith("."))
+        ]
+    except OSError:
+        return []
+
+
+def folder_picker_label(directory: str) -> str:
+    """Return the display label for a folder picker option."""
+    path = Path(directory)
+    return path.name or str(path)
+
+
+def request_folder_picker(
+    target_key: str,
+    fallback_value: str = "",
+) -> None:
+    """Open the folder picker for a Streamlit input key."""
+    current_value = str(st.session_state.get(target_key, "") or fallback_value)
+    start_directory = folder_picker_start_directory(current_value)
+    st.session_state["_hhs_folder_picker_open"] = True
+    st.session_state["_hhs_folder_picker_target_key"] = target_key
+    st.session_state["_hhs_folder_picker_current_dir"] = start_directory
+    st.session_state["_hhs_folder_picker_current_dir_input"] = start_directory
+    st.session_state.setdefault("_hhs_folder_picker_include_dot_folders", False)
+    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+
+
+def close_folder_picker() -> None:
+    """Close the folder picker dialog and clear transient selection state."""
+    st.session_state["_hhs_folder_picker_open"] = False
+    st.session_state.pop("_hhs_folder_picker_target_key", None)
+    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+
+
+def set_folder_picker_current_directory(directory: str) -> None:
+    """Set the folder picker current directory."""
+    selected_directory = folder_picker_start_directory(directory)
+    st.session_state["_hhs_folder_picker_current_dir"] = selected_directory
+    st.session_state["_hhs_folder_picker_current_dir_input"] = selected_directory
+    include_dot_folders = bool(
+        st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
+    )
+    child_directories = folder_picker_child_directories(
+        selected_directory, include_dot_folders
+    )
+    if child_directories:
+        st.session_state["_hhs_folder_picker_selected_dir"] = child_directories[0]
+    else:
+        st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+
+
+def apply_folder_picker_typed_directory() -> None:
+    """Apply the manually typed folder picker directory."""
+    set_folder_picker_current_directory(
+        str(st.session_state.get("_hhs_folder_picker_current_dir_input", ""))
+    )
+
+
+def open_folder_picker_parent() -> None:
+    """Move the folder picker to the parent directory."""
+    current_directory = Path(
+        folder_picker_start_directory(
+            str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
+        )
+    )
+    set_folder_picker_current_directory(str(current_directory.parent))
+
+
+def open_folder_picker_selected_directory() -> None:
+    """Move the folder picker into the selected child directory."""
+    selected_directory = str(
+        st.session_state.get("_hhs_folder_picker_selected_dir", "")
+    )
+    if selected_directory:
+        set_folder_picker_current_directory(selected_directory)
+
+
+def apply_folder_picker_selection() -> None:
+    """Assign the selected folder to the target Streamlit input key."""
+    target_key = str(st.session_state.get("_hhs_folder_picker_target_key", ""))
+    if target_key:
+        st.session_state[target_key] = folder_picker_start_directory(
+            str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
+        )
+    close_folder_picker()
+
+
+def render_folder_picker_dialog() -> bool:
+    """Render the visual folder picker dialog when requested."""
+    if not st.session_state.get("_hhs_folder_picker_open"):
+        return False
+
+    def render_body() -> None:
+        """Render the visual folder picker controls."""
+        current_directory = folder_picker_start_directory(
+            str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
+        )
+        st.text_input(
+            "Folder",
+            key="_hhs_folder_picker_current_dir_input",
+            on_change=apply_folder_picker_typed_directory,
+        )
+        include_dot_folders = bool(
+            st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
+        )
+        child_directories = folder_picker_child_directories(
+            current_directory, include_dot_folders
+        )
+        selected_directory = st.session_state.get("_hhs_folder_picker_selected_dir")
+        if selected_directory not in child_directories:
+            st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+        if child_directories:
+            st.selectbox(
+                "Folders",
+                child_directories,
+                key="_hhs_folder_picker_selected_dir",
+                format_func=folder_picker_label,
+            )
+        else:
+            st.caption("No child folders.")
+        st.checkbox(
+            "Include .dot-folders",
+            key="_hhs_folder_picker_include_dot_folders",
+            value=False,
+        )
+        with st.container(key="folder_picker_action_grid"):
+            st.button(
+                "",
+                key="folder_picker_parent_button",
+                help="Parent",
+                on_click=open_folder_picker_parent,
+                width="stretch",
+            )
+            st.button(
+                "",
+                key="folder_picker_open_button",
+                help="Open",
+                disabled=not bool(child_directories),
+                on_click=open_folder_picker_selected_directory,
+                width="stretch",
+            )
+            st.button(
+                "",
+                key="folder_picker_select_button",
+                help="Select",
+                on_click=apply_folder_picker_selection,
+                width="stretch",
+            )
+            st.button(
+                "ﰸ",
+                key="folder_picker_cancel_button",
+                help="Cancel",
+                on_click=close_folder_picker,
+                width="stretch",
+            )
+
+    return pop_dialog(
+        title="Select folder",
+        body=render_body,
+        buttons=(),
+        close_callback=close_folder_picker,
+    )
+
+
 def homesetup_version() -> str:
     """Return the HomeSetup product version from the shell environment."""
     return os.environ.get("HHS_VERSION", "unknown")
@@ -1127,7 +1333,7 @@ def push_floating_status(
     message: str, kind: str = "info", timeout_seconds: float = 4.0
 ) -> None:
     """Store a compact floating status message for the next render."""
-    clean_message = strip_ansi(str(message)).strip()
+    clean_message = clean_command_status_message(str(message))
     if not clean_message:
         return
     kind_aliases = {"success": "info", "warning": "warn"}
@@ -1219,8 +1425,7 @@ def render_footer() -> None:
     logo_data_uri = load_app_image_data_uri(
         hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"
     )
-    st.html(
-        f"""
+    st.html(f"""
         <footer class="hhs-app-footer">
           <a class="hhs-footer-logo-link" href="{repository_url}" target="_blank" rel="noopener noreferrer" aria-label="HomeSetup repository">
             <img class="hhs-footer-logo" src="{logo_data_uri}" alt="" aria-hidden="true">
@@ -1234,8 +1439,7 @@ def render_footer() -> None:
           <a class="hhs-footer-link hhs-footer-working-dir-link" href="{working_dir_url}" target="_self">Working dir: <span class="hhs-footer-working-dir-value">{working_dir}</span></a>
           {status_group_markup}
         </footer>
-        """
-    )
+        """)
 
 
 def query_param_requested(name: str) -> bool:
@@ -1287,7 +1491,7 @@ def render_home_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2> Informational</h2>
+          <h2> System</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -1413,9 +1617,9 @@ def table_editable_flag(
 
 
 def table_edit_args(
-    edit_args: Callable[[dict[str, str], int], tuple[object, ...]]
-    | tuple[object, ...]
-    | None,
+    edit_args: (
+        Callable[[dict[str, str], int], tuple[object, ...]] | tuple[object, ...] | None
+    ),
     row: dict[str, str],
     row_index: int,
 ) -> tuple[object, ...]:
@@ -1462,6 +1666,7 @@ def render_selected_table_item(
     edit_max_chars: int | None = None,
     edit_on_change: Callable[..., None] | None = None,
     edit_args: tuple[object, ...] = (),
+    edit_folder_picker: bool = False,
     reset_selection: Callable[[], None] | None = None,
     selected_actions: list[dict[str, object]] | None = None,
 ) -> None:
@@ -1471,7 +1676,8 @@ def render_selected_table_item(
     if editable and edit_key is not None:
         st.session_state.setdefault(edit_key, edit_value)
     visible_actions = selected_actions or []
-    action_weights = [0.035] * (1 + len(visible_actions))
+    edit_action_count = 1 + len(visible_actions) + int(edit_folder_picker)
+    action_weights = [0.035] * edit_action_count
 
     if is_editing and edit_key is not None:
         columns = st.columns(
@@ -1489,7 +1695,19 @@ def render_selected_table_item(
                 placeholder=edit_label,
                 args=edit_args,
             )
-        with columns[1]:
+        action_start_index = 1
+        if edit_folder_picker:
+            with columns[action_start_index]:
+                st.button(
+                    "",
+                    key=f"{editing_key}_folder_picker_button",
+                    help="Select folder",
+                    on_click=request_folder_picker,
+                    args=(edit_key, edit_value),
+                    width="stretch",
+                )
+            action_start_index += 1
+        with columns[action_start_index]:
             st.button(
                 "ﰸ",
                 key=f"{editing_key}_cancel_button",
@@ -1498,7 +1716,9 @@ def render_selected_table_item(
                 args=(editing_key, edit_key, reset_selection),
                 width="stretch",
             )
-        render_selected_table_actions(visible_actions, columns[2:], selected_index)
+        render_selected_table_actions(
+            visible_actions, columns[action_start_index + 1 :], selected_index
+        )
         return
 
     if editable:
@@ -1649,9 +1869,10 @@ def render_table(
     selected_edit_height: int = hhs_ui.ENV_VALUE_EDITOR_HEIGHT,
     selected_edit_max_chars: int | None = None,
     selected_edit_on_change: Callable[..., None] | None = None,
-    selected_edit_args: Callable[[dict[str, str], int], tuple[object, ...]]
-    | tuple[object, ...]
-    | None = None,
+    selected_edit_args: (
+        Callable[[dict[str, str], int], tuple[object, ...]] | tuple[object, ...] | None
+    ) = None,
+    selected_edit_folder_picker: bool = False,
     reset_selection: Callable[[], None] | None = None,
     selected_action_buttons: list[dict[str, object]] | None = None,
     action_buttons: list[dict[str, object]] | None = None,
@@ -1709,9 +1930,7 @@ def render_table(
             selected_item_value,
             selected_index,
             key,
-            table_editable_flag(
-                selected_editable, selected_row, selected_index
-            ),
+            table_editable_flag(selected_editable, selected_row, selected_index),
             edit_key=(
                 table_edit_key(selected_edit_key, selected_row, selected_index)
                 if selected_edit_key is not None
@@ -1724,9 +1943,8 @@ def render_table(
             edit_height=selected_edit_height,
             edit_max_chars=selected_edit_max_chars,
             edit_on_change=selected_edit_on_change,
-            edit_args=table_edit_args(
-                selected_edit_args, selected_row, selected_index
-            ),
+            edit_args=table_edit_args(selected_edit_args, selected_row, selected_index),
+            edit_folder_picker=selected_edit_folder_picker,
             reset_selection=reset_selection,
             selected_actions=visible_selected_actions,
         )
@@ -1890,33 +2108,146 @@ def render_table_filter_controls(
 
 def render_env_add_controls() -> None:
     """Render the environment variable new-entry controls."""
-    name_col, value_col, action_col = st.columns(
-        [1.25, 4.0, 0.2], vertical_alignment="center"
+    render_named_value_add_controls(
+        "env",
+        "Name",
+        "Value",
+        "Custom Variable",
+        "Optional value",
+        apply_env_add_form_value,
     )
-    with name_col:
-        st.text_input(
-            "Name",
-            key="env_add_name",
-            on_change=save_ui_state,
-            placeholder="Custom Variable",
+
+
+def render_named_value_add_controls(
+    key_prefix: str,
+    name_label: str,
+    value_label: str,
+    name_placeholder: str,
+    value_placeholder: str,
+    on_submit: Callable[[], None],
+    value_folder_picker: bool = False,
+) -> None:
+    """Render Enter-submitted Name and Value controls for a config listing."""
+    with st.form(f"{key_prefix}_add_form", border=False):
+        if value_folder_picker:
+            name_col, value_col, _spacer_col, folder_col = st.columns(
+                [1.25, 4.05, 0.012, 0.15], vertical_alignment="center"
+            )
+        else:
+            name_col, value_col = st.columns([1.25, 4.2], vertical_alignment="center")
+            folder_col = None
+        with name_col:
+            st.text_input(
+                name_label,
+                key=f"{key_prefix}_add_name",
+                placeholder=name_placeholder,
+            )
+        with value_col:
+            st.text_input(
+                value_label,
+                key=f"{key_prefix}_add_value",
+                placeholder=value_placeholder,
+            )
+        if folder_col is not None:
+            with folder_col:
+                st.form_submit_button(
+                    "",
+                    key=f"{key_prefix}_folder_picker_button",
+                    help="Select folder",
+                    on_click=request_folder_picker,
+                    args=(f"{key_prefix}_add_value", value_placeholder),
+                    width="stretch",
+                )
+        st.form_submit_button(
+            "Add",
+            key=f"{key_prefix}_add_submit",
+            on_click=on_submit,
         )
-    with value_col:
-        st.text_input(
-            "Value",
-            key="env_add_value",
-            on_change=save_ui_state,
-            placeholder="Optional value",
+
+
+def render_value_add_controls(
+    key_prefix: str,
+    value_label: str,
+    value_placeholder: str,
+    on_submit: Callable[[], None],
+    value_folder_picker: bool = False,
+) -> None:
+    """Render an Enter-submitted Value control for a config listing."""
+    with st.form(f"{key_prefix}_add_form", border=False):
+        if value_folder_picker:
+            value_col, folder_col = st.columns([1, 0.035], vertical_alignment="center")
+        else:
+            value_col = st.container()
+            folder_col = None
+        with value_col:
+            st.text_input(
+                value_label,
+                key=f"{key_prefix}_add_value",
+                placeholder=value_placeholder,
+            )
+        if folder_col is not None:
+            with folder_col:
+                st.form_submit_button(
+                    "",
+                    key=f"{key_prefix}_folder_picker_button",
+                    help="Select folder",
+                    on_click=request_folder_picker,
+                    args=(f"{key_prefix}_add_value", value_placeholder),
+                    width="stretch",
+                )
+        st.form_submit_button(
+            "Add",
+            key=f"{key_prefix}_add_submit",
+            on_click=on_submit,
         )
-    env_add_name = str(st.session_state.get("env_add_name", "")).strip()
-    with action_col:
-        st.button(
-            "",
-            key="env_add_button",
-            disabled=not env_add_name,
-            help="Add",
-            on_click=apply_env_add_form_value,
-            width="stretch",
-        )
+
+
+def render_path_add_controls() -> None:
+    """Render the PATH new-entry controls."""
+    render_value_add_controls(
+        "path",
+        "Path",
+        "Custom path",
+        apply_path_add_form_value,
+        value_folder_picker=True,
+    )
+
+
+def render_dir_add_controls() -> None:
+    """Render the saved directory new-entry controls."""
+    render_named_value_add_controls(
+        "dir",
+        "Name",
+        "Path",
+        "Directory alias",
+        "Directory path",
+        apply_dir_add_form_value,
+        value_folder_picker=True,
+    )
+
+
+def render_cmd_add_controls() -> None:
+    """Render the saved command new-entry controls."""
+    render_named_value_add_controls(
+        "cmd",
+        "Name",
+        "Command",
+        "Command alias",
+        "Command value",
+        apply_cmd_add_form_value,
+    )
+
+
+def render_alias_add_controls() -> None:
+    """Render the alias new-entry controls."""
+    render_named_value_add_controls(
+        "alias",
+        "Name",
+        "Expression",
+        "Alias",
+        "Alias expression",
+        apply_alias_add_form_value,
+    )
 
 
 def render_home_tools_panel() -> None:
@@ -2013,6 +2344,15 @@ def strip_ansi(value: str) -> str:
     )
 
 
+def clean_command_status_message(value: str) -> str:
+    """Return command output suitable for compact UI status messages."""
+    clean_value = strip_ansi(value).strip()
+    clean_value = re.sub(r"^\s*[✘✖✗×]\s*", "", clean_value)
+    clean_value = re.sub(r"^\s*Fatal:\s*", "", clean_value)
+    clean_value = re.sub(r"^\s*__[A-Za-z0-9_]+\s*", "", clean_value)
+    return clean_value.strip()
+
+
 def updater_output_has_updates(output: str) -> bool:
     """Return whether updater command output reports available updates."""
     clean_output = strip_ansi(output).lower()
@@ -2060,7 +2400,9 @@ def store_updater_check_result(result: subprocess.CompletedProcess[str]) -> None
     if result.returncode == 0:
         st.session_state["updater_last_check_epoch"] = time.time()
         st.session_state["updater_last_check_output"] = output
-        st.session_state["updater_update_available"] = updater_output_has_updates(output)
+        st.session_state["updater_update_available"] = updater_output_has_updates(
+            output
+        )
         save_ui_state()
         return
     push_floating_status(output or "Unable to check HomeSetup updates.", "warn")
@@ -3222,9 +3564,7 @@ def build_hhs_envs_command(prefix_filter: str | None) -> str:
     )
 
 
-def build_hhs_env_action_command(
-    operation: str, name: str, value: str = ""
-) -> str:
+def build_hhs_env_action_command(operation: str, name: str, value: str = "") -> str:
     """Build the Bash command used to add, edit, or delete a custom environment value."""
     safe_operation = "del" if operation == "del" else "add"
     safe_name = shlex.quote(name)
@@ -3558,6 +3898,26 @@ def build_hhs_paths_command() -> str:
     )
 
 
+def build_hhs_path_action_command(
+    operation: str, path_value: str, old_path_value: str = ""
+) -> str:
+    """Build the Bash command used to add, edit, or delete a persistent PATH value."""
+    safe_path = shlex.quote(path_value)
+    if operation == "del":
+        action_args = f"-r {safe_path}"
+    elif operation == "edit" and old_path_value and old_path_value != path_value:
+        safe_old_path = shlex.quote(old_path_value)
+        action_args = f"-r {safe_old_path}; __hhs_paths -a {safe_path}"
+    else:
+        action_args = f"-a {safe_path}"
+    return (
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-paths.bash"; '
+        f"__hhs_paths {action_args}"
+    )
+
+
 def build_hhs_dirs_command() -> str:
     """Build the Bash command used to run the __hhs_load_dir HomeSetup function."""
     return (
@@ -3565,6 +3925,21 @@ def build_hhs_dirs_command() -> str:
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-dirs.bash"; '
         "__hhs_load_dir -l"
+    )
+
+
+def build_hhs_dir_action_command(operation: str, name: str, value: str = "") -> str:
+    """Build the Bash command used to add, edit, or delete a saved directory."""
+    safe_name = shlex.quote(name)
+    if operation == "del":
+        action_args = f"-r {safe_name}"
+    else:
+        action_args = f"{shlex.quote(value)} {safe_name}"
+    return (
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-dirs.bash"; '
+        f"__hhs_save_dir {action_args}"
     )
 
 
@@ -3578,6 +3953,21 @@ def build_hhs_commands_command() -> str:
     )
 
 
+def build_hhs_command_action_command(operation: str, name: str, value: str = "") -> str:
+    """Build the Bash command used to add, edit, or delete a saved command."""
+    safe_name = shlex.quote(name)
+    if operation == "del":
+        action_args = f"-r {safe_name}"
+    else:
+        action_args = f"-a {safe_name} {shlex.quote(value)}"
+    return (
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-command.bash"; '
+        f"__hhs_command {action_args}"
+    )
+
+
 def build_hhs_aliases_command() -> str:
     """Build the Bash command used to run the __hhs_aliases HomeSetup function."""
     return (
@@ -3585,6 +3975,20 @@ def build_hhs_aliases_command() -> str:
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-aliases.bash"; '
         "__hhs_aliases -l"
+    )
+
+
+def build_hhs_alias_action_command(operation: str, name: str, value: str = "") -> str:
+    """Build the Bash command used to add, edit, or delete a custom alias."""
+    safe_name = shlex.quote(name)
+    action_args = (
+        f"-r {safe_name}" if operation == "del" else f"{safe_name} {shlex.quote(value)}"
+    )
+    return (
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-aliases.bash"; '
+        f"__hhs_aliases {action_args}"
     )
 
 
@@ -3828,11 +4232,35 @@ def run_hhs_paths() -> subprocess.CompletedProcess[str]:
     )
 
 
+def run_hhs_path_action(
+    operation: str, path_value: str, old_path_value: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run a persistent PATH entry action."""
+    return run_bash_command(
+        build_hhs_path_action_command(operation, path_value, old_path_value),
+        "Updating PATH entries...",
+        ttl_seconds=0,
+        use_cache=False,
+    )
+
+
 def run_hhs_dirs() -> subprocess.CompletedProcess[str]:
     """Run the __hhs_load_dir HomeSetup function and return the completed process."""
     return run_bash_command(
         build_hhs_dirs_command(),
         "Loading saved directories...",
+    )
+
+
+def run_hhs_dir_action(
+    operation: str, name: str, value: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run a persistent saved directory action."""
+    return run_bash_command(
+        build_hhs_dir_action_command(operation, name, value),
+        "Updating saved directories...",
+        ttl_seconds=0,
+        use_cache=False,
     )
 
 
@@ -3844,11 +4272,35 @@ def run_hhs_commands() -> subprocess.CompletedProcess[str]:
     )
 
 
+def run_hhs_command_action(
+    operation: str, name: str, value: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run a persistent saved command action."""
+    return run_bash_command(
+        build_hhs_command_action_command(operation, name, value),
+        "Updating saved commands...",
+        ttl_seconds=0,
+        use_cache=False,
+    )
+
+
 def run_hhs_aliases() -> subprocess.CompletedProcess[str]:
     """Run the __hhs_aliases HomeSetup function and return the completed process."""
     return run_bash_command(
         build_hhs_aliases_command(),
         "Loading custom aliases...",
+    )
+
+
+def run_hhs_alias_action(
+    operation: str, name: str, value: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run a persistent custom alias action."""
+    return run_bash_command(
+        build_hhs_alias_action_command(operation, name, value),
+        "Updating custom aliases...",
+        ttl_seconds=0,
+        use_cache=False,
     )
 
 
@@ -3889,6 +4341,54 @@ def env_filter_pattern(env_filter: str, other_filter: str = "") -> str | None:
         clean_filter = other_filter.strip()
         return clean_filter or None
     return None
+
+
+def refresh_env_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the current environment listing command after a mutation."""
+    env_filter = str(st.session_state.get("env_filter", "All"))
+    other_filter = str(st.session_state.get("env_other_filter", ""))
+    return run_hhs_envs(env_filter_pattern(env_filter, other_filter))
+
+
+def refresh_path_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the PATH listing command after a mutation."""
+    return run_hhs_paths()
+
+
+def refresh_dir_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the saved directory listing command after a mutation."""
+    return run_hhs_dirs()
+
+
+def refresh_cmd_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the saved command listing command after a mutation."""
+    return run_hhs_commands()
+
+
+def refresh_alias_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the custom alias listing command after a mutation."""
+    return run_hhs_aliases()
+
+
+def refresh_home_tools_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the Home tools listing command after a mutation."""
+    return run_hhs_tools()
+
+
+def refresh_service_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the services listing command after a mutation."""
+    return run_hhs_services()
+
+
+def refresh_process_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the current process listing command after a mutation."""
+    process_filter = str(st.session_state.get("monitor_process_filter", ""))
+    return run_hhs_process_list(process_filter)
+
+
+def refresh_ai_model_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the AI model listing command after a mutation."""
+    return run_hhs_ask_models()
 
 
 def row_matches_text_filter(row: dict[str, str], text_filter: str = "") -> bool:
@@ -4721,6 +5221,14 @@ def dir_table_key() -> str:
     return f"{hhs_ui.DIR_TABLE_KEY}_{reset_counter}"
 
 
+def reset_dir_table_selection() -> None:
+    """Reset the saved directory dataframe selection for the next rerun."""
+    reset_counter = st.session_state.setdefault(hhs_ui.DIR_TABLE_RESET_COUNTER_KEY, 0)
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[hhs_ui.DIR_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
+
+
 def cmd_table_key() -> str:
     """Return the Streamlit command dataframe key for the current selection generation."""
     reset_counter = st.session_state.setdefault(hhs_ui.CMD_TABLE_RESET_COUNTER_KEY, 0)
@@ -4730,6 +5238,14 @@ def cmd_table_key() -> str:
     return f"{hhs_ui.CMD_TABLE_KEY}_{reset_counter}"
 
 
+def reset_cmd_table_selection() -> None:
+    """Reset the saved command dataframe selection for the next rerun."""
+    reset_counter = st.session_state.setdefault(hhs_ui.CMD_TABLE_RESET_COUNTER_KEY, 0)
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[hhs_ui.CMD_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
+
+
 def alias_table_key() -> str:
     """Return the Streamlit alias dataframe key for the current selection generation."""
     reset_counter = st.session_state.setdefault(hhs_ui.ALIAS_TABLE_RESET_COUNTER_KEY, 0)
@@ -4737,6 +5253,14 @@ def alias_table_key() -> str:
         reset_counter = 0
         st.session_state[hhs_ui.ALIAS_TABLE_RESET_COUNTER_KEY] = reset_counter
     return f"{hhs_ui.ALIAS_TABLE_KEY}_{reset_counter}"
+
+
+def reset_alias_table_selection() -> None:
+    """Reset the alias dataframe selection for the next rerun."""
+    reset_counter = st.session_state.setdefault(hhs_ui.ALIAS_TABLE_RESET_COUNTER_KEY, 0)
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[hhs_ui.ALIAS_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
 
 
 def service_table_key() -> str:
@@ -4816,16 +5340,17 @@ def apply_path_value_overrides(rows: list[dict[str, str]]) -> list[dict[str, str
     ]
 
 
-def apply_selected_env_value(name: str, value: str) -> None:
+def apply_selected_env_value(name: str, value: str) -> bool:
     """Persist a selected environment value and store it for table rerenders."""
     result = run_hhs_env_action("add", name, value)
-    status_message = strip_ansi(result.stdout or result.stderr or "").strip()
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_clear()
+    refresh_env_listing()
     if result.returncode == 0:
         os.environ[name] = value
         env_value_overrides()[name] = value
         push_floating_status(
-            status_message or f"Environment variable saved: \"{name}\"",
+            status_message or f'Environment variable saved: "{name}"',
             "info",
         )
     else:
@@ -4834,18 +5359,20 @@ def apply_selected_env_value(name: str, value: str) -> None:
             "error",
         )
     save_ui_state()
+    return result.returncode == 0
 
 
 def apply_env_delete(name: str) -> None:
     """Delete a custom environment value and reset the table selection."""
     result = run_hhs_env_action("del", name)
-    status_message = strip_ansi(result.stdout or result.stderr or "").strip()
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_clear()
+    refresh_env_listing()
     if result.returncode == 0:
         os.environ.pop(name, None)
         env_value_overrides().pop(name, None)
         push_floating_status(
-            status_message or f"Environment variable removed: \"{name}\"",
+            status_message or f'Environment variable removed: "{name}"',
             "info",
         )
     else:
@@ -4863,19 +5390,143 @@ def apply_env_add_form_value() -> None:
     value = str(st.session_state.get("env_add_value", ""))
     if not name:
         return
-    apply_selected_env_value(name, value)
-    st.session_state["env_add_name"] = ""
-    st.session_state["env_add_value"] = ""
+    if apply_selected_env_value(name, value):
+        clear_add_form_fields("env")
 
 
-def apply_selected_path_value(old_path: str, new_path: str) -> None:
-    """Export an edited PATH entry and store it for table rerenders."""
-    path_values = path_entries()
-    updated_values = [new_path if entry == old_path else entry for entry in path_values]
-    if new_path not in updated_values:
-        updated_values.append(new_path)
-    os.environ["PATH"] = ":".join(updated_values)
-    path_value_overrides()[old_path] = new_path
+def push_config_action_status(
+    result: subprocess.CompletedProcess[str],
+    success_fallback: str,
+    error_fallback: str,
+) -> None:
+    """Push a config action status from command output or a fallback message."""
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+    if result.returncode == 0:
+        push_floating_status(status_message or success_fallback, "info")
+    else:
+        push_floating_status(status_message or error_fallback, "error")
+
+
+def apply_selected_path_value(old_path: str, new_path: str) -> bool:
+    """Persist an edited PATH entry and store it for table rerenders."""
+    result = run_hhs_path_action("edit", new_path, old_path)
+    cache_clear()
+    refresh_path_listing()
+    if result.returncode == 0:
+        path_values = [entry for entry in path_entries() if entry != old_path]
+        if new_path not in path_values:
+            path_values.insert(0, new_path)
+        os.environ["PATH"] = ":".join(path_values)
+        path_value_overrides()[old_path] = new_path
+    push_config_action_status(
+        result,
+        f'PATH entry saved: "{new_path}"',
+        f"Unable to save PATH entry: {new_path}",
+    )
+    save_ui_state()
+    return result.returncode == 0
+
+
+def apply_path_delete(path_value: str) -> None:
+    """Delete a PATH entry and reset the table selection."""
+    result = run_hhs_path_action("del", path_value)
+    cache_clear()
+    refresh_path_listing()
+    if result.returncode == 0:
+        os.environ["PATH"] = ":".join(
+            entry for entry in path_entries() if entry != path_value
+        )
+        path_value_overrides().pop(path_value, None)
+    push_config_action_status(
+        result,
+        f'PATH entry removed: "{path_value}"',
+        f"Unable to remove PATH entry: {path_value}",
+    )
+    reset_path_table_selection()
+    save_ui_state()
+
+
+def apply_selected_dir_value(name: str, value: str) -> bool:
+    """Persist a saved directory value."""
+    result = run_hhs_dir_action("add", name, value)
+    cache_clear()
+    refresh_dir_listing()
+    push_config_action_status(
+        result,
+        f'Saved directory saved: "{name}"',
+        f"Unable to save directory: {name}",
+    )
+    save_ui_state()
+    return result.returncode == 0
+
+
+def apply_dir_delete(name: str) -> None:
+    """Delete a saved directory and reset the table selection."""
+    result = run_hhs_dir_action("del", name)
+    cache_clear()
+    refresh_dir_listing()
+    push_config_action_status(
+        result,
+        f'Saved directory removed: "{name}"',
+        f"Unable to remove saved directory: {name}",
+    )
+    reset_dir_table_selection()
+    save_ui_state()
+
+
+def apply_selected_cmd_value(name: str, value: str) -> bool:
+    """Persist a saved command value."""
+    result = run_hhs_command_action("add", name, value)
+    cache_clear()
+    refresh_cmd_listing()
+    push_config_action_status(
+        result,
+        f'Saved command saved: "{name}"',
+        f"Unable to save command: {name}",
+    )
+    save_ui_state()
+    return result.returncode == 0
+
+
+def apply_cmd_delete(name: str) -> None:
+    """Delete a saved command and reset the table selection."""
+    result = run_hhs_command_action("del", name)
+    cache_clear()
+    refresh_cmd_listing()
+    push_config_action_status(
+        result,
+        f'Saved command removed: "{name}"',
+        f"Unable to remove saved command: {name}",
+    )
+    reset_cmd_table_selection()
+    save_ui_state()
+
+
+def apply_selected_alias_value(name: str, value: str) -> bool:
+    """Persist a custom alias value."""
+    result = run_hhs_alias_action("add", name, value)
+    cache_clear()
+    refresh_alias_listing()
+    push_config_action_status(
+        result,
+        f'Alias saved: "{name}"',
+        f"Unable to save alias: {name}",
+    )
+    save_ui_state()
+    return result.returncode == 0
+
+
+def apply_alias_delete(name: str) -> None:
+    """Delete a custom alias and reset the table selection."""
+    result = run_hhs_alias_action("del", name)
+    cache_clear()
+    refresh_alias_listing()
+    push_config_action_status(
+        result,
+        f'Alias removed: "{name}"',
+        f"Unable to remove alias: {name}",
+    )
+    reset_alias_table_selection()
     save_ui_state()
 
 
@@ -4885,8 +5536,69 @@ def apply_selected_env_editor_value(name: str, editor_key: str) -> None:
 
 
 def apply_selected_path_editor_value(old_path: str, editor_key: str) -> None:
-    """Export the current selected PATH editor value."""
+    """Persist the current selected PATH editor value."""
     apply_selected_path_value(old_path, str(st.session_state.get(editor_key, "")))
+
+
+def apply_selected_dir_editor_value(name: str, editor_key: str) -> None:
+    """Persist the current selected directory editor value."""
+    apply_selected_dir_value(name, str(st.session_state.get(editor_key, "")))
+
+
+def apply_selected_cmd_editor_value(name: str, editor_key: str) -> None:
+    """Persist the current selected command editor value."""
+    apply_selected_cmd_value(name, str(st.session_state.get(editor_key, "")))
+
+
+def apply_selected_alias_editor_value(name: str, editor_key: str) -> None:
+    """Persist the current selected alias editor value."""
+    apply_selected_alias_value(name, str(st.session_state.get(editor_key, "")))
+
+
+def clear_add_form_fields(key_prefix: str, include_name: bool = True) -> None:
+    """Clear the new-entry form fields for a config listing after a successful add."""
+    if include_name:
+        st.session_state[f"{key_prefix}_add_name"] = ""
+    st.session_state[f"{key_prefix}_add_value"] = ""
+
+
+def apply_path_add_form_value() -> None:
+    """Persist the current PATH add form value."""
+    value = str(st.session_state.get("path_add_value", "")).strip()
+    if not value:
+        return
+    if apply_selected_path_value(value, value):
+        clear_add_form_fields("path", include_name=False)
+
+
+def apply_dir_add_form_value() -> None:
+    """Persist the current saved directory add form value."""
+    name = str(st.session_state.get("dir_add_name", "")).strip()
+    value = str(st.session_state.get("dir_add_value", "")).strip()
+    if not name or not value:
+        return
+    if apply_selected_dir_value(name, value):
+        clear_add_form_fields("dir")
+
+
+def apply_cmd_add_form_value() -> None:
+    """Persist the current saved command add form value."""
+    name = str(st.session_state.get("cmd_add_name", "")).strip()
+    value = str(st.session_state.get("cmd_add_value", ""))
+    if not name:
+        return
+    if apply_selected_cmd_value(name, value):
+        clear_add_form_fields("cmd")
+
+
+def apply_alias_add_form_value() -> None:
+    """Persist the current alias add form value."""
+    name = str(st.session_state.get("alias_add_name", "")).strip()
+    value = str(st.session_state.get("alias_add_value", ""))
+    if not name:
+        return
+    if apply_selected_alias_value(name, value):
+        clear_add_form_fields("alias")
 
 
 def scroll_to_env_value_editor(editor_key: str) -> None:
@@ -5005,7 +5717,114 @@ def render_path_rows(rows: list[dict[str, str]]) -> None:
             row["Value"],
             path_value_editor_key(index),
         ),
+        selected_edit_folder_picker=True,
         reset_selection=reset_path_table_selection,
+        selected_action_buttons=[
+            {
+                "label": "Delete",
+                "glyph": "",
+                "key_prefix": "path_delete_button",
+                "on_click": apply_path_delete,
+                "args": lambda row, _index: (row["Value"],),
+            },
+        ],
+    )
+
+
+def render_dir_rows(rows: list[dict[str, str]]) -> None:
+    """Render selectable editable saved directory rows."""
+    render_table(
+        rows,
+        key=dir_table_key(),
+        empty_hint="Select a row to interact",
+        height=hhs_ui.ENV_TABLE_HEIGHT,
+        width=hhs_ui.ENV_TABLE_WIDTH,
+        selected_label=lambda row, _index: f"Selected: {row['Name']}",
+        selected_editable=True,
+        selected_edit_key=lambda _row, index: dir_value_editor_key(index),
+        selected_edit_value=lambda row, _index: row["Value"],
+        selected_edit_label="Selected directory path",
+        selected_edit_max_chars=int(hhs_ui.COMMAND_COLUMNS),
+        selected_edit_on_change=apply_selected_dir_editor_value,
+        selected_edit_args=lambda row, index: (
+            row["Name"],
+            dir_value_editor_key(index),
+        ),
+        selected_edit_folder_picker=True,
+        reset_selection=reset_dir_table_selection,
+        selected_action_buttons=[
+            {
+                "label": "Delete",
+                "glyph": "",
+                "key_prefix": "dir_delete_button",
+                "on_click": apply_dir_delete,
+                "args": lambda row, _index: (row["Name"],),
+            },
+        ],
+    )
+
+
+def render_cmd_rows(rows: list[dict[str, str]]) -> None:
+    """Render selectable editable saved command rows."""
+    render_table(
+        rows,
+        key=cmd_table_key(),
+        empty_hint="Select a row to interact",
+        height=hhs_ui.ENV_TABLE_HEIGHT,
+        width=hhs_ui.ENV_TABLE_WIDTH,
+        selected_label=lambda row, _index: f"Selected: {row['Name']}",
+        selected_editable=True,
+        selected_edit_key=lambda _row, index: cmd_value_editor_key(index),
+        selected_edit_value=lambda row, _index: row["Value"],
+        selected_edit_label="Selected command value",
+        selected_edit_max_chars=int(hhs_ui.COMMAND_COLUMNS),
+        selected_edit_on_change=apply_selected_cmd_editor_value,
+        selected_edit_args=lambda row, index: (
+            row["Name"],
+            cmd_value_editor_key(index),
+        ),
+        reset_selection=reset_cmd_table_selection,
+        selected_action_buttons=[
+            {
+                "label": "Delete",
+                "glyph": "",
+                "key_prefix": "cmd_delete_button",
+                "on_click": apply_cmd_delete,
+                "args": lambda row, _index: (row.get("Index") or row["Name"],),
+            },
+        ],
+    )
+
+
+def render_alias_rows(rows: list[dict[str, str]]) -> None:
+    """Render selectable editable alias rows."""
+    render_table(
+        rows,
+        key=alias_table_key(),
+        empty_hint="Select a row to interact",
+        height=hhs_ui.ENV_TABLE_HEIGHT,
+        width=hhs_ui.ENV_TABLE_WIDTH,
+        selected_label=lambda row, _index: f"Selected: {row['Name']}",
+        selected_editable=True,
+        selected_edit_key=lambda _row, index: alias_value_editor_key(index),
+        selected_edit_value=lambda row, _index: row["Value"],
+        selected_edit_label="Selected alias expression",
+        selected_edit_max_chars=int(hhs_ui.COMMAND_COLUMNS),
+        selected_edit_on_change=apply_selected_alias_editor_value,
+        selected_edit_args=lambda row, index: (
+            row["Name"],
+            alias_value_editor_key(index),
+        ),
+        reset_selection=reset_alias_table_selection,
+        selected_action_buttons=[
+            {
+                "label": "Delete",
+                "glyph": "",
+                "key_prefix": "alias_delete_button",
+                "on_click": apply_alias_delete,
+                "args": lambda row, _index: (row["Name"],),
+            },
+        ],
     )
 
 
@@ -5027,9 +5846,7 @@ def render_read_only_rows(
             + (
                 selected_value(row, _index)
                 if selected_value is not None
-                else row.get("Name")
-                or row.get("Index")
-                or row.get("Value", "")
+                else row.get("Name") or row.get("Index") or row.get("Value", "")
             )
         ),
     )
@@ -5121,7 +5938,9 @@ def execute_pending_home_tool_action() -> None:
         return
 
     result = run_hhs_tool_action(operation, tool_name)
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_clear()
+    refresh_home_tools_listing()
     close_home_tool_tldr_dialog()
     st.session_state["home_tool_action_operation"] = operation
     st.session_state["home_tool_action_name"] = tool_name
@@ -5129,12 +5948,13 @@ def execute_pending_home_tool_action() -> None:
     st.session_state["home_tool_action_succeeded"] = result.returncode == 0
     if result.returncode == 0:
         push_floating_status(
-            f"{home_tool_action_noun(operation)} completed: {tool_name}",
+            status_message
+            or f"{home_tool_action_noun(operation)} completed: {tool_name}",
             "info",
         )
     else:
         push_floating_status(
-            f"{home_tool_action_noun(operation)} failed: {tool_name}",
+            status_message or f"{home_tool_action_noun(operation)} failed: {tool_name}",
             "error",
         )
 
@@ -5248,17 +6068,19 @@ def render_home_tool_tldr_dialog() -> bool:
 def apply_selected_service_action(operation: str, service_name: str) -> None:
     """Run a service action and reset the service selection."""
     result = run_hhs_service_action(operation, service_name)
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_clear()
-    st.session_state["service_action_message"] = result.stdout or result.stderr or ""
+    refresh_service_listing()
+    st.session_state["service_action_message"] = status_message
     st.session_state["service_action_succeeded"] = result.returncode == 0
     if result.returncode == 0:
         push_floating_status(
-            f"Service {operation} completed: {service_name}",
+            status_message or f"Service {operation} completed: {service_name}",
             "info",
         )
     else:
         push_floating_status(
-            f"Service {operation} failed: {service_name}",
+            status_message or f"Service {operation} failed: {service_name}",
             "error",
         )
     reset_service_table_selection()
@@ -5267,15 +6089,19 @@ def apply_selected_service_action(operation: str, service_name: str) -> None:
 def apply_selected_process_kill(process_name: str) -> None:
     """Kill the selected process name and store the action result."""
     result = run_hhs_process_kill(process_name)
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_clear()
-    st.session_state["monitor_process_action_message"] = (
-        result.stdout or result.stderr or ""
-    )
+    refresh_process_listing()
+    st.session_state["monitor_process_action_message"] = status_message
     st.session_state["monitor_process_action_succeeded"] = result.returncode == 0
     if result.returncode == 0:
-        push_floating_status(f"Killed process: {process_name}", "info")
+        push_floating_status(
+            status_message or f"Killed process: {process_name}", "info"
+        )
     else:
-        push_floating_status(f"Unable to kill process: {process_name}", "error")
+        push_floating_status(
+            status_message or f"Unable to kill process: {process_name}", "error"
+        )
 
 
 def styled_service_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
@@ -5295,9 +6121,9 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
     action_succeeded = st.session_state.pop("service_action_succeeded", None)
     if action_message:
         if action_succeeded:
-            st.success(strip_ansi(action_message))
+            st.success(clean_command_status_message(action_message))
         else:
-            st.error(strip_ansi(action_message))
+            st.error(clean_command_status_message(action_message))
 
     _, selected_row = render_table(
         rows,
@@ -5338,6 +6164,7 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
 
 def render_envs_table() -> None:
     """Render environment variables using __hhs_envs."""
+
     def render_env_controls() -> tuple[str, str]:
         """Render environment table controls and return the selected filter."""
         render_env_add_controls()
@@ -5360,14 +6187,18 @@ def render_envs_table() -> None:
 
 def render_paths_table() -> None:
     """Render PATH entries using __hhs_paths."""
-    path_filter, other_filter = render_table_controls_panel(
-        lambda: render_table_filter_controls(
+
+    def render_path_controls() -> tuple[str, str]:
+        """Render PATH table controls and return the selected filter."""
+        render_path_add_controls()
+        return render_table_filter_controls(
             hhs_ui.PATH_FILTERS,
             "path_filter",
             "path_other_filter",
             hhs_ui.PATH_FILTER_COLUMNS,
         )
-    )
+
+    path_filter, other_filter = render_table_controls_panel(render_path_controls)
     result = run_hhs_paths()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list PATH entries.")
@@ -5379,67 +6210,74 @@ def render_paths_table() -> None:
 
 def render_dirs_table() -> None:
     """Render saved directories using __hhs_load_dir."""
-    dirs_filter, other_filter = render_table_controls_panel(
-        lambda: render_table_filter_controls(
+
+    def render_dir_controls() -> tuple[str, str]:
+        """Render saved directory table controls and return the selected filter."""
+        render_dir_add_controls()
+        return render_table_filter_controls(
             hhs_ui.LIST_FILTERS,
             "dirs_filter",
             "dirs_other_filter",
             hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
-    )
+
+    dirs_filter, other_filter = render_table_controls_panel(render_dir_controls)
     result = run_hhs_dirs()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list saved directories.")
         return
-    render_read_only_rows(
+    render_dir_rows(
         filter_rows_by_text(parse_hhs_dirs(result.stdout), dirs_filter, other_filter),
-        dir_table_key(),
-        selected_value=lambda row, _index: row.get("Value", ""),
     )
 
 
 def render_cmds_table() -> None:
     """Render saved commands using __hhs_command."""
-    cmds_filter, other_filter = render_table_controls_panel(
-        lambda: render_table_filter_controls(
+
+    def render_cmd_controls() -> tuple[str, str]:
+        """Render saved command table controls and return the selected filter."""
+        render_cmd_add_controls()
+        return render_table_filter_controls(
             hhs_ui.LIST_FILTERS,
             "cmds_filter",
             "cmds_other_filter",
             hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
-    )
+
+    cmds_filter, other_filter = render_table_controls_panel(render_cmd_controls)
     result = run_hhs_commands()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list saved commands.")
         return
-    render_read_only_rows(
+    render_cmd_rows(
         filter_rows_by_text(
             parse_hhs_commands(result.stdout), cmds_filter, other_filter
         ),
-        cmd_table_key(),
-        selected_value=lambda row, _index: row.get("Value", ""),
     )
 
 
 def render_aliases_table() -> None:
     """Render custom aliases using __hhs_aliases."""
-    alias_filter, other_filter = render_table_controls_panel(
-        lambda: render_table_filter_controls(
+
+    def render_alias_controls() -> tuple[str, str]:
+        """Render alias table controls and return the selected filter."""
+        render_alias_add_controls()
+        return render_table_filter_controls(
             hhs_ui.LIST_FILTERS,
             "alias_filter",
             "alias_other_filter",
             hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
-    )
+
+    alias_filter, other_filter = render_table_controls_panel(render_alias_controls)
     result = run_hhs_aliases()
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list custom aliases.")
         return
-    render_read_only_rows(
+    render_alias_rows(
         filter_rows_by_text(
             parse_hhs_aliases(result.stdout), alias_filter, other_filter
         ),
-        alias_table_key(),
     )
 
 
@@ -5606,7 +6444,9 @@ def render_monitor_disk_chart() -> None:
     result = run_hhs_disk_usage(selected_directory, int(top_n))
     if result.returncode != 0:
         st.error(
-            strip_ansi(result.stderr or result.stdout or "Unable to load disk usage.")
+            clean_command_status_message(
+                result.stderr or result.stdout or "Unable to load disk usage."
+            )
         )
         return
     rows = sorted(
@@ -5715,9 +6555,9 @@ def render_monitor_processes_panel() -> None:
     action_succeeded = st.session_state.pop("monitor_process_action_succeeded", None)
     if action_message:
         if action_succeeded:
-            st.success(strip_ansi(action_message))
+            st.success(clean_command_status_message(action_message))
         else:
-            st.error(strip_ansi(action_message))
+            st.error(clean_command_status_message(action_message))
 
     def render_process_controls() -> str:
         """Render process table controls and return the filter text."""
@@ -5740,7 +6580,9 @@ def render_monitor_processes_panel() -> None:
     result = run_hhs_process_list(process_filter)
     if result.returncode != 0:
         st.error(
-            strip_ansi(result.stderr or result.stdout or "Unable to load processes.")
+            clean_command_status_message(
+                result.stderr or result.stdout or "Unable to load processes."
+            )
         )
         return
     rows = parse_hhs_process_list(result.stdout)
@@ -5819,7 +6661,11 @@ def render_monitor_logs_once(selected_log: str) -> None:
     """Render the selected log once without automatic refresh."""
     result = run_hhs_logs(selected_log, 200)
     if result.returncode != 0:
-        st.error(strip_ansi(result.stderr or result.stdout or "Unable to load logs."))
+        st.error(
+            clean_command_status_message(
+                result.stderr or result.stdout or "Unable to load logs."
+            )
+        )
         return
     render_terminal_output(
         colorize_log_output(result.stdout),
@@ -6264,7 +7110,7 @@ def render_ai_settings_panel() -> None:
     if st.session_state.get("ai_model_select_error"):
         st.error(st.session_state["ai_model_select_error"])
     if st.session_state.get("ai_model_delete_error"):
-            st.error(st.session_state["ai_model_delete_error"])
+        st.error(st.session_state["ai_model_delete_error"])
 
 
 def ai_view_label(ai_view: str) -> str:
@@ -6488,6 +7334,7 @@ def main() -> None:
     execute_pending_dialog_callback()
     render_sidebar()
     render_main_view()
+    render_folder_picker_dialog()
     render_floating_status()
     render_footer()
 

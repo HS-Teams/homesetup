@@ -102,12 +102,20 @@ div[class*="_selected_editing_"] button {
   width: 2rem;
 }
 
+div[class*="st-key-alias_delete_button_"][class*="_selected"],
+div[class*="st-key-cmd_delete_button_"][class*="_selected"],
+div[class*="st-key-dir_delete_button_"][class*="_selected"],
 div[class*="st-key-env_delete_button_"][class*="_selected"],
+div[class*="st-key-path_delete_button_"][class*="_selected"],
 div[class*="st-key-ai_delete_model_button_"][class*="_selected"] {
   margin: 0;
 }
 
+div[class*="st-key-alias_delete_button_"][class*="_selected"] button,
+div[class*="st-key-cmd_delete_button_"][class*="_selected"] button,
+div[class*="st-key-dir_delete_button_"][class*="_selected"] button,
 div[class*="st-key-env_delete_button_"][class*="_selected"] button,
+div[class*="st-key-path_delete_button_"][class*="_selected"] button,
 div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   align-items: center;
   border-radius: 4px;
@@ -123,11 +131,16 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   width: 2rem;
 }
 
-.st-key-env_add_button {
-  margin-top: 1.55rem;
+.st-key-alias_add_submit,
+.st-key-cmd_add_submit,
+.st-key-dir_add_submit,
+.st-key-env_add_submit,
+.st-key-path_add_submit {
+  display: none;
 }
 
-.st-key-env_add_button button {
+.st-key-dir_folder_picker_button button,
+.st-key-path_folder_picker_button button {
   align-items: center;
   border-radius: 4px;
   display: inline-flex;
@@ -138,6 +151,45 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   min-height: 2rem;
   min-width: 2rem;
   padding: 0;
+  width: 2rem;
+}
+
+.st-key-dir_folder_picker_button,
+.st-key-path_folder_picker_button {
+  margin-top: 1.55rem;
+}
+
+.st-key-folder_picker_cancel_button button,
+.st-key-folder_picker_open_button button,
+.st-key-folder_picker_parent_button button,
+.st-key-folder_picker_select_button button {
+  align-items: center;
+  border-radius: 4px;
+  display: inline-flex;
+  font-size: 0.9rem;
+  font-weight: 800;
+  height: 2rem;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  text-align: center;
+  width: 2rem;
+}
+
+.st-key-folder_picker_action_grid,
+.st-key-folder_picker_action_grid [data-testid="stVerticalBlock"] {
+  align-items: center;
+  display: grid !important;
+  gap: var(--hhs-inline-control-gap);
+  grid-auto-flow: column;
+  grid-template-columns: repeat(4, 2rem);
+  justify-content: center;
+}
+
+.st-key-folder_picker_action_grid > div,
+.st-key-folder_picker_action_grid [data-testid="stVerticalBlock"] > div {
+  min-width: 2rem;
   width: 2rem;
 }
 
