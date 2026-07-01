@@ -124,14 +124,6 @@ body,
   color: #15803d;
 }
 
-.hhs-ai-selected-model {
-  color: var(--hhs-foreground);
-}
-
-.hhs-ai-selected-model strong {
-  color: #2563eb;
-}
-
 .st-key-ai_confirm_clear_button button,
 .st-key-ai_cancel_clear_button button,
 .st-key-ai_confirm_model_select_button button,

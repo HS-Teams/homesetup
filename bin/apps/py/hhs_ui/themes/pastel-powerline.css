@@ -135,14 +135,6 @@ body,
   color: var(--hhs-powerline-docker);
 }
 
-.hhs-ai-selected-model {
-  color: var(--hhs-foreground);
-}
-
-.hhs-ai-selected-model strong {
-  color: var(--hhs-powerline-os);
-}
-
 .st-key-ai_confirm_clear_button button,
 .st-key-ai_cancel_clear_button button,
 .st-key-ai_confirm_model_select_button button,
