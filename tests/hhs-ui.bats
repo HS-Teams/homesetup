@@ -1130,10 +1130,13 @@ PY
   run grep -q 'flex: 0 0 auto !important' "${css_file}"
   assert_success
 
-  run grep -q 'flex: 0 1 18rem !important' "${css_file}"
+  run grep -q 'flex: 1 1 auto !important' "${css_file}"
   assert_success
 
-  run grep -q 'margin-left: -1rem !important' "${css_file}"
+  run grep -q 'max-width: none' "${css_file}"
+  assert_success
+
+  run grep -q 'width: 100%' "${css_file}"
   assert_success
 
   run grep -q 'hhs_ui.THREE_OPTION_FILTER_COLUMNS' "${ui_file}"
@@ -2448,10 +2451,19 @@ PY
   run grep -q 'def run_hhs_env_action' "${ui_file}"
   assert_success
 
+  run grep -q -- "-a {shlex.quote(f'{name}={value}')}" "${ui_file}"
+  assert_success
+
+  run grep -q 'apply_selected_env_value(name, str(st.session_state.get(editor_key, "")))' "${ui_file}"
+  assert_success
+
   run grep -q -- '--del {safe_name}' "${ui_file}"
   assert_success
 
   run grep -q 'on_click=apply_env_add_form_value' "${ui_file}"
+  assert_success
+
+  run grep -q 'placeholder="Custom Variable"' "${ui_file}"
   assert_success
 
   run grep -q 'render_table_controls_panel(render_env_controls)' "${ui_file}"
@@ -2459,6 +2471,12 @@ PY
 
   run grep -q 'render_table_filter_controls' "${ui_file}"
   assert_success
+
+  run grep -q 'status_message = strip_ansi(result.stdout or result.stderr or "").strip()' "${ui_file}"
+  assert_success
+
+  run grep -q 'env_action_message' "${ui_file}"
+  assert_failure
 
   run grep -q '""' "${ui_file}"
   assert_success

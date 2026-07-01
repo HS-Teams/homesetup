@@ -542,7 +542,8 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 .st-key-history_directories_other_filter,
 .st-key-path_other_filter,
 .st-key-service_other_filter {
-  max-width: 18rem;
+  max-width: none;
+  width: 100%;
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter),
@@ -580,9 +581,9 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) 
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:last-child {
-  flex: 0 1 18rem !important;
-  margin-left: -1rem !important;
-  width: 18rem !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
 }
 
 .st-key-alias_other_filter input,
@@ -595,6 +596,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[dat
 .st-key-path_other_filter input,
 .st-key-service_other_filter input {
   min-height: 2rem;
+  width: 100%;
 }
 
 [role="radiogroup"][aria-label$="filter"] {

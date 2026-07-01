@@ -1898,7 +1898,7 @@ def render_env_add_controls() -> None:
             "Name",
             key="env_add_name",
             on_change=save_ui_state,
-            placeholder="CUSTOM_ENV",
+            placeholder="Custom Variable",
         )
     with value_col:
         st.text_input(
@@ -3231,7 +3231,7 @@ def build_hhs_env_action_command(
     if safe_operation == "del":
         action_args = f"--del {safe_name}"
     else:
-        action_args = f"--add {shlex.quote(f'{name}={value}')}"
+        action_args = f"-a {shlex.quote(f'{name}={value}')}"
     return (
         'export HHS_DIR="${HHS_DIR}"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
@@ -4819,30 +4819,40 @@ def apply_path_value_overrides(rows: list[dict[str, str]]) -> list[dict[str, str
 def apply_selected_env_value(name: str, value: str) -> None:
     """Persist a selected environment value and store it for table rerenders."""
     result = run_hhs_env_action("add", name, value)
+    status_message = strip_ansi(result.stdout or result.stderr or "").strip()
     cache_clear()
-    st.session_state["env_action_message"] = result.stdout or result.stderr or ""
-    st.session_state["env_action_succeeded"] = result.returncode == 0
     if result.returncode == 0:
         os.environ[name] = value
         env_value_overrides()[name] = value
-        push_floating_status(f"Saved environment variable: {name}", "info")
+        push_floating_status(
+            status_message or f"Environment variable saved: \"{name}\"",
+            "info",
+        )
     else:
-        push_floating_status(f"Unable to save environment variable: {name}", "error")
+        push_floating_status(
+            status_message or f"Unable to save environment variable: {name}",
+            "error",
+        )
     save_ui_state()
 
 
 def apply_env_delete(name: str) -> None:
     """Delete a custom environment value and reset the table selection."""
     result = run_hhs_env_action("del", name)
+    status_message = strip_ansi(result.stdout or result.stderr or "").strip()
     cache_clear()
-    st.session_state["env_action_message"] = result.stdout or result.stderr or ""
-    st.session_state["env_action_succeeded"] = result.returncode == 0
     if result.returncode == 0:
         os.environ.pop(name, None)
         env_value_overrides().pop(name, None)
-        push_floating_status(f"Deleted environment variable: {name}", "info")
+        push_floating_status(
+            status_message or f"Environment variable removed: \"{name}\"",
+            "info",
+        )
     else:
-        push_floating_status(f"Unable to delete environment variable: {name}", "error")
+        push_floating_status(
+            status_message or f"Unable to delete environment variable: {name}",
+            "error",
+        )
     reset_env_table_selection()
     save_ui_state()
 
@@ -5328,14 +5338,6 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
 
 def render_envs_table() -> None:
     """Render environment variables using __hhs_envs."""
-    action_message = st.session_state.pop("env_action_message", "")
-    action_succeeded = st.session_state.pop("env_action_succeeded", None)
-    if action_message:
-        if action_succeeded:
-            st.success(strip_ansi(action_message))
-        else:
-            st.error(strip_ansi(action_message))
-
     def render_env_controls() -> tuple[str, str]:
         """Render environment table controls and return the selected filter."""
         render_env_add_controls()
