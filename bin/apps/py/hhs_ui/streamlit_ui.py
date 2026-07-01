@@ -1334,27 +1334,155 @@ def home_tool_is_not_found(row: dict[str, str]) -> bool:
     return "not found" in status or "not installed" in status
 
 
-def render_selected_item(label: str, value: str) -> None:
-    """Render a selected item label/value pair using theme-controlled styles."""
-    st.markdown(
-        (
-            '<div class="hhs-selected-item">'
-            f'<span class="hhs-selected-item-label">{html.escape(label)}</span>'
-            " "
-            f'<span class="hhs-selected-item-value">{html.escape(value)}</span>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
+def selected_item_editing_key(table_key: str | None, selected_index: int) -> str:
+    """Return the session key for a selected table row edit mode."""
+    safe_key = table_key or "hhs_table"
+    return f"{safe_key}_selected_editing_{selected_index}"
 
 
-def render_selected_item_text(text: str) -> None:
-    """Render selected item text split on the first label/value separator."""
+def enable_selected_item_edit(
+    editing_key: str, edit_key: str | None = None, edit_value: str = ""
+) -> None:
+    """Enable inline editing for the current selected table row."""
+    st.session_state[editing_key] = True
+    if edit_key:
+        st.session_state[edit_key] = edit_value
+
+
+def cancel_selected_item_edit(editing_key: str, edit_key: str | None = None) -> None:
+    """Cancel inline editing for the current selected table row."""
+    st.session_state[editing_key] = False
+    if edit_key:
+        st.session_state.pop(edit_key, None)
+
+
+def selected_label_parts(text: str) -> tuple[str, str]:
+    """Return the selected label and value parts from display text."""
     label, separator, value = text.partition(":")
     if not separator:
-        render_selected_item(text, "")
+        return text, ""
+    return f"{label}:", value.strip()
+
+
+def table_editable_flag(
+    editable: bool | Callable[[dict[str, str], int], bool],
+    row: dict[str, str],
+    row_index: int,
+) -> bool:
+    """Return whether the selected table row supports inline editing."""
+    if callable(editable):
+        return bool(editable(row, row_index))
+    return bool(editable)
+
+
+def table_edit_args(
+    edit_args: Callable[[dict[str, str], int], tuple[object, ...]]
+    | tuple[object, ...]
+    | None,
+    row: dict[str, str],
+    row_index: int,
+) -> tuple[object, ...]:
+    """Return callback args for a selected row edit widget."""
+    if callable(edit_args):
+        return edit_args(row, row_index)
+    return edit_args or ()
+
+
+def table_edit_key(
+    edit_key: Callable[[dict[str, str], int], str] | str | None,
+    row: dict[str, str],
+    row_index: int,
+) -> str:
+    """Return the Streamlit key for a selected row edit widget."""
+    if callable(edit_key):
+        return edit_key(row, row_index)
+    return str(edit_key or f"selected_table_edit_value_{row_index}")
+
+
+def table_edit_value(
+    edit_value: Callable[[dict[str, str], int], str] | str | None,
+    row: dict[str, str],
+    row_index: int,
+) -> str:
+    """Return the initial value for a selected row edit widget."""
+    if callable(edit_value):
+        return edit_value(row, row_index)
+    if edit_value is not None:
+        return str(edit_value)
+    return str(row.get("Value", ""))
+
+
+def render_selected_table_item(
+    label: str,
+    value: str,
+    selected_index: int,
+    table_key: str | None,
+    editable: bool,
+    edit_key: str | None = None,
+    edit_value: str = "",
+    edit_label: str = "Selected value",
+    edit_height: int = hhs_ui.ENV_VALUE_EDITOR_HEIGHT,
+    edit_max_chars: int | None = None,
+    edit_on_change: Callable[..., None] | None = None,
+    edit_args: tuple[object, ...] = (),
+) -> None:
+    """Render the normalized selected table row summary and optional editor."""
+    editing_key = selected_item_editing_key(table_key, selected_index)
+    is_editing = bool(st.session_state.get(editing_key, False)) and editable
+    if editable and edit_key is not None:
+        st.session_state.setdefault(edit_key, edit_value)
+
+    if is_editing and edit_key is not None:
+        value_col, action_col = st.columns(
+            [1, 0.08], vertical_alignment="center", gap="small", width="stretch"
+        )
+        with value_col:
+            st.text_input(
+                f"{value}:",
+                key=edit_key,
+                max_chars=edit_max_chars,
+                on_change=edit_on_change,
+                placeholder=edit_label,
+                args=edit_args,
+            )
+        with action_col:
+            st.button(
+                "ﰸ",
+                key=f"{editing_key}_cancel_button",
+                help="Cancel edit",
+                on_click=cancel_selected_item_edit,
+                args=(editing_key, edit_key),
+                width="stretch",
+            )
         return
-    render_selected_item(f"{label}:", value.strip())
+
+    if editable:
+        value_col, action_col = st.columns(
+            [1, 0.08], vertical_alignment="center", gap="small", width="stretch"
+        )
+    else:
+        value_col = st.container()
+        action_col = None
+    with value_col:
+        st.markdown(
+            (
+                '<span class="hhs-selected-item-line">'
+                f'<span class="hhs-selected-item-label">{html.escape(label)}</span>'
+                f'<span class="hhs-selected-item-value">{html.escape(value)}</span>'
+                "</span>"
+            ),
+            unsafe_allow_html=True,
+        )
+    if action_col is not None:
+        with action_col:
+            st.button(
+                "",
+                key=f"{editing_key}_button",
+                help="Edit",
+                on_click=enable_selected_item_edit,
+                args=(editing_key, edit_key, edit_value),
+                width="stretch",
+            )
 
 
 def env_path_aliases() -> list[tuple[str, str]]:
@@ -1414,7 +1542,16 @@ def render_table(
     table_data: object | None = None,
     row_style: Callable[[pd.Series], list[str]] | None = None,
     selected_label: Callable[[dict[str, str], int], str] | None = None,
-    selected_label_html: bool = False,
+    selected_editable: bool | Callable[[dict[str, str], int], bool] = False,
+    selected_edit_key: Callable[[dict[str, str], int], str] | str | None = None,
+    selected_edit_value: Callable[[dict[str, str], int], str] | str | None = None,
+    selected_edit_label: str = "Selected value",
+    selected_edit_height: int = hhs_ui.ENV_VALUE_EDITOR_HEIGHT,
+    selected_edit_max_chars: int | None = None,
+    selected_edit_on_change: Callable[..., None] | None = None,
+    selected_edit_args: Callable[[dict[str, str], int], tuple[object, ...]]
+    | tuple[object, ...]
+    | None = None,
     action_buttons: list[dict[str, object]] | None = None,
     action_column_weights: list[float] | None = None,
     column_config: dict[str, object] | None = None,
@@ -1461,10 +1598,31 @@ def render_table(
         st.caption(action_hint)
     if selected_label is not None:
         label = selected_label(selected_row, selected_index)
-        if selected_label_html:
-            st.markdown(label, unsafe_allow_html=True)
-        else:
-            render_selected_item_text(label)
+        selected_item_label, selected_item_value = selected_label_parts(label)
+        render_selected_table_item(
+            selected_item_label,
+            selected_item_value,
+            selected_index,
+            key,
+            table_editable_flag(
+                selected_editable, selected_row, selected_index
+            ),
+            edit_key=(
+                table_edit_key(selected_edit_key, selected_row, selected_index)
+                if selected_edit_key is not None
+                else None
+            ),
+            edit_value=table_edit_value(
+                selected_edit_value, selected_row, selected_index
+            ),
+            edit_label=selected_edit_label,
+            edit_height=selected_edit_height,
+            edit_max_chars=selected_edit_max_chars,
+            edit_on_change=selected_edit_on_change,
+            edit_args=table_edit_args(
+                selected_edit_args, selected_row, selected_index
+            ),
+        )
 
     visible_actions = [
         action
@@ -4536,92 +4694,71 @@ def scroll_to_ai_model_actions(anchor_id: str) -> None:
 def render_env_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable read-only environment variable rows."""
     rows = apply_env_value_overrides(rows)
-    _, selected_row = render_table(
+    render_table(
         rows,
         key=env_table_key(),
         height=hhs_ui.ENV_TABLE_HEIGHT,
         width=hhs_ui.ENV_TABLE_WIDTH,
+        selected_label=lambda row, _index: f"Selected: {row['Name']}",
+        selected_editable=True,
+        selected_edit_key=lambda row, _index: env_value_editor_key(row["Name"]),
+        selected_edit_value=lambda row, _index: row["Value"],
+        selected_edit_label="Selected value",
+        selected_edit_max_chars=int(hhs_ui.COMMAND_COLUMNS),
+        selected_edit_on_change=apply_selected_env_editor_value,
+        selected_edit_args=lambda row, _index: (
+            row["Name"],
+            env_value_editor_key(row["Name"]),
+        ),
     )
-    if selected_row is None:
-        return
-
-    editor_key = env_value_editor_key(selected_row["Name"])
-    st.session_state.setdefault(editor_key, selected_row["Value"])
-    render_selected_item("Selected:", selected_row["Name"])
-    st.text_area(
-        "Selected value",
-        height=hhs_ui.ENV_VALUE_EDITOR_HEIGHT,
-        key=editor_key,
-        label_visibility="collapsed",
-        max_chars=int(hhs_ui.COMMAND_COLUMNS),
-        on_change=apply_selected_env_editor_value,
-        args=(selected_row["Name"], editor_key),
-    )
-    scroll_to_env_value_editor(editor_key)
 
 
 def render_path_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable editable PATH rows."""
     rows = apply_path_value_overrides(rows)
-    selected_index, selected_row = render_table(
+    render_table(
         rows,
         key=path_table_key(),
         height=hhs_ui.PATH_TABLE_HEIGHT,
         width=hhs_ui.PATH_TABLE_WIDTH,
+        selected_label=lambda row, _index: f"Selected: {row['Name']}",
+        selected_editable=True,
+        selected_edit_key=lambda _row, index: path_value_editor_key(index),
+        selected_edit_value=lambda row, _index: row["Value"],
+        selected_edit_label="Selected PATH value",
+        selected_edit_max_chars=int(hhs_ui.COMMAND_COLUMNS),
+        selected_edit_on_change=apply_selected_path_editor_value,
+        selected_edit_args=lambda row, index: (
+            row["Value"],
+            path_value_editor_key(index),
+        ),
     )
-    if selected_index is None or selected_row is None:
-        return
-
-    editor_key = path_value_editor_key(selected_index)
-    st.session_state.setdefault(editor_key, selected_row["Value"])
-    render_selected_item("Selected:", selected_row["Name"])
-    st.text_area(
-        "Selected PATH value",
-        height=hhs_ui.PATH_VALUE_EDITOR_HEIGHT,
-        key=editor_key,
-        label_visibility="collapsed",
-        max_chars=int(hhs_ui.COMMAND_COLUMNS),
-        on_change=apply_selected_path_editor_value,
-        args=(selected_row["Value"], editor_key),
-    )
-    scroll_to_env_value_editor(editor_key)
 
 
 def render_read_only_rows(
     rows: list[dict[str, str]],
     table_key: str,
-    value_key_prefix: str,
-    selected_label: str,
     empty_caption: str = "Select a row to interact",
+    selected_value: Callable[[dict[str, str], int], str] | None = None,
 ) -> None:
     """Render selectable read-only configuration rows."""
-    selected_index, selected_row = render_table(
+    render_table(
         rows,
         key=table_key,
         empty_hint=empty_caption,
         height=hhs_ui.ENV_TABLE_HEIGHT,
         width=hhs_ui.ENV_TABLE_WIDTH,
+        selected_label=lambda row, _index: (
+            "Selected: "
+            + (
+                selected_value(row, _index)
+                if selected_value is not None
+                else row.get("Name")
+                or row.get("Index")
+                or row.get("Value", "")
+            )
+        ),
     )
-    if selected_index is None or selected_row is None:
-        return
-
-    editor_key = f"{value_key_prefix}_{selected_index}"
-    st.session_state[editor_key] = selected_row["Value"]
-    selected_name = (
-        selected_row.get("Name")
-        or selected_row.get("Index")
-        or selected_row.get("Value", "")
-    )
-    render_selected_item("Selected:", selected_name)
-    st.text_area(
-        selected_label,
-        disabled=True,
-        height=hhs_ui.ENV_VALUE_EDITOR_HEIGHT,
-        key=editor_key,
-        label_visibility="collapsed",
-        max_chars=int(hhs_ui.COMMAND_COLUMNS),
-    )
-    scroll_to_env_value_editor(editor_key)
 
 
 def service_name_cell_style(_: object) -> str:
@@ -5019,8 +5156,7 @@ def render_dirs_table() -> None:
     render_read_only_rows(
         filter_rows_by_text(parse_hhs_dirs(result.stdout), dirs_filter, other_filter),
         dir_table_key(),
-        hhs_ui.DIR_VALUE_EDITOR_KEY_PREFIX,
-        "Selected DIR value",
+        selected_value=lambda row, _index: row.get("Value", ""),
     )
 
 
@@ -5057,8 +5193,7 @@ def render_cmds_table() -> None:
             parse_hhs_commands(result.stdout), cmds_filter, other_filter
         ),
         cmd_table_key(),
-        hhs_ui.CMD_VALUE_EDITOR_KEY_PREFIX,
-        "Selected COMMAND value",
+        selected_value=lambda row, _index: row.get("Value", ""),
     )
 
 
@@ -5095,8 +5230,6 @@ def render_aliases_table() -> None:
             parse_hhs_aliases(result.stdout), alias_filter, other_filter
         ),
         alias_table_key(),
-        hhs_ui.ALIAS_VALUE_EDITOR_KEY_PREFIX,
-        "Selected ALIAS value",
     )
 
 
@@ -5168,8 +5301,7 @@ def render_history_commands_table() -> None:
             parse_hhs_history(result.stdout), history_commands_filter, other_filter
         ),
         history_command_table_key(),
-        hhs_ui.HISTORY_COMMAND_VALUE_EDITOR_KEY_PREFIX,
-        "Selected COMMANDS value",
+        selected_value=lambda row, _index: row.get("Value", ""),
     )
 
 
@@ -5213,8 +5345,7 @@ def render_history_directories_table() -> None:
     render_read_only_rows(
         rows,
         history_directory_table_key(),
-        hhs_ui.HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX,
-        "Selected DIRECTORIES value",
+        selected_value=lambda row, _index: row.get("Value", ""),
     )
 
 
@@ -5919,10 +6050,7 @@ def render_ai_settings_panel() -> None:
         key=ai_model_table_key(),
         use_container_width=True,
         row_style=style_ai_model_row,
-        selected_label=lambda row, _index: (
-            f'<div class="hhs-ai-selected-model">Selected: <strong>{html.escape(row["Name"])}</strong></div>'
-        ),
-        selected_label_html=True,
+        selected_label=lambda row, _index: f"Selected: {row['Name']}",
         action_buttons=[
             {
                 "label": "Select Model",

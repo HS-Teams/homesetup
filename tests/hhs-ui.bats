@@ -1124,6 +1124,60 @@ PY
   run grep -q 'selected_label=lambda row, _index: f"Selected: {row.get('"'"'Tool'"'"', '"'"''"'"')}"' "${ui_file}"
   assert_success
 
+  run grep -q 'def render_selected_table_item' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_editable: bool | Callable' "${ui_file}"
+  assert_success
+
+  run grep -q '""' "${ui_file}"
+  assert_success
+
+  run grep -q '"ﰸ"' "${ui_file}"
+  assert_success
+
+  run grep -q 'help="Edit"' "${ui_file}"
+  assert_success
+
+  run grep -q 'args=(editing_key, edit_key, edit_value)' "${ui_file}"
+  assert_success
+
+  run grep -q 'gap="small"' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.text_input(' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"{value}:"' "${ui_file}"
+  assert_success
+
+  run grep -q '\[1, 0.08\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'help="Cancel edit"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def cancel_selected_item_edit' "${ui_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="_selected_editing_"\] button' "${css_file}"
+  assert_success
+
+  run grep -q '\[data-testid="stTextInput"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'grid-template-columns: max-content minmax(0, 1fr)' "${css_file}"
+  assert_success
+
+  run grep -q 'white-space: nowrap' "${css_file}"
+  assert_success
+
+  run grep -q 'hhs-selected-item-line' "${ui_file}"
+  assert_success
+
+  run grep -q 'display: inline-flex' "${css_file}"
+  assert_success
+
   run grep -q 'def build_hhs_hspm_command' "${ui_file}"
   assert_success
 
@@ -2155,12 +2209,6 @@ PY
   run grep -q 'hhs-ai-model-action-footer-guard' "${css_file}"
   assert_success
 
-  run grep -q 'hhs-ai-selected-model' "${ui_file}"
-  assert_success
-
-  run grep -q 'hhs-ai-selected-model strong' "${css_file}"
-  assert_success
-
   run grep -q 'min-height: 8rem' "${css_file}"
   assert_success
 
@@ -2252,6 +2300,38 @@ PY
   assert_success
 
   run grep -q 'def render_aliases_table' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_editable=True' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_edit_key=lambda row, _index: env_value_editor_key(row\["Name"\])' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_edit_key=lambda _row, index: path_value_editor_key(index)' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_value: Callable\[\[dict\[str, str\], int\], str\] | None = None' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_value=lambda row, _index: row.get("Value", "")' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+import ast
+from pathlib import Path
+
+tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
+functions = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+read_only = functions["render_read_only_rows"]
+if any(
+    isinstance(node, ast.Call)
+    and isinstance(node.func, ast.Attribute)
+    and node.func.attr == "text_area"
+    for node in ast.walk(read_only)
+):
+    raise SystemExit("read-only selected rows should not render disabled text areas")
+PY
   assert_success
 }
 

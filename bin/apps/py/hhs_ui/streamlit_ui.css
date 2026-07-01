@@ -66,20 +66,77 @@ textarea,
   color: var(--hhs-markdown-table-value);
 }
 
-.hhs-selected-item {
-  color: var(--hhs-selected-item-label);
-  font-size: 0.88rem;
-  font-weight: 650;
-  line-height: 1.45;
-  margin: 0.25rem 0;
+.hhs-selected-item-line {
+  align-items: baseline;
+  display: inline-flex;
+  gap: 0.45rem;
+  max-width: 100%;
 }
 
 .hhs-selected-item-label {
   color: var(--hhs-selected-item-label);
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.45;
+  white-space: nowrap;
 }
 
 .hhs-selected-item-value {
   color: var(--hhs-selected-item-value);
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+div[class*="_selected_editing_"] button {
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  min-height: 2.5rem;
+  padding: 0.1rem 0.25rem;
+}
+
+div[class*="st-key-alias_selected_value_"] [data-testid="stTextInput"],
+div[class*="st-key-cmd_selected_value_"] [data-testid="stTextInput"],
+div[class*="st-key-dir_selected_value_"] [data-testid="stTextInput"],
+div[class*="st-key-env_selected_value_"] [data-testid="stTextInput"],
+div[class*="st-key-history_command_selected_value_"] [data-testid="stTextInput"],
+div[class*="st-key-history_directory_selected_value_"] [data-testid="stTextInput"],
+div[class*="st-key-path_selected_value_"] [data-testid="stTextInput"],
+div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+div[class*="st-key-alias_selected_value_"] [data-testid="stTextInput"] label,
+div[class*="st-key-cmd_selected_value_"] [data-testid="stTextInput"] label,
+div[class*="st-key-dir_selected_value_"] [data-testid="stTextInput"] label,
+div[class*="st-key-env_selected_value_"] [data-testid="stTextInput"] label,
+div[class*="st-key-history_command_selected_value_"] [data-testid="stTextInput"] label,
+div[class*="st-key-history_directory_selected_value_"] [data-testid="stTextInput"] label,
+div[class*="st-key-path_selected_value_"] [data-testid="stTextInput"] label,
+div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label {
+  margin: 0;
+  min-width: 0;
+}
+
+div[class*="st-key-alias_selected_value_"] [data-testid="stTextInput"] label p,
+div[class*="st-key-cmd_selected_value_"] [data-testid="stTextInput"] label p,
+div[class*="st-key-dir_selected_value_"] [data-testid="stTextInput"] label p,
+div[class*="st-key-env_selected_value_"] [data-testid="stTextInput"] label p,
+div[class*="st-key-history_command_selected_value_"] [data-testid="stTextInput"] label p,
+div[class*="st-key-history_directory_selected_value_"] [data-testid="stTextInput"] label p,
+div[class*="st-key-path_selected_value_"] [data-testid="stTextInput"] label p,
+div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p {
+  color: var(--hhs-selected-item-label);
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.45;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .hhs-vspacer {
@@ -265,16 +322,6 @@ div[data-testid="stNumberInput"] {
 .hhs-ai-settings-current-model span {
   border-radius: 4px;
   padding: 0.2rem 0.45rem;
-}
-
-.hhs-ai-selected-model {
-  font-size: 0.9rem;
-  font-weight: 650;
-  margin: 0 0 0.5rem;
-}
-
-.hhs-ai-selected-model strong {
-  font-weight: 800;
 }
 
 .hhs-ai-model-action-footer-guard {
@@ -486,6 +533,17 @@ div[class*="st-key-service_selected_value_"] textarea {
   overflow-y: hidden;
   resize: none;
   white-space: pre;
+}
+
+div[class*="st-key-alias_selected_value_"] input,
+div[class*="st-key-cmd_selected_value_"] input,
+div[class*="st-key-dir_selected_value_"] input,
+div[class*="st-key-env_selected_value_"] input,
+div[class*="st-key-history_command_selected_value_"] input,
+div[class*="st-key-history_directory_selected_value_"] input,
+div[class*="st-key-path_selected_value_"] input,
+div[class*="st-key-service_selected_value_"] input {
+  min-height: 2.5rem;
 }
 
 .hhs-tab-loader {
