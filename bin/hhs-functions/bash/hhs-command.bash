@@ -19,7 +19,9 @@ function __hhs_command() {
 
   HHS_CMD_FILE=${HHS_CMD_FILE:-$HHS_DIR/.cmd_file}
 
-  local cmd_name cmd_alias cmd_expr pad pad_len mselect_file all_cmds=() index=1 sel_cmd ret_val=1
+  local cmd_name cmd_alias cmd_expr pad pad_len mselect_file all_cmds=() cmd_index next_cmd
+  local normalized_index
+  local index=1 sel_cmd ret_val=1
   local columns col_offset=26
 
   touch "${HHS_CMD_FILE}"
@@ -48,13 +50,16 @@ function __hhs_command() {
       ;;
     -a | --add)
       shift
-      cmd_name=$(echo -en "${1//[:space:]/_}" | tr '[:lower:]' '[:upper:]')
+      cmd_name=$(echo -en "$1" | tr -s '[:space:]' '_' | tr '[:lower:]' '[:upper:]')
       shift
       cmd_expr="${*//\"/\\\"}"
       if [[ -z "${cmd_name}" || -z "${cmd_expr}" ]]; then
         __hhs_errcho "${FUNCNAME[0]}" "Invalid arguments: \"${cmd_name}\"\t\"${cmd_expr}\"${NC}"
       fi
-      ised -e "s#(^Command ${cmd_name}: .*)##g" -e '/^\s*$/d' "${HHS_CMD_FILE}"
+      for cmd_index in "${!all_cmds[@]}"; do
+        next_cmd="${all_cmds[cmd_index]}"
+        [[ "${next_cmd}" == "Command ${cmd_name}: "* ]] && unset 'all_cmds[cmd_index]'
+      done
       all_cmds+=("Command ${cmd_name}: ${cmd_expr}")
       printf "%s\n" "${all_cmds[@]}" >"${HHS_CMD_FILE}"
       sort -u "${HHS_CMD_FILE}" -o "${HHS_CMD_FILE}"
@@ -65,13 +70,14 @@ function __hhs_command() {
       shift
       # Command ID can be the index or the alias
       cmd_alias=$(echo -en "$1" | tr -s '[:space:]' '_' | tr '[:lower:]' '[:upper:]')
-      local re='^[1-9]+$'
+      local re='^0*[1-9][0-9]*$'
       if [[ ${cmd_alias} =~ $re ]]; then
         # Remove by index
-        cmd_expr=$(awk "NR==$1" "${HHS_CMD_FILE}" | awk -F ': ' '{ print $0 }')
+        normalized_index=$((10#${cmd_alias}))
+        cmd_expr=$(awk "NR==${normalized_index}" "${HHS_CMD_FILE}" | awk -F ': ' '{ print $0 }')
         [[ -z "${cmd_expr}" ]] && __hhs_errcho "${FUNCNAME[0]}" "Command index not found: \"${cmd_alias}\"" && return 1
         ised -e "/^${cmd_expr}$/d" "${HHS_CMD_FILE}" && {
-          echo "${YELLOW}Command ${WHITE}(${cmd_alias})${NC} removed!"
+          echo "${YELLOW}Command ${WHITE}(${normalized_index})${NC} removed!"
           ret_val=0
         }
       elif [[ -n "${cmd_alias}" ]]; then

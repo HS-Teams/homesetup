@@ -45,13 +45,13 @@ function __hhs_aliases() {
     elif [[ "$1" == '-r' || "$1" == "--remove" ]] && [[ -n "$2" ]]; then
       alias_name="$2"
       # Remove one alias
-      if unalias "${alias_name}" &>/dev/null; then
+      if grep -q "^alias ${alias_name}=.*$" "${HHS_ALIASES_FILE}"; then
+        unalias "${alias_name}" &>/dev/null || true
         if ised "/^alias ${alias_name}=.*$/d" "${HHS_ALIASES_FILE}"; then
           echo -e "${YELLOW}Alias removed: ${WHITE}\"${alias_name}\"${NC}"
           return 0
-        else
-          __hhs_errcho "${FUNCNAME[0]}" "Failed to remove alias: \"${alias_name}\""
         fi
+        __hhs_errcho "${FUNCNAME[0]}" "Failed to remove alias: \"${alias_name}\""
       else
         __hhs_errcho "${FUNCNAME[0]}" "Alias not found: \"${alias_name}\""
         return 1

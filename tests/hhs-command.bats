@@ -66,6 +66,25 @@ teardown() {
 }
 
 # TC - 2
+@test "when-adding-existing-command-alias-then-should-replace-entry" {
+  run __hhs_command -a test_cmd ls -lt
+  assert_success
+  assert_output --partial "Command saved: \"TEST_CMD\""
+
+  run __hhs_command -a test_cmd ls -lta
+  assert_success
+  assert_output --partial "Command saved: \"TEST_CMD\""
+
+  run cat "${HHS_CMD_FILE}"
+  assert_success
+  assert_output "Command TEST_CMD: ls -lta"
+
+  run grep -c '^Command TEST_CMD:' "${HHS_CMD_FILE}"
+  assert_success
+  assert_output "1"
+}
+
+# TC - 2
 @test "when-removing-command-by-index-then-should-update-file" {
   run __hhs_command -a run echo run
   assert_success
@@ -73,6 +92,23 @@ teardown() {
   assert_success
 
   run __hhs_command -r 1
+  assert_success
+  assert_output --partial "Command (1) removed!"
+
+  run cat "${HHS_CMD_FILE}"
+  assert_success
+  assert_output --partial "Command TRY: echo try"
+  refute_output --partial "Command RUN: echo run"
+}
+
+# TC - 4
+@test "when-removing-command-by-padded-index-then-should-update-file" {
+  run __hhs_command -a run echo run
+  assert_success
+  run __hhs_command -a try echo try
+  assert_success
+
+  run __hhs_command -r 001
   assert_success
   assert_output --partial "Command (1) removed!"
 

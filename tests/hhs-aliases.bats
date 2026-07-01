@@ -44,3 +44,12 @@ load_bats_libs
   assert_success
   assert_output --partial "Alias removed: \"hhs-bats\""
 }
+
+# TC - 5
+@test "when-removing-an-alias-only-saved-on-disk-then-should-remove-it" {
+  printf "alias hhs-bats='ls -la'\n" >> "${HHS_ALIASES_FILE}"
+  run __hhs_aliases -r 'hhs-bats'
+  assert_success
+  assert_output --partial "Alias removed: \"hhs-bats\""
+  refute grep -q "^alias hhs-bats=.*$" "${HHS_ALIASES_FILE}"
+}
