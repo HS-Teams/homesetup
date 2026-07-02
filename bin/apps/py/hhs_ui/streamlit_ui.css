@@ -492,6 +492,33 @@ div[class*="st-key-monitor_process_kill_button_"] button {
   padding: 0.2rem 0.45rem;
 }
 
+.hhs-ai-chat-meta .hhs-tooltip {
+  cursor: help;
+  position: relative;
+}
+
+.hhs-ai-chat-meta .hhs-tooltip-content {
+  background: var(--hhs-panel);
+  border: 1px solid var(--hhs-comment);
+  border-radius: 4px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  color: var(--hhs-foreground);
+  display: none;
+  left: 0;
+  line-height: 1.35;
+  min-width: max-content;
+  padding: 0.45rem 0.6rem;
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  white-space: nowrap;
+  z-index: 20;
+}
+
+.hhs-ai-chat-meta .hhs-tooltip:hover .hhs-tooltip-content,
+.hhs-ai-chat-meta .hhs-tooltip:focus-within .hhs-tooltip-content {
+  display: block;
+}
+
 .hhs-ai-assistant-text {
   font-weight: 800;
 }

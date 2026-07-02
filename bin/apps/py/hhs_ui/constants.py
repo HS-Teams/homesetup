@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.157"
+VERSION = "0.0.165"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -21,6 +21,7 @@ APP_FONT_FILE = (
 APP_AI_USER_AVATAR_FILE = APP_DIR / "assets/images/user.png"
 APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"
 APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"
+APP_FAVICON_FILE = APP_DIR / "assets/images/favicon.png"
 UI_STATE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-state"
 UI_CACHE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-cache"
 UI_SSH_CONNECTION_FILE = (
@@ -105,7 +106,7 @@ LOG_LEVELS = (
 TABLE_CONTROLS_PANEL_TITLE = "Filters & Controls"
 THEME_SELECTED_KEY = "theme_selected"
 AI_CODE_BLOCK_WRAP_COLUMNS = 96
-AI_PERFORMANCE_MIN_SAMPLES = 5
+AI_PERFORMANCE_MIN_SAMPLES = 3
 AI_PERFORMANCE_RECALC_INTERVAL = 5
 AI_PERFORMANCE_TIMING_LIMIT = 100
 PROCESS_TABLE_KEY = "monitor_process_table"

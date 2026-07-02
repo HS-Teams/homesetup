@@ -1408,13 +1408,39 @@ def render_folder_picker_dialog() -> bool:
 
 
 def homesetup_version() -> str:
-    """Return the HomeSetup product version from the shell environment."""
+    """Return the cached HomeSetup product version from the shell environment."""
+    refresh_cache = not bool(st.session_state.get("footer_hhs_version_cache_loaded"))
+    result = run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)
+    st.session_state["footer_hhs_version_cache_loaded"] = True
+    if result.returncode == 0:
+        for row in parse_hhs_envs(result.stdout):
+            if row["Name"] == "HHS_VERSION" and row["Value"]:
+                return row["Value"]
     return os.environ.get("HHS_VERSION", "unknown")
 
 
 def homesetup_home() -> Path:
     """Return the HomeSetup repository root used by this UI."""
     return Path(os.environ.get("HHS_HOME", hhs_ui.APP_DIR.parents[3])).expanduser()
+
+
+def homesetup_config_dir() -> Path:
+    """Return the HomeSetup runtime configuration directory used by this UI."""
+    return Path(os.environ.get("HHS_DIR", Path.home() / ".config/hhs")).expanduser()
+
+
+def ollama_history_file() -> Path:
+    """Return the configured HomeSetup Ollama history file path."""
+    return Path(
+        os.environ.get("HHS_OLLAMA_HISTORY_FILE", homesetup_config_dir() / ".ollama_history")
+    ).expanduser()
+
+
+def ollama_prompt_file() -> Path:
+    """Return the configured HomeSetup Ollama prompt file path."""
+    return Path(
+        os.environ.get("HHS_OLLAMA_PROMPT_FILE", homesetup_config_dir() / "hhs-ask-ollama.md")
+    ).expanduser()
 
 
 def monitor_default_disk_directory() -> str:
@@ -1868,6 +1894,8 @@ def handle_footer_actions() -> None:
                 output or "HomeSetup update command completed."
             )
             st.session_state["updater_update_available"] = False
+            cache_delete_tag("env")
+            st.session_state["footer_hhs_version_cache_loaded"] = False
             save_ui_state()
             push_floating_status("HomeSetup update command completed.", "info")
 
@@ -3367,6 +3395,125 @@ def ollama_model_context_size(ollama_model: str) -> str:
     return "?"
 
 
+def parse_context_window_kib(context_size: str) -> int:
+    """Return an Ollama context window label as KiB for history-file budgeting."""
+    normalized_context = context_size.strip().upper().replace(",", "")
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([KMG]?)", normalized_context)
+    if not match:
+        return 0
+    value = float(match.group(1))
+    unit = match.group(2)
+    multiplier = {"": 1, "K": 1, "M": 1024, "G": 1024 * 1024}[unit]
+    return max(int(value * multiplier), 0)
+
+
+def file_size_bytes(file_path: Path) -> int:
+    """Return a file size in bytes, or zero when the file is missing."""
+    try:
+        return file_path.stat().st_size if file_path.is_file() else 0
+    except OSError:
+        return 0
+
+
+def percent_of_context(file_size: int, context_window_bytes: int) -> int:
+    """Return a clamped percentage of an Ollama context window."""
+    return max(0, min(round((file_size / context_window_bytes) * 100), 100))
+
+
+def ai_context_usage_percentages(context_size: str) -> dict[str, int] | None:
+    """Return prompt, history context, and total context usage percentages."""
+    context_window_kib = parse_context_window_kib(context_size)
+    if context_window_kib <= 0:
+        return None
+    context_window_bytes = context_window_kib * 1024
+    prompt_size = file_size_bytes(ollama_prompt_file())
+    history_size = file_size_bytes(ollama_history_file())
+    return {
+        "prompt": percent_of_context(prompt_size, context_window_bytes),
+        "context": percent_of_context(history_size, context_window_bytes),
+        "total": percent_of_context(prompt_size + history_size, context_window_bytes),
+    }
+
+
+def ai_context_used_percent(context_size: str) -> int | None:
+    """Return the percent of the selected model context used by prompt and history."""
+    usage_percentages = ai_context_usage_percentages(context_size)
+    if usage_percentages is None:
+        return None
+    return usage_percentages["total"]
+
+
+def ai_context_used_color(percent_used: int) -> str:
+    """Return the CSS color token for an AI context usage percentage."""
+    if percent_used >= 90:
+        return "var(--hhs-danger)"
+    if percent_used >= 40:
+        return "var(--hhs-warning)"
+    return "var(--hhs-success)"
+
+
+def html_tooltip_chip(label: str, value_html: str, tooltip_html: str) -> str:
+    """Return a chat metadata chip with an HTML tooltip."""
+    return (
+        f'<span class="hhs-tooltip" tabindex="0">{html.escape(label)}: '
+        f"{value_html}"
+        f'<span class="hhs-tooltip-content">{tooltip_html}</span></span>'
+    )
+
+
+def model_characteristics_tooltip_html(
+    ollama_model: str, context_size: str, model_output: str
+) -> str:
+    """Return model characteristics tooltip HTML using the model table columns."""
+    model_row = next(
+        (
+            row
+            for row in parse_ollama_model_rows(model_output, ollama_model)
+            if row["Name"] == ollama_model
+        ),
+        {},
+    )
+    if not model_row:
+        model_row = {"Name": ollama_model, "Context": context_size}
+    return "<br>".join(
+        f"{html.escape(column)}: {html.escape(str(value))}"
+        for column, value in model_row.items()
+        if str(value).strip()
+    )
+
+
+def ai_context_used_tooltip_html(context_size: str) -> str:
+    """Return prompt and history context usage tooltip HTML."""
+    usage_percentages = ai_context_usage_percentages(context_size)
+    if usage_percentages is None:
+        return "Prompt: -<br>Context: -"
+    return (
+        f"Prompt: {usage_percentages['prompt']}%<br>"
+        f"Context: {usage_percentages['context']}%"
+    )
+
+
+def ai_context_used_meta_html(context_size: str) -> str:
+    """Return the AI context usage meta row HTML."""
+    percent_used = ai_context_used_percent(context_size)
+    tooltip_html = ai_context_used_tooltip_html(context_size)
+    if percent_used is None:
+        return html_tooltip_chip(
+            "Ctx Used",
+            '<strong class="hhs-ai-chat-model hhs-ai-context-used">-</strong>',
+            tooltip_html,
+        )
+    formatted_percent = html.escape(f"{percent_used}%")
+    context_color = ai_context_used_color(percent_used)
+    return html_tooltip_chip(
+        "Ctx Used",
+        '<strong class="hhs-ai-chat-model hhs-ai-context-used" '
+        f'style="color: {context_color};">'
+        f"{formatted_percent}</strong>",
+        tooltip_html,
+    )
+
+
 def ai_model_performance_timings() -> list[dict[str, str | float]]:
     """Return the persisted AI request timing circular buffer."""
     timings = st.session_state.setdefault("ai_model_performance_timings", [])
@@ -3436,8 +3583,11 @@ def record_ai_model_request_duration(model_name: str, duration_seconds: float) -
     sample_counts[clean_model] = sample_counts.get(clean_model, 0) + 1
     model_sample_count = sample_counts[clean_model]
     if (
-        model_sample_count >= hhs_ui.AI_PERFORMANCE_MIN_SAMPLES
-        and model_sample_count % hhs_ui.AI_PERFORMANCE_RECALC_INTERVAL == 0
+        model_sample_count == hhs_ui.AI_PERFORMANCE_MIN_SAMPLES
+        or (
+            model_sample_count > hhs_ui.AI_PERFORMANCE_MIN_SAMPLES
+            and model_sample_count % hhs_ui.AI_PERFORMANCE_RECALC_INTERVAL == 0
+        )
     ):
         model_durations = timing_durations_for_model(clean_model)
         if model_durations:
@@ -3464,6 +3614,17 @@ def format_ai_request_duration(duration_seconds: float) -> str:
     return f"{duration_seconds / 60:.1f} minutes"
 
 
+def ai_model_recent_duration_tooltip_html(model_name: str) -> str:
+    """Return the last five AI request durations as tooltip HTML."""
+    recent_durations = timing_durations_for_model(model_name)[-5:]
+    if not recent_durations:
+        return "-"
+    return "<br>".join(
+        html.escape(format_ai_request_duration(duration))
+        for duration in recent_durations
+    )
+
+
 def ai_model_performance_meta_html(model_name: str) -> str:
     """Return the AI model performance meta row HTML, or an empty string."""
     average_duration = ai_model_average_duration_seconds(model_name)
@@ -3471,10 +3632,41 @@ def ai_model_performance_meta_html(model_name: str) -> str:
         formatted_duration = "-"
     else:
         formatted_duration = html.escape(format_ai_request_duration(average_duration))
-    return (
-        '<span>Latency: '
-        f'<strong class="hhs-ai-chat-duration">{formatted_duration}</strong></span>'
+    return html_tooltip_chip(
+        "Latency",
+        '<strong class="hhs-ai-chat-model hhs-ai-chat-duration">'
+        f"{formatted_duration}</strong>",
+        ai_model_recent_duration_tooltip_html(model_name),
     )
+
+
+def ai_chat_meta_html(
+    username: str, ollama_model: str, context_size: str, model_output: str
+) -> str:
+    """Return the AI chat metadata row HTML."""
+    safe_username = html.escape(username)
+    safe_model = html.escape(ollama_model)
+    safe_context_size = html.escape(context_size)
+    user_html = html_tooltip_chip(
+        "User",
+        f'<strong class="hhs-ai-chat-model hhs-ai-chat-user">{safe_username}</strong>',
+        "Current logged user",
+    )
+    model_html = html_tooltip_chip(
+        "Model",
+        f'<strong class="hhs-ai-chat-model">{safe_model}[{safe_context_size}]</strong>',
+        model_characteristics_tooltip_html(ollama_model, context_size, model_output),
+    )
+    performance_html = ai_model_performance_meta_html(ollama_model)
+    context_used_html = ai_context_used_meta_html(context_size)
+    return f"""
+    <div class="hhs-ai-chat-meta">
+      {user_html}
+      {model_html}
+      {context_used_html}
+      {performance_html}
+    </div>
+    """
 
 
 def format_ai_chat_prefix(
@@ -4514,6 +4706,15 @@ def cache_delete_tag(cache_tag: str) -> None:
         save_ui_cache(updated_cache)
 
 
+def cache_delete_command(command: str, cache_tag: str = "default") -> None:
+    """Delete the UI cache entry for a specific command-result tag and command."""
+    cache = load_ui_cache()
+    cache_key = command_cache_key(effective_bash_command(command), cache_tag)
+    if cache_key in cache:
+        del cache[cache_key]
+        save_ui_cache(cache)
+
+
 def cache_clear() -> None:
     """Delete all UI cache entries."""
     save_ui_cache({})
@@ -4559,6 +4760,7 @@ def build_hhs_envs_command(prefix_filter: str | None) -> str:
     filter_arg = f' "{prefix_filter}"' if prefix_filter else ""
     return (
         'export HHS_DIR="${HHS_DIR}"; '
+        'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
         f"__hhs_envs{filter_arg}"
@@ -5150,10 +5352,15 @@ def build_hhs_services_command(
     )
 
 
-def run_hhs_envs(prefix_filter: str | None) -> subprocess.CompletedProcess[str]:
+def run_hhs_envs(
+    prefix_filter: str | None, refresh_cache: bool = False
+) -> subprocess.CompletedProcess[str]:
     """Run the __hhs_envs HomeSetup function and return the completed process."""
+    command = build_hhs_envs_command(prefix_filter)
+    if refresh_cache:
+        cache_delete_command(command, "env")
     return run_bash_command(
-        build_hhs_envs_command(prefix_filter),
+        command,
         "Loading environment variables...",
         cache_tag="env",
     )
@@ -8255,17 +8462,11 @@ def render_ai_chat_panel() -> None:
         else "unknown"
     )
     context_size = ollama_model_context_size(ollama_model)
-    performance_html = ai_model_performance_meta_html(ollama_model)
     meta_col, clear_col = st.columns([3.6, 0.4], vertical_alignment="center")
     with meta_col:
-        st.markdown(
-            f"""
-            <div class="hhs-ai-chat-meta">
-              <span>User: <strong class="hhs-ai-chat-user">{html.escape(username)}</strong></span>
-              <span>Model: <strong class="hhs-ai-chat-model">{html.escape(ollama_model)}[{html.escape(context_size)}]</strong></span>
-              {performance_html}
-            </div>
-            """,
+        meta_placeholder = st.empty()
+        meta_placeholder.markdown(
+            ai_chat_meta_html(username, ollama_model, context_size, model_result.stdout),
             unsafe_allow_html=True,
         )
     with clear_col:
@@ -8321,6 +8522,12 @@ def render_ai_chat_panel() -> None:
             result = run_hhs_ask(prompt)
             request_duration = time.perf_counter() - ask_started_at
             record_ai_model_request_duration(ollama_model, request_duration)
+            meta_placeholder.markdown(
+                ai_chat_meta_html(
+                    username, ollama_model, context_size, model_result.stdout
+                ),
+                unsafe_allow_html=True,
+            )
             if result.returncode != 0:
                 answer = strip_ansi(
                     result.stderr or result.stdout or "Unable to ask Ollama."
@@ -8684,6 +8891,7 @@ def main() -> None:
     configure_app_font_theme(selected_theme)
     st.set_page_config(
         page_title=f"HomeSetup - UI v{hhs_ui.VERSION}",
+        page_icon=str(hhs_ui.APP_FAVICON_FILE),
         layout="wide",
     )
     restore_ui_state()
@@ -8691,6 +8899,7 @@ def main() -> None:
     st.session_state.setdefault("updater_last_check_epoch", 0.0)
     st.session_state.setdefault("updater_last_check_output", "")
     st.session_state.setdefault("updater_update_available", False)
+    st.session_state.setdefault("footer_hhs_version_cache_loaded", False)
     st.session_state.setdefault("footer_shell_version_dialog_title", "")
     st.session_state.setdefault("footer_shell_version_output", "")
     render_styles()

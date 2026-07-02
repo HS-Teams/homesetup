@@ -99,9 +99,9 @@ export HHS_STREAMLIT_UI_PORT="${HHS_STREAMLIT_UI_PORT:-18501}"
 # Load all dotfiles following the order.
 # Notice that the order here is important, do not reorder it.
 DOTFILES=(
+  'bash_env'
   'bash_aliases'
   'bash_colors'
-  'bash_env'
   'bash_functions'
   'bash_icons'
   'bash_prompt'
@@ -112,11 +112,11 @@ DOTFILES=(
 # Notice that the order here is important, do not reorder it.
 CUSTOM_DOTFILES=(
    'env'
-   'colors'
-   'prompt'
    'aliases'
-   'aliasdef'
+   'colors'
    'functions'
+   'prompt'
+   'aliasdef'
 )
 
 # Re-create the HomeSetup log file.

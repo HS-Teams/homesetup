@@ -732,6 +732,12 @@ assert "st.html(" in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source
 assert 'Connected to remote  {connected_host_display}' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
+homesetup_version_body = ui_source.split("def homesetup_version", 1)[1].split("\ndef ", 1)[0]
+assert 'st.session_state.get("footer_hhs_version_cache_loaded")' in homesetup_version_body
+assert 'run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)' in homesetup_version_body
+assert 'st.session_state["footer_hhs_version_cache_loaded"] = True' in homesetup_version_body
+assert 'parse_hhs_envs(result.stdout)' in homesetup_version_body
+assert 'hhs_ui.VERSION' not in homesetup_version_body
 constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
 init_source = Path("bin/apps/py/hhs_ui/__init__.py").read_text()
 assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in constants_source
@@ -772,6 +778,11 @@ assert 'footer_shell_version_dialog_close_button' in ui_source
 assert 'def build_hhs_updater_command' in ui_source
 assert 'def run_hhs_updater_check' in ui_source
 assert 'def run_hhs_updater_update' in ui_source
+footer_actions_body = ui_source.split("def handle_footer_actions", 1)[1].split("\ndef ", 1)[0]
+assert 'cache_delete_tag("env")' in footer_actions_body
+assert 'st.session_state["footer_hhs_version_cache_loaded"] = False' in footer_actions_body
+assert 'def cache_delete_command' in ui_source
+assert 'cache_delete_command(command, "env")' in ui_source
 assert 'def updater_output_has_updates' in ui_source
 assert 'def updater_check_due' in ui_source
 assert 'def store_updater_check_result' in ui_source
@@ -2692,6 +2703,12 @@ PY
   run grep -q 'APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"' "${constants_file}"
   assert_success
 
+  run grep -q 'APP_FAVICON_FILE = APP_DIR / "assets/images/favicon.png"' "${constants_file}"
+  assert_success
+
+  run grep -q 'APP_FAVICON_FILE' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
   run test -s "${ask_prompt_file}"
   assert_success
 
@@ -2702,6 +2719,12 @@ PY
   assert_success
 
   run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/images/homesetup.png"
+  assert_success
+
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/images/favicon.png"
+  assert_success
+
+  run grep -q 'page_icon=str(hhs_ui.APP_FAVICON_FILE)' "${ui_file}"
   assert_success
 
   run grep -q 'build_hhs_ask_execute_command(\["-k", message\])' "${ui_file}"
@@ -3066,6 +3089,9 @@ PY
   run grep -q 'timeout_seconds=hhs_ask_timeout_seconds()' "${ui_file}"
   assert_success
 
+  run grep -q 'AI_PERFORMANCE_MIN_SAMPLES = 3' "${constants_file}"
+  assert_success
+
   run grep -q 'AI_PERFORMANCE_TIMING_LIMIT = 100' "${constants_file}"
   assert_success
 
@@ -3090,6 +3116,114 @@ PY
   run grep -q 'def record_ai_model_request_duration' "${ui_file}"
   assert_success
 
+  run grep -q 'def ai_chat_meta_html' "${ui_file}"
+  assert_success
+
+  run grep -q 'def parse_context_window_kib' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ai_context_used_percent' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ai_context_used_color' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ai_context_used_meta_html' "${ui_file}"
+  assert_success
+
+  run grep -q 'def html_tooltip_chip' "${ui_file}"
+  assert_success
+
+  run grep -q 'def model_characteristics_tooltip_html' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ai_context_used_tooltip_html' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ai_model_recent_duration_tooltip_html' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ollama_history_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ollama_prompt_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'def file_size_bytes' "${ui_file}"
+  assert_success
+
+  run grep -q 'HHS_OLLAMA_HISTORY_FILE' "${ui_file}"
+  assert_success
+
+  run grep -q 'HHS_OLLAMA_PROMPT_FILE' "${ui_file}"
+  assert_success
+
+  run grep -q '".ollama_history"' "${ui_file}"
+  assert_success
+
+  run grep -q '"hhs-ask-ollama.md"' "${ui_file}"
+  assert_success
+
+  run grep -q 'prompt_size = file_size_bytes(ollama_prompt_file())' "${ui_file}"
+  assert_success
+
+  run grep -q 'history_size = file_size_bytes(ollama_history_file())' "${ui_file}"
+  assert_success
+
+  run grep -q 'percent_of_context(prompt_size + history_size' "${ui_file}"
+  assert_success
+
+  run grep -q '"Ctx Used"' "${ui_file}"
+  assert_success
+
+  run grep -q 'Current logged user' "${ui_file}"
+  assert_success
+
+  run grep -q 'Prompt: ' "${ui_file}"
+  assert_success
+
+  run grep -q 'Context: ' "${ui_file}"
+  assert_success
+
+  run grep -q 'parse_ollama_model_rows(model_output, ollama_model)' "${ui_file}"
+  assert_success
+
+  run grep -q 'timing_durations_for_model(model_name)\[-5:\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-tooltip-content' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-ai-chat-meta .hhs-tooltip:hover .hhs-tooltip-content' "${css_file}"
+  assert_success
+
+  run grep -q 'hhs-ai-chat-model hhs-ai-chat-user' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-ai-chat-model hhs-ai-context-used' "${ui_file}"
+  assert_success
+
+  run grep -q 'var(--hhs-danger)' "${ui_file}"
+  assert_success
+
+  run grep -q 'var(--hhs-warning)' "${ui_file}"
+  assert_success
+
+  run grep -q 'var(--hhs-success)' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-ai-chat-model hhs-ai-chat-duration' "${ui_file}"
+  assert_success
+
+  run grep -q 'meta_placeholder = st.empty()' "${ui_file}"
+  assert_success
+
+  run grep -q 'meta_placeholder.markdown(' "${ui_file}"
+  assert_success
+
+  run grep -q 'model_sample_count == hhs_ui.AI_PERFORMANCE_MIN_SAMPLES' "${ui_file}"
+  assert_success
+
   run grep -q 'def ai_model_performance_timings' "${ui_file}"
   assert_success
 
@@ -3105,7 +3239,7 @@ PY
   run grep -q 'record_ai_model_request_duration(ollama_model, request_duration)' "${ui_file}"
   assert_success
 
-  run grep -q 'Latency: ' "${ui_file}"
+  run grep -q '"Latency"' "${ui_file}"
   assert_success
 
   run grep -q 'def parse_ollama_model_rows' "${ui_file}"
@@ -3896,6 +4030,12 @@ PY
   assert_success
 
   run grep -q 'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")";' "${ui_file}"
+  assert_success
+
+  run grep -q 'run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state.setdefault("footer_hhs_version_cache_loaded", False)' "${ui_file}"
   assert_success
 }
 
