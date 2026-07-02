@@ -2855,6 +2855,9 @@ PY
   run grep -q 'def ttyd_binary' "${ui_file}"
   assert_success
 
+  run grep -q '/opt/homebrew/opt/ttyd/bin/ttyd' "${ui_file}"
+  assert_success
+
   run grep -q 'def ttyd_font_family' "${ui_file}"
   assert_success
 

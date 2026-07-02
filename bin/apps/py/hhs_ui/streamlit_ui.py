@@ -3177,7 +3177,9 @@ def ttyd_binary() -> str:
     for candidate in (
         os.environ.get("TTYD", ""),
         "/opt/homebrew/bin/ttyd",
+        "/opt/homebrew/opt/ttyd/bin/ttyd",
         "/usr/local/bin/ttyd",
+        "/usr/local/opt/ttyd/bin/ttyd",
         "/usr/bin/ttyd",
     ):
         if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
