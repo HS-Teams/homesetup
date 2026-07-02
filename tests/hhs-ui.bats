@@ -632,7 +632,7 @@ PY
   assert_success
 
   run grep -q 'class="hhs-vspacer"' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'class="hhs-sidebar-separator"' "${ui_file}"
   assert_success
@@ -2458,10 +2458,24 @@ PY
   run grep -q '" HANDBOOK"' "${ui_file}"
   assert_success
 
-  run grep -q '" TERMINAL"' "${ui_file}"
+  run grep -q '" Terminal"' "${ui_file}"
   assert_success
 
   run grep -q 'args=("TERMINAL",)' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+sidebar_body = ui_source.split("def render_sidebar()", 1)[1].split("\ndef ", 1)[0]
+terminal_index = sidebar_body.index("render_sidebar_terminal_button()")
+theme_index = sidebar_body.index('st.markdown("**Theme**")')
+documents_index = sidebar_body.index('st.markdown("**Documents**")')
+assert terminal_index < theme_index < documents_index
+documents_body = sidebar_body[documents_index:]
+assert '" Terminal"' not in documents_body
+PY
   assert_success
 
   run grep -q 'def render_terminal_document_view' "${ui_file}"

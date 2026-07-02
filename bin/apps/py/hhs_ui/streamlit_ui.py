@@ -505,6 +505,17 @@ def close_document_view() -> None:
     save_ui_state()
 
 
+def render_sidebar_terminal_button() -> None:
+    """Render the sidebar shortcut that opens the Terminal view."""
+    st.button(
+        " Terminal",
+        key="terminal_open_button",
+        on_click=open_document_view,
+        args=("TERMINAL",),
+        width="stretch",
+    )
+
+
 def clear_ai_chat_history() -> None:
     """Reset the backend ask history and clear the current AI chat history."""
     result = run_hhs_ask_reset(close_dialogs=True)
@@ -876,7 +887,6 @@ def render_sidebar() -> None:
                 width="stretch",
             )
         if connected_host or not selected_host_is_local():
-            st.markdown('<div class="hhs-vspacer"></div>', unsafe_allow_html=True)
             if connected_host:
                 st.button(
                     "ﮤ Disconnect",
@@ -891,11 +901,11 @@ def render_sidebar() -> None:
                     on_click=request_ssh_host_connect,
                     width="stretch",
                 )
-            st.markdown(
-                '<div class="hhs-vspacer"></div><hr class="hhs-sidebar-separator" /><div class="hhs-vspacer"></div>',
-                unsafe_allow_html=True,
-            )
-        st.write("")
+        render_sidebar_terminal_button()
+        st.markdown(
+            '<hr class="hhs-sidebar-separator" />',
+            unsafe_allow_html=True,
+        )
         st.markdown("**Theme**")
         selected_theme = st.selectbox(
             "Theme",
@@ -936,13 +946,6 @@ def render_sidebar() -> None:
                 key="handbook_open_button",
                 on_click=open_document_view,
                 args=("HANDBOOK",),
-                width="stretch",
-            )
-            st.button(
-                " TERMINAL",
-                key="terminal_open_button",
-                on_click=open_document_view,
-                args=("TERMINAL",),
                 width="stretch",
             )
 

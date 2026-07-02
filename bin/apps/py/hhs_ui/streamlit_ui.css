@@ -248,10 +248,6 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
   white-space: nowrap;
 }
 
-.hhs-vspacer {
-  height: 0.65rem;
-}
-
 .hhs-sidebar-separator {
   border: 0;
   border-top: 1px solid var(--hhs-theme-border-color);
