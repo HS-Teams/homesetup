@@ -20,12 +20,14 @@ Copyright:
 from __future__ import annotations
 
 import csv
+import atexit
 import hashlib
 import html
 import importlib
 import json
 import os
 import re
+import secrets
 import shlex
 import shutil
 import signal
@@ -34,13 +36,16 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from base64 import b64encode
 from collections.abc import Callable
 from datetime import datetime
 from functools import lru_cache
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import TypeVar
 
@@ -69,6 +74,10 @@ COMMAND_RESULT_SNAPSHOT_LIMIT = 100
 TTYD_PROCESS_KEY = "_hhs_ttyd_process"
 TTYD_PORT_KEY = "_hhs_ttyd_port"
 TTYD_SIGNATURE_KEY = "_hhs_ttyd_signature"
+TTYD_CLEANUP_TOKEN_KEY = "_hhs_ttyd_cleanup_token"
+TTYD_CLEANUP_REGISTRY: dict[str, dict[str, object]] = {}
+TTYD_CLEANUP_SERVER: ThreadingHTTPServer | None = None
+TTYD_CLEANUP_SERVER_PORT = 0
 AI_CONTEXT_UPLOAD_TYPES = (
     "txt",
     "md",
@@ -983,46 +992,70 @@ def render_sidebar() -> None:
 def render_preloader(message: str = "Loading...", transient: bool = True) -> None:
     """Render a full-page overlay preloader."""
     render_footer_visibility_script(hidden=True)
-    safe_message = html.escape(message)
     loader_class = (
         "hhs-tab-loader hhs-tab-loader-transient" if transient else "hhs-tab-loader"
     )
-    st.markdown(
-        f'<div class="{loader_class}">'
-        '<div class="hhs-tab-loader-panel">'
-        '<span class="hhs-tab-loader-spinner"></span>'
-        '<span class="hhs-tab-loader-copy">'
-        f'<span class="hhs-tab-loader-label">{safe_message}</span>'
-        '<span class="hhs-tab-loader-elapsed" data-start-time="0">time elapsed: 0m:00s</span>'
-        "</span>"
-        "</div>"
-        "</div>",
-        unsafe_allow_html=True,
+    components.html(
+        f"""
+        <script>
+          (() => {{
+            const doc = window.parent.document;
+            const existing = doc.getElementById("hhs-command-overlay");
+            if (existing) {{
+              existing.remove();
+            }}
+            const overlay = doc.createElement("div");
+            overlay.id = "hhs-command-overlay";
+            overlay.className = {json.dumps(loader_class)};
+            overlay.innerHTML = `
+              <div class="hhs-tab-loader-panel">
+                <span class="hhs-tab-loader-spinner"></span>
+                <span class="hhs-tab-loader-copy">
+                  <span class="hhs-tab-loader-label"></span>
+                  <span class="hhs-tab-loader-elapsed" data-start-time="0">time elapsed: 0m:00s</span>
+                </span>
+              </div>
+            `;
+            overlay.querySelector(".hhs-tab-loader-label").textContent = {json.dumps(str(message))};
+            doc.body.appendChild(overlay);
+            const node = overlay.querySelector(".hhs-tab-loader-elapsed");
+            if (!node || node.dataset.timerStarted === "true") {{
+              return;
+            }}
+            node.dataset.timerStarted = "true";
+            const started_at = Date.now();
+            const render_elapsed = () => {{
+              const elapsed_seconds = Math.max(0, Math.floor((Date.now() - started_at) / 1000));
+              const minutes = Math.floor(elapsed_seconds / 60);
+              const seconds = String(elapsed_seconds % 60).padStart(2, "0");
+              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
+            }};
+            render_elapsed();
+            window.setInterval(render_elapsed, 1000);
+          }})();
+        </script>
+        """,
+        height=0,
+        width=0,
     )
+
+
+def clear_preloader() -> None:
+    """Remove the browser-level command overlay."""
     components.html(
         """
         <script>
           (() => {
-            const elapsed_nodes = window.parent.document.querySelectorAll(".hhs-tab-loader-elapsed");
-            elapsed_nodes.forEach((node) => {
-              if (node.dataset.timerStarted === "true") {
-                return;
-              }
-              node.dataset.timerStarted = "true";
-              const started_at = Date.now();
-              const render_elapsed = () => {
-                const elapsed_seconds = Math.max(0, Math.floor((Date.now() - started_at) / 1000));
-                const minutes = Math.floor(elapsed_seconds / 60);
-                const seconds = String(elapsed_seconds % 60).padStart(2, "0");
-                node.textContent = `time elapsed: ${minutes}m:${seconds}s`;
-              };
-              render_elapsed();
-              window.setInterval(render_elapsed, 1000);
-            });
+            const doc = window.parent.document;
+            const overlay = doc.getElementById("hhs-command-overlay");
+            if (overlay) {
+              overlay.remove();
+            }
           })();
         </script>
         """,
         height=0,
+        width=0,
     )
 
 
@@ -1138,21 +1171,15 @@ def set_overlay(
     close_dialogs: bool = False,
 ) -> None:
     """Show or hide the reusable full-page command overlay."""
-    placeholder_key = "_hhs_overlay_placeholder"
     if active:
         if close_dialogs:
             close_all_dialogs()
         save_ui_state()
-        placeholder = st.empty()
-        st.session_state[placeholder_key] = placeholder
-        with placeholder.container():
-            render_preloader(message, transient=transient)
+        render_preloader(message, transient=transient)
         time.sleep(0.1)
         return
 
-    placeholder = st.session_state.pop(placeholder_key, None)
-    if placeholder is not None:
-        placeholder.empty()
+    clear_preloader()
     render_footer_visibility_script(hidden=False)
 
 
@@ -3434,6 +3461,7 @@ def build_ttyd_command(
     command = [
         binary,
         "-W",
+        "-q",
         "-i",
         hhs_ui.TTYD_HOST,
         "-p",
@@ -3502,6 +3530,7 @@ def ensure_ttyd_session() -> str:
     st.session_state[TTYD_PROCESS_KEY] = process
     st.session_state[TTYD_PORT_KEY] = port
     st.session_state[TTYD_SIGNATURE_KEY] = signature
+    update_browser_cleanup_registration()
     return f"http://{hhs_ui.TTYD_HOST}:{port}/"
 
 
@@ -3530,6 +3559,172 @@ def render_ttyd_terminal_frame(ttyd_url: str) -> None:
 def render_ttyd_unavailable() -> None:
     """Render a dependency message when ttyd cannot be started."""
     st.error("ttyd is not available to the UI process.")
+
+
+def cleanup_session_resources(token: str) -> None:
+    """Close ttyd and SSH resources registered for a browser session token."""
+    entry = TTYD_CLEANUP_REGISTRY.pop(token, None)
+    if not entry:
+        return
+    stop_process(entry.get("ttyd_process"))
+    ssh_host = str(entry.get("ssh_host", "")).strip()
+    if ssh_host and not selected_host_is_local(ssh_host):
+        run_cleanup_bash_command(build_ssh_disconnect_command(ssh_host), 10)
+        clear_registered_ssh_connection()
+
+
+def run_cleanup_bash_command(
+    command: str, timeout_seconds: int
+) -> subprocess.CompletedProcess[str]:
+    """Run a local cleanup command outside the normal Streamlit render flow."""
+    try:
+        return subprocess.run(
+            [RUN_SHELL, "-lc", command],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as error:
+        return subprocess.CompletedProcess(
+            [RUN_SHELL, "-lc", command],
+            124,
+            error.stdout or "",
+            error.stderr or f"Command timed out after {timeout_seconds} seconds.",
+        )
+    except OSError as error:
+        return subprocess.CompletedProcess(
+            [RUN_SHELL, "-lc", command],
+            127,
+            "",
+            str(error),
+        )
+
+
+class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
+    """HTTP handler used by browser unload beacons to close ttyd and SSH."""
+
+    def log_message(self, _format: str, *_args: object) -> None:
+        """Suppress cleanup server access logs."""
+        return
+
+    def end_headers(self) -> None:
+        """Send CORS headers for browser unload beacons."""
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        super().end_headers()
+
+    def do_OPTIONS(self) -> None:
+        """Handle browser preflight requests."""
+        self.send_response(204)
+        self.end_headers()
+
+    def do_GET(self) -> None:
+        """Handle image/fetch fallback cleanup requests."""
+        self.handle_cleanup_request()
+
+    def do_POST(self) -> None:
+        """Handle navigator.sendBeacon cleanup requests."""
+        self.handle_cleanup_request()
+
+    def handle_cleanup_request(self) -> None:
+        """Close resources for the token provided in the request query string."""
+        parsed_url = urllib.parse.urlparse(self.path)
+        token = urllib.parse.parse_qs(parsed_url.query).get("token", [""])[0]
+        if token:
+            cleanup_session_resources(token)
+        self.send_response(204)
+        self.end_headers()
+
+
+def cleanup_all_registered_sessions() -> None:
+    """Close all registered ttyd and SSH resources on Streamlit process exit."""
+    for token in list(TTYD_CLEANUP_REGISTRY):
+        cleanup_session_resources(token)
+
+
+def ensure_ttyd_cleanup_server() -> int:
+    """Start the localhost cleanup server and return its port."""
+    global TTYD_CLEANUP_SERVER, TTYD_CLEANUP_SERVER_PORT
+    if TTYD_CLEANUP_SERVER is not None:
+        return TTYD_CLEANUP_SERVER_PORT
+    server = ThreadingHTTPServer((hhs_ui.TTYD_HOST, 0), TtydCleanupRequestHandler)
+    server.daemon_threads = True
+    TTYD_CLEANUP_SERVER = server
+    TTYD_CLEANUP_SERVER_PORT = int(server.server_address[1])
+    thread = threading.Thread(
+        target=server.serve_forever,
+        name="hhs-ttyd-cleanup",
+        daemon=True,
+    )
+    thread.start()
+    atexit.register(cleanup_all_registered_sessions)
+    return TTYD_CLEANUP_SERVER_PORT
+
+
+def browser_cleanup_token() -> str:
+    """Return the per-browser-session cleanup token."""
+    token = str(st.session_state.get(TTYD_CLEANUP_TOKEN_KEY, "")).strip()
+    if not token:
+        token = secrets.token_urlsafe(24)
+        st.session_state[TTYD_CLEANUP_TOKEN_KEY] = token
+    return token
+
+
+def update_browser_cleanup_registration() -> str:
+    """Register the current ttyd and SSH resources for browser unload cleanup."""
+    token = browser_cleanup_token()
+    TTYD_CLEANUP_REGISTRY[token] = {
+        "ttyd_process": st.session_state.get(TTYD_PROCESS_KEY),
+        "ssh_host": connected_ssh_host(),
+    }
+    return token
+
+
+def render_browser_cleanup_script() -> None:
+    """Install a browser unload hook that closes ttyd and SSH resources."""
+    token = update_browser_cleanup_registration()
+    port = ensure_ttyd_cleanup_server()
+    cleanup_url = f"http://{hhs_ui.TTYD_HOST}:{port}/cleanup?token={token}"
+    components.html(
+        f"""
+        <script>
+          (() => {{
+            const cleanupUrl = {cleanup_url!r};
+            const parentWindow = window.parent;
+            if (parentWindow.__hhsTtydCleanupUrl === cleanupUrl) {{
+              return;
+            }}
+            parentWindow.__hhsTtydCleanupUrl = cleanupUrl;
+            const cleanup = () => {{
+              try {{
+                if (parentWindow.__hhsTtydCleanupSent === cleanupUrl) {{
+                  return;
+                }}
+                parentWindow.__hhsTtydCleanupSent = cleanupUrl;
+                if (navigator.sendBeacon) {{
+                  navigator.sendBeacon(cleanupUrl, "");
+                  return;
+                }}
+                fetch(cleanupUrl, {{
+                  method: "POST",
+                  mode: "no-cors",
+                  keepalive: true,
+                }}).catch(() => {{}});
+              }} catch (_error) {{
+                const image = new Image();
+                image.src = cleanupUrl;
+              }}
+            }};
+            parentWindow.addEventListener("pagehide", cleanup, {{ once: true }});
+            parentWindow.addEventListener("beforeunload", cleanup, {{ once: true }});
+          }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def terminal_document_title() -> str:
@@ -4693,20 +4888,32 @@ def ssh_connection_is_alive(host: str) -> bool:
 
 
 def restore_registered_ssh_connection_on_session_start() -> None:
-    """Restore a registered SSH connection when a new Streamlit session starts."""
+    """Restore or schedule a saved SSH connection when a Streamlit session starts."""
     if st.session_state.get("ssh_connection_restore_checked"):
         return
     st.session_state["ssh_connection_restore_checked"] = True
-    host = registered_ssh_connection_host()
+    reconnect_host = str(
+        st.session_state.get(hhs_ui.SSH_RECONNECT_HOST_KEY, "")
+    ).strip()
+    host = registered_ssh_connection_host() or reconnect_host
     if not host:
         return
     if not ssh_connection_is_alive(host):
-        clear_disconnected_ssh_host(host)
+        clear_registered_ssh_connection()
+        if reconnect_host and not selected_host_is_local(reconnect_host):
+            st.session_state["ssh_host_selected"] = reconnect_host
+            st.session_state["ssh_host_selector"] = reconnect_host
+            st.session_state["ssh_connect_pending"] = reconnect_host
+            st.session_state["ssh_disconnect_pending"] = ""
+            st.session_state["ssh_connect_pending_message"] = (
+                f"Reconnecting to {ssh_connection_display(reconnect_host)}"
+            )
         return
     st.session_state["ssh_connection_status"] = "connected"
     st.session_state["ssh_connection_host"] = host
     st.session_state["ssh_host_selected"] = host
     st.session_state["ssh_host_selector"] = host
+    st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = host
     st.session_state["ssh_connection_error"] = ""
     update_remote_footer_working_directory()
     save_ui_state()
@@ -4775,6 +4982,7 @@ def clear_disconnected_ssh_host(host: str) -> None:
     st.session_state["ssh_disconnect_pending"] = ""
     st.session_state["ssh_host_selected"] = local_hostname()
     st.session_state["ssh_host_selector"] = local_hostname()
+    st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""
     st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)
     clear_registered_ssh_connection()
     cache_clear()
@@ -4913,6 +5121,7 @@ def request_ssh_host_connect() -> None:
     if selected_host_is_local(host):
         return
     st.session_state["ssh_connect_pending"] = host
+    st.session_state["ssh_connect_pending_message"] = ""
     st.session_state["ssh_disconnect_pending"] = ""
     cache_clear()
     save_ui_state()
@@ -4928,6 +5137,7 @@ def request_ssh_host_disconnection() -> None:
         return
     st.session_state["ssh_disconnect_pending"] = host
     st.session_state["ssh_connect_pending"] = ""
+    st.session_state["ssh_connect_pending_message"] = ""
 
 
 def execute_pending_ssh_connection() -> None:
@@ -4935,11 +5145,15 @@ def execute_pending_ssh_connection() -> None:
     host = str(st.session_state.get("ssh_connect_pending", "")).strip()
     if not host:
         return
+    loader_message = str(
+        st.session_state.get("ssh_connect_pending_message", "")
+    ).strip() or f"Connecting to SSH host {host}..."
     was_terminal_active = terminal_document_view_is_active()
     st.session_state["ssh_connect_pending"] = ""
+    st.session_state["ssh_connect_pending_message"] = ""
     result = run_bash_command(
         build_ssh_connect_command(host),
-        f"Connecting to SSH host {host}...",
+        loader_message,
         ttl_seconds=0,
         use_cache=False,
         force_local=True,
@@ -4952,6 +5166,7 @@ def execute_pending_ssh_connection() -> None:
         st.session_state["ssh_connection_host"] = host
         st.session_state["ssh_host_selected"] = host
         st.session_state["ssh_host_selector"] = host
+        st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = host
         st.session_state["ssh_connection_error"] = ""
         st.session_state["ssh_connection_dialog_title"] = ""
         update_remote_footer_working_directory()
@@ -4965,6 +5180,7 @@ def execute_pending_ssh_connection() -> None:
     else:
         st.session_state["ssh_connection_status"] = "failed"
         st.session_state["ssh_connection_host"] = ""
+        st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""
         st.session_state["ssh_connection_error"] = strip_ansi(
             result.stderr or result.stdout or f"Unable to connect to SSH host {host}."
         )
@@ -4979,6 +5195,7 @@ def execute_pending_ssh_disconnection() -> None:
         return
     stop_ttyd_session()
     st.session_state["ssh_disconnect_pending"] = ""
+    st.session_state["ssh_connect_pending_message"] = ""
     run_bash_command(
         build_ssh_disconnect_command(host),
         f"Disconnecting from SSH host {host}...",
@@ -4994,6 +5211,7 @@ def execute_pending_ssh_disconnection() -> None:
     st.session_state["ssh_connection_dialog_title"] = ""
     st.session_state["ssh_host_selected"] = local_hostname()
     st.session_state["ssh_host_selector"] = local_hostname()
+    st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""
     st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)
     clear_registered_ssh_connection()
     cache_clear()
@@ -9789,11 +10007,13 @@ def main() -> None:
     st.session_state.setdefault(hhs_ui.DOCUMENT_SELECTED_KEY, "README")
     st.session_state.setdefault("ssh_host_selected", local_hostname())
     st.session_state.setdefault("ssh_connect_pending", "")
+    st.session_state.setdefault("ssh_connect_pending_message", "")
     st.session_state.setdefault("ssh_disconnect_pending", "")
     st.session_state.setdefault("ssh_connection_status", "")
     st.session_state.setdefault("ssh_connection_host", "")
     st.session_state.setdefault("ssh_connection_error", "")
     st.session_state.setdefault("ssh_connection_dialog_title", "")
+    st.session_state.setdefault(hhs_ui.SSH_RECONNECT_HOST_KEY, "")
     restore_registered_ssh_connection_on_session_start()
     synchronize_selected_ssh_host_with_connection()
     if selected_host_is_local():
@@ -9881,6 +10101,7 @@ def main() -> None:
     render_folder_picker_dialog()
     render_footer()
     render_floating_status()
+    render_browser_cleanup_script()
 
 
 if __name__ == "__main__":

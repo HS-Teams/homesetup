@@ -195,7 +195,7 @@ else
     'gcc' 'make' 'gradle'
     'jq' 'sqlite3' 'gawk' 'hunspell'
     'bat' 'fd' 'nvim' 'delta' 'tldr' 'zoxide' 'glow' 'btop'
-    'colorls' 'fzf' 'starship' 'gtrash' 'atuin' 'ollama'
+    'colorls' 'fzf' 'starship' 'gtrash' 'atuin' 'ollama' 'ttyd'
 
   )
 

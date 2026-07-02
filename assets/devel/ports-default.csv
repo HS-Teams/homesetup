@@ -1,52 +1,104 @@
 Port,Kind,Reserved
-0,Reserved,true
-20,FTP data,false
-21,FTP control,false
-22,SSH,false
-23,Telnet,false
-25,SMTP,false
-53,DNS,false
-67,DHCP server,false
-68,DHCP client,false
-80,HTTP,false
-110,POP3,false
-123,NTP,false
-143,IMAP,false
-161,SNMP,false
-389,LDAP,false
-443,HTTPS,false
-445,SMB,false
-465,SMTPS,false
-587,SMTP submission,false
-636,LDAPS,false
-993,IMAPS,false
-995,POP3S,false
-1080,SOCKS,false
-1433,Microsoft SQL Server,false
-1521,Oracle Database,false
-2049,NFS,false
-2181,ZooKeeper,false
-2375,Docker API,false
-2376,Docker API TLS,false
-3000,Development web app,false
-3306,MySQL,false
-3389,RDP,false
-4369,Erlang Port Mapper,false
-5000,Development web app,false
-5432,PostgreSQL,false
-5672,AMQP,false
-5900,VNC,false
-6379,Redis,false
-8000,Development web app,false
-8080,HTTP alternate,false
-8188,ComfyUI,false
-8443,HTTPS alternate,false
-8888,Jupyter,false
-9000,SonarQube / app server,false
-9090,Prometheus,false
-9200,Elasticsearch,false
-9300,Elasticsearch transport,false
-9418,Git,false
-15672,RabbitMQ management,false
-27017,MongoDB,false
-50000,Jenkins agent,false
+0,Reserved,True
+20,FTP data,False
+21,FTP control,False
+22,SSH,False
+23,Telnet,False
+25,SMTP,False
+53,DNS,False
+67,DHCP server,False
+68,DHCP client,False
+69,TFTP,False
+80,HTTP,False
+110,POP3,False
+111,RPCbind,False
+119,NNTP,False
+123,NTP,False
+135,Microsoft RPC,False
+137,NetBIOS Name,False
+138,NetBIOS Datagram,False
+139,NetBIOS Session,False
+143,IMAP,False
+161,SNMP,False
+162,SNMP Trap,False
+389,LDAP,False
+443,HTTPS,False
+445,SMB,False
+465,SMTPS,False
+514,Syslog,False
+587,SMTP submission,False
+631,IPP,False
+636,LDAPS,False
+873,rsync,False
+993,IMAPS,False
+995,POP3S,False
+1080,SOCKS,False
+1433,Microsoft SQL Server,False
+1521,Oracle Database,False
+1883,MQTT,False
+2049,NFS,False
+2181,ZooKeeper,False
+2375,Docker API,False
+2376,Docker API TLS,False
+3000,Development web app,False
+3306,MySQL,False
+3389,RDP,False
+4222,NATS,False
+4317,OpenTelemetry gRPC,False
+4318,OpenTelemetry HTTP,False
+4369,Erlang Port Mapper,False
+4443,HTTPS alternate,False
+4646,Nomad,False
+5000,Development web app,False
+5432,PostgreSQL,False
+5601,Kibana,False
+5672,AMQP,False
+5678,n8n,False
+5900,VNC,False
+5984,CouchDB,False
+5985,WinRM HTTP,False
+5986,WinRM HTTPS,False
+6379,Redis,False
+6443,Kubernetes API,False
+7001,WebLogic,False
+7002,WebLogic SSL,False
+7199,Cassandra JMX,False
+7474,Neo4j HTTP,False
+7687,Neo4j Bolt,False
+8000,Development web app,False
+8080,HTTP alternate,False
+8081,Development web app,False
+8188,ComfyUI / Dozzle,False
+8200,HashiCorp Vault,False
+8201,HashiCorp Vault Cluster,False
+8443,HTTPS alternate,False
+8500,Consul,False
+8501,Streamlit,False
+8600,Consul DNS,False
+8888,Jupyter,False
+9000,SonarQube / app server,False
+9042,Apache Cassandra,False
+9090,Prometheus,False
+9091,Transmission Web UI,False
+9092,Apache Kafka,False
+9093,Apache Kafka SSL,False
+9094,Apache Kafka,False
+9160,Apache Cassandra Thrift,False
+9200,Elasticsearch,False
+9300,Elasticsearch transport,False
+9418,Git,False
+10000,Webmin,False
+11211,Memcached,False
+11434,Ollama,False
+14268,Jaeger Collector,False
+15672,RabbitMQ management,False
+16686,Jaeger UI,False
+25565,Minecraft Java,False
+27017,MongoDB,False
+27018,MongoDB,False
+27019,MongoDB,False
+28017,MongoDB HTTP (legacy),False
+30000,Kubernetes NodePort,False
+32400,Plex Media Server,False
+50000,Jenkins agent,False
+50051,gRPC,False

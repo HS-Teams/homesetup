@@ -168,6 +168,7 @@ usage: $APP_NAME [OPTIONS] <args>
   # HomeSetup application dependencies
   DEPENDENCIES=(
     'git' 'curl' 'ruby' 'rsync' 'mkdir' 'vim' 'gawk' 'make' 'jq'
+    'ttyd'
   )
 
   # Missing HomeSetup dependencies

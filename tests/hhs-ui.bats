@@ -23,6 +23,7 @@ setup() {
   css_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.css"
   ask_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"
   ask_prompt_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md"
+  bash_env_file="${HHS_REPO_DIR}/dotfiles/bash/bash_env.bash"
   hhsrc_file="${HHS_REPO_DIR}/dotfiles/bash/hhsrc.bash"
   hspm_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"
   ui_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/ui.bash"
@@ -32,15 +33,32 @@ setup() {
 @test "when installing HomeSetup then Streamlit should be included as a Python package" {
   run grep -q "'streamlit'" "${HHS_REPO_DIR}/install.bash"
   assert_success
+
+  run grep -q "'ttyd'" "${HHS_REPO_DIR}/install.bash"
+  assert_success
 }
 
 # TC - 2
 @test "when uninstalling HomeSetup then Streamlit should be included as a removable Python package" {
   run grep -q "'streamlit'" "${HHS_REPO_DIR}/uninstall.bash"
   assert_success
+
+  run grep -q "REQUIRED_PACKAGES=(" "${HHS_REPO_DIR}/uninstall.bash"
+  assert_success
+
+  run grep -q "'ttyd'" "${HHS_REPO_DIR}/uninstall.bash"
+  assert_success
+
+  run grep -q "uninstall_required_packages" "${HHS_REPO_DIR}/uninstall.bash"
+  assert_success
 }
 
-# TC - 3
+@test "when loading shell environment then ttyd should be a default developer tool" {
+  run grep -q "'ttyd'" "${bash_env_file}"
+  assert_success
+}
+
+# TC - 4
 @test "when registering plugins then ui plugin should expose required hhs functions" {
   run grep -q '^function help()' "${ui_plugin_file}"
   assert_success
@@ -959,6 +977,11 @@ shell_name_block = re.search(r"\.hhs-footer-shell-name\s*\{([^}]*)\}", base_css)
 shell_name_hover_block = re.search(r"\.hhs-footer-shell-status:hover \.hhs-footer-shell-name,[^{]+\{([^}]*)\}", base_css).group(1)
 remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", base_css).group(1)
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
+block_container_block = re.search(r"\.block-container\s*\{([^}]*)\}", base_css).group(1)
+main_block_gap_block = re.search(r"\[data-testid=\"stMainBlockContainer\"\] > \[data-testid=\"stVerticalBlock\"\],[^{]+\{([^}]*)\}", base_css).group(1)
+view_key_block = re.search(r"\.st-key-active_view,[^{]+\{([^}]*)\}", base_css).group(1)
+active_view_tabs_block = re.search(r"\.st-key-active_view \[role=\"radiogroup\"\]\s*\{([^}]*)\}", base_css).group(1)
+streamlit_chrome_block = re.search(r"\[data-testid=\"stHeader\"\],[^{]+\{([^}]*)\}", base_css).group(1)
 theme_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", dracula_css).group(1)
 assert "color: inherit" in link_block
 assert "text-decoration: none !important" in link_block
@@ -1005,6 +1028,31 @@ assert "var(--hhs-theme-footer-status-info-color)" in base_css
 assert "var(--hhs-theme-footer-status-warn-color)" in base_css
 assert "var(--hhs-theme-footer-status-error-color)" in base_css
 assert "font-size: var(--hhs-theme-footer-status-text-size)" in base_css
+assert "--hhs-streamlit-toolbar-guard-width: 8rem" in base_css
+assert "padding-top: 0 !important" in block_container_block
+assert '[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]' in base_css
+assert ".block-container > [data-testid=\"stVerticalBlock\"]" in base_css
+assert "gap: 0 !important" in main_block_gap_block
+assert "row-gap: 0 !important" in main_block_gap_block
+assert ".st-key-home_view" in base_css
+assert ".st-key-config_view" in base_css
+assert ".st-key-history_view" in base_css
+assert ".st-key-monitor_view" in base_css
+assert ".st-key-ai_view" in base_css
+assert "margin-top: 0 !important" in view_key_block
+assert "padding-top: 0 !important" in view_key_block
+assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-active_view)' in base_css
+assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-home_view)' in base_css
+assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ai_view)' in base_css
+assert '.st-key-home_view [data-baseweb="button-group"]' in base_css
+assert "padding-right: var(--hhs-streamlit-toolbar-guard-width)" in active_view_tabs_block
+assert '[data-testid="stToolbar"]' in base_css
+assert '[data-testid="stDecoration"]' in base_css
+assert '[data-testid="stStatusWidget"]' in base_css
+assert "#MainMenu" in base_css
+assert "display: none !important" in streamlit_chrome_block
+assert "height: 0 !important" in streamlit_chrome_block
+assert "visibility: hidden !important" in streamlit_chrome_block
 assert "border-top: 1px solid var(--hhs-floating-status-color)" in base_css
 assert "border-bottom: 1px solid" in base_css
 assert "border-top: 2px solid var(--hhs-comment)" in dracula_css
@@ -1143,18 +1191,21 @@ tokyo-night-css
     streamlit.session_state[ui.hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = True
     streamlit.session_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] = "TERMINAL"
     streamlit.session_state[ui.hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] = "Home"
+    streamlit.session_state[ui.hhs_ui.SSH_RECONNECT_HOST_KEY] = "homeserver"
     ui.save_ui_state()
     saved_state = json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))
     assert saved_state["theme_selected"] == "tokyo-night"
     assert saved_state[ui.hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] is True
     assert saved_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] == "TERMINAL"
     assert saved_state[ui.hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] == "Home"
+    assert saved_state[ui.hhs_ui.SSH_RECONNECT_HOST_KEY] == "homeserver"
 
     streamlit.session_state.clear()
     ui.restore_ui_state()
     assert streamlit.session_state["theme_selected"] == "tokyo-night"
     assert streamlit.session_state[ui.hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] is True
     assert streamlit.session_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] == "TERMINAL"
+    assert streamlit.session_state[ui.hhs_ui.SSH_RECONNECT_HOST_KEY] == "homeserver"
     assert "tokyo-night-css" in ui.load_app_theme_css()
 
     config_options.clear()
@@ -1189,6 +1240,12 @@ PY
   assert_success
 
   run grep -q 'SSH_VIEW = "SSH"' "${constants_file}"
+  assert_success
+
+  run grep -q 'SSH_RECONNECT_HOST_KEY = "ssh_reconnect_host"' "${constants_file}"
+  assert_success
+
+  run grep -q 'SSH_RECONNECT_HOST_KEY,' "${constants_file}"
   assert_success
 
   run grep -q 'def parse_ssh_config_ports' "${ui_file}"
@@ -2068,7 +2125,7 @@ for node in ast.walk(tree):
         and isinstance(func.value, ast.Name)
         and func.value.id == "subprocess"
     )
-    allowed_functions = {"resolve_run_shell", "run_bash_command"}
+    allowed_functions = {"resolve_run_shell", "run_bash_command", "run_cleanup_bash_command"}
     if is_subprocess_run and enclosing_function(node) not in allowed_functions:
         violations.append(f"line {node.lineno}")
 
@@ -2105,6 +2162,21 @@ PY
   assert_success
 
   run grep -q 'ssh_connection_restore_checked' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.SSH_RECONNECT_HOST_KEY' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ssh_connect_pending"\] = reconnect_host' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"Reconnecting to {ssh_connection_display(reconnect_host)}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'loader_message = str(' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ssh_connect_pending_message"\] = ""' "${ui_file}"
   assert_success
 
   run grep -q 'Disconnecting stale SSH host' "${ui_file}"
@@ -2145,6 +2217,12 @@ assert "cache_clear()" in source.split("def clear_host_scoped_session_state", 1)
 assert "cache_clear()" in source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
 disconnect_body = source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
 assert "st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)" in disconnect_body
+assert 'st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""' in disconnect_body
+restore_body = source.split("def restore_registered_ssh_connection_on_session_start", 1)[1].split("\ndef ", 1)[0]
+assert "registered_ssh_connection_host() or reconnect_host" in restore_body
+assert "clear_disconnected_ssh_host(host)" not in restore_body
+assert 'st.session_state["ssh_connect_pending"] = reconnect_host' in restore_body
+assert 'st.session_state["ssh_connect_pending_message"] = (' in restore_body
 PY
   assert_success
 
@@ -2658,7 +2736,34 @@ PY
   run grep -q 'set_overlay(True, loader_message, close_dialogs=close_dialogs)' "${ui_file}"
   assert_success
 
+  run grep -q 'overlay.id = "hhs-command-overlay"' "${ui_file}"
+  assert_success
+
+  run grep -q 'doc.body.appendChild(overlay)' "${ui_file}"
+  assert_success
+
+  run grep -q 'def clear_preloader()' "${ui_file}"
+  assert_success
+
+  run grep -q 'clear_preloader()' "${ui_file}"
+  assert_success
+
+  run grep -q 'command_overlay_slot' "${ui_file}"
+  assert_failure
+
+  run grep -q 'placeholder_key = "_hhs_overlay_placeholder"' "${ui_file}"
+  assert_failure
+
   run grep -q 'with placeholder.container()' "${ui_file}"
+  assert_failure
+
+  run grep -q 'st.container(key=f"command_overlay_slot_{sequence}")' "${ui_file}"
+  assert_failure
+
+  run grep -q 'sequence_key = "_hhs_overlay_slot_sequence"' "${ui_file}"
+  assert_failure
+
+  run grep -q 'hhs-tab-loader-label' "${ui_file}"
   assert_success
 
   run grep -q 'time.sleep(0.1)' "${ui_file}"
@@ -2674,6 +2779,24 @@ PY
   assert_success
 
   run grep -q 'hhs-tab-loader' "${css_file}"
+  assert_success
+
+  run grep -F -q 'div[class*="st-key-command_overlay_slot_"]' "${css_file}"
+  assert_failure
+
+  run grep -F -q '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:empty' "${css_file}"
+  assert_success
+
+  run grep -F -q '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stMarkdownContainer"] style)' "${css_file}"
+  assert_success
+
+  run grep -F -q '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stAppIframeResizerAnchor"])' "${css_file}"
+  assert_success
+
+  run grep -q 'height: 0 !important' "${css_file}"
+  assert_success
+
+  run grep -q 'position: fixed' "${css_file}"
   assert_success
 
   run grep -q 'background: var(--hhs-background)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
@@ -2910,7 +3033,40 @@ PY
   run grep -q 'def ensure_ttyd_session' "${ui_file}"
   assert_success
 
+  run grep -q 'def cleanup_session_resources' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ensure_ttyd_cleanup_server' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_browser_cleanup_script' "${ui_file}"
+  assert_success
+
+  run grep -q 'navigator.sendBeacon(cleanupUrl, "")' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.addEventListener("pagehide", cleanup, {{ once: true }})' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.addEventListener("beforeunload", cleanup, {{ once: true }})' "${ui_file}"
+  assert_success
+
+  run grep -q 'cleanup_all_registered_sessions' "${ui_file}"
+  assert_success
+
+  run grep -q 'atexit.register(cleanup_all_registered_sessions)' "${ui_file}"
+  assert_success
+
+  run grep -q 'build_ssh_disconnect_command(ssh_host)' "${ui_file}"
+  assert_success
+
   run grep -q 'ttyd_process_is_running(process)' "${ui_file}"
+  assert_success
+
+  run grep -q '"-q",' "${ui_file}"
+  assert_success
+
+  run grep -q 'update_browser_cleanup_registration()' "${ui_file}"
   assert_success
 
   run grep -q 'start_new_session=True' "${ui_file}"
@@ -2923,6 +3079,23 @@ PY
   assert_success
 
   run grep -q 'subprocess.Popen(' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
+disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
+connect_index = main_body.index("execute_pending_ssh_connection()")
+cleanup_index = main_body.index("render_browser_cleanup_script()")
+sidebar_index = main_body.index("render_sidebar()")
+main_view_index = main_body.index("render_main_view()")
+footer_index = main_body.index("render_footer()")
+floating_status_index = main_body.index("render_floating_status()")
+assert disconnect_index < connect_index < sidebar_index < main_view_index
+assert footer_index < floating_status_index < cleanup_index
+PY
   assert_success
 
   run grep -q 'def render_ttyd_terminal_frame' "${ui_file}"
@@ -2967,7 +3140,10 @@ PY
   run grep -q '.hhs-ttyd-terminal-frame' "${css_file}"
   assert_success
 
-  run grep -q 'var(--hhs-ttyd-max-height, 720px)' "${css_file}"
+  run grep -q 'height: calc(100dvh - var(--hhs-footer-guard-height) - 7.25rem)' "${css_file}"
+  assert_success
+
+  run grep -q 'max-height: var(--hhs-ttyd-max-height, 720px)' "${css_file}"
   assert_success
 
   run python3 - <<'PY'

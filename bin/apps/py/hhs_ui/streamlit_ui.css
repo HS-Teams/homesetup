@@ -4,6 +4,7 @@
   --hhs-footer-guard-height: 3.5rem;
   --hhs-inline-control-gap: 0.45rem;
   --hhs-log-chrome-height: calc(14rem + 160px);
+  --hhs-streamlit-toolbar-guard-width: 8rem;
   --hhs-danger: #dc2626;
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
@@ -43,11 +44,28 @@ textarea,
   white-space: nowrap;
 }
 
+[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stStatusWidget"],
+#MainMenu {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  visibility: hidden !important;
+}
+
 .block-container {
   padding-left: 1rem;
   padding-right: 1rem;
-  padding-top: 1.75rem;
+  padding-top: 0 !important;
   padding-bottom: 4.5rem;
+}
+
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"],
+.block-container > [data-testid="stVerticalBlock"] {
+  gap: 0 !important;
+  row-gap: 0 !important;
 }
 
 [data-testid="stVegaLiteChart"] {
@@ -324,12 +342,42 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
   width: 24px;
 }
 
+.st-key-active_view,
+.st-key-home_view,
+.st-key-config_view,
+.st-key-history_view,
+.st-key-monitor_view,
+.st-key-ai_view {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-active_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-home_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-config_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-history_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-monitor_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ai_view) {
+  margin: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+
+.st-key-home_view [data-baseweb="button-group"],
+.st-key-config_view [data-baseweb="button-group"],
+.st-key-history_view [data-baseweb="button-group"],
+.st-key-monitor_view [data-baseweb="button-group"],
+.st-key-ai_view [data-baseweb="button-group"] {
+  margin: 0 !important;
+}
+
 .st-key-active_view [role="radiogroup"] {
   align-items: flex-start;
   display: flex;
   gap: 1.25rem;
   min-height: 3rem;
   overflow: visible;
+  padding-right: var(--hhs-streamlit-toolbar-guard-width);
 }
 
 .st-key-active_view [role="radiogroup"] label {
@@ -615,11 +663,9 @@ div[role="dialog"]:has(.hhs-shell-version-output)
   border: 1px solid var(--hhs-theme-heading-border-color);
   border-radius: 0.4rem;
   box-sizing: border-box;
-  height: min(
-    calc(100dvh - var(--hhs-footer-guard-height) - 12.25rem),
-    var(--hhs-ttyd-max-height, 720px)
-  );
+  height: calc(100dvh - var(--hhs-footer-guard-height) - 7.25rem);
   margin: 0;
+  max-height: var(--hhs-ttyd-max-height, 720px);
   min-height: 360px;
   overflow: hidden;
   padding: 0;
@@ -833,6 +879,19 @@ div[class*="st-key-history_directory_selected_value_"] input,
 div[class*="st-key-path_selected_value_"] input,
 div[class*="st-key-service_selected_value_"] input {
   min-height: 2.5rem;
+}
+
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:empty,
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stMarkdownContainer"] style),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(iframe[height="0"]),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(iframe[style*="height: 0px"]),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stIFrame"][height="0"]),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stAppIframeResizerAnchor"]) {
+  height: 0 !important;
+  margin: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
 }
 
 .hhs-tab-loader {

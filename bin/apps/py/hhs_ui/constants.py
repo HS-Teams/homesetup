@@ -32,6 +32,7 @@ UI_CACHE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-cache"
 UI_SSH_CONNECTION_FILE = (
     Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-ssh-connection"
 )
+SSH_RECONNECT_HOST_KEY = "ssh_reconnect_host"
 TTYD_INDEX_FILE = (
     Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ttyd-index.html"
 )
@@ -166,6 +167,7 @@ PERSISTED_UI_KEYS = (
     "path_value_overrides",
     "service_filter",
     "service_other_filter",
+    SSH_RECONNECT_HOST_KEY,
     "theme_selected",
     "updater_last_check_epoch",
     "updater_last_check_output",

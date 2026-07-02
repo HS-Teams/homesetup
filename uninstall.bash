@@ -29,7 +29,7 @@ SHELL="${SHELL:/bin/bash}"
 [[ -f "${HOME}/.bash_colors" ]] && source "${HOME}/.bash_colors"
 
 UNSETS=(
-  'quit' 'usage' 'uninstall_dotfiles' 'uninstall_dotfiles'
+  'quit' 'usage' 'uninstall_dotfiles' 'uninstall_required_packages'
 )
 
 # HomeSetup installation prefix file
@@ -56,6 +56,11 @@ PYTHON_MODULES=(
   'streamlit'
 )
 
+# HomeSetup required operating system packages to uninstall.
+REQUIRED_PACKAGES=(
+  'ttyd'
+)
+
 # Shell type
 SHELL_TYPE="${SHELL##*/}"
 
@@ -70,6 +75,9 @@ REMOVE_HHS_DIR=
 
 # Flag indicating HSPyLib removal
 REMOVE_HSPYLIB=
+
+# Flag indicating required package removal
+REMOVE_PACKAGES=
 
 # Flag indicating HomeSetup project removal
 REMOVE_PRJ_DIR=
@@ -122,10 +130,14 @@ check_installation() {
     [[ -z ${QUIET} ]] && read -rn 1 -p \
       "Uninstall HomeSetup python packages(${PYTHON_MODULES[*]}) y/[n] ? " REMOVE_HSPYLIB
     [[ -n "${REMOVE_HSPYLIB}" ]] && echo ''
+    [[ -z ${QUIET} ]] && read -rn 1 -p \
+      "Uninstall HomeSetup required packages(${REQUIRED_PACKAGES[*]}) y/[n] ? " REMOVE_PACKAGES
+    [[ -n "${REMOVE_PACKAGES}" ]] && echo ''
 
     [[ "${REMOVE_PRJ_DIR}" =~ ^[yY]$ ]] && UNINSTALL_TYPE+=' +hhs-prj'
     [[ "${REMOVE_HHS_DIR}" =~ ^[yY]$ ]] && UNINSTALL_TYPE+=' +hhs-dir'
     [[ "${REMOVE_HSPYLIB}" =~ ^[yY]$ ]] && UNINSTALL_TYPE+=' +lib-dir'
+    [[ "${REMOVE_PACKAGES}" =~ ^[yY]$ ]] && UNINSTALL_TYPE+=' +packages'
 
     echo -e "${NC}"
     echo -e "${WHITE}### ${GREEN}HomeSetup© ${WHITE}Removal Settings ###${NC}"
@@ -134,6 +146,7 @@ check_installation() {
     echo -e "     Install Dir: ${HHS_HOME}"
     echo -e "  Install Prefix: ${HHS_PREFIX}"
     echo -e "        Dotfiles: ${ALL_DOTFILES[*]}"
+    echo -e "Required Pkgs: ${REQUIRED_PACKAGES[*]}"
     echo -e "${NC}"
 
     echo -e "${YELLOW}"
@@ -148,6 +161,40 @@ check_installation() {
   else
     quit 2 "Installation files were not found or removed !"
   fi
+}
+
+uninstall_required_packages() {
+
+  local package remove_cmd sudo_cmd
+
+  [[ "${REMOVE_PACKAGES}" =~ ^[yY]$ ]] || return 0
+
+  echo -e "\n${BLUE}Removing HomeSetup required packages ...${NC}"
+  sudo_cmd=()
+  [[ "$(id -u)" -ne 0 ]] && command -v sudo &>/dev/null && sudo_cmd=('sudo')
+  for package in "${REQUIRED_PACKAGES[@]}"; do
+    echo -e "\n${BLUE}Removing ${package}${NC}"
+    if command -v brew &>/dev/null && brew list --formula "${package}" &>/dev/null; then
+      remove_cmd=(brew uninstall "${package}")
+    elif command -v apt-get &>/dev/null && dpkg -s "${package}" &>/dev/null; then
+      remove_cmd=("${sudo_cmd[@]}" apt-get remove -y "${package}")
+    elif command -v dnf &>/dev/null && rpm -q "${package}" &>/dev/null; then
+      remove_cmd=("${sudo_cmd[@]}" dnf remove -y "${package}")
+    elif command -v apk &>/dev/null && apk info -e "${package}" &>/dev/null; then
+      remove_cmd=("${sudo_cmd[@]}" apk del "${package}")
+    elif command -v pacman &>/dev/null && pacman -Q "${package}" &>/dev/null; then
+      remove_cmd=("${sudo_cmd[@]}" pacman -Rns --noconfirm "${package}")
+    elif command -v "${package}" &>/dev/null; then
+      \rm -fv "$(command -v "${package}")" ||
+        echo -e "${RED}# Unable to remove HomeSetup package ${package} !\n${NC}"
+      continue
+    else
+      echo -e "${YELLOW}# HomeSetup package ${package} is not installed.${NC}"
+      continue
+    fi
+    "${remove_cmd[@]}" &>/dev/null ||
+      echo -e "${RED}# Unable to uninstall HomeSetup package ${package} !\n${NC}"
+  done
 }
 
 # Remove dotfiles
@@ -220,6 +267,8 @@ uninstall_dotfiles() {
 
   # Remove Starship. Locate and delete the binary
   command -v 'starship' &>/dev/null && \rm -fv "$(command -v 'starship')"
+
+  uninstall_required_packages
 
   # Restoring prompts
   export PS1='\[\h:\W \u \$ '
