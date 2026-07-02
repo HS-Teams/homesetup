@@ -1073,7 +1073,7 @@ PY
   run grep -q '<h2> SSH</h2>' "${ui_file}"
   assert_success
 
-  run grep -q '<h2> Ask Ollama HomeSetup AI</h2>' "${ui_file}"
+  run grep -q '<h2> Ask Ollama HomeSetup AI</h2>' "${ui_file}"
   assert_success
 
   run grep -q 'AI_VIEWS = ("CHAT", "CONTEXT", "SETTINGS")' "${constants_file}"
@@ -1124,8 +1124,8 @@ PY
   run grep -q 'def render_home_docker_panel' "${ui_file}"
   assert_success
 
-  run grep -q 'Docker Containers' "${ui_file}"
-  assert_success
+  run grep -q ' Docker Containers' "${ui_file}"
+  assert_failure
 
   run grep -q 'def run_docker_ps' "${ui_file}"
   assert_success
@@ -1133,7 +1133,10 @@ PY
   run grep -q 'def run_docker_images' "${ui_file}"
   assert_success
 
-  run grep -q 'render_docker_markdown_table("All containers", run_docker_ps())' "${ui_file}"
+  run grep -q 'render_docker_markdown_table(' "${ui_file}"
+  assert_success
+
+  run grep -q '"All Containers", run_docker_ps(), omitted_columns=("COMMAND", "PORTS")' "${ui_file}"
   assert_success
 
   run grep -q 'render_docker_markdown_table("Available Images", run_docker_images())' "${ui_file}"
@@ -3557,6 +3560,12 @@ assert (
     "\"/docker-entrypoint\" | 2 days ago | Up 2 days | "
     "127.0.0.1:8888->80/tcp | homeselect-webapp |"
 ) in table
+containers_table = namespace["docker_cli_markdown_table"](
+    sample, omitted_columns=("COMMAND", "PORTS")
+)
+assert "| CONTAINER ID | IMAGE | CREATED | STATUS | NAMES |" in containers_table
+assert "COMMAND" not in containers_table
+assert "PORTS" not in containers_table
 assert namespace["docker_cli_markdown_table"]("") == ""
 PY
   assert_success

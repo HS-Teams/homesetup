@@ -1654,21 +1654,17 @@ def render_home_system_panel() -> None:
 
 def render_home_docker_panel() -> None:
     """Render Docker container and image listings on the Home view."""
-    st.markdown(
-        """
-        <section class="hhs-view-heading">
-          <h2> Docker Containers</h2>
-        </section>
-        """,
-        unsafe_allow_html=True,
+    render_docker_markdown_table(
+        "All Containers", run_docker_ps(), omitted_columns=("COMMAND", "PORTS")
     )
-    render_docker_markdown_table("All containers", run_docker_ps())
     st.write("")
     render_docker_markdown_table("Available Images", run_docker_images())
 
 
 def render_docker_markdown_table(
-    title: str, result: subprocess.CompletedProcess[str]
+    title: str,
+    result: subprocess.CompletedProcess[str],
+    omitted_columns: tuple[str, ...] = (),
 ) -> None:
     """Render a Docker command result as a Markdown table."""
     st.markdown(f"##### {title}")
@@ -1676,7 +1672,7 @@ def render_docker_markdown_table(
         st.error(strip_ansi(result.stderr or result.stdout) or f"{title} failed.")
         return
 
-    table = docker_cli_markdown_table(result.stdout)
+    table = docker_cli_markdown_table(result.stdout, omitted_columns=omitted_columns)
     if table:
         st.markdown(table)
         return
@@ -3316,9 +3312,29 @@ def parse_fixed_width_cli_table(output: str) -> tuple[list[str], list[list[str]]
     return headers, rows
 
 
-def docker_cli_markdown_table(output: str) -> str:
+def filter_markdown_table_columns(
+    headers: list[str], rows: list[list[str]], omitted_columns: tuple[str, ...]
+) -> tuple[list[str], list[list[str]]]:
+    """Return Markdown table data without the named columns."""
+    omitted_column_names = set(omitted_columns)
+    if not omitted_column_names:
+        return headers, rows
+
+    kept_indexes = [
+        index for index, header in enumerate(headers) if header not in omitted_column_names
+    ]
+    return (
+        [headers[index] for index in kept_indexes],
+        [[row[index] if index < len(row) else "" for index in kept_indexes] for row in rows],
+    )
+
+
+def docker_cli_markdown_table(
+    output: str, omitted_columns: tuple[str, ...] = ()
+) -> str:
     """Return a Markdown table from Docker's default command output."""
     headers, rows = parse_fixed_width_cli_table(output)
+    headers, rows = filter_markdown_table_columns(headers, rows, omitted_columns)
     return markdown_table(headers, rows)
 
 
@@ -7879,7 +7895,7 @@ def render_ai_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading">
-          <h2> Ask Ollama HomeSetup AI</h2>
+          <h2> Ask Ollama HomeSetup AI</h2>
         </section>
         """,
         unsafe_allow_html=True,
