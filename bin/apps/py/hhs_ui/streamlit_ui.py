@@ -19,6 +19,7 @@ Copyright:
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import html
 import importlib
@@ -57,6 +58,12 @@ FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
 FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
 FLOATING_STATUS_QUEUE_LIMIT = 20
 FOOTER_REMOTE_WORKING_DIR_KEY = "_hhs_footer_remote_working_dir"
+FOOTER_LOCAL_WORKING_DIR_KEY = "_hhs_footer_local_working_dir"
+TABLE_SELECTION_SNAPSHOT_KEY = "_hhs_table_selection_snapshots"
+COMMAND_RESULT_SNAPSHOT_KEY = "_hhs_command_result_snapshots"
+COMMAND_RESULT_SNAPSHOT_LIMIT = 100
+TERMINAL_DIR_STACK_KEY = "_hhs_terminal_dir_stack"
+TERMINAL_PREVIOUS_CWD_KEY = "_hhs_terminal_previous_cwd"
 AI_CONTEXT_UPLOAD_TYPES = (
     "txt",
     "md",
@@ -931,11 +938,6 @@ def render_sidebar() -> None:
                     on_click=request_ssh_host_connect,
                     width="stretch",
                 )
-        render_sidebar_terminal_button()
-        st.markdown(
-            '<hr class="hhs-sidebar-separator" />',
-            unsafe_allow_html=True,
-        )
         st.markdown("**Theme**")
         selected_theme = st.selectbox(
             "Theme",
@@ -954,8 +956,10 @@ def render_sidebar() -> None:
             st.session_state["theme_reload_name"] = selected_theme
             st.rerun()
         st.session_state["theme_last_seen"] = selected_theme
-        st.write("")
-        st.markdown("**Documents**")
+        st.markdown(
+            '<hr class="hhs-sidebar-separator" />',
+            unsafe_allow_html=True,
+        )
         if st.session_state.get(hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY):
             st.button(
                 "BACK",
@@ -978,6 +982,7 @@ def render_sidebar() -> None:
                 args=("HANDBOOK",),
                 width="stretch",
             )
+            render_sidebar_terminal_button()
 
 
 def render_preloader(message: str = "Loading...", transient: bool = True) -> None:
@@ -2015,7 +2020,8 @@ def render_home_view() -> None:
         on_change=save_ui_state,
         width="stretch",
     )
-    st.write("")
+    if home_view != "Docker":
+        st.write("")
     if home_view == "System":
         render_home_system_panel()
     elif home_view == "Docker":
@@ -2042,30 +2048,113 @@ def render_home_system_panel() -> None:
 
 def render_home_docker_panel() -> None:
     """Render Docker container and image listings on the Home view."""
-    render_docker_markdown_table(
-        "All Containers", run_docker_ps(), omitted_columns=("COMMAND", "PORTS")
+    if not docker_agent_is_running():
+        render_docker_agent_required_view()
+        return
+    with st.expander("All Containers", expanded=True):
+        render_docker_container_table(run_docker_ps())
+    with st.expander("Available Images", expanded=True):
+        render_docker_image_table(run_docker_images())
+
+
+def render_docker_agent_required_view() -> None:
+    """Render an empty Docker panel when the Docker daemon is unavailable."""
+    st.markdown(
+        """
+        <section class="hhs-remote-connect-required">
+          <h2>Docker agent is not running</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
     )
-    st.write("")
-    render_docker_markdown_table("Available Images", run_docker_images())
 
 
-def render_docker_markdown_table(
-    title: str,
+def render_docker_command_table(
     result: subprocess.CompletedProcess[str],
+    table_key: str,
+    headers: list[str],
     omitted_columns: tuple[str, ...] = (),
+    selected_label: Callable[[dict[str, str], int], str] | None = None,
+    action_buttons: list[dict[str, object]] | None = None,
+    reset_selection: Callable[[], None] | None = None,
 ) -> None:
-    """Render a Docker command result as a Markdown table."""
-    st.markdown(f"##### {title}")
+    """Render a Docker command result using the shared dataframe component."""
+    rows = docker_cli_table_rows(result.stdout, omitted_columns=omitted_columns)
     if result.returncode != 0:
-        st.error(strip_ansi(result.stderr or result.stdout) or f"{title} failed.")
-        return
+        rows = []
+    render_table(
+        rows,
+        key=table_key,
+        empty_hint="Select a row to interact" if rows else "",
+        headers=headers,
+        table_data=pd.DataFrame(rows, columns=headers),
+        selected_label=selected_label,
+        action_buttons=action_buttons,
+        reset_selection=reset_selection,
+        use_container_width=True,
+    )
 
-    table = docker_cli_markdown_table(result.stdout, omitted_columns=omitted_columns)
-    if table:
-        st.markdown(table)
-        return
 
-    st.info("No rows returned.")
+def render_docker_container_table(result: subprocess.CompletedProcess[str]) -> None:
+    """Render Docker containers with selected-row container actions."""
+    render_docker_command_table(
+        result,
+        docker_container_table_key(),
+        ["CONTAINER ID", "IMAGE", "NAMES", "STATUS", "CREATED AT"],
+        omitted_columns=("COMMAND", "PORTS"),
+        selected_label=lambda row, _index: (
+            f"Selected: {row.get('NAMES') or row.get('CONTAINER ID', '')}"
+        ),
+        action_buttons=[
+            {
+                "label": "Start",
+                "key_prefix": "docker_container_start_button",
+                "help": "Start",
+                "on_click": apply_docker_container_action,
+                "args": lambda row, _index: ("start", row.get("CONTAINER ID", "")),
+                "disabled": lambda row, _index: docker_container_is_up(row),
+            },
+            {
+                "label": "Stop",
+                "key_prefix": "docker_container_stop_button",
+                "help": "Stop",
+                "on_click": apply_docker_container_action,
+                "args": lambda row, _index: ("stop", row.get("CONTAINER ID", "")),
+                "disabled": lambda row, _index: not docker_container_is_up(row),
+            },
+            {
+                "label": "Remove",
+                "key_prefix": "docker_container_remove_button",
+                "help": "Remove",
+                "on_click": apply_docker_container_action,
+                "args": lambda row, _index: ("rm", row.get("CONTAINER ID", "")),
+                "disabled": lambda row, _index: docker_container_is_up(row),
+            },
+        ],
+        reset_selection=reset_docker_container_table_selection,
+    )
+
+
+def render_docker_image_table(result: subprocess.CompletedProcess[str]) -> None:
+    """Render Docker images with a selected-row image delete action."""
+    render_docker_command_table(
+        result,
+        docker_image_table_key(),
+        ["IMAGE ID", "REPOSITORY", "TAG", "SIZE", "CREATED AT"],
+        selected_label=lambda row, _index: (
+            f"Selected: {row.get('REPOSITORY', '')}:{row.get('TAG', '')}"
+        ),
+        action_buttons=[
+            {
+                "label": "Delete",
+                "key_prefix": "docker_image_delete_button",
+                "help": "Delete",
+                "on_click": apply_docker_image_action,
+                "args": lambda row, _index: (row.get("IMAGE ID", ""),),
+            },
+        ],
+        reset_selection=reset_docker_image_table_selection,
+    )
 
 
 def home_shopt_is_on(row: dict[str, str]) -> bool:
@@ -2418,6 +2507,79 @@ def display_table_rows(rows: list[dict[str, str]]) -> list[dict[str, object]]:
     ]
 
 
+def table_selection_key_prefixes() -> tuple[str, ...]:
+    """Return Streamlit dataframe key prefixes that represent selectable tables."""
+    return (
+        hhs_ui.AI_MODEL_TABLE_KEY,
+        hhs_ui.ALIAS_TABLE_KEY,
+        hhs_ui.CMD_TABLE_KEY,
+        hhs_ui.DIR_TABLE_KEY,
+        hhs_ui.DOCKER_CONTAINER_TABLE_KEY,
+        hhs_ui.DOCKER_IMAGE_TABLE_KEY,
+        hhs_ui.ENV_TABLE_KEY,
+        hhs_ui.HISTORY_COMMAND_TABLE_KEY,
+        hhs_ui.HISTORY_DIRECTORY_TABLE_KEY,
+        hhs_ui.HOME_SHOPTS_TABLE_KEY,
+        hhs_ui.HOME_TOOLS_TABLE_KEY,
+        hhs_ui.PATH_TABLE_KEY,
+        hhs_ui.PROCESS_TABLE_KEY,
+        hhs_ui.SERVICE_TABLE_KEY,
+        hhs_ui.SSH_TUNNEL_TABLE_KEY,
+    )
+
+
+def table_selection_widget_key(key: object) -> bool:
+    """Return whether a Streamlit session key belongs to a selectable dataframe."""
+    key_text = str(key)
+    return any(
+        key_text == prefix or key_text.startswith(f"{prefix}_")
+        for prefix in table_selection_key_prefixes()
+    )
+
+
+def table_selection_rows(selection_state: object) -> tuple[int, ...]:
+    """Return selected row indexes from a Streamlit dataframe selection state."""
+    selection = getattr(selection_state, "selection", None)
+    if selection is None and isinstance(selection_state, dict):
+        selection = selection_state.get("selection", selection_state)
+    rows = getattr(selection, "rows", None)
+    if rows is None and isinstance(selection, dict):
+        rows = selection.get("rows")
+    if rows is None:
+        return ()
+    return tuple(int(row) for row in rows)
+
+
+def table_selection_snapshots() -> dict[str, tuple[int, ...]]:
+    """Return remembered dataframe selections keyed by Streamlit widget key."""
+    snapshots = st.session_state.setdefault(TABLE_SELECTION_SNAPSHOT_KEY, {})
+    if not isinstance(snapshots, dict):
+        snapshots = {}
+        st.session_state[TABLE_SELECTION_SNAPSHOT_KEY] = snapshots
+    return snapshots
+
+
+def table_selection_rerun_in_progress() -> bool:
+    """Return whether the current rerun was caused by a table row selection."""
+    snapshots = table_selection_snapshots()
+    for key in st.session_state:
+        if not table_selection_widget_key(key):
+            continue
+        rows = table_selection_rows(st.session_state.get(key))
+        previous_rows = tuple(snapshots.get(str(key), ()))
+        if rows != previous_rows:
+            return True
+    return False
+
+
+def remember_table_selection(key: str | None, selection_state: object) -> None:
+    """Remember the latest dataframe selection after a table render."""
+    if key is None:
+        return
+    snapshots = table_selection_snapshots()
+    snapshots[str(key)] = table_selection_rows(selection_state)
+
+
 def render_table(
     rows: list[dict[str, str]],
     key: str | None,
@@ -2476,6 +2638,8 @@ def render_table(
         dataframe_args["selection_mode"] = "single-row"
 
     selection = st.dataframe(rendered_data, **dataframe_args)
+    if checkbox:
+        remember_table_selection(key, selection)
     if not checkbox:
         return None, None
 
@@ -3072,6 +3236,125 @@ def terminal_prompt(cwd: str) -> str:
     return f"{display_cwd} $ "
 
 
+def terminal_command_tokens(command: str) -> list[str]:
+    """Return shell-like tokens for a standalone terminal command."""
+    try:
+        return shlex.split(command, posix=True)
+    except ValueError:
+        return []
+
+
+def terminal_command_is_standalone(command: str) -> bool:
+    """Return whether a command can be safely pre-applied without changing semantics."""
+    return not bool(re.search(r"(?:&&|\|\||[;&|<>`])", command))
+
+
+def terminal_directory_target_is_static(target: str) -> bool:
+    """Return whether a directory target can be resolved without shell evaluation."""
+    return not bool(re.search(r"[$*?\[\]{}()!]", target))
+
+
+def resolve_terminal_directory_target(target: str, cwd: str) -> str | None:
+    """Resolve a static directory target against the current terminal cwd."""
+    clean_target = target.strip()
+    if not clean_target:
+        return str(Path.home()) if not connected_ssh_host() else None
+    if clean_target == "~" or clean_target.startswith("~/"):
+        if connected_ssh_host():
+            return None
+        clean_target = str(Path.home()) + clean_target[1:]
+    if not terminal_directory_target_is_static(clean_target):
+        return None
+    if os.path.isabs(clean_target):
+        return os.path.normpath(clean_target)
+    return os.path.normpath(os.path.join(cwd, clean_target))
+
+
+def local_terminal_directory_is_valid(path: str) -> bool:
+    """Return whether a local predicted terminal directory exists."""
+    return connected_ssh_host() or os.path.isdir(path)
+
+
+def terminal_directory_stack() -> list[str]:
+    """Return the terminal directory stack used to predict pushd/popd effects."""
+    stack = st.session_state.setdefault(TERMINAL_DIR_STACK_KEY, [])
+    if not isinstance(stack, list):
+        stack = []
+        st.session_state[TERMINAL_DIR_STACK_KEY] = stack
+    return [str(path) for path in stack]
+
+
+def set_terminal_directory_stack(stack: list[str]) -> None:
+    """Persist the terminal directory stack."""
+    st.session_state[TERMINAL_DIR_STACK_KEY] = stack
+
+
+def update_terminal_working_directory(cwd: str) -> None:
+    """Update terminal and footer working directory state."""
+    clean_cwd = cwd.strip()
+    if not clean_cwd:
+        return
+    st.session_state[hhs_ui.TERMINAL_CWD_KEY] = clean_cwd
+    if connected_ssh_host():
+        st.session_state[FOOTER_REMOTE_WORKING_DIR_KEY] = clean_cwd
+    else:
+        st.session_state[FOOTER_LOCAL_WORKING_DIR_KEY] = clean_cwd
+
+
+def predicted_terminal_directory(command: str, cwd: str) -> str | None:
+    """Return a pre-send cwd prediction for standalone directory mutations."""
+    if not terminal_command_is_standalone(command):
+        return None
+    tokens = terminal_command_tokens(command)
+    if not tokens:
+        return None
+    operation = tokens[0]
+    if operation == "dirs" and tokens[1:] == ["-c"]:
+        set_terminal_directory_stack([])
+        return cwd
+    if operation == "cd":
+        target = tokens[1] if len(tokens) > 1 else ""
+        if target == "-":
+            previous_cwd = str(st.session_state.get(TERMINAL_PREVIOUS_CWD_KEY, ""))
+            if not previous_cwd:
+                return None
+            target_cwd = previous_cwd
+        else:
+            target_cwd = resolve_terminal_directory_target(target, cwd)
+        if target_cwd and local_terminal_directory_is_valid(target_cwd):
+            st.session_state[TERMINAL_PREVIOUS_CWD_KEY] = cwd
+            return target_cwd
+        return None
+    if operation == "pushd":
+        stack = terminal_directory_stack()
+        if len(tokens) > 1 and re.fullmatch(r"[+-]\d+", tokens[1]):
+            return None
+        if len(tokens) == 1:
+            if not stack:
+                return None
+            target_cwd = stack[0]
+            set_terminal_directory_stack([cwd, *stack[1:]])
+            st.session_state[TERMINAL_PREVIOUS_CWD_KEY] = cwd
+            return target_cwd
+        target_cwd = resolve_terminal_directory_target(tokens[1], cwd)
+        if target_cwd and local_terminal_directory_is_valid(target_cwd):
+            set_terminal_directory_stack([cwd, *stack])
+            st.session_state[TERMINAL_PREVIOUS_CWD_KEY] = cwd
+            return target_cwd
+        return None
+    if operation == "popd":
+        if len(tokens) > 1:
+            return None
+        stack = terminal_directory_stack()
+        if not stack:
+            return None
+        target_cwd = stack[0]
+        set_terminal_directory_stack(stack[1:])
+        st.session_state[TERMINAL_PREVIOUS_CWD_KEY] = cwd
+        return target_cwd
+    return None
+
+
 def handle_terminal_event(event: dict[str, object] | None) -> None:
     """Execute a submitted terminal command when the component emits a new event."""
     if not event:
@@ -3106,11 +3389,14 @@ def execute_terminal_command(command: str) -> None:
     if isinstance(history, list):
         history.append(command)
     cwd = str(st.session_state[hhs_ui.TERMINAL_CWD_KEY])
+    predicted_cwd = predicted_terminal_directory(command, cwd)
+    if predicted_cwd:
+        update_terminal_working_directory(predicted_cwd)
     prompt = terminal_prompt(cwd)
     result = run_terminal_command(command, cwd)
     stdout, next_cwd = parse_terminal_command_stdout(result.stdout, cwd)
     output = format_terminal_command_output(result, stdout)
-    st.session_state[hhs_ui.TERMINAL_CWD_KEY] = next_cwd
+    update_terminal_working_directory(next_cwd)
     append_terminal_transcript(f"{prompt}{command}\n{output}")
 
 
@@ -3212,11 +3498,46 @@ def parse_terminal_command_stdout(stdout: str, fallback_cwd: str) -> tuple[str, 
         if line.startswith("__HHS_TERMINAL_CWD__"):
             next_cwd = line.removeprefix("__HHS_TERMINAL_CWD__").strip() or fallback_cwd
             continue
+        if terminal_output_line_is_noise(line):
+            continue
         output_lines.append(line)
     output = "\n".join(output_lines)
     if stdout.endswith("\n") and output:
         output += "\n"
     return output, next_cwd
+
+
+def terminal_output_line_is_noise(line: str) -> bool:
+    """Return whether a terminal output line is SSH/HomeSetup wrapper chatter."""
+    clean_line = strip_ansi(line).strip()
+    if not clean_line:
+        return False
+    if clean_line == "exit":
+        return True
+    if clean_line.startswith("[bash] HomeSetup is starting"):
+        return True
+    if "Welcome " in clean_line and " to HomeSetup v" in clean_line:
+        return True
+    if re.fullmatch(r"Shell option \S+ set to (?:on|off)", clean_line):
+        return True
+    if re.fullmatch(r"(?:Shared )?Connection to .+ closed\.", clean_line, re.IGNORECASE):
+        return True
+    if re.fullmatch(r"Shared connection to .+ closed\.", clean_line, re.IGNORECASE):
+        return True
+    return False
+
+
+def filter_terminal_output_noise(value: str) -> str:
+    """Return terminal output without SSH/HomeSetup wrapper chatter lines."""
+    lines = [
+        line
+        for line in value.splitlines()
+        if not terminal_output_line_is_noise(line)
+    ]
+    output = "\n".join(lines)
+    if value.endswith("\n") and output:
+        output += "\n"
+    return output
 
 
 def format_terminal_command_output(
@@ -3225,7 +3546,9 @@ def format_terminal_command_output(
     """Return command output formatted for the terminal transcript."""
     output = stdout
     if result.stderr:
-        output += strip_ssh_shared_connection_notice(result.stderr)
+        output += filter_terminal_output_noise(
+            strip_ssh_shared_connection_notice(result.stderr)
+        )
     if result.returncode != 0:
         output += f"\n[exit {result.returncode}]\n"
     if output and not output.endswith("\n"):
@@ -3980,15 +4303,41 @@ def parse_fixed_width_cli_table(output: str) -> tuple[list[str], list[list[str]]
     if not lines:
         return [], []
 
-    headers = re.split(r"\s{2,}", lines[0].strip())
+    headers = (
+        [part.strip() for part in lines[0].split("\t")]
+        if "\t" in lines[0]
+        else re.split(r"\s{2,}", lines[0].strip())
+    )
     if len(headers) < 2:
         return [], []
 
     rows: list[list[str]] = []
     for line in lines[1:]:
-        parts = re.split(r"\s{2,}", line.strip(), maxsplit=len(headers) - 1)
+        parts = (
+            [part.strip() for part in line.split("\t")]
+            if "\t" in line
+            else re.split(r"\s{2,}", line.strip(), maxsplit=len(headers) - 1)
+        )
         rows.append(normalize_markdown_table_row(headers, parts))
     return headers, rows
+
+
+def docker_cli_table_output(output: str) -> str:
+    """Return Docker CLI table output with remote shell startup banners removed."""
+    lines = [
+        line.rstrip()
+        for line in strip_ansi(output).splitlines()
+        if line.strip() and set(line.strip()) != {"-"}
+    ]
+    for index, line in enumerate(lines):
+        headers = (
+            [part.strip() for part in line.split("\t")]
+            if "\t" in line
+            else re.split(r"\s{2,}", line.strip())
+        )
+        if headers and headers[0] in {"CONTAINER ID", "REPOSITORY"}:
+            return "\n".join(lines[index:])
+    return ""
 
 
 def filter_markdown_table_columns(
@@ -4008,13 +4357,21 @@ def filter_markdown_table_columns(
     )
 
 
-def docker_cli_markdown_table(
+def docker_cli_table_rows(
     output: str, omitted_columns: tuple[str, ...] = ()
-) -> str:
-    """Return a Markdown table from Docker's default command output."""
-    headers, rows = parse_fixed_width_cli_table(output)
+) -> list[dict[str, str]]:
+    """Return Docker CLI table output as row dictionaries."""
+    headers, rows = parse_fixed_width_cli_table(docker_cli_table_output(output))
     headers, rows = filter_markdown_table_columns(headers, rows, omitted_columns)
-    return markdown_table(headers, rows)
+    return [
+        {header: row[index] if index < len(row) else "" for index, header in enumerate(headers)}
+        for row in rows
+    ]
+
+
+def docker_container_is_up(row: dict[str, str]) -> bool:
+    """Return whether a Docker container row reports a running status."""
+    return row.get("STATUS", "").strip().lower().startswith("up")
 
 
 def command_env() -> dict[str, str]:
@@ -4422,6 +4779,8 @@ def clear_host_scoped_session_state() -> None:
         hhs_ui.ALIAS_TABLE_KEY,
         hhs_ui.CMD_TABLE_KEY,
         hhs_ui.DIR_TABLE_KEY,
+        hhs_ui.DOCKER_CONTAINER_TABLE_KEY,
+        hhs_ui.DOCKER_IMAGE_TABLE_KEY,
         hhs_ui.ENV_TABLE_KEY,
         hhs_ui.HISTORY_COMMAND_TABLE_KEY,
         hhs_ui.HISTORY_DIRECTORY_TABLE_KEY,
@@ -4691,12 +5050,19 @@ def run_bash_command(
     """Run a Bash command with tagged command-result caching and a preloader."""
     remote_host = command_remote_host(force_local=force_local)
     command_to_run = effective_bash_command(command, force_local=force_local)
+    selection_only_rerun = table_selection_rerun_in_progress()
+    show_command_overlay = show_overlay and not selection_only_rerun
     effective_timeout = timeout_seconds
     if effective_timeout is None and command_to_run != command:
         effective_timeout = 60
     cache_key = command_cache_key(command_to_run, cache_tag)
+    snapshot_value = command_result_snapshot_get(cache_key) if selection_only_rerun else None
+    if snapshot_value is not None:
+        return completed_process_from_cache(command_to_run, snapshot_value)
+
     cached_value = cache_get(cache_key) if use_cache else None
     if use_cache and cached_value is not None:
+        command_result_snapshot_set(cache_key, cached_value)
         result = completed_process_from_cache(command_to_run, cached_value)
         if handle_remote_command_result(remote_host, result):
             st.rerun()
@@ -4708,7 +5074,7 @@ def run_bash_command(
             st.rerun()
         return result
 
-    if show_overlay:
+    if show_command_overlay:
         set_overlay(True, loader_message, close_dialogs=close_dialogs)
     try:
         result = subprocess.run(
@@ -4720,6 +5086,10 @@ def run_bash_command(
             timeout=effective_timeout,
         )
         disconnected = handle_remote_command_result(remote_host, result)
+        if not ssh_shared_connection_closed(result):
+            command_result_snapshot_set(
+                cache_key, cache_value_from_completed_process(result)
+            )
         if use_cache and not ssh_shared_connection_closed(result):
             cache_set(
                 cache_key, cache_value_from_completed_process(result), ttl_seconds
@@ -4738,7 +5108,7 @@ def run_bash_command(
             st.rerun()
         return result
     finally:
-        if show_overlay:
+        if show_command_overlay:
             set_overlay(False)
 
 
@@ -4844,6 +5214,48 @@ def cache_get(key: str) -> dict[str, object] | None:
     return value if isinstance(value, dict) else None
 
 
+def command_result_snapshots() -> dict[str, dict[str, object]]:
+    """Return in-session command results used for table selection-only reruns."""
+    snapshots = st.session_state.setdefault(COMMAND_RESULT_SNAPSHOT_KEY, {})
+    if not isinstance(snapshots, dict):
+        snapshots = {}
+        st.session_state[COMMAND_RESULT_SNAPSHOT_KEY] = snapshots
+    return snapshots
+
+
+def command_result_snapshot_get(key: str) -> dict[str, object] | None:
+    """Return the last in-session command result for a command cache key."""
+    value = command_result_snapshots().get(key)
+    return value if isinstance(value, dict) else None
+
+
+def command_result_snapshot_set(key: str, value: dict[str, object]) -> None:
+    """Store an in-session command result for fast selection-only reruns."""
+    snapshots = command_result_snapshots()
+    snapshots[key] = value
+    while len(snapshots) > COMMAND_RESULT_SNAPSHOT_LIMIT:
+        snapshots.pop(next(iter(snapshots)))
+
+
+def command_result_snapshot_delete(key_prefix: str) -> None:
+    """Delete in-session command results that match a key or key prefix."""
+    snapshots = command_result_snapshots()
+    for key in list(snapshots):
+        if key == key_prefix or key.startswith(f"{key_prefix}:"):
+            snapshots.pop(key, None)
+
+
+def command_result_snapshot_delete_tag(cache_tag: str) -> None:
+    """Delete in-session command results for a command-result tag."""
+    tag_prefix = f"command_tag:{safe_cache_tag(cache_tag)}:"
+    command_result_snapshot_delete(tag_prefix.rstrip(":"))
+
+
+def command_result_snapshot_clear() -> None:
+    """Delete all in-session command results."""
+    st.session_state[COMMAND_RESULT_SNAPSHOT_KEY] = {}
+
+
 def cache_set(
     key: str,
     value: dict[str, object],
@@ -4870,6 +5282,7 @@ def cache_delete(key_prefix: str) -> None:
     }
     if updated_cache != cache:
         save_ui_cache(updated_cache)
+    command_result_snapshot_delete(key_prefix)
 
 
 def cache_delete_tag(cache_tag: str) -> None:
@@ -4881,6 +5294,7 @@ def cache_delete_tag(cache_tag: str) -> None:
     }
     if updated_cache != cache:
         save_ui_cache(updated_cache)
+    command_result_snapshot_delete_tag(cache_tag)
 
 
 def cache_delete_command(command: str, cache_tag: str = "default") -> None:
@@ -4890,11 +5304,13 @@ def cache_delete_command(command: str, cache_tag: str = "default") -> None:
     if cache_key in cache:
         del cache[cache_key]
         save_ui_cache(cache)
+    command_result_snapshot_delete(cache_key)
 
 
 def cache_clear() -> None:
     """Delete all UI cache entries."""
     save_ui_cache({})
+    command_result_snapshot_clear()
 
 
 def completed_process_from_cache(
@@ -5086,6 +5502,10 @@ def footer_working_directory() -> str:
         remote_cwd = str(st.session_state.get(FOOTER_REMOTE_WORKING_DIR_KEY, "")).strip()
         if remote_cwd:
             return remote_cwd
+    else:
+        local_cwd = str(st.session_state.get(FOOTER_LOCAL_WORKING_DIR_KEY, "")).strip()
+        if local_cwd:
+            return local_cwd
     return os.getcwd()
 
 
@@ -5187,12 +5607,35 @@ def build_hhs_shopt_action_command(operation: str, option_name: str) -> str:
 
 def build_docker_ps_command() -> str:
     """Build the Bash command used to list Docker containers."""
-    return "docker ps -a"
+    return (
+        "docker ps -a --format "
+        "'table {{.ID}}\t{{.Image}}\t{{.Command}}\t{{.CreatedAt}}\t{{.Status}}\t{{.Ports}}\t{{.Names}}'"
+    )
 
 
 def build_docker_images_command() -> str:
     """Build the Bash command used to list Docker images."""
-    return "docker images"
+    return (
+        "docker images --format "
+        "'table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}'"
+    )
+
+
+def build_docker_agent_check_command() -> str:
+    """Build the Bash command used to check whether Docker is running."""
+    return "docker info >/dev/null 2>&1"
+
+
+def build_docker_container_action_command(operation: str, container_id: str) -> str:
+    """Build the Bash command used to run an action against a Docker container."""
+    if operation not in {"start", "stop", "rm"}:
+        raise ValueError(f"Unsupported Docker container operation: {operation}")
+    return f"docker {operation} {shlex.quote(container_id)}"
+
+
+def build_docker_image_delete_command(image_id: str) -> str:
+    """Build the Bash command used to remove a Docker image."""
+    return f"docker image rm -f {shlex.quote(image_id)}"
 
 
 def build_hhs_hspm_command(operation: str, tool_name: str) -> str:
@@ -5664,6 +6107,44 @@ def run_docker_images() -> subprocess.CompletedProcess[str]:
         "Loading Docker images...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
         timeout_seconds=10,
+        cache_tag="docker",
+    )
+
+
+def docker_agent_is_running() -> bool:
+    """Return whether the Docker daemon responds on the selected host."""
+    result = run_bash_command(
+        build_docker_agent_check_command(),
+        "Checking Docker agent...",
+        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        timeout_seconds=5,
+        cache_tag="docker",
+    )
+    return result.returncode == 0
+
+
+def run_docker_container_action(
+    operation: str, container_id: str
+) -> subprocess.CompletedProcess[str]:
+    """Run a Docker container action and return the completed process."""
+    return run_bash_command(
+        build_docker_container_action_command(operation, container_id),
+        f"Running docker {operation}...",
+        ttl_seconds=0,
+        use_cache=False,
+        timeout_seconds=20,
+        cache_tag="docker",
+    )
+
+
+def run_docker_image_delete(image_id: str) -> subprocess.CompletedProcess[str]:
+    """Run Docker image deletion and return the completed process."""
+    return run_bash_command(
+        build_docker_image_delete_command(image_id),
+        "Deleting Docker image...",
+        ttl_seconds=0,
+        use_cache=False,
+        timeout_seconds=30,
         cache_tag="docker",
     )
 
@@ -6549,6 +7030,56 @@ def split_bind_address(bind: str) -> tuple[str, int | None]:
     return "127.0.0.1", int(clean_bind) if clean_bind.isdigit() else None
 
 
+def split_host_port(value: str) -> tuple[str, int | None]:
+    """Return host and port from a host:port value."""
+    clean_value = value.strip()
+    if not clean_value or clean_value.upper() == "SOCKS":
+        return clean_value, None
+    if clean_value.startswith("[") and "]:" in clean_value:
+        host, port = clean_value[1:].split("]:", 1)
+        return host, int(port) if port.isdigit() else None
+    if ":" in clean_value:
+        host, port = clean_value.rsplit(":", 1)
+        return host, int(port) if port.isdigit() else None
+    return clean_value, int(clean_value) if clean_value.isdigit() else None
+
+
+@lru_cache(maxsize=1)
+def default_port_kinds() -> dict[int, str]:
+    """Return default port usage labels loaded from the bundled CSV asset."""
+    port_kinds: dict[int, str] = {}
+    try:
+        with hhs_ui.PORTS_DEFAULT_FILE.open(newline="", encoding="utf-8") as csv_file:
+            for row in csv.DictReader(csv_file):
+                port = str(row.get("Port", "")).strip()
+                kind = str(row.get("Kind", "")).strip()
+                if port.isdigit() and kind:
+                    port_kinds[int(port)] = kind
+    except OSError:
+        return {}
+    return port_kinds
+
+
+def ssh_tunnel_kind_port(row: dict[str, str]) -> int | None:
+    """Return the service port used to identify an SSH tunnel kind."""
+    if row.get("Type", "").lower() == "dynamic":
+        _, bind_port = split_bind_address(row.get("Bind", ""))
+        return bind_port
+    _, destination_port = split_host_port(row.get("Destination", ""))
+    if destination_port is not None:
+        return destination_port
+    _, bind_port = split_bind_address(row.get("Bind", ""))
+    return bind_port
+
+
+def ssh_tunnel_kind(row: dict[str, str]) -> str:
+    """Return the default app usage label for an SSH tunnel row."""
+    port = ssh_tunnel_kind_port(row)
+    if port is None:
+        return ""
+    return default_port_kinds().get(port, "")
+
+
 def local_port_is_reachable(host: str, port: int | None) -> bool:
     """Return whether a local TCP host and port accepts connections."""
     if port is None:
@@ -6620,6 +7151,7 @@ def display_ssh_tunnel_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
         {
             "Local Port": row.get("Bind", ""),
             "Remote Host:Port": row.get("Destination", ""),
+            "Kind": ssh_tunnel_kind(row),
             "Status": row.get("Status", ""),
             "Link": ssh_tunnel_link(row.get("Bind", "")),
         }
@@ -6899,6 +7431,48 @@ def reset_ai_model_table_selection() -> None:
     if not isinstance(reset_counter, int):
         reset_counter = 0
     st.session_state[hhs_ui.AI_MODEL_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
+
+
+def docker_container_table_key() -> str:
+    """Return the Docker container dataframe key for the current selection generation."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+        st.session_state[hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY] = reset_counter
+    return f"{hhs_ui.DOCKER_CONTAINER_TABLE_KEY}_{reset_counter}"
+
+
+def reset_docker_container_table_selection() -> None:
+    """Reset the Docker container dataframe selection for the next rerun."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
+
+
+def docker_image_table_key() -> str:
+    """Return the Docker image dataframe key for the current selection generation."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+        st.session_state[hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY] = reset_counter
+    return f"{hhs_ui.DOCKER_IMAGE_TABLE_KEY}_{reset_counter}"
+
+
+def reset_docker_image_table_selection() -> None:
+    """Reset the Docker image dataframe selection for the next rerun."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
 
 
 def home_tools_table_key() -> str:
@@ -7303,6 +7877,38 @@ def apply_home_shopt_action(operation: str, option_name: str) -> None:
         f"Unable to {action_label} shell option: {option_name}",
     )
     reset_home_shopts_table_selection()
+    save_ui_state()
+
+
+def apply_docker_container_action(operation: str, container_id: str) -> None:
+    """Run a Docker container action from the selected container table row."""
+    clean_container_id = container_id.strip()
+    if not clean_container_id:
+        return
+    result = run_docker_container_action(operation, clean_container_id)
+    cache_delete_tag("docker")
+    push_config_action_status(
+        result,
+        f"Docker container {operation} completed: {clean_container_id}",
+        f"Docker container {operation} failed: {clean_container_id}",
+    )
+    reset_docker_container_table_selection()
+    save_ui_state()
+
+
+def apply_docker_image_action(image_id: str) -> None:
+    """Delete a Docker image from the selected image table row."""
+    clean_image_id = image_id.strip()
+    if not clean_image_id:
+        return
+    result = run_docker_image_delete(clean_image_id)
+    cache_delete_tag("docker")
+    push_config_action_status(
+        result,
+        f"Docker image deleted: {clean_image_id}",
+        f"Docker image deletion failed: {clean_image_id}",
+    )
+    reset_docker_image_table_selection()
     save_ui_state()
 
 
@@ -8563,7 +9169,7 @@ def render_ssh_view() -> None:
         st.error(result.stderr or "Unable to load SSH tunnels.")
         return
     rows = annotate_ssh_tunnel_statuses(parse_ssh_tunnels(result.stdout, host))
-    headers = ["Local Port", "Remote Host:Port", "Status", "Link"]
+    headers = ["Local Port", "Remote Host:Port", "Kind", "Status", "Link"]
     render_table(
         rows,
         key=hhs_ui.SSH_TUNNEL_TABLE_KEY,

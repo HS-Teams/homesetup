@@ -1,0 +1,52 @@
+Port,Kind,Reserved
+0,Reserved,true
+20,FTP data,false
+21,FTP control,false
+22,SSH,false
+23,Telnet,false
+25,SMTP,false
+53,DNS,false
+67,DHCP server,false
+68,DHCP client,false
+80,HTTP,false
+110,POP3,false
+123,NTP,false
+143,IMAP,false
+161,SNMP,false
+389,LDAP,false
+443,HTTPS,false
+445,SMB,false
+465,SMTPS,false
+587,SMTP submission,false
+636,LDAPS,false
+993,IMAPS,false
+995,POP3S,false
+1080,SOCKS,false
+1433,Microsoft SQL Server,false
+1521,Oracle Database,false
+2049,NFS,false
+2181,ZooKeeper,false
+2375,Docker API,false
+2376,Docker API TLS,false
+3000,Development web app,false
+3306,MySQL,false
+3389,RDP,false
+4369,Erlang Port Mapper,false
+5000,Development web app,false
+5432,PostgreSQL,false
+5672,AMQP,false
+5900,VNC,false
+6379,Redis,false
+8000,Development web app,false
+8080,HTTP alternate,false
+8188,ComfyUI,false
+8443,HTTPS alternate,false
+8888,Jupyter,false
+9000,SonarQube / app server,false
+9090,Prometheus,false
+9200,Elasticsearch,false
+9300,Elasticsearch transport,false
+9418,Git,false
+15672,RabbitMQ management,false
+27017,MongoDB,false
+50000,Jenkins agent,false

@@ -455,7 +455,7 @@ namespace = {
     "st": SimpleNamespace(session_state=session_state),
     "activate_terminal_document_view": lambda: activated.append(True),
 }
-exec(source[start:end], namespace)
+exec("from __future__ import annotations\n" + source[start:end], namespace)
 
 namespace["restore_terminal_document_view"](False)
 assert session_state == {}
@@ -1009,6 +1009,7 @@ assert "var(--hhs-theme-footer-status-error-color)" in base_css
 assert "font-size: var(--hhs-theme-footer-status-text-size)" in base_css
 assert "border-top: 1px solid var(--hhs-floating-status-color)" in base_css
 assert "border-bottom: 1px solid" in base_css
+assert "border-top: 2px solid var(--hhs-comment)" in dracula_css
 assert "justify-content: center" in base_css
 assert "text-align: center" in base_css
 assert "--hhs-footer-guard-height: 3.5rem" in base_css
@@ -1332,6 +1333,21 @@ PY
   run grep -q 'def render_home_docker_panel' "${ui_file}"
   assert_success
 
+  run grep -q 'def render_docker_agent_required_view' "${ui_file}"
+  assert_success
+
+  run grep -q 'def docker_agent_is_running' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_docker_agent_check_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'Docker agent is not running' "${ui_file}"
+  assert_success
+
+  run grep -q 'if not docker_agent_is_running()' "${ui_file}"
+  assert_success
+
   run grep -q ' Docker Containers' "${ui_file}"
   assert_failure
 
@@ -1341,19 +1357,101 @@ PY
   run grep -q 'def run_docker_images' "${ui_file}"
   assert_success
 
-  run grep -q 'render_docker_markdown_table(' "${ui_file}"
+  run grep -q 'with st.expander("All Containers", expanded=True)' "${ui_file}"
   assert_success
 
-  run grep -q '"All Containers", run_docker_ps(), omitted_columns=("COMMAND", "PORTS")' "${ui_file}"
+  run grep -q 'with st.expander("Available Images", expanded=True)' "${ui_file}"
   assert_success
 
-  run grep -q 'render_docker_markdown_table("Available Images", run_docker_images())' "${ui_file}"
+  run grep -q 'def render_docker_command_table' "${ui_file}"
   assert_success
 
-  run grep -q 'return "docker ps -a"' "${ui_file}"
+  run grep -q 'render_docker_container_table(run_docker_ps())' "${ui_file}"
   assert_success
 
-  run grep -q 'return "docker images"' "${ui_file}"
+  run grep -q 'render_docker_image_table(run_docker_images())' "${ui_file}"
+  assert_success
+
+  run grep -q 'docker_container_table_key(),' "${ui_file}"
+  assert_success
+
+  run grep -q 'docker_image_table_key(),' "${ui_file}"
+  assert_success
+
+  run grep -q '"label": "Start"' "${ui_file}"
+  assert_success
+
+  run grep -q '"label": "Stop"' "${ui_file}"
+  assert_success
+
+  run grep -q '"label": "Remove"' "${ui_file}"
+  assert_success
+
+  run grep -q '"label": "Delete"' "${ui_file}"
+  assert_success
+
+  run grep -F -q '["CONTAINER ID", "IMAGE", "NAMES", "STATUS", "CREATED AT"]' "${ui_file}"
+  assert_success
+
+  run grep -F -q '["IMAGE ID", "REPOSITORY", "TAG", "SIZE", "CREATED AT"]' "${ui_file}"
+  assert_success
+
+  run grep -q 'def docker_container_is_up' "${ui_file}"
+  assert_success
+
+  run grep -q '"disabled": lambda row, _index: docker_container_is_up(row)' "${ui_file}"
+  assert_success
+
+  run grep -q '"disabled": lambda row, _index: not docker_container_is_up(row)' "${ui_file}"
+  assert_success
+
+  run grep -q 'build_docker_container_action_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'build_docker_image_delete_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'docker image rm -f' "${ui_file}"
+  assert_success
+
+  run grep -q 'docker ps -a --format' "${ui_file}"
+  assert_success
+
+  run grep -q 'docker images --format' "${ui_file}"
+  assert_success
+
+  run grep -F -q '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}' "${ui_file}"
+  assert_success
+
+  run grep -q 'return "docker info >/dev/null 2>&1"' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+for function_name in ("run_docker_ps", "run_docker_images"):
+    body = source.split(f"def {function_name}", 1)[1].split("\ndef ", 1)[0]
+    assert "use_cache=False" not in body, function_name
+agent_body = source.split("def docker_agent_is_running", 1)[1].split("\ndef ", 1)[0]
+assert "use_cache=False" not in agent_body
+docker_body = source.split("def render_home_docker_panel", 1)[1].split("\ndef ", 1)[0]
+required_index = docker_body.index("render_docker_agent_required_view()")
+containers_index = docker_body.index('st.expander("All Containers"')
+assert required_index < containers_index
+PY
+  assert_success
+
+  run grep -q 'DOCKER_CONTAINER_TABLE_KEY = "docker_container_table"' "${constants_file}"
+  assert_success
+
+  run grep -q 'DOCKER_IMAGE_TABLE_KEY = "docker_image_table"' "${constants_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.DOCKER_CONTAINER_TABLE_KEY' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.DOCKER_IMAGE_TABLE_KEY' "${ui_file}"
   assert_success
 
   run grep -q '"home_tools_filter"' "${constants_file}"
@@ -2267,7 +2365,16 @@ PY
   run grep -q 'def display_ssh_tunnel_rows' "${ui_file}"
   assert_success
 
-  run grep -q 'headers = \["Local Port", "Remote Host:Port", "Status", "Link"\]' "${ui_file}"
+  run grep -q 'headers = \["Local Port", "Remote Host:Port", "Kind", "Status", "Link"\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'Path(os.environ.get("HHS_HOME", APP_DIR.parents\[4\]))' "${constants_file}"
+  assert_success
+
+  run grep -q '/ "assets/devel/ports-default.csv"' "${constants_file}"
+  assert_success
+
+  run test -s "${HHS_REPO_DIR}/assets/devel/ports-default.csv"
   assert_success
 
   run grep -q 'column_config: dict\[str, object\] | None = None' "${ui_file}"
@@ -2289,15 +2396,23 @@ PY
   assert_success
 
   run python3 - "${ui_file}" <<'PY'
+import csv
 import re
 import shlex
 import sys
+from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def split_ssh_command(")
 end = source.index("def parse_hhs_history(")
 namespace = {
+    "csv": csv,
+    "hhs_ui": SimpleNamespace(
+        PORTS_DEFAULT_FILE=Path("assets/devel/ports-default.csv"),
+    ),
+    "lru_cache": lru_cache,
     "Path": Path,
     "re": re,
     "shlex": shlex,
@@ -2397,10 +2512,13 @@ assert display_rows == [
     {
         "Local Port": "15432",
         "Remote Host:Port": "127.0.0.1:5432",
+        "Kind": "PostgreSQL",
         "Status": "Reachable",
         "Link": "http://127.0.0.1:15432",
     }
 ], display_rows
+assert namespace["ssh_tunnel_kind"]({"Type": "Local", "Destination": "localhost:80"}) == "HTTP"
+assert namespace["ssh_tunnel_kind"]({"Type": "Dynamic", "Bind": "127.0.0.1:1080"}) == "SOCKS"
 PY
   assert_success
 
@@ -2674,10 +2792,15 @@ assert "return" in terminal_button_body.split('st.button(', 1)[0]
 sidebar_body = ui_source.split("def render_sidebar()", 1)[1].split("\ndef ", 1)[0]
 terminal_index = sidebar_body.index("render_sidebar_terminal_button()")
 theme_index = sidebar_body.index('st.markdown("**Theme**")')
-documents_index = sidebar_body.index('st.markdown("**Documents**")')
-assert terminal_index < theme_index < documents_index
-documents_body = sidebar_body[documents_index:]
-assert '" Terminal"' not in documents_body
+separator_index = sidebar_body.index('hhs-sidebar-separator')
+connect_index = sidebar_body.index('"ﮣ Connect"')
+disconnect_index = sidebar_body.index('"ﮤ Disconnect"')
+readme_index = sidebar_body.index('" README"')
+handbook_index = sidebar_body.index('" HANDBOOK"')
+assert connect_index < theme_index
+assert disconnect_index < theme_index
+assert theme_index < separator_index < readme_index < handbook_index < terminal_index
+assert 'st.markdown("**Documents**")' not in sidebar_body
 PY
   assert_success
 
@@ -2831,6 +2954,12 @@ PY
   run grep -q 'build_terminal_command(command, cwd)' "${ui_file}"
   assert_success
 
+  run grep -q 'def predicted_terminal_directory' "${ui_file}"
+  assert_success
+
+  run grep -q 'update_terminal_working_directory(predicted_cwd)' "${ui_file}"
+  assert_success
+
   run grep -q 'source "${HOME}/.hhsrc" >/dev/null 2>&1 || true' "${ui_file}"
   assert_success
 
@@ -2922,6 +3051,104 @@ PY
 
   run grep -q '@st.dialog("Confirm model deletion")' "${ui_file}"
   assert_failure
+}
+
+@test "when terminal mutates directories then cwd should be predicted before command dispatch" {
+  run python3 - "${ui_file}" <<'PY'
+import os
+import re
+import shlex
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def terminal_command_tokens(")
+end = source.index("def handle_terminal_event(")
+session_state = {}
+remote_state = {"connected": False}
+namespace = {
+    "FOOTER_LOCAL_WORKING_DIR_KEY": "_hhs_footer_local_working_dir",
+    "FOOTER_REMOTE_WORKING_DIR_KEY": "_hhs_footer_remote_working_dir",
+    "TERMINAL_DIR_STACK_KEY": "_hhs_terminal_dir_stack",
+    "TERMINAL_PREVIOUS_CWD_KEY": "_hhs_terminal_previous_cwd",
+    "Path": Path,
+    "hhs_ui": SimpleNamespace(TERMINAL_CWD_KEY="terminal_cwd"),
+    "os": os,
+    "re": re,
+    "shlex": shlex,
+    "st": SimpleNamespace(session_state=session_state),
+    "connected_ssh_host": lambda: remote_state["connected"],
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+assert namespace["terminal_command_is_standalone"]("cd /tmp") is True
+assert namespace["terminal_command_is_standalone"]("cd /tmp && ls") is False
+assert namespace["predicted_terminal_directory"]("cd /tmp", "/") == "/tmp"
+assert namespace["predicted_terminal_directory"]("cd /not-a-real-hhs-dir", "/") is None
+assert namespace["predicted_terminal_directory"]("pushd /tmp", "/") == "/tmp"
+assert session_state["_hhs_terminal_dir_stack"] == ["/"]
+assert namespace["predicted_terminal_directory"]("popd", "/tmp") == "/"
+assert session_state["_hhs_terminal_dir_stack"] == []
+namespace["update_terminal_working_directory"]("/tmp")
+assert session_state["terminal_cwd"] == "/tmp"
+assert session_state["_hhs_footer_local_working_dir"] == "/tmp"
+
+remote_state["connected"] = True
+assert namespace["predicted_terminal_directory"]("cd ~/bin", "/root") is None
+assert namespace["predicted_terminal_directory"]("cd /var", "/root") == "/var"
+namespace["update_terminal_working_directory"]("/var")
+assert session_state["_hhs_footer_remote_working_dir"] == "/var"
+
+execute_body = source.split("def execute_terminal_command(command: str)", 1)[1].split("\ndef ", 1)[0]
+predict_index = execute_body.index("predicted_terminal_directory(command, cwd)")
+update_index = execute_body.index("update_terminal_working_directory(predicted_cwd)")
+run_index = execute_body.index("run_terminal_command(command, cwd)")
+assert predict_index < update_index < run_index
+PY
+  assert_success
+}
+
+@test "when remote terminal prints wrapper chatter then command output should be filtered" {
+  run python3 - "${ui_file}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def parse_terminal_command_stdout(")
+end = source.index("def strip_ansi(")
+namespace = {
+    "re": re,
+    "strip_ansi": lambda value: value,
+    "strip_ssh_shared_connection_notice": lambda value: value,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+stdout = (
+    "[bash] HomeSetup is starting...\n"
+    "[Linux-ubuntu/bash]   Welcome root to HomeSetup v1.9.18 \n"
+    "Shell option expand_aliases set to on \n"
+    "Shell option checkwinsize set to on \n"
+    "bash: cd: /etc/gabiroba: No such file or directory\n"
+    "exit\n"
+    "__HHS_TERMINAL_CWD__/etc/ssl\n"
+)
+output, cwd = namespace["parse_terminal_command_stdout"](stdout, "/root")
+assert cwd == "/etc/ssl"
+assert "HomeSetup is starting" not in output
+assert "Welcome root" not in output
+assert "Shell option expand_aliases" not in output
+assert "\nexit\n" not in f"\n{output}\n"
+assert "bash: cd: /etc/gabiroba: No such file or directory" in output
+
+stderr = "Shared connection to 167.99.120.81 closed.\nConnection to host closed.\nreal error\n"
+filtered = namespace["filter_terminal_output_noise"](stderr)
+assert "Shared connection" not in filtered
+assert "Connection to host closed" not in filtered
+assert filtered == "real error\n"
+PY
+  assert_success
 }
 
 # TC - 13
@@ -4229,7 +4456,7 @@ source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def env_path_aliases()")
 end = source.index("def render_table(")
 namespace = {"os": os, "re": re}
-exec(source[start:end], namespace)
+exec("from __future__ import annotations\n" + source[start:end], namespace)
 
 os.environ.clear()
 os.environ.update(
@@ -4258,6 +4485,73 @@ assert display_rows[1]["Value"] == "${HHS_DIR}/log/app.log", display_rows
 assert display_rows[2]["Value"] == "/opt/tool", display_rows
 assert display_rows[3]["Value"] == "${HHS_HOME}/bin:${HHS_DIR}/bin", display_rows
 assert rows[0]["Value"] == "/Users/hjunior/HomeSetup/bin", rows
+PY
+  assert_success
+}
+
+@test "when selecting table rows then command overlays should be suppressed" {
+  run python3 - "${ui_file}" <<'PY'
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def table_selection_key_prefixes()")
+end = source.index("def render_table(")
+session_state = {
+    "_hhs_table_selection_snapshots": {
+        "env_vars_table_0": (),
+        "docker_container_table_0": (1,),
+    },
+    "env_vars_table_0": {"selection": {"rows": [2]}},
+    "docker_container_table_0": {"selection": {"rows": [1]}},
+}
+namespace = {
+    "hhs_ui": SimpleNamespace(
+        AI_MODEL_TABLE_KEY="ai_model_table",
+        ALIAS_TABLE_KEY="alias_vars_table",
+        CMD_TABLE_KEY="cmd_vars_table",
+        DIR_TABLE_KEY="dir_vars_table",
+        DOCKER_CONTAINER_TABLE_KEY="docker_container_table",
+        DOCKER_IMAGE_TABLE_KEY="docker_image_table",
+        ENV_TABLE_KEY="env_vars_table",
+        HISTORY_COMMAND_TABLE_KEY="history_command_vars_table",
+        HISTORY_DIRECTORY_TABLE_KEY="history_directory_vars_table",
+        HOME_SHOPTS_TABLE_KEY="home_shopts_table",
+        HOME_TOOLS_TABLE_KEY="home_tools_table",
+        PATH_TABLE_KEY="path_vars_table",
+        PROCESS_TABLE_KEY="monitor_process_table",
+        SERVICE_TABLE_KEY="service_vars_table",
+        SSH_TUNNEL_TABLE_KEY="ssh_tunnel_table",
+    ),
+    "st": SimpleNamespace(session_state=session_state),
+    "TABLE_SELECTION_SNAPSHOT_KEY": "_hhs_table_selection_snapshots",
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+assert namespace["table_selection_widget_key"]("env_vars_table_0") is True
+assert namespace["table_selection_widget_key"]("unrelated") is False
+assert namespace["table_selection_rows"]({"selection": {"rows": [2]}}) == (2,)
+assert namespace["table_selection_rerun_in_progress"]() is True
+namespace["remember_table_selection"]("env_vars_table_0", {"selection": {"rows": [2]}})
+assert namespace["table_selection_rerun_in_progress"]() is False
+
+snapshot_start = source.index("def command_result_snapshots()")
+snapshot_end = source.index("def cache_set(")
+snapshot_namespace = {
+    "st": SimpleNamespace(session_state={}),
+    "COMMAND_RESULT_SNAPSHOT_KEY": "_hhs_command_result_snapshots",
+    "COMMAND_RESULT_SNAPSHOT_LIMIT": 2,
+    "safe_cache_tag": lambda value: value,
+}
+exec("from __future__ import annotations\n" + source[snapshot_start:snapshot_end], snapshot_namespace)
+snapshot_namespace["command_result_snapshot_set"]("command_tag:docker:one", {"stdout": "one"})
+snapshot_namespace["command_result_snapshot_set"]("command_tag:docker:two", {"stdout": "two"})
+snapshot_namespace["command_result_snapshot_set"]("command_tag:docker:three", {"stdout": "three"})
+assert snapshot_namespace["command_result_snapshot_get"]("command_tag:docker:one") is None
+assert snapshot_namespace["command_result_snapshot_get"]("command_tag:docker:three")["stdout"] == "three"
+snapshot_namespace["command_result_snapshot_delete_tag"]("docker")
+assert snapshot_namespace["command_result_snapshot_get"]("command_tag:docker:three") is None
 PY
   assert_success
 }
@@ -4298,6 +4592,7 @@ start = source.index("def footer_working_directory(")
 end = source.index("def run_hhs_updater_check(")
 session_state = {}
 namespace = {
+    "FOOTER_LOCAL_WORKING_DIR_KEY": "_hhs_footer_local_working_dir",
     "FOOTER_REMOTE_WORKING_DIR_KEY": "_hhs_footer_remote_working_dir",
     "st": SimpleNamespace(session_state=session_state),
     "os": SimpleNamespace(getcwd=lambda: "/local/cwd"),
@@ -4305,6 +4600,8 @@ namespace = {
 exec(source[start:end], namespace)
 
 assert namespace["footer_working_directory"]() == "/local/cwd"
+session_state["_hhs_footer_local_working_dir"] = "/terminal/local"
+assert namespace["footer_working_directory"]() == "/terminal/local"
 session_state["ssh_connection_status"] = "connected"
 assert namespace["footer_working_directory"]() == "/local/cwd"
 session_state["_hhs_footer_remote_working_dir"] = "/remote/cwd"
@@ -4341,7 +4638,7 @@ PY
   assert_success
 }
 
-@test "when parsing Docker command output then markdown tables should preserve columns" {
+@test "when parsing Docker command output then tables should preserve columns" {
   run python3 - "${ui_file}" <<'PY'
 import re
 import sys
@@ -4358,20 +4655,76 @@ sample = (
     "f9eae755ef6e   yorevs/homeselect:ui-0.0.7.6   \"/docker-entrypoint\"   2 days ago   Up 2 days    127.0.0.1:8888->80/tcp   homeselect-webapp\n"
 )
 
-table = namespace["docker_cli_markdown_table"](sample)
-assert "| CONTAINER ID | IMAGE | COMMAND | CREATED | STATUS | PORTS | NAMES |" in table
-assert (
-    "| f9eae755ef6e | yorevs/homeselect:ui-0.0.7.6 | "
-    "\"/docker-entrypoint\" | 2 days ago | Up 2 days | "
-    "127.0.0.1:8888->80/tcp | homeselect-webapp |"
-) in table
-containers_table = namespace["docker_cli_markdown_table"](
+rows = namespace["docker_cli_table_rows"](sample)
+assert rows == [
+    {
+        "CONTAINER ID": "f9eae755ef6e",
+        "IMAGE": "yorevs/homeselect:ui-0.0.7.6",
+        "COMMAND": "\"/docker-entrypoint\"",
+        "CREATED": "2 days ago",
+        "STATUS": "Up 2 days",
+        "PORTS": "127.0.0.1:8888->80/tcp",
+        "NAMES": "homeselect-webapp",
+    }
+]
+containers_rows = namespace["docker_cli_table_rows"](
     sample, omitted_columns=("COMMAND", "PORTS")
 )
-assert "| CONTAINER ID | IMAGE | CREATED | STATUS | NAMES |" in containers_table
-assert "COMMAND" not in containers_table
-assert "PORTS" not in containers_table
-assert namespace["docker_cli_markdown_table"]("") == ""
+assert containers_rows == [
+    {
+        "CONTAINER ID": "f9eae755ef6e",
+        "IMAGE": "yorevs/homeselect:ui-0.0.7.6",
+        "CREATED": "2 days ago",
+        "STATUS": "Up 2 days",
+        "NAMES": "homeselect-webapp",
+    }
+]
+assert namespace["docker_container_is_up"](containers_rows[0]) is True
+assert namespace["docker_container_is_up"]({"STATUS": "Exited (0) 2 hours ago"}) is False
+remote_output = (
+    "[bash] HomeSetup is starting...\n"
+    "[Linux-ubuntu/bash] Welcome root to HomeSetup v1.9.18\n"
+    + sample
+)
+remote_rows = namespace["docker_cli_table_rows"](
+    remote_output, omitted_columns=("COMMAND", "PORTS")
+)
+assert remote_rows[0]["NAMES"] == "homeselect-webapp"
+image_sample = (
+    "REPOSITORY            TAG          IMAGE ID       CREATED       SIZE\n"
+    "yorevs/homeselect     api-0.0.7.6  a1b2c3d4e5f6   2 days ago    314MB\n"
+)
+image_rows = namespace["docker_cli_table_rows"](
+    "[bash] HomeSetup is starting...\n"
+    "[Linux-ubuntu/bash] Welcome root to HomeSetup v1.9.18\n"
+    + image_sample
+)
+assert image_rows == [
+    {
+        "REPOSITORY": "yorevs/homeselect",
+        "TAG": "api-0.0.7.6",
+        "IMAGE ID": "a1b2c3d4e5f6",
+        "CREATED": "2 days ago",
+        "SIZE": "314MB",
+    }
+]
+formatted_image_sample = (
+    "REPOSITORY\tTAG\tIMAGE ID\tSIZE\tCREATED AT\n"
+    "yorevs/homeselect\tui-0.0.7.6\tf6b43e69bb9b\t203MB\t2026-06-19 00:21:26 -0300 -03\n"
+)
+formatted_image_rows = namespace["docker_cli_table_rows"](
+    "[bash] HomeSetup is starting...\n" + formatted_image_sample
+)
+assert formatted_image_rows == [
+    {
+        "REPOSITORY": "yorevs/homeselect",
+        "TAG": "ui-0.0.7.6",
+        "IMAGE ID": "f6b43e69bb9b",
+        "SIZE": "203MB",
+        "CREATED AT": "2026-06-19 00:21:26 -0300 -03",
+    }
+]
+assert namespace["docker_cli_table_rows"]("") == []
 PY
   assert_success
 }

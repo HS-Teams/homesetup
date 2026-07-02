@@ -22,6 +22,10 @@ APP_AI_USER_AVATAR_FILE = APP_DIR / "assets/images/user.png"
 APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"
 APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"
 APP_FAVICON_FILE = APP_DIR / "assets/images/favicon.png"
+PORTS_DEFAULT_FILE = (
+    Path(os.environ.get("HHS_HOME", APP_DIR.parents[4]))
+    / "assets/devel/ports-default.csv"
+)
 UI_STATE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-state"
 UI_CACHE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-cache"
 UI_SSH_CONNECTION_FILE = (
@@ -255,6 +259,10 @@ ENV_VALUE_EDITOR_SCROLL_HELPER_HEIGHT = 0
 ENV_VALUE_EDITOR_HEIGHT = 40
 ENV_VALUE_EDITOR_KEY_PREFIX = "env_selected_value"
 ENV_VALUE_OVERRIDES_KEY = "env_value_overrides"
+DOCKER_CONTAINER_TABLE_KEY = "docker_container_table"
+DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY = "docker_container_table_reset_counter"
+DOCKER_IMAGE_TABLE_KEY = "docker_image_table"
+DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY = "docker_image_table_reset_counter"
 HOME_TOOLS_TABLE_KEY = "home_tools_table"
 HOME_TOOLS_TABLE_RESET_COUNTER_KEY = "home_tools_table_reset_counter"
 HOME_SHOPTS_TABLE_KEY = "home_shopts_table"

@@ -247,7 +247,7 @@ div[class*="st-key-service_selected_value_"] textarea {
 
 .hhs-app-footer {
   background: var(--hhs-panel);
-  border-top: 1px solid var(--hhs-comment);
+  border-top: 2px solid var(--hhs-comment);
   color: var(--hhs-foreground);
 }
 
