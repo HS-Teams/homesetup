@@ -13,7 +13,6 @@ DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
 APP_THEME_CSS_FILE = APP_DIR / "themes/dracula.css"
-TERMINAL_COMPONENT_DIR = APP_DIR / "components/terminal"
 APP_FONT_FAMILY = "Droid Sans Mono for Powerline Nerd Font Complete"
 APP_FONT_FILE = (
     APP_DIR / "assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
@@ -33,10 +32,9 @@ UI_CACHE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-cache"
 UI_SSH_CONNECTION_FILE = (
     Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-ssh-connection"
 )
-TERMINAL_LOG_FILE = (
-    Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-terminal.log"
+TTYD_INDEX_FILE = (
+    Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ttyd-index.html"
 )
-TERMINAL_TRANSCRIPT_MAX_CHARS = 10000
 UI_CACHE_REALTIME_TTL_SECONDS = 15
 UI_CACHE_NORMAL_TTL_SECONDS = 300
 UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900
@@ -293,12 +291,8 @@ PATH_FILTER_COLUMNS = [2.25, 1.75]
 DOCUMENT_VIEW_ACTIVE_KEY = "document_view_active"
 DOCUMENT_PREVIOUS_VIEW_KEY = "document_previous_view"
 DOCUMENT_SELECTED_KEY = "document_selected"
-TERMINAL_COMMAND_HISTORY_KEY = "terminal_command_history"
 TERMINAL_CWD_KEY = "terminal_cwd"
-TERMINAL_LAST_EVENT_ID_KEY = "terminal_last_event_id"
 TERMINAL_READY_STATUS_SHOWN_KEY = "terminal_ready_status_shown"
-TERMINAL_RESET_COUNTER_KEY = "terminal_reset_counter"
-TERMINAL_TRANSCRIPT_KEY = "terminal_transcript"
 DOCUMENTS = {
     "README": ("README", "README.md"),
     "HANDBOOK": ("Handbook", "docs/handbook/handbook.md"),

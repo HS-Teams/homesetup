@@ -28,12 +28,15 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import tempfile
 import textwrap
 import time
+import urllib.error
+import urllib.request
 from base64 import b64encode
 from collections.abc import Callable
 from datetime import datetime
@@ -63,8 +66,6 @@ FOOTER_LOCAL_WORKING_DIR_KEY = "_hhs_footer_local_working_dir"
 TABLE_SELECTION_SNAPSHOT_KEY = "_hhs_table_selection_snapshots"
 COMMAND_RESULT_SNAPSHOT_KEY = "_hhs_command_result_snapshots"
 COMMAND_RESULT_SNAPSHOT_LIMIT = 100
-TERMINAL_DIR_STACK_KEY = "_hhs_terminal_dir_stack"
-TERMINAL_PREVIOUS_CWD_KEY = "_hhs_terminal_previous_cwd"
 TTYD_PROCESS_KEY = "_hhs_ttyd_process"
 TTYD_PORT_KEY = "_hhs_ttyd_port"
 TTYD_SIGNATURE_KEY = "_hhs_ttyd_signature"
@@ -356,26 +357,6 @@ def load_app_theme_css() -> str:
     return load_text_file(theme_css_file(selected_theme))
 
 
-def selected_theme_custom_property(property_name: str, default: str = "") -> str:
-    """Return a resolved custom property value from the selected HomeSetup UI theme."""
-    selected_theme = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
-    theme_properties = theme_custom_properties(selected_theme)
-    property_value = theme_properties.get(property_name, default)
-    visited_properties: set[str] = set()
-    while True:
-        variable_match = re.fullmatch(r"var\(\s*--([A-Za-z0-9_-]+)\s*\)", property_value)
-        if not variable_match:
-            return property_value
-        referenced_property = variable_match.group(1)
-        if (
-            referenced_property in visited_properties
-            or referenced_property not in theme_properties
-        ):
-            return default
-        visited_properties.add(referenced_property)
-        property_value = theme_properties[referenced_property]
-
-
 def persist_theme_selection(theme_name: str) -> None:
     """Persist the selected theme directly into the UI state file."""
     selected_theme = validated_theme_name(theme_name)
@@ -503,6 +484,8 @@ def document_details(document_key: str) -> tuple[str, Path]:
 
 def open_document_view(document_key: str) -> None:
     """Open a document view in the main content panel."""
+    if terminal_document_view_is_active() and document_key != "TERMINAL":
+        deactivate_terminal_document_view()
     st.session_state[hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] = st.session_state.get(
         "active_view", "Home"
     )
@@ -518,6 +501,12 @@ def activate_terminal_document_view() -> None:
     st.session_state[hhs_ui.TERMINAL_CWD_KEY] = footer_working_directory()
 
 
+def deactivate_terminal_document_view() -> None:
+    """Stop ttyd resources when leaving the Terminal document view."""
+    stop_ttyd_session()
+    st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = False
+
+
 def restore_terminal_document_view(was_terminal_active: bool) -> None:
     """Restore the Terminal document view after a host-scoped state reset."""
     if not was_terminal_active:
@@ -531,6 +520,8 @@ def restore_terminal_document_view(was_terminal_active: bool) -> None:
 def close_document_view() -> None:
     """Close the document view and restore the previous main view."""
     previous_view = st.session_state.get(hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY, "Home")
+    if terminal_document_view_is_active():
+        deactivate_terminal_document_view()
     st.session_state[hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = False
     if previous_view in hhs_ui.VIEWS:
         st.session_state["active_view"] = previous_view
@@ -3160,7 +3151,6 @@ def render_terminal_document_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    st.write("")
     initialize_terminal_session_state()
     ttyd_url = ensure_ttyd_session()
     if not ttyd_url:
@@ -3189,9 +3179,176 @@ def ttyd_binary() -> str:
 
 def ttyd_font_family() -> str:
     """Return the terminal font family backed by the bundled font asset."""
-    if hhs_ui.APP_FONT_FILE.is_file():
+    if ttyd_font_file().is_file():
         return hhs_ui.APP_FONT_FAMILY
     return "monospace"
+
+
+def ttyd_font_file() -> Path:
+    """Return the preferred terminal font file for ttyd's isolated iframe."""
+    if hhs_ui.APP_FONT_FILE.is_file():
+        return hhs_ui.APP_FONT_FILE
+    otf_file = (
+        Path(os.environ.get("HHS_HOME", hhs_ui.APP_DIR.parents[4]))
+        / "assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.otf"
+    )
+    if otf_file.is_file():
+        return otf_file
+    return hhs_ui.APP_FONT_FILE
+
+
+def ttyd_font_mime_type(font_file: Path) -> str:
+    """Return the MIME type for the ttyd terminal font file."""
+    if font_file.suffix.lower() == ".otf":
+        return "font/otf"
+    return "font/woff2"
+
+
+def ttyd_font_format(font_file: Path) -> str:
+    """Return the CSS font format for the ttyd terminal font file."""
+    if font_file.suffix.lower() == ".otf":
+        return "opentype"
+    return "woff2"
+
+
+def ttyd_index_signature(binary: str) -> str:
+    """Return a stable cache signature for the ttyd index and terminal font."""
+    font_file = ttyd_font_file()
+    parts = ["hhs-ttyd-font-index-v1", binary]
+    for path in (Path(binary), font_file):
+        try:
+            stat = path.stat()
+            parts.append(f"{path}:{stat.st_mtime_ns}:{stat.st_size}")
+        except OSError:
+            parts.append(f"{path}:missing")
+    return "|".join(parts)
+
+
+def ttyd_index_is_current(binary: str) -> bool:
+    """Return whether the generated ttyd index matches the current font and binary."""
+    try:
+        first_line = hhs_ui.TTYD_INDEX_FILE.read_text(
+            encoding="utf-8", errors="ignore"
+        ).splitlines()[0]
+    except (IndexError, OSError):
+        return False
+    return first_line == f"<!-- {ttyd_index_signature(binary)} -->"
+
+
+def fetch_ttyd_default_index(binary: str) -> str:
+    """Fetch the default HTML index served by the installed ttyd binary."""
+    port = allocate_ttyd_port()
+    process = subprocess.Popen(
+        [
+            binary,
+            "-i",
+            hhs_ui.TTYD_HOST,
+            "-p",
+            str(port),
+            "/bin/sh",
+            "-lc",
+            "sleep 30",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        url = f"http://{hhs_ui.TTYD_HOST}:{port}/"
+        for _ in range(20):
+            if not ttyd_process_is_running(process):
+                return ""
+            try:
+                with urllib.request.urlopen(url, timeout=1) as response:
+                    return response.read().decode("utf-8")
+            except (OSError, urllib.error.URLError):
+                time.sleep(0.05)
+        return ""
+    finally:
+        stop_process(process)
+
+
+def ttyd_font_face_style() -> str:
+    """Return the CSS that loads the HomeSetup terminal font inside ttyd."""
+    font_file = ttyd_font_file()
+    if not font_file.is_file():
+        return ""
+    encoded_font = b64encode(font_file.read_bytes()).decode("ascii")
+    family = html.escape(hhs_ui.APP_FONT_FAMILY, quote=True)
+    mime_type = ttyd_font_mime_type(font_file)
+    font_format = ttyd_font_format(font_file)
+    return (
+        "<style>"
+        "@font-face{"
+        f'font-family:"{family}";'
+        f'src:url("data:{mime_type};base64,{encoded_font}") format("{font_format}");'
+        "font-weight:normal;"
+        "font-style:normal;"
+        "font-display:block;"
+        "}"
+        "html,body,#terminal,.xterm,.xterm-viewport,.xterm-screen{"
+        f'font-family:"{family}",monospace!important;'
+        "}"
+        "</style>"
+    )
+
+
+def inject_ttyd_font(index_html: str, binary: str) -> str:
+    """Return ttyd index HTML with the HomeSetup terminal font injected."""
+    signature = f"<!-- {ttyd_index_signature(binary)} -->\n"
+    style = ttyd_font_face_style()
+    if not style:
+        return f"{signature}{index_html}"
+    if "</head>" in index_html:
+        return f"{signature}{index_html.replace('</head>', style + '</head>', 1)}"
+    return f"{signature}{style}{index_html}"
+
+
+def ensure_ttyd_index_file(binary: str) -> str:
+    """Create or reuse the generated ttyd index that embeds the terminal font."""
+    if ttyd_index_is_current(binary):
+        return str(hhs_ui.TTYD_INDEX_FILE)
+    index_html = fetch_ttyd_default_index(binary)
+    if not index_html:
+        return ""
+    patched_index = inject_ttyd_font(index_html, binary)
+    try:
+        hhs_ui.TTYD_INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temporary_file = hhs_ui.TTYD_INDEX_FILE.with_suffix(".tmp")
+        temporary_file.write_text(patched_index, encoding="utf-8")
+        temporary_file.replace(hhs_ui.TTYD_INDEX_FILE)
+        return str(hhs_ui.TTYD_INDEX_FILE)
+    except OSError:
+        return ""
+
+
+def stop_process(process: object) -> None:
+    """Terminate a process object if it is still running."""
+    if not ttyd_process_is_running(process):
+        return
+    process_group = 0
+    process_id = int(getattr(process, "pid", 0) or 0)
+    if process_id:
+        try:
+            process_group = os.getpgid(process_id)
+        except OSError:
+            process_group = 0
+    try:
+        if process_group and process_group != os.getpgrp():
+            os.killpg(process_group, signal.SIGTERM)
+        else:
+            process.terminate()
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        if process_group and process_group != os.getpgrp():
+            os.killpg(process_group, signal.SIGKILL)
+        else:
+            process.kill()
+        process.wait(timeout=1)
+    except OSError:
+        return
 
 
 def ttyd_process_is_running(process: object) -> bool:
@@ -3211,11 +3368,11 @@ def allocate_ttyd_port() -> int:
         return int(server_socket.getsockname()[1])
 
 
-def ttyd_session_signature(cwd: str) -> str:
+def ttyd_session_signature(cwd: str, binary: str) -> str:
     """Return the session signature used to decide whether ttyd must restart."""
     host = connected_ssh_host()
     mode = f"ssh:{host}" if host else "local"
-    return f"{mode}:{cwd}"
+    return f"{mode}:{cwd}:{ttyd_index_signature(binary)}"
 
 
 def ttyd_process_working_directory(cwd: str) -> str:
@@ -3270,9 +3427,11 @@ def build_ttyd_shell_command(cwd: str) -> list[str]:
     return [RUN_SHELL, "-l"]
 
 
-def build_ttyd_command(binary: str, port: int, cwd: str) -> list[str]:
+def build_ttyd_command(
+    binary: str, port: int, cwd: str, index_file: str = ""
+) -> list[str]:
     """Build the ttyd server command for the active terminal session."""
-    return [
+    command = [
         binary,
         "-W",
         "-i",
@@ -3293,8 +3452,11 @@ def build_ttyd_command(binary: str, port: int, cwd: str) -> list[str]:
         "disableResizeOverlay=true",
         "-t",
         "titleFixed=HomeSetup Terminal",
-        *build_ttyd_shell_command(cwd),
     ]
+    if index_file:
+        command.extend(("-I", index_file))
+    command.extend(build_ttyd_shell_command(cwd))
+    return command
 
 
 def stop_ttyd_session() -> None:
@@ -3302,16 +3464,7 @@ def stop_ttyd_session() -> None:
     process = st.session_state.pop(TTYD_PROCESS_KEY, None)
     st.session_state.pop(TTYD_PORT_KEY, None)
     st.session_state.pop(TTYD_SIGNATURE_KEY, None)
-    if not ttyd_process_is_running(process):
-        return
-    try:
-        process.terminate()
-        process.wait(timeout=1)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=1)
-    except OSError:
-        return
+    stop_process(process)
 
 
 def ensure_ttyd_session() -> str:
@@ -3321,7 +3474,7 @@ def ensure_ttyd_session() -> str:
         stop_ttyd_session()
         return ""
     cwd = footer_working_directory()
-    signature = ttyd_session_signature(cwd)
+    signature = ttyd_session_signature(cwd, binary)
     process = st.session_state.get(TTYD_PROCESS_KEY)
     port = st.session_state.get(TTYD_PORT_KEY)
     if (
@@ -3333,13 +3486,15 @@ def ensure_ttyd_session() -> str:
 
     stop_ttyd_session()
     port = allocate_ttyd_port()
-    command = build_ttyd_command(binary, port, cwd)
+    index_file = ensure_ttyd_index_file(binary)
+    command = build_ttyd_command(binary, port, cwd, index_file)
     process = subprocess.Popen(
         command,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         text=True,
+        start_new_session=True,
     )
     time.sleep(0.15)
     if not ttyd_process_is_running(process):
@@ -3384,337 +3539,12 @@ def terminal_document_title() -> str:
     return "Terminal"
 
 
-def hhs_terminal_component(**kwargs: object) -> object:
-    """Render the HomeSetup terminal custom component and return its value."""
-    component = components.declare_component(
-        "hhs_terminal", path=str(hhs_ui.TERMINAL_COMPONENT_DIR)
-    )
-    return component(**kwargs)
-
-
-def render_terminal_component(
-    transcript: str, prompt: str, history: list[str], reset_counter: int, height: int
-) -> dict[str, object] | None:
-    """Render the xterm.js terminal component and return submitted command events."""
-    value = hhs_terminal_component(
-        transcript=transcript,
-        prompt=prompt,
-        history=history,
-        resetCounter=reset_counter,
-        height=height,
-        borderColor=selected_theme_custom_property("hhs-theme-heading-border-color"),
-        key="hhs_terminal_component",
-        default=None,
-    )
-    return value if isinstance(value, dict) else None
-
-
 def initialize_terminal_session_state() -> None:
-    """Initialize terminal transcript, working directory, and command history."""
-    restored_transcript = load_terminal_transcript()
-    st.session_state.setdefault(hhs_ui.TERMINAL_TRANSCRIPT_KEY, restored_transcript)
+    """Initialize ttyd terminal working directory and ready status."""
     st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, footer_working_directory())
-    st.session_state.setdefault(hhs_ui.TERMINAL_COMMAND_HISTORY_KEY, [])
-    st.session_state.setdefault(hhs_ui.TERMINAL_LAST_EVENT_ID_KEY, "")
-    st.session_state.setdefault(hhs_ui.TERMINAL_RESET_COUNTER_KEY, 0)
     if not bool(st.session_state.get(hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY, False)):
-        push_floating_status(terminal_ready_status_message(restored_transcript), "info")
+        push_floating_status("HomeSetup terminal ready.", "info")
         st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = True
-
-
-def terminal_reset_counter() -> int:
-    """Return the terminal reset counter as a valid integer."""
-    reset_counter = st.session_state.setdefault(hhs_ui.TERMINAL_RESET_COUNTER_KEY, 0)
-    if isinstance(reset_counter, int):
-        return reset_counter
-    st.session_state[hhs_ui.TERMINAL_RESET_COUNTER_KEY] = 0
-    return 0
-
-
-def terminal_ready_status_message(restored_transcript: str) -> str:
-    """Return the terminal ready status message for a fresh or restored session."""
-    if restored_transcript:
-        return "HomeSetup terminal ready. Session restored."
-    return "HomeSetup terminal ready."
-
-
-def terminal_prompt(cwd: str) -> str:
-    """Return the visible terminal prompt for the current working directory."""
-    home = str(Path.home())
-    display_cwd = "~" if cwd == home else cwd.replace(f"{home}/", "~/", 1)
-    return f"{display_cwd} $ "
-
-
-def terminal_command_tokens(command: str) -> list[str]:
-    """Return shell-like tokens for a standalone terminal command."""
-    try:
-        return shlex.split(command, posix=True)
-    except ValueError:
-        return []
-
-
-def terminal_command_is_standalone(command: str) -> bool:
-    """Return whether a command can be safely pre-applied without changing semantics."""
-    return not bool(re.search(r"(?:&&|\|\||[;&|<>`])", command))
-
-
-def terminal_directory_target_is_static(target: str) -> bool:
-    """Return whether a directory target can be resolved without shell evaluation."""
-    return not bool(re.search(r"[$*?\[\]{}()!]", target))
-
-
-def resolve_terminal_directory_target(target: str, cwd: str) -> str | None:
-    """Resolve a static directory target against the current terminal cwd."""
-    clean_target = target.strip()
-    if not clean_target:
-        return str(Path.home()) if not connected_ssh_host() else None
-    if clean_target == "~" or clean_target.startswith("~/"):
-        if connected_ssh_host():
-            return None
-        clean_target = str(Path.home()) + clean_target[1:]
-    if not terminal_directory_target_is_static(clean_target):
-        return None
-    if os.path.isabs(clean_target):
-        return os.path.normpath(clean_target)
-    return os.path.normpath(os.path.join(cwd, clean_target))
-
-
-def local_terminal_directory_is_valid(path: str) -> bool:
-    """Return whether a local predicted terminal directory exists."""
-    return connected_ssh_host() or os.path.isdir(path)
-
-
-def terminal_directory_stack() -> list[str]:
-    """Return the terminal directory stack used to predict pushd/popd effects."""
-    stack = st.session_state.setdefault(TERMINAL_DIR_STACK_KEY, [])
-    if not isinstance(stack, list):
-        stack = []
-        st.session_state[TERMINAL_DIR_STACK_KEY] = stack
-    return [str(path) for path in stack]
-
-
-def set_terminal_directory_stack(stack: list[str]) -> None:
-    """Persist the terminal directory stack."""
-    st.session_state[TERMINAL_DIR_STACK_KEY] = stack
-
-
-def update_terminal_working_directory(cwd: str) -> None:
-    """Update terminal and footer working directory state."""
-    clean_cwd = cwd.strip()
-    if not clean_cwd:
-        return
-    st.session_state[hhs_ui.TERMINAL_CWD_KEY] = clean_cwd
-    if connected_ssh_host():
-        st.session_state[FOOTER_REMOTE_WORKING_DIR_KEY] = clean_cwd
-    else:
-        st.session_state[FOOTER_LOCAL_WORKING_DIR_KEY] = clean_cwd
-
-
-def predicted_terminal_directory(command: str, cwd: str) -> str | None:
-    """Return a pre-send cwd prediction for standalone directory mutations."""
-    if not terminal_command_is_standalone(command):
-        return None
-    tokens = terminal_command_tokens(command)
-    if not tokens:
-        return None
-    operation = tokens[0]
-    if operation == "dirs" and tokens[1:] == ["-c"]:
-        set_terminal_directory_stack([])
-        return cwd
-    if operation == "cd":
-        target = tokens[1] if len(tokens) > 1 else ""
-        if target == "-":
-            previous_cwd = str(st.session_state.get(TERMINAL_PREVIOUS_CWD_KEY, ""))
-            if not previous_cwd:
-                return None
-            target_cwd = previous_cwd
-        else:
-            target_cwd = resolve_terminal_directory_target(target, cwd)
-        if target_cwd and local_terminal_directory_is_valid(target_cwd):
-            st.session_state[TERMINAL_PREVIOUS_CWD_KEY] = cwd
-            return target_cwd
-        return None
-    if operation == "pushd":
-        stack = terminal_directory_stack()
-        if len(tokens) > 1 and re.fullmatch(r"[+-]\d+", tokens[1]):
-            return None
-        if len(tokens) == 1:
-            if not stack:
-                return None
-            target_cwd = stack[0]
-            set_terminal_directory_stack([cwd, *stack[1:]])
-            st.session_state[TERMINAL_PREVIOUS_CWD_KEY] = cwd
-            return target_cwd
-        target_cwd = resolve_terminal_directory_target(tokens[1], cwd)
-        if target_cwd and local_terminal_directory_is_valid(target_cwd):
-            set_terminal_directory_stack([cwd, *stack])
-            st.session_state[TERMINAL_PREVIOUS_CWD_KEY] = cwd
-            return target_cwd
-        return None
-    if operation == "popd":
-        if len(tokens) > 1:
-            return None
-        stack = terminal_directory_stack()
-        if not stack:
-            return None
-        target_cwd = stack[0]
-        set_terminal_directory_stack(stack[1:])
-        st.session_state[TERMINAL_PREVIOUS_CWD_KEY] = cwd
-        return target_cwd
-    return None
-
-
-def handle_terminal_event(event: dict[str, object] | None) -> None:
-    """Execute a submitted terminal command when the component emits a new event."""
-    if not event:
-        return
-    event_id = str(event.get("eventId", ""))
-    command = str(event.get("command", ""))
-    if not event_id or event_id == st.session_state[hhs_ui.TERMINAL_LAST_EVENT_ID_KEY]:
-        return
-    st.session_state[hhs_ui.TERMINAL_LAST_EVENT_ID_KEY] = event_id
-    execute_terminal_command(command)
-    st.rerun()
-
-
-def sendToTerminal(command: str) -> None:
-    """Send a command to the Terminal panel and execute it."""
-    initialize_terminal_session_state()
-    execute_terminal_command(command)
-
-
-def execute_terminal_command(command: str) -> None:
-    """Execute a terminal command and append its output to the transcript."""
-    clean_command = command.strip()
-    if clean_command in {"clear", "cls", "reset"}:
-        clear_terminal_transcript()
-        return
-    if not clean_command:
-        cwd = str(st.session_state[hhs_ui.TERMINAL_CWD_KEY])
-        append_terminal_transcript(f"{terminal_prompt(cwd)}\n")
-        return
-
-    history = st.session_state.setdefault(hhs_ui.TERMINAL_COMMAND_HISTORY_KEY, [])
-    if isinstance(history, list):
-        history.append(command)
-    cwd = str(st.session_state[hhs_ui.TERMINAL_CWD_KEY])
-    predicted_cwd = predicted_terminal_directory(command, cwd)
-    if predicted_cwd:
-        update_terminal_working_directory(predicted_cwd)
-    prompt = terminal_prompt(cwd)
-    result = run_terminal_command(command, cwd)
-    stdout, next_cwd = parse_terminal_command_stdout(result.stdout, cwd)
-    output = format_terminal_command_output(result, stdout)
-    update_terminal_working_directory(next_cwd)
-    append_terminal_transcript(f"{prompt}{command}\n{output}")
-
-
-def append_terminal_transcript(value: str) -> None:
-    """Append text to the terminal transcript."""
-    transcript = str(st.session_state.get(hhs_ui.TERMINAL_TRANSCRIPT_KEY, ""))
-    st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY] = truncate_terminal_transcript(
-        transcript + value
-    )
-    save_terminal_transcript(str(st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY]))
-
-
-def truncate_terminal_transcript(value: str) -> str:
-    """Return a transcript constrained to the terminal buffer size."""
-    if len(value) <= hhs_ui.TERMINAL_TRANSCRIPT_MAX_CHARS:
-        return value
-    return value[-hhs_ui.TERMINAL_TRANSCRIPT_MAX_CHARS :]
-
-
-def load_terminal_transcript() -> str:
-    """Load the persisted terminal transcript buffer."""
-    try:
-        return truncate_terminal_transcript(
-            hhs_ui.TERMINAL_LOG_FILE.read_text(encoding="utf-8")
-        )
-    except OSError:
-        return ""
-
-
-def save_terminal_transcript(value: str) -> None:
-    """Persist the terminal transcript buffer."""
-    try:
-        hhs_ui.TERMINAL_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        hhs_ui.TERMINAL_LOG_FILE.write_text(
-            truncate_terminal_transcript(value), encoding="utf-8"
-        )
-    except OSError:
-        return
-
-
-def clear_terminal_transcript() -> None:
-    """Clear the terminal transcript session state and persisted buffer."""
-    stop_ttyd_session()
-    st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY] = ""
-    st.session_state[hhs_ui.TERMINAL_RESET_COUNTER_KEY] = terminal_reset_counter() + 1
-    try:
-        hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)
-    except OSError:
-        pass
-    push_floating_status("Session was reset", "info")
-
-
-def build_terminal_command(command: str, cwd: str) -> str:
-    """Build a Bash command that runs a line-oriented terminal command."""
-    return "\n".join(
-        (
-            'export HHS_HOME="${HHS_HOME}";',
-            'export HHS_DIR="${HHS_DIR}";',
-            'export TERM="${TERM:-xterm-256color}";',
-            'export PS1="${PS1:-\\u@\\h:\\w\\$ }";',
-            "shopt -s expand_aliases;",
-            "shopt -s checkwinsize 2>/dev/null || true;",
-            'if [[ -s "${HOME}/.hhsrc" ]]; then',
-            'source "${HOME}/.hhsrc" >/dev/null 2>&1 || true;',
-            'elif [[ -n "${HHS_HOME:-}" && -s "${HHS_HOME}/dotfiles/bash/bash_commons.bash" ]]; then',
-            'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash" >/dev/null 2>&1 || true;',
-            'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-dirs.bash" >/dev/null 2>&1 || true;',
-            'source "${HHS_HOME}/dotfiles/bash/bash_env.bash" >/dev/null 2>&1 || true;',
-            'source "${HHS_HOME}/dotfiles/bash/bash_functions.bash" >/dev/null 2>&1 || true;',
-            'source "${HHS_HOME}/dotfiles/bash/bash_aliases.bash" >/dev/null 2>&1 || true;',
-            "fi;",
-            f"cd {shlex.quote(cwd)} 2>/dev/null || cd \"${{HOME}}\";",
-            "__hhs_terminal_status=0;",
-            f"{{ {command}; }} || __hhs_terminal_status=$?;",
-            'printf "\\n__HHS_TERMINAL_CWD__%s\\n" "$PWD";',
-            'exit "${__hhs_terminal_status}";',
-        )
-    )
-
-
-def run_terminal_command(
-    command: str, cwd: str
-) -> subprocess.CompletedProcess[str]:
-    """Run a terminal command through the existing HomeSetup command runner."""
-    return run_bash_command(
-        build_terminal_command(command, cwd),
-        "Running terminal command...",
-        ttl_seconds=0,
-        use_cache=False,
-        timeout_seconds=120,
-        cache_tag="terminal",
-    )
-
-
-def parse_terminal_command_stdout(stdout: str, fallback_cwd: str) -> tuple[str, str]:
-    """Return terminal stdout with the cwd marker removed."""
-    next_cwd = fallback_cwd
-    output_lines: list[str] = []
-    for line in stdout.splitlines():
-        if line.startswith("__HHS_TERMINAL_CWD__"):
-            next_cwd = line.removeprefix("__HHS_TERMINAL_CWD__").strip() or fallback_cwd
-            continue
-        if terminal_output_line_is_noise(line):
-            continue
-        output_lines.append(line)
-    output = "\n".join(output_lines)
-    if stdout.endswith("\n") and output:
-        output += "\n"
-    return output, next_cwd
 
 
 def terminal_output_line_is_noise(line: str) -> bool:
@@ -3746,22 +3576,6 @@ def filter_terminal_output_noise(value: str) -> str:
     ]
     output = "\n".join(lines)
     if value.endswith("\n") and output:
-        output += "\n"
-    return output
-
-
-def format_terminal_command_output(
-    result: subprocess.CompletedProcess[str], stdout: str
-) -> str:
-    """Return command output formatted for the terminal transcript."""
-    output = stdout
-    if result.stderr:
-        output += filter_terminal_output_noise(
-            strip_ssh_shared_connection_notice(result.stderr)
-        )
-    if result.returncode != 0:
-        output += f"\n[exit {result.returncode}]\n"
-    if output and not output.endswith("\n"):
         output += "\n"
     return output
 
@@ -5003,8 +4817,6 @@ def clear_host_scoped_session_state() -> None:
         hhs_ui.SERVICE_TABLE_KEY,
         hhs_ui.SSH_TUNNEL_TABLE_KEY,
     }
-    reset_counter = terminal_reset_counter() + 1
-
     for key in list(st.session_state.keys()):
         if key in preserved_keys:
             continue
@@ -5026,16 +4838,8 @@ def clear_host_scoped_session_state() -> None:
     st.session_state["ai_prompt_error"] = ""
     st.session_state["ai_prompt_loaded"] = False
     st.session_state["ai_view"] = "CHAT"
-    st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY] = ""
     st.session_state[hhs_ui.TERMINAL_CWD_KEY] = "."
-    st.session_state[hhs_ui.TERMINAL_COMMAND_HISTORY_KEY] = []
-    st.session_state[hhs_ui.TERMINAL_LAST_EVENT_ID_KEY] = ""
     st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = False
-    st.session_state[hhs_ui.TERMINAL_RESET_COUNTER_KEY] = reset_counter
-    try:
-        hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)
-    except OSError:
-        pass
     cache_clear()
 
 
@@ -9880,6 +9684,8 @@ def render_remote_connection_required_view() -> None:
 
 def render_main_view() -> None:
     """Render the active HomeSetup UI view."""
+    if not terminal_document_view_is_active():
+        stop_ttyd_session()
     if selected_remote_host_requires_connection():
         render_remote_connection_required_view()
         return

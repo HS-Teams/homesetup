@@ -834,8 +834,6 @@ from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs_ui/streamlit_ui.css").read_text()
-terminal_html = Path("bin/apps/py/hhs_ui/components/terminal/index.html").read_text()
-terminal_js = Path("bin/apps/py/hhs_ui/components/terminal/terminal.js").read_text()
 dracula_css = Path("bin/apps/py/hhs_ui/themes/dracula.css").read_text()
 homesetup_css = Path("bin/apps/py/hhs_ui/themes/homesetup.css").read_text()
 tokyo_night_css = Path("bin/apps/py/hhs_ui/themes/tokyo-night.css").read_text()
@@ -1056,32 +1054,6 @@ assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]
 assert "border-color: var(--hhs-primary)" in dracula_css
 assert "--hhs-theme-heading-border-color: var(--hhs-theme-border-color)" in dracula_css
 assert "--hhs-theme-heading-border-color: var(--hhs-theme-border-color)" in tokyo_night_css
-assert "resolved custom property value" in ui_source
-assert 'borderColor=selected_theme_custom_property("hhs-theme-heading-border-color")' in ui_source
-assert "#6d5c99" not in terminal_html
-assert "#6d5c99" not in terminal_js
-assert "let commandCursor = 0" in terminal_js
-assert "function handleTerminalShortcut" in terminal_js
-assert "function previousWordCursor" in terminal_js
-assert "function nextWordCursor" in terminal_js
-assert "function clearVisibleTerminal" in terminal_js
-assert "function clearPersistedTerminal" in terminal_js
-assert "function handleTerminalKeydown" in terminal_js
-assert "let lastResetCounter = null" in terminal_js
-assert "const resetCounter = Number(args.resetCounter || 0)" in terminal_js
-assert "resetCounter !== lastResetCounter" in terminal_js
-assert "lastResetCounter = resetCounter" in terminal_js
-assert r'"\x1b[D": () => replaceCommandLine(commandBuffer, commandCursor - 1)' in terminal_js
-assert r'"\x1b[C": () => replaceCommandLine(commandBuffer, commandCursor + 1)' in terminal_js
-assert r'"\x01": () => replaceCommandLine(commandBuffer, 0)' in terminal_js
-assert r'"\x05": () => replaceCommandLine(commandBuffer, commandBuffer.length)' in terminal_js
-assert r'"\x0c": clearPersistedTerminal' in terminal_js
-assert r'"\x0b": clearPersistedTerminal' in terminal_js
-assert r'"\x03": cancelCommandLine' in terminal_js
-assert 'terminalHost.addEventListener("keydown", handleTerminalKeydown, true)' in terminal_js
-assert 'commandBuffer = "";' in terminal_js
-assert 'submitCommand("clear")' in terminal_js
-assert 'if clean_command in {"clear", "cls", "reset"}' in ui_source
 PY
   assert_success
 
@@ -2150,9 +2122,6 @@ PY
   run grep -q 'st.session_state\[hhs_ui.TERMINAL_CWD_KEY\] = "."' "${ui_file}"
   assert_success
 
-  run grep -q 'hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)' "${ui_file}"
-  assert_success
-
   run grep -q 'key in hhs_ui.PERSISTED_UI_KEYS' "${ui_file}"
   assert_success
 
@@ -2828,6 +2797,9 @@ PY
   run grep -q 'def activate_terminal_document_view' "${ui_file}"
   assert_success
 
+  run grep -q 'def deactivate_terminal_document_view' "${ui_file}"
+  assert_success
+
   run grep -q 'def restore_terminal_document_view' "${ui_file}"
   assert_success
 
@@ -2838,6 +2810,25 @@ PY
   assert_success
 
   run grep -q 'def close_document_view' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+open_body = ui_source.split("def open_document_view", 1)[1].split("\ndef ", 1)[0]
+close_body = ui_source.split("def close_document_view", 1)[1].split("\ndef ", 1)[0]
+render_main_body = ui_source.split("def render_main_view", 1)[1].split("\ndef ", 1)[0]
+deactivate_body = ui_source.split("def deactivate_terminal_document_view", 1)[1].split("\ndef ", 1)[0]
+assert 'terminal_document_view_is_active() and document_key != "TERMINAL"' in open_body
+assert "deactivate_terminal_document_view()" in open_body
+assert "if terminal_document_view_is_active():" in close_body
+assert "deactivate_terminal_document_view()" in close_body
+assert "if not terminal_document_view_is_active():" in render_main_body
+assert "stop_ttyd_session()" in render_main_body
+assert "stop_ttyd_session()" in deactivate_body
+assert "TERMINAL_READY_STATUS_SHOWN_KEY" in deactivate_body
+PY
   assert_success
 
   run grep -q 'def terminal_document_title' "${ui_file}"
@@ -2861,7 +2852,31 @@ PY
   run grep -q 'def ttyd_font_family' "${ui_file}"
   assert_success
 
-  run grep -q 'hhs_ui.APP_FONT_FILE.is_file()' "${ui_file}"
+  run grep -q 'def ttyd_font_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.otf' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ensure_ttyd_index_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'def fetch_ttyd_default_index' "${ui_file}"
+  assert_success
+
+  run grep -q 'def inject_ttyd_font' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ttyd_font_face_style' "${ui_file}"
+  assert_success
+
+  run grep -q 'data:{mime_type};base64,{encoded_font}' "${ui_file}"
+  assert_success
+
+  run grep -q 'TTYD_INDEX_FILE = (' "${constants_file}"
+  assert_success
+
+  run grep -q '"TTYD_INDEX_FILE"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
   assert_success
 
   run grep -q 'return hhs_ui.APP_FONT_FAMILY' "${ui_file}"
@@ -2871,6 +2886,9 @@ PY
   assert_success
 
   run grep -q 'fontFamily={ttyd_font_family()}, monospace' "${ui_file}"
+  assert_success
+
+  run grep -q 'command.extend(("-I", index_file))' "${ui_file}"
   assert_success
 
   run grep -q 'def build_ttyd_remote_command' "${ui_file}"
@@ -2895,6 +2913,15 @@ PY
   run grep -q 'ttyd_process_is_running(process)' "${ui_file}"
   assert_success
 
+  run grep -q 'start_new_session=True' "${ui_file}"
+  assert_success
+
+  run grep -q 'os.killpg(process_group, signal.SIGTERM)' "${ui_file}"
+  assert_success
+
+  run grep -q 'os.killpg(process_group, signal.SIGKILL)' "${ui_file}"
+  assert_success
+
   run grep -q 'subprocess.Popen(' "${ui_file}"
   assert_success
 
@@ -2907,196 +2934,40 @@ PY
   run grep -q 'stop_ttyd_session()' "${ui_file}"
   assert_success
 
-  run grep -q 'def hhs_terminal_component' "${ui_file}"
-  assert_success
-
-  run grep -q 'components.declare_component(' "${ui_file}"
-  assert_success
-
-  run grep -q 'TERMINAL_COMPONENT_DIR = APP_DIR / "components/terminal"' "${constants_file}"
-  assert_success
-
-  run grep -q 'TERMINAL_LOG_FILE = (' "${constants_file}"
-  assert_success
-
-  run grep -q 'TERMINAL_TRANSCRIPT_MAX_CHARS = 10000' "${constants_file}"
-  assert_success
-
-  run grep -q 'def render_terminal_component' "${ui_file}"
-  assert_success
-
-  run grep -q 'height=0' "${ui_file}"
-  assert_success
-
   run grep -q 'TERMINAL_READY_STATUS_SHOWN_KEY = "terminal_ready_status_shown"' "${constants_file}"
-  assert_success
-
-  run grep -q 'TERMINAL_RESET_COUNTER_KEY = "terminal_reset_counter"' "${constants_file}"
   assert_success
 
   run grep -q 'st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, footer_working_directory())' "${ui_file}"
   assert_success
 
-  run grep -q 'push_floating_status(' "${ui_file}"
-  assert_success
-
-  run grep -q 'def terminal_ready_status_message' "${ui_file}"
-  assert_success
-
-  run grep -q 'def terminal_reset_counter' "${ui_file}"
-  assert_success
-
-  run grep -q '"HomeSetup terminal ready. Session restored."' "${ui_file}"
-  assert_success
-
   run grep -q '"HomeSetup terminal ready."' "${ui_file}"
-  assert_success
-
-  run grep -q 'push_floating_status(terminal_ready_status_message(restored_transcript), "info")' "${ui_file}"
-  assert_success
-
-  run grep -q 'restored_transcript = load_terminal_transcript()' "${ui_file}"
-  assert_success
-
-  run grep -q 'hhs_ui.TERMINAL_TRANSCRIPT_KEY, restored_transcript' "${ui_file}"
   assert_success
 
   run grep -q 'ttyd_url = ensure_ttyd_session()' "${ui_file}"
   assert_success
 
-  run grep -q 'resetCounter=reset_counter' "${ui_file}"
-  assert_success
-
-  run grep -q 'def execute_terminal_command' "${ui_file}"
-  assert_success
-
-  run grep -q 'if clean_command in {"clear", "cls", "reset"}' "${ui_file}"
-  assert_success
-
-  run grep -q 'def clear_terminal_transcript' "${ui_file}"
-  assert_success
-
-  run grep -q 'def load_terminal_transcript' "${ui_file}"
-  assert_success
-
-  run grep -q 'def save_terminal_transcript' "${ui_file}"
-  assert_success
-
-  run grep -q 'def truncate_terminal_transcript' "${ui_file}"
-  assert_success
-
-  run grep -q 'hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)' "${ui_file}"
-  assert_success
-
-  run grep -q 'push_floating_status("Session was reset", "info")' "${ui_file}"
-  assert_success
-
-  run grep -q 'TERMINAL_RESET_COUNTER_KEY' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
-  assert_success
-
-  run grep -q 'hhs_ui.TERMINAL_TRANSCRIPT_MAX_CHARS' "${ui_file}"
-  assert_success
-
-  run grep -q 'def sendToTerminal(command: str)' "${ui_file}"
-  assert_success
-
-  run grep -q 'execute_terminal_command(command)' "${ui_file}"
-  assert_success
-
-  run grep -q 'def build_terminal_command' "${ui_file}"
-  assert_success
-
-  run grep -q 'def run_terminal_command' "${ui_file}"
-  assert_success
-
-  run grep -q 'build_terminal_command(command, cwd)' "${ui_file}"
-  assert_success
-
-  run grep -q 'def predicted_terminal_directory' "${ui_file}"
-  assert_success
-
-  run grep -q 'update_terminal_working_directory(predicted_cwd)' "${ui_file}"
-  assert_success
-
-  run grep -q 'source "${HOME}/.hhsrc" >/dev/null 2>&1 || true' "${ui_file}"
-  assert_success
-
-  run grep -q 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-dirs.bash" >/dev/null 2>&1 || true' "${ui_file}"
-  assert_success
-
-  run grep -q 'source "${HHS_HOME}/dotfiles/bash/bash_aliases.bash" >/dev/null 2>&1 || true' "${ui_file}"
-  assert_success
-
-  run grep -q 'use_cache=False' "${ui_file}"
-  assert_success
-
-  run grep -q '@xterm/xterm@5.5.0' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
-
-  run grep -q 'streamlit:setComponentValue' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
-
-  run grep -q 'term.onData\|terminal.onData' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
-
-  run grep -q 'Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
-  assert_success
-
-  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
-  assert_success
-
-  run cmp -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2" "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
-  assert_success
-
-  run grep -q 'src: url("./Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2")' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
-  assert_success
-
-  run grep -q '#terminal-shell' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
-  assert_success
-
-  run grep -q 'padding: 0.75rem 0.75rem 2.5rem' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
-  assert_success
-
-  run grep -q 'terminalShell.style.height' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
-
-  run grep -q 'fontSize: 14' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
-
-  run grep -q 'cursorStyle: "underline"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
-
-  run grep -q 'function terminalHeight' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
-
-  run grep -q 'PARENT_BOTTOM_GUARD_PX = 116' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
-
-  run grep -q 'FRAME_HEIGHT_PADDING_PX' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  run grep -q 'def hhs_terminal_component' "${ui_file}"
   assert_failure
 
-  run grep -q 'terminal.scrollToBottom()' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
+  run grep -q 'def render_terminal_component' "${ui_file}"
+  assert_failure
 
-  run grep -q 'function scrollTerminalToContent' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
+  run grep -q 'def execute_terminal_command' "${ui_file}"
+  assert_failure
 
-  run grep -q 'terminal.write(`${transcriptText}${promptText}`, scrollTerminalToContent)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
+  run grep -q 'TERMINAL_COMPONENT_DIR' "${constants_file}"
+  assert_failure
 
-  run grep -q 'window.parent.innerHeight' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
-  assert_success
+  run grep -q 'TERMINAL_TRANSCRIPT_KEY' "${constants_file}"
+  assert_failure
 
   run grep -q '.st-key-hhs_terminal_component iframe' "${css_file}"
-  assert_success
+  assert_failure
 
   run grep -q '.hhs-ttyd-terminal-frame' "${css_file}"
   assert_success
 
   run grep -q 'var(--hhs-ttyd-max-height, 720px)' "${css_file}"
-  assert_success
-
-  run grep -q 'overflow-y: auto !important' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
   assert_success
 
   run python3 - <<'PY'
@@ -3117,62 +2988,6 @@ PY
   assert_failure
 }
 
-@test "when terminal mutates directories then cwd should be predicted before command dispatch" {
-  run python3 - "${ui_file}" <<'PY'
-import os
-import re
-import shlex
-import sys
-from pathlib import Path
-from types import SimpleNamespace
-
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-start = source.index("def terminal_command_tokens(")
-end = source.index("def handle_terminal_event(")
-session_state = {}
-remote_state = {"connected": False}
-namespace = {
-    "FOOTER_LOCAL_WORKING_DIR_KEY": "_hhs_footer_local_working_dir",
-    "FOOTER_REMOTE_WORKING_DIR_KEY": "_hhs_footer_remote_working_dir",
-    "TERMINAL_DIR_STACK_KEY": "_hhs_terminal_dir_stack",
-    "TERMINAL_PREVIOUS_CWD_KEY": "_hhs_terminal_previous_cwd",
-    "Path": Path,
-    "hhs_ui": SimpleNamespace(TERMINAL_CWD_KEY="terminal_cwd"),
-    "os": os,
-    "re": re,
-    "shlex": shlex,
-    "st": SimpleNamespace(session_state=session_state),
-    "connected_ssh_host": lambda: remote_state["connected"],
-}
-exec("from __future__ import annotations\n" + source[start:end], namespace)
-
-assert namespace["terminal_command_is_standalone"]("cd /tmp") is True
-assert namespace["terminal_command_is_standalone"]("cd /tmp && ls") is False
-assert namespace["predicted_terminal_directory"]("cd /tmp", "/") == "/tmp"
-assert namespace["predicted_terminal_directory"]("cd /not-a-real-hhs-dir", "/") is None
-assert namespace["predicted_terminal_directory"]("pushd /tmp", "/") == "/tmp"
-assert session_state["_hhs_terminal_dir_stack"] == ["/"]
-assert namespace["predicted_terminal_directory"]("popd", "/tmp") == "/"
-assert session_state["_hhs_terminal_dir_stack"] == []
-namespace["update_terminal_working_directory"]("/tmp")
-assert session_state["terminal_cwd"] == "/tmp"
-assert session_state["_hhs_footer_local_working_dir"] == "/tmp"
-
-remote_state["connected"] = True
-assert namespace["predicted_terminal_directory"]("cd ~/bin", "/root") is None
-assert namespace["predicted_terminal_directory"]("cd /var", "/root") == "/var"
-namespace["update_terminal_working_directory"]("/var")
-assert session_state["_hhs_footer_remote_working_dir"] == "/var"
-
-execute_body = source.split("def execute_terminal_command(command: str)", 1)[1].split("\ndef ", 1)[0]
-predict_index = execute_body.index("predicted_terminal_directory(command, cwd)")
-update_index = execute_body.index("update_terminal_working_directory(predicted_cwd)")
-run_index = execute_body.index("run_terminal_command(command, cwd)")
-assert predict_index < update_index < run_index
-PY
-  assert_success
-}
-
 @test "when remote terminal prints wrapper chatter then command output should be filtered" {
   run python3 - "${ui_file}" <<'PY'
 import re
@@ -3180,7 +2995,7 @@ import sys
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-start = source.index("def parse_terminal_command_stdout(")
+start = source.index("def terminal_output_line_is_noise(")
 end = source.index("def strip_ansi(")
 namespace = {
     "re": re,
@@ -3198,13 +3013,13 @@ stdout = (
     "exit\n"
     "__HHS_TERMINAL_CWD__/etc/ssl\n"
 )
-output, cwd = namespace["parse_terminal_command_stdout"](stdout, "/root")
-assert cwd == "/etc/ssl"
+output = namespace["filter_terminal_output_noise"](stdout)
 assert "HomeSetup is starting" not in output
 assert "Welcome root" not in output
 assert "Shell option expand_aliases" not in output
 assert "\nexit\n" not in f"\n{output}\n"
 assert "bash: cd: /etc/gabiroba: No such file or directory" in output
+assert "__HHS_TERMINAL_CWD__" in output
 
 stderr = "Shared connection to 167.99.120.81 closed.\nConnection to host closed.\nreal error\n"
 filtered = namespace["filter_terminal_output_noise"](stderr)

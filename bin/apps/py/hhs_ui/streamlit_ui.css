@@ -610,27 +610,19 @@ div[role="dialog"]:has(.hhs-shell-version-output)
   width: max-content;
 }
 
-.st-key-hhs_terminal_component,
-.st-key-hhs_terminal_component iframe {
-  width: 100% !important;
-}
-
-.st-key-hhs_terminal_component iframe {
-  display: block;
-  min-height: 360px;
-}
-
 .hhs-ttyd-terminal-shell {
   background: var(--hhs-theme-bg-color);
   border: 1px solid var(--hhs-theme-heading-border-color);
   border-radius: 0.4rem;
   box-sizing: border-box;
   height: min(
-    calc(100dvh - var(--hhs-footer-guard-height) - 10.5rem),
+    calc(100dvh - var(--hhs-footer-guard-height) - 12.25rem),
     var(--hhs-ttyd-max-height, 720px)
   );
+  margin: 0;
   min-height: 360px;
   overflow: hidden;
+  padding: 0;
   width: 100%;
 }
 
