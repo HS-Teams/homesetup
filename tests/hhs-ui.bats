@@ -2254,7 +2254,10 @@ PY
   run grep -q 'bash -ic' "${ui_file}"
   assert_success
 
-  run grep -q 'ssh -tt' "${ui_file}"
+  run grep -q '"ssh",' "${ui_file}"
+  assert_success
+
+  run grep -q '"-tt",' "${ui_file}"
   assert_success
 
   run grep -q 'safe_remote_shell = shlex.quote' "${ui_file}"
@@ -2849,6 +2852,58 @@ PY
   run grep -q '<h2> {html.escape(title)}</h2>' "${ui_file}"
   assert_success
 
+  run grep -q 'def ttyd_binary' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ttyd_font_family' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.APP_FONT_FILE.is_file()' "${ui_file}"
+  assert_success
+
+  run grep -q 'return hhs_ui.APP_FONT_FAMILY' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_ttyd_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'fontFamily={ttyd_font_family()}, monospace' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_ttyd_remote_command' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+remote_body = ui_source.split("def build_ttyd_remote_command", 1)[1].split("\ndef ", 1)[0]
+assert '"ssh",' in remote_body
+assert '"-tt",' in remote_body
+PY
+  assert_success
+
+  run grep -q 'ControlPath={ssh_control_path(host)}' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ensure_ttyd_session' "${ui_file}"
+  assert_success
+
+  run grep -q 'ttyd_process_is_running(process)' "${ui_file}"
+  assert_success
+
+  run grep -q 'subprocess.Popen(' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_ttyd_terminal_frame' "${ui_file}"
+  assert_success
+
+  run grep -q 'class="hhs-ttyd-terminal-frame"' "${ui_file}"
+  assert_success
+
+  run grep -q 'stop_ttyd_session()' "${ui_file}"
+  assert_success
+
   run grep -q 'def hhs_terminal_component' "${ui_file}"
   assert_success
 
@@ -2903,7 +2958,7 @@ PY
   run grep -q 'hhs_ui.TERMINAL_TRANSCRIPT_KEY, restored_transcript' "${ui_file}"
   assert_success
 
-  run grep -q 'reset_counter=terminal_reset_counter()' "${ui_file}"
+  run grep -q 'ttyd_url = ensure_ttyd_session()' "${ui_file}"
   assert_success
 
   run grep -q 'resetCounter=reset_counter' "${ui_file}"
@@ -3030,6 +3085,12 @@ PY
   assert_success
 
   run grep -q '.st-key-hhs_terminal_component iframe' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-ttyd-terminal-frame' "${css_file}"
+  assert_success
+
+  run grep -q 'var(--hhs-ttyd-max-height, 720px)' "${css_file}"
   assert_success
 
   run grep -q 'overflow-y: auto !important' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"

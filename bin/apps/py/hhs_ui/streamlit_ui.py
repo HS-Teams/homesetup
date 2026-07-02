@@ -27,6 +27,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import socket
 import subprocess
 import sys
@@ -64,6 +65,9 @@ COMMAND_RESULT_SNAPSHOT_KEY = "_hhs_command_result_snapshots"
 COMMAND_RESULT_SNAPSHOT_LIMIT = 100
 TERMINAL_DIR_STACK_KEY = "_hhs_terminal_dir_stack"
 TERMINAL_PREVIOUS_CWD_KEY = "_hhs_terminal_previous_cwd"
+TTYD_PROCESS_KEY = "_hhs_ttyd_process"
+TTYD_PORT_KEY = "_hhs_ttyd_port"
+TTYD_SIGNATURE_KEY = "_hhs_ttyd_signature"
 AI_CONTEXT_UPLOAD_TYPES = (
     "txt",
     "md",
@@ -3146,7 +3150,7 @@ def render_document_view() -> None:
 
 
 def render_terminal_document_view() -> None:
-    """Render the line-oriented xterm.js terminal document view."""
+    """Render the ttyd-backed terminal document view."""
     title = terminal_document_title()
     st.markdown(
         f"""
@@ -3158,14 +3162,217 @@ def render_terminal_document_view() -> None:
     )
     st.write("")
     initialize_terminal_session_state()
-    terminal_event = render_terminal_component(
-        transcript=str(st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY]),
-        prompt=terminal_prompt(str(st.session_state[hhs_ui.TERMINAL_CWD_KEY])),
-        history=list(st.session_state[hhs_ui.TERMINAL_COMMAND_HISTORY_KEY]),
-        reset_counter=terminal_reset_counter(),
-        height=0,
+    ttyd_url = ensure_ttyd_session()
+    if not ttyd_url:
+        render_ttyd_unavailable()
+        return
+    render_ttyd_terminal_frame(ttyd_url)
+
+
+def ttyd_binary() -> str:
+    """Return the ttyd executable path when it is available to the UI process."""
+    discovered = shutil.which("ttyd")
+    if discovered:
+        return discovered
+    for candidate in (
+        os.environ.get("TTYD", ""),
+        "/opt/homebrew/bin/ttyd",
+        "/usr/local/bin/ttyd",
+        "/usr/bin/ttyd",
+    ):
+        if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return ""
+
+
+def ttyd_font_family() -> str:
+    """Return the terminal font family backed by the bundled font asset."""
+    if hhs_ui.APP_FONT_FILE.is_file():
+        return hhs_ui.APP_FONT_FAMILY
+    return "monospace"
+
+
+def ttyd_process_is_running(process: object) -> bool:
+    """Return whether a stored ttyd process is still alive."""
+    if not hasattr(process, "poll"):
+        return False
+    try:
+        return process.poll() is None
+    except OSError:
+        return False
+
+
+def allocate_ttyd_port() -> int:
+    """Return an available local TCP port for a ttyd session."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+        server_socket.bind((hhs_ui.TTYD_HOST, 0))
+        return int(server_socket.getsockname()[1])
+
+
+def ttyd_session_signature(cwd: str) -> str:
+    """Return the session signature used to decide whether ttyd must restart."""
+    host = connected_ssh_host()
+    mode = f"ssh:{host}" if host else "local"
+    return f"{mode}:{cwd}"
+
+
+def ttyd_process_working_directory(cwd: str) -> str:
+    """Return the local working directory used to launch the ttyd process."""
+    if connected_ssh_host():
+        return os.getcwd()
+    if cwd and os.path.isdir(cwd):
+        return cwd
+    return os.getcwd()
+
+
+def ssh_config_option_args() -> list[str]:
+    """Return OpenSSH config arguments for subprocess list commands."""
+    return ["-F", str(Path.home() / ".ssh/config")]
+
+
+def build_ttyd_remote_command(host: str, cwd: str) -> list[str]:
+    """Build the SSH command run by ttyd for remote terminal sessions."""
+    remote_command = (
+        f"cd {shlex.quote(cwd)} 2>/dev/null || cd; "
+        'exec "${SHELL:-bash}" -l'
     )
-    handle_terminal_event(terminal_event)
+    ssh_options = [
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        "-o",
+        "ConnectionAttempts=1",
+        "-o",
+        "ServerAliveInterval=5",
+        "-o",
+        "ServerAliveCountMax=1",
+        "-o",
+        f"ControlPath={ssh_control_path(host)}",
+    ]
+    return [
+        "ssh",
+        "-tt",
+        *ssh_config_option_args(),
+        *ssh_options,
+        host,
+        f"bash -lc {shlex.quote(remote_command)}",
+    ]
+
+
+def build_ttyd_shell_command(cwd: str) -> list[str]:
+    """Build the shell command served by ttyd for the active execution host."""
+    host = connected_ssh_host()
+    if host:
+        return build_ttyd_remote_command(host, cwd)
+    return [RUN_SHELL, "-l"]
+
+
+def build_ttyd_command(binary: str, port: int, cwd: str) -> list[str]:
+    """Build the ttyd server command for the active terminal session."""
+    return [
+        binary,
+        "-W",
+        "-i",
+        hhs_ui.TTYD_HOST,
+        "-p",
+        str(port),
+        "-w",
+        ttyd_process_working_directory(cwd),
+        "-t",
+        f"fontFamily={ttyd_font_family()}, monospace",
+        "-t",
+        "fontSize=14",
+        "-t",
+        "cursorStyle=underline",
+        "-t",
+        "disableLeaveAlert=true",
+        "-t",
+        "disableResizeOverlay=true",
+        "-t",
+        "titleFixed=HomeSetup Terminal",
+        *build_ttyd_shell_command(cwd),
+    ]
+
+
+def stop_ttyd_session() -> None:
+    """Stop any ttyd process owned by the current Streamlit session."""
+    process = st.session_state.pop(TTYD_PROCESS_KEY, None)
+    st.session_state.pop(TTYD_PORT_KEY, None)
+    st.session_state.pop(TTYD_SIGNATURE_KEY, None)
+    if not ttyd_process_is_running(process):
+        return
+    try:
+        process.terminate()
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=1)
+    except OSError:
+        return
+
+
+def ensure_ttyd_session() -> str:
+    """Start or reuse a ttyd server and return the iframe URL."""
+    binary = ttyd_binary()
+    if not binary:
+        stop_ttyd_session()
+        return ""
+    cwd = footer_working_directory()
+    signature = ttyd_session_signature(cwd)
+    process = st.session_state.get(TTYD_PROCESS_KEY)
+    port = st.session_state.get(TTYD_PORT_KEY)
+    if (
+        ttyd_process_is_running(process)
+        and isinstance(port, int)
+        and st.session_state.get(TTYD_SIGNATURE_KEY) == signature
+    ):
+        return f"http://{hhs_ui.TTYD_HOST}:{port}/"
+
+    stop_ttyd_session()
+    port = allocate_ttyd_port()
+    command = build_ttyd_command(binary, port, cwd)
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    time.sleep(0.15)
+    if not ttyd_process_is_running(process):
+        return ""
+    st.session_state[TTYD_PROCESS_KEY] = process
+    st.session_state[TTYD_PORT_KEY] = port
+    st.session_state[TTYD_SIGNATURE_KEY] = signature
+    return f"http://{hhs_ui.TTYD_HOST}:{port}/"
+
+
+def render_ttyd_terminal_frame(ttyd_url: str) -> None:
+    """Render the active ttyd terminal in an iframe."""
+    safe_url = html.escape(ttyd_url, quote=True)
+    iframe_height = int(hhs_ui.TTYD_IFRAME_HEIGHT)
+    st.markdown(
+        f"""
+        <div
+          class="hhs-ttyd-terminal-shell"
+          style="--hhs-ttyd-max-height: {iframe_height}px;"
+        >
+          <iframe
+            class="hhs-ttyd-terminal-frame"
+            src="{safe_url}"
+            title="HomeSetup Terminal"
+            loading="eager"
+          ></iframe>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_ttyd_unavailable() -> None:
+    """Render a dependency message when ttyd cannot be started."""
+    st.error("ttyd is not available to the UI process.")
 
 
 def terminal_document_title() -> str:
@@ -3439,6 +3646,7 @@ def save_terminal_transcript(value: str) -> None:
 
 def clear_terminal_transcript() -> None:
     """Clear the terminal transcript session state and persisted buffer."""
+    stop_ttyd_session()
     st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY] = ""
     st.session_state[hhs_ui.TERMINAL_RESET_COUNTER_KEY] = terminal_reset_counter() + 1
     try:
@@ -4743,6 +4951,7 @@ def synchronize_selected_ssh_host_with_connection() -> None:
 
 def clear_disconnected_ssh_host(host: str) -> None:
     """Clear stale UI SSH connection state and select the local host."""
+    stop_ttyd_session()
     st.session_state["ssh_connection_status"] = ""
     st.session_state["ssh_connection_host"] = ""
     st.session_state["ssh_connection_error"] = ""
@@ -4758,6 +4967,7 @@ def clear_disconnected_ssh_host(host: str) -> None:
 
 def clear_host_scoped_session_state() -> None:
     """Clear UI state that belongs to the previously selected execution host."""
+    stop_ttyd_session()
     preserved_keys = {
         hhs_ui.THEME_SELECTED_KEY,
         "theme_last_seen",
@@ -4961,6 +5171,7 @@ def execute_pending_ssh_disconnection() -> None:
     host = str(st.session_state.get("ssh_disconnect_pending", "")).strip()
     if not host:
         return
+    stop_ttyd_session()
     st.session_state["ssh_disconnect_pending"] = ""
     run_bash_command(
         build_ssh_disconnect_command(host),

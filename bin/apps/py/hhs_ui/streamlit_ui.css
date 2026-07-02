@@ -620,6 +620,28 @@ div[role="dialog"]:has(.hhs-shell-version-output)
   min-height: 360px;
 }
 
+.hhs-ttyd-terminal-shell {
+  background: var(--hhs-theme-bg-color);
+  border: 1px solid var(--hhs-theme-heading-border-color);
+  border-radius: 0.4rem;
+  box-sizing: border-box;
+  height: min(
+    calc(100dvh - var(--hhs-footer-guard-height) - 10.5rem),
+    var(--hhs-ttyd-max-height, 720px)
+  );
+  min-height: 360px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.hhs-ttyd-terminal-frame {
+  background: var(--hhs-theme-bg-color);
+  border: 0;
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
 .hhs-log-output {
   height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height));
   margin: 0.35rem 0 0;
