@@ -542,6 +542,16 @@ div[class*="st-key-monitor_process_kill_button_"] button {
   word-break: normal;
 }
 
+.st-key-hhs_terminal_component,
+.st-key-hhs_terminal_component iframe {
+  width: 100% !important;
+}
+
+.st-key-hhs_terminal_component iframe {
+  display: block;
+  min-height: 360px;
+}
+
 .hhs-log-output {
   height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height));
   margin: 0.35rem 0 0;
@@ -589,6 +599,7 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 .st-key-cmds_other_filter,
 .st-key-dirs_other_filter,
 .st-key-env_other_filter,
+.st-key-home_shopts_other_filter,
 .st-key-home_tools_other_filter,
 .st-key-history_commands_other_filter,
 .st-key-history_directories_other_filter,
@@ -602,6 +613,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_shopts_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter),
@@ -614,6 +626,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-
 div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_shopts_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:first-child,
@@ -628,6 +641,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-
 div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_shopts_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:last-child,
@@ -642,6 +656,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[dat
 .st-key-cmds_other_filter input,
 .st-key-dirs_other_filter input,
 .st-key-env_other_filter input,
+.st-key-home_shopts_other_filter input,
 .st-key-home_tools_other_filter input,
 .st-key-history_commands_other_filter input,
 .st-key-history_directories_other_filter input,

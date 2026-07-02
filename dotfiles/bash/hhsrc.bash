@@ -238,7 +238,7 @@ if [[ ${HHS_LOAD_SHELL_OPTIONS} -eq 1 ]]; then
   while read -r line; do
     if [[ ${line} =~ ${re_key_pair} ]]; then
       option="${BASH_REMATCH[1]}"
-      state="${BASH_REMATCH[2]}"
+      state="$(tr '[:upper:]' '[:lower:]' <<<"${BASH_REMATCH[2]}")"
       if [[ "${state}" == 'on' ]]; then
         \shopt -s "${option}" &>/dev/null || __hhs_log "WARN" "Unable to SET shell option: ${option}"
       elif [[ "${state}" == 'off' ]]; then

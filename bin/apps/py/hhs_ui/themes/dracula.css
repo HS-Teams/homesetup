@@ -6,6 +6,7 @@
   --hhs-theme-text-color: #f8f8f2;
   --hhs-theme-link-color: #8be9fd;
   --hhs-theme-border-color: #6272a4;
+  --hhs-theme-heading-border-color: var(--hhs-theme-border-color);
   --hhs-theme-dataframe-border-color: #6272a4;
   --hhs-theme-dataframe-header-background-color: #44475a;
   --hhs-theme-code-background-color: #21222c;
@@ -15,7 +16,7 @@
   --hhs-theme-footer-status-info-color: #8be9fd;
   --hhs-theme-footer-status-warn-color: #f1fa8c;
   --hhs-theme-footer-status-error-color: #ff5555;
-  --hhs-theme-footer-status-text-size: 0.84rem;
+  --hhs-theme-footer-status-text-size: 1.176rem;
   --hhs-theme-show-widget-border: true;
   --hhs-theme-show-sidebar-border: true;
   --hhs-background: var(--hhs-theme-background-color);
@@ -96,7 +97,7 @@ body,
 }
 
 .hhs-view-heading {
-  border-bottom: 1px solid var(--hhs-comment);
+  border-bottom: 1px solid var(--hhs-theme-heading-border-color);
 }
 
 .hhs-view-heading h2 {

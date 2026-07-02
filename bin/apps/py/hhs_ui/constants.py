@@ -8,11 +8,12 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.112"
+VERSION = "0.0.133"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
 APP_THEME_CSS_FILE = APP_DIR / "themes/dracula.css"
+TERMINAL_COMPONENT_DIR = APP_DIR / "components/terminal"
 APP_FONT_FAMILY = "Droid Sans Mono for Powerline Nerd Font Complete"
 APP_FONT_FILE = (
     APP_DIR / "assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
@@ -25,6 +26,10 @@ UI_CACHE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-cache"
 UI_SSH_CONNECTION_FILE = (
     Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-ssh-connection"
 )
+TERMINAL_LOG_FILE = (
+    Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-terminal.log"
+)
+TERMINAL_TRANSCRIPT_MAX_CHARS = 10000
 UI_CACHE_REALTIME_TTL_SECONDS = 15
 UI_CACHE_NORMAL_TTL_SECONDS = 300
 UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900
@@ -34,7 +39,7 @@ VIEWS = ("Home", "Configs", "Services", "Monitor", "History")
 AI_VIEW = "AI"
 SSH_VIEW = "SSH"
 VIEW_LABELS = {
-    "Home": " Home",
+    "Home": " System",
     "Configs": " Configs",
     "Services": " Services",
     "Monitor": " Monitor",
@@ -48,10 +53,11 @@ AI_VIEW_LABELS = {
     "CONTEXT": " Context",
     "SETTINGS": " Settings",
 }
-HOME_VIEWS = ("System", "Tools")
+HOME_VIEWS = ("System", "Tools", "SHOPTS")
 HOME_VIEW_LABELS = {
     "System": " Summary",
     "Tools": " Tools",
+    "SHOPTS": " Shell Options",
 }
 CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")
 CONFIG_VIEW_LABELS = {
@@ -80,6 +86,7 @@ LIST_FILTERS = ("All", "Other")
 HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
 SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")
+SHOPTS_FILTERS = ("All", "ON", "OFF", "Other")
 TABLE_CONTROLS_PANEL_TITLE = "Filters & Controls"
 THEME_SELECTED_KEY = "theme_selected"
 AI_CODE_BLOCK_WRAP_COLUMNS = 96
@@ -100,6 +107,9 @@ PERSISTED_UI_KEYS = (
     "config_view",
     "dirs_filter",
     "dirs_other_filter",
+    "document_previous_view",
+    "document_selected",
+    "document_view_active",
     "env_filter",
     "env_other_filter",
     "env_value_overrides",
@@ -107,6 +117,8 @@ PERSISTED_UI_KEYS = (
     "ssh_host_selected",
     "home_tools_filter",
     "home_tools_other_filter",
+    "home_shopts_filter",
+    "home_shopts_other_filter",
     "history_commands_filter",
     "history_commands_other_filter",
     "history_directories_filter",
@@ -170,6 +182,7 @@ TOP_PROCESS_SORT_KEYS = {
 TOOL_LINE_PATTERN = re.compile(
     r"^\[(.*?)\]\s+Checking:\s+(.+?)\s+\.{2,}\s+(\S+)\s+(INSTALLED|NOT FOUND|ALIASED|FUNCTION)(?:\s+=>\s+(.*))?$"
 )
+SHOPT_LINE_PATTERN = re.compile(r"^(?:(\S+)\s+)?(ON|OFF)\s+(.+)$")
 SYSINFO_KEY_VALUE_PATTERN = re.compile(r"^\s*([A-Za-z0-9_. -]+?)\.{2,}\s*:\s*(.*)$")
 SYSINFO_SECTION_PATTERN = re.compile(r"^([A-Za-z][A-Za-z0-9 -]+):$")
 LOG_TAILOR_RULES = (
@@ -218,6 +231,8 @@ ENV_VALUE_EDITOR_KEY_PREFIX = "env_selected_value"
 ENV_VALUE_OVERRIDES_KEY = "env_value_overrides"
 HOME_TOOLS_TABLE_KEY = "home_tools_table"
 HOME_TOOLS_TABLE_RESET_COUNTER_KEY = "home_tools_table_reset_counter"
+HOME_SHOPTS_TABLE_KEY = "home_shopts_table"
+HOME_SHOPTS_TABLE_RESET_COUNTER_KEY = "home_shopts_table_reset_counter"
 HISTORY_COMMAND_TABLE_KEY = "history_command_vars_table"
 HISTORY_COMMAND_TABLE_RESET_COUNTER_KEY = "history_command_vars_table_reset_counter"
 HISTORY_COMMAND_VALUE_EDITOR_KEY_PREFIX = "history_command_selected_value"
@@ -242,6 +257,11 @@ PATH_FILTER_COLUMNS = [2.25, 1.75]
 DOCUMENT_VIEW_ACTIVE_KEY = "document_view_active"
 DOCUMENT_PREVIOUS_VIEW_KEY = "document_previous_view"
 DOCUMENT_SELECTED_KEY = "document_selected"
+TERMINAL_COMMAND_HISTORY_KEY = "terminal_command_history"
+TERMINAL_CWD_KEY = "terminal_cwd"
+TERMINAL_LAST_EVENT_ID_KEY = "terminal_last_event_id"
+TERMINAL_READY_STATUS_SHOWN_KEY = "terminal_ready_status_shown"
+TERMINAL_TRANSCRIPT_KEY = "terminal_transcript"
 DOCUMENTS = {
     "README": ("README", "README.md"),
     "HANDBOOK": ("Handbook", "docs/handbook/handbook.md"),

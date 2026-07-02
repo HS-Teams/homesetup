@@ -84,6 +84,63 @@ AI_CONTEXT_UPLOAD_TYPES = (
     "php",
     "sql",
 )
+SHOPT_DESCRIPTIONS = {
+    "assoc_expand_once": "Suppresses repeated evaluation of associative array subscripts.",
+    "autocd": "Runs a directory name as if it were the argument to cd.",
+    "cdable_vars": "Treats a non-directory cd argument as a variable containing the target directory.",
+    "cdspell": "Corrects minor spelling errors in directory names used with cd.",
+    "checkhash": "Verifies hashed commands still exist before executing them.",
+    "checkjobs": "Checks for stopped and running jobs before an interactive shell exits.",
+    "checkwinsize": "Updates LINES and COLUMNS after each command when the terminal size changes.",
+    "cmdhist": "Stores all lines of a multi-line command in one history entry.",
+    "compat31": "Uses Bash 3.1 compatibility for quoted =~ conditional arguments.",
+    "compat32": "Uses Bash 3.2 compatibility for conditional and locale-specific behavior.",
+    "compat40": "Uses Bash 4.0 compatibility for conditional and locale-specific behavior.",
+    "compat41": "Uses Bash 4.1 compatibility for conditional and POSIX mode behavior.",
+    "compat42": "Uses Bash 4.2 compatibility for pattern replacement quote handling.",
+    "compat43": "Uses Bash 4.3 compatibility for word expansion and loop state behavior.",
+    "compat44": "Uses Bash 4.4 compatibility for expansion and unset behavior.",
+    "complete_fullquote": "Quotes all shell metacharacters in completion results.",
+    "direxpand": "Expands directory names during completion.",
+    "dirspell": "Corrects directory name spelling during completion.",
+    "dotglob": "Includes filenames beginning with a dot in pathname expansion.",
+    "execfail": "Prevents a non-interactive shell from exiting when exec cannot run its target.",
+    "expand_aliases": "Expands aliases before command execution.",
+    "extdebug": "Enables debugger-oriented shell behavior and tracing.",
+    "extglob": "Enables extended pathname pattern matching operators.",
+    "extquote": "Enables ANSI-C and locale-specific quoting inside parameter expansions.",
+    "failglob": "Makes non-matching pathname patterns raise an expansion error.",
+    "force_fignore": "Applies FIGNORE suffixes even when they are the only completion matches.",
+    "globasciiranges": "Uses ASCII ordering for bracket expression ranges in pattern matching.",
+    "globstar": "Makes ** recursively match files and directories during pathname expansion.",
+    "gnu_errfmt": "Formats shell error messages in GNU style.",
+    "histappend": "Appends history to HISTFILE instead of overwriting it on shell exit.",
+    "histreedit": "Lets readline re-edit a failed history substitution.",
+    "histverify": "Loads history substitutions into readline before execution for review.",
+    "hostcomplete": "Completes hostnames when a word containing @ is completed.",
+    "huponexit": "Sends SIGHUP to jobs when an interactive login shell exits.",
+    "inherit_errexit": "Preserves errexit in command substitutions.",
+    "interactive_comments": "Allows # to begin comments in interactive shells.",
+    "lastpipe": "Runs the last foreground pipeline command in the current shell when possible.",
+    "lithist": "Stores multi-line history entries with embedded newlines when cmdhist is enabled.",
+    "localvar_inherit": "Lets local variables inherit prior visible values and attributes.",
+    "localvar_unset": "Makes unset local variables hide same-named outer variables.",
+    "login_shell": "Indicates that the shell was started as a login shell.",
+    "mailwarn": "Warns when a checked mail file has been read since the last check.",
+    "no_empty_cmd_completion": "Skips PATH completion attempts on an empty command line.",
+    "nocaseglob": "Matches filenames case-insensitively during pathname expansion.",
+    "nocasematch": "Matches case and [[ patterns case-insensitively.",
+    "noexpand_translation": "Prevents translated strings from being single-quoted.",
+    "nullglob": "Expands non-matching pathname patterns to nothing.",
+    "progcomp": "Enables programmable completion.",
+    "progcomp_alias": "Tries programmable completion through an alias target.",
+    "promptvars": "Expands variables and command substitutions in prompt strings.",
+    "restricted_shell": "Indicates that the shell is running in restricted mode.",
+    "shift_verbose": "Reports an error when shift exceeds the number of positional parameters.",
+    "sourcepath": "Uses PATH to find files passed to source or dot.",
+    "varredir_close": "Automatically closes file descriptors opened with varredir redirections.",
+    "xpg_echo": "Makes echo expand backslash escape sequences by default.",
+}
 TableControlsResult = TypeVar("TableControlsResult")
 
 
@@ -182,6 +239,15 @@ def load_app_theme_css() -> str:
     """Load the selected HomeSetup Streamlit UI theme stylesheet."""
     selected_theme = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
     return theme_css_file(selected_theme).read_text(encoding="utf-8")
+
+
+def selected_theme_custom_property(property_name: str, default: str) -> str:
+    """Return a custom property value from the selected HomeSetup UI theme."""
+    selected_theme = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
+    theme_properties = css_custom_properties(
+        theme_css_file(selected_theme).read_text(encoding="utf-8")
+    )
+    return theme_properties.get(property_name, default)
 
 
 def persist_theme_selection(theme_name: str) -> None:
@@ -318,6 +384,7 @@ def open_document_view(document_key: str) -> None:
     )
     st.session_state[hhs_ui.DOCUMENT_SELECTED_KEY] = document_key
     st.session_state[hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = True
+    save_ui_state()
 
 
 def close_document_view() -> None:
@@ -326,6 +393,7 @@ def close_document_view() -> None:
     st.session_state[hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = False
     if previous_view in hhs_ui.VIEWS:
         st.session_state["active_view"] = previous_view
+    save_ui_state()
 
 
 def clear_ai_chat_history() -> None:
@@ -677,6 +745,13 @@ def render_sidebar() -> None:
                 key="handbook_open_button",
                 on_click=open_document_view,
                 args=("HANDBOOK",),
+                width="stretch",
+            )
+            st.button(
+                " TERMINAL",
+                key="terminal_open_button",
+                on_click=open_document_view,
+                args=("TERMINAL",),
                 width="stretch",
             )
 
@@ -1511,6 +1586,8 @@ def render_home_view() -> None:
         render_home_system_panel()
     elif home_view == "Tools":
         render_home_tools_panel()
+    elif home_view == "SHOPTS":
+        render_home_shopts_panel()
 
 
 def home_view_label(home_view: str) -> str:
@@ -1525,6 +1602,16 @@ def render_home_system_panel() -> None:
         st.error(result.stderr or "Unable to load system information.")
         return
     st.markdown(format_hhs_sysinfo_markdown(result.stdout))
+
+
+def home_shopt_is_on(row: dict[str, str]) -> bool:
+    """Return whether a shell option row is currently enabled."""
+    return row.get("State") == "ON"
+
+
+def home_shopt_is_off(row: dict[str, str]) -> bool:
+    """Return whether a shell option row is currently disabled."""
+    return row.get("State") == "OFF"
 
 
 def tool_status_cell_style(value: object) -> str:
@@ -1549,6 +1636,25 @@ def styled_tool_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
     styler = dataframe.style
     if "Status" in dataframe:
         styler = styler.map(tool_status_cell_style, subset=["Status"])
+    return styler
+
+
+def shopt_status_cell_style(value: object) -> str:
+    """Return the dataframe cell style for shell option statuses."""
+    value_text = str(value).lower()
+    if "off" in value_text:
+        return "color: #ff5555; font-weight: 800;"
+    if "on" in value_text:
+        return "color: #50fa7b; font-weight: 800;"
+    return "color: #f8f8f2; font-weight: 800;"
+
+
+def styled_shopt_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
+    """Return shell option rows with styled Status cells."""
+    dataframe = pd.DataFrame(rows)
+    styler = dataframe.style
+    if "Status" in dataframe:
+        styler = styler.map(shopt_status_cell_style, subset=["Status"])
     return styler
 
 
@@ -2317,10 +2423,68 @@ def render_home_tools_panel() -> None:
     )
 
 
+def render_home_shopts_panel() -> None:
+    """Render shell options on the Home view."""
+    result = run_hhs_shopt()
+    if result.returncode != 0:
+        st.error(result.stderr or result.stdout or "Unable to load shell options.")
+        return
+    rows = parse_hhs_shopt(result.stdout)
+    if not rows:
+        st.caption("No shell options found.")
+        return
+    shopts_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
+            hhs_ui.SHOPTS_FILTERS,
+            "home_shopts_filter",
+            "home_shopts_other_filter",
+            hhs_ui.FOUR_OPTION_FILTER_COLUMNS,
+        )
+    )
+    filtered_rows = filter_shopt_rows(rows, shopts_filter, other_filter)
+    if not filtered_rows:
+        st.caption("No shell options match the current filter.")
+        return
+    render_table(
+        filtered_rows,
+        key=home_shopts_table_key(),
+        checkbox=True,
+        headers=["Status", "Option", "Description"],
+        selected_label=lambda row, _index: (
+            f"Selected: {row.get('Option', '')} ({row.get('State', '')})"
+        ),
+        table_data=styled_shopt_rows(filtered_rows),
+        height=hhs_ui.ENV_TABLE_HEIGHT,
+        width=hhs_ui.ENV_TABLE_WIDTH,
+        reset_selection=reset_home_shopts_table_selection,
+        action_buttons=[
+            {
+                "label": " Turn ON",
+                "key_prefix": "home_shopt_set_button",
+                "on_click": apply_home_shopt_action,
+                "disabled": lambda row, _index: home_shopt_is_on(row),
+                "args": lambda row, _index: ("set", row.get("Option", "")),
+            },
+            {
+                "label": " Turn OFF",
+                "key_prefix": "home_shopt_unset_button",
+                "on_click": apply_home_shopt_action,
+                "disabled": lambda row, _index: home_shopt_is_off(row),
+                "args": lambda row, _index: ("unset", row.get("Option", "")),
+            },
+        ],
+        action_column_weights=[1, 1],
+    )
+
+
 def render_document_view() -> None:
     """Render the selected HomeSetup document."""
+    document_key = str(st.session_state.get(hhs_ui.DOCUMENT_SELECTED_KEY, "README"))
+    if document_key == "TERMINAL":
+        render_terminal_document_view()
+        return
     title, document = document_details(
-        str(st.session_state.get(hhs_ui.DOCUMENT_SELECTED_KEY, "README"))
+        document_key
     )
     st.markdown(
         f"""
@@ -2335,6 +2499,238 @@ def render_document_view() -> None:
         st.error(f"Document not found: {document}")
         return
     st.markdown(document.read_text(encoding="utf-8"), unsafe_allow_html=True)
+
+
+def render_terminal_document_view() -> None:
+    """Render the line-oriented xterm.js terminal document view."""
+    st.markdown(
+        """
+        <section class="hhs-view-heading">
+          <h2> Terminal</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write("")
+    initialize_terminal_session_state()
+    terminal_event = render_terminal_component(
+        transcript=str(st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY]),
+        prompt=terminal_prompt(str(st.session_state[hhs_ui.TERMINAL_CWD_KEY])),
+        history=list(st.session_state[hhs_ui.TERMINAL_COMMAND_HISTORY_KEY]),
+        height=0,
+    )
+    handle_terminal_event(terminal_event)
+
+
+def hhs_terminal_component(**kwargs: object) -> object:
+    """Render the HomeSetup terminal custom component and return its value."""
+    component = components.declare_component(
+        "hhs_terminal", path=str(hhs_ui.TERMINAL_COMPONENT_DIR)
+    )
+    return component(**kwargs)
+
+
+def render_terminal_component(
+    transcript: str, prompt: str, history: list[str], height: int
+) -> dict[str, object] | None:
+    """Render the xterm.js terminal component and return submitted command events."""
+    border_color = selected_theme_custom_property(
+        "hhs-theme-heading-border-color", "var(--hhs-theme-border-color)"
+    )
+    value = hhs_terminal_component(
+        transcript=transcript,
+        prompt=prompt,
+        history=history,
+        height=height,
+        borderColor=border_color,
+        key="hhs_terminal_component",
+        default=None,
+    )
+    return value if isinstance(value, dict) else None
+
+
+def initialize_terminal_session_state() -> None:
+    """Initialize terminal transcript, working directory, and command history."""
+    restored_transcript = load_terminal_transcript()
+    st.session_state.setdefault(hhs_ui.TERMINAL_TRANSCRIPT_KEY, restored_transcript)
+    st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, str(Path.home()))
+    st.session_state.setdefault(hhs_ui.TERMINAL_COMMAND_HISTORY_KEY, [])
+    st.session_state.setdefault(hhs_ui.TERMINAL_LAST_EVENT_ID_KEY, "")
+    if not bool(st.session_state.get(hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY, False)):
+        push_floating_status(terminal_ready_status_message(restored_transcript), "info")
+        st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = True
+
+
+def terminal_ready_status_message(restored_transcript: str) -> str:
+    """Return the terminal ready status message for a fresh or restored session."""
+    if restored_transcript:
+        return "HomeSetup terminal ready. Session restored."
+    return "HomeSetup terminal ready."
+
+
+def terminal_prompt(cwd: str) -> str:
+    """Return the visible terminal prompt for the current working directory."""
+    home = str(Path.home())
+    display_cwd = "~" if cwd == home else cwd.replace(f"{home}/", "~/", 1)
+    return f"{display_cwd} $ "
+
+
+def handle_terminal_event(event: dict[str, object] | None) -> None:
+    """Execute a submitted terminal command when the component emits a new event."""
+    if not event:
+        return
+    event_id = str(event.get("eventId", ""))
+    command = str(event.get("command", ""))
+    if not event_id or event_id == st.session_state[hhs_ui.TERMINAL_LAST_EVENT_ID_KEY]:
+        return
+    st.session_state[hhs_ui.TERMINAL_LAST_EVENT_ID_KEY] = event_id
+    execute_terminal_command(command)
+    st.rerun()
+
+
+def sendToTerminal(command: str) -> None:
+    """Send a command to the Terminal panel and execute it."""
+    initialize_terminal_session_state()
+    execute_terminal_command(command)
+
+
+def execute_terminal_command(command: str) -> None:
+    """Execute a terminal command and append its output to the transcript."""
+    clean_command = command.strip()
+    if clean_command in {"clear", "reset"}:
+        clear_terminal_transcript()
+        return
+    if not clean_command:
+        cwd = str(st.session_state[hhs_ui.TERMINAL_CWD_KEY])
+        append_terminal_transcript(f"{terminal_prompt(cwd)}\n")
+        return
+
+    history = st.session_state.setdefault(hhs_ui.TERMINAL_COMMAND_HISTORY_KEY, [])
+    if isinstance(history, list):
+        history.append(command)
+    cwd = str(st.session_state[hhs_ui.TERMINAL_CWD_KEY])
+    prompt = terminal_prompt(cwd)
+    result = run_terminal_command(command, cwd)
+    stdout, next_cwd = parse_terminal_command_stdout(result.stdout, cwd)
+    output = format_terminal_command_output(result, stdout)
+    st.session_state[hhs_ui.TERMINAL_CWD_KEY] = next_cwd
+    append_terminal_transcript(f"{prompt}{command}\n{output}")
+
+
+def append_terminal_transcript(value: str) -> None:
+    """Append text to the terminal transcript."""
+    transcript = str(st.session_state.get(hhs_ui.TERMINAL_TRANSCRIPT_KEY, ""))
+    st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY] = truncate_terminal_transcript(
+        transcript + value
+    )
+    save_terminal_transcript(str(st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY]))
+
+
+def truncate_terminal_transcript(value: str) -> str:
+    """Return a transcript constrained to the terminal buffer size."""
+    if len(value) <= hhs_ui.TERMINAL_TRANSCRIPT_MAX_CHARS:
+        return value
+    return value[-hhs_ui.TERMINAL_TRANSCRIPT_MAX_CHARS :]
+
+
+def load_terminal_transcript() -> str:
+    """Load the persisted terminal transcript buffer."""
+    try:
+        return truncate_terminal_transcript(
+            hhs_ui.TERMINAL_LOG_FILE.read_text(encoding="utf-8")
+        )
+    except OSError:
+        return ""
+
+
+def save_terminal_transcript(value: str) -> None:
+    """Persist the terminal transcript buffer."""
+    try:
+        hhs_ui.TERMINAL_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        hhs_ui.TERMINAL_LOG_FILE.write_text(
+            truncate_terminal_transcript(value), encoding="utf-8"
+        )
+    except OSError:
+        return
+
+
+def clear_terminal_transcript() -> None:
+    """Clear the terminal transcript session state and persisted buffer."""
+    st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY] = ""
+    try:
+        hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)
+    except OSError:
+        return
+
+
+def build_terminal_command(command: str, cwd: str) -> str:
+    """Build a Bash command that runs a line-oriented terminal command."""
+    return "\n".join(
+        (
+            'export HHS_HOME="${HHS_HOME}";',
+            'export HHS_DIR="${HHS_DIR}";',
+            'export TERM="${TERM:-xterm-256color}";',
+            'export PS1="${PS1:-\\u@\\h:\\w\\$ }";',
+            "shopt -s expand_aliases;",
+            "shopt -s checkwinsize 2>/dev/null || true;",
+            'if [[ -s "${HOME}/.hhsrc" ]]; then',
+            'source "${HOME}/.hhsrc" >/dev/null 2>&1 || true;',
+            'elif [[ -n "${HHS_HOME:-}" && -s "${HHS_HOME}/dotfiles/bash/bash_commons.bash" ]]; then',
+            'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash" >/dev/null 2>&1 || true;',
+            'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-dirs.bash" >/dev/null 2>&1 || true;',
+            'source "${HHS_HOME}/dotfiles/bash/bash_env.bash" >/dev/null 2>&1 || true;',
+            'source "${HHS_HOME}/dotfiles/bash/bash_functions.bash" >/dev/null 2>&1 || true;',
+            'source "${HHS_HOME}/dotfiles/bash/bash_aliases.bash" >/dev/null 2>&1 || true;',
+            "fi;",
+            f"cd {shlex.quote(cwd)} 2>/dev/null || cd \"${{HOME}}\";",
+            "__hhs_terminal_status=0;",
+            f"{{ {command}; }} || __hhs_terminal_status=$?;",
+            'printf "\\n__HHS_TERMINAL_CWD__%s\\n" "$PWD";',
+            'exit "${__hhs_terminal_status}";',
+        )
+    )
+
+
+def run_terminal_command(
+    command: str, cwd: str
+) -> subprocess.CompletedProcess[str]:
+    """Run a terminal command through the existing HomeSetup command runner."""
+    return run_bash_command(
+        build_terminal_command(command, cwd),
+        "Running terminal command...",
+        ttl_seconds=0,
+        use_cache=False,
+        timeout_seconds=120,
+    )
+
+
+def parse_terminal_command_stdout(stdout: str, fallback_cwd: str) -> tuple[str, str]:
+    """Return terminal stdout with the cwd marker removed."""
+    next_cwd = fallback_cwd
+    output_lines: list[str] = []
+    for line in stdout.splitlines():
+        if line.startswith("__HHS_TERMINAL_CWD__"):
+            next_cwd = line.removeprefix("__HHS_TERMINAL_CWD__").strip() or fallback_cwd
+            continue
+        output_lines.append(line)
+    output = "\n".join(output_lines)
+    if stdout.endswith("\n") and output:
+        output += "\n"
+    return output, next_cwd
+
+
+def format_terminal_command_output(
+    result: subprocess.CompletedProcess[str], stdout: str
+) -> str:
+    """Return command output formatted for the terminal transcript."""
+    output = stdout
+    if result.stderr:
+        output += result.stderr
+    if result.returncode != 0:
+        output += f"\n[exit {result.returncode}]\n"
+    if output and not output.endswith("\n"):
+        output += "\n"
+    return output
 
 
 def strip_ansi(value: str) -> str:
@@ -3689,6 +4085,59 @@ def build_hhs_tools_command() -> str:
     )
 
 
+def build_hhs_shopt_setup_command() -> str:
+    """Build the common Bash setup command used by __hhs_shopt UI calls."""
+    return (
+        'export HHS_DIR="${HHS_DIR}"; '
+        'export HHS_SHOPTS_FILE="${HHS_SHOPTS_FILE:-${HHS_DIR}/shell-opts.toml}"; '
+        'mkdir -p "${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_icons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-toml.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-shell-utils.bash"; '
+        'if [[ ! -s "${HHS_SHOPTS_FILE}" ]]; then '
+        "\\shopt | awk '{print $1\" = \"$2}' >\"${HHS_SHOPTS_FILE}\"; "
+        'fi; '
+    )
+
+
+def build_hhs_shopt_load_saved_command() -> str:
+    """Build a Bash command that applies saved shell options to this process."""
+    return (
+        'if [[ -s "${HHS_SHOPTS_FILE}" ]]; then '
+        'while IFS= read -r line; do '
+        'if [[ "${line}" =~ ^([a-zA-Z0-9_]+)[[:space:]]*='
+        '[[:space:]]*([Oo][Nn]|[Oo][Ff][Ff])$ ]]; then '
+        'option="${BASH_REMATCH[1]}"; state="${BASH_REMATCH[2]}"; '
+        'if [[ "${state}" =~ ^[Oo][Nn]$ ]]; then '
+        'shopt -s "${option}" 2>/dev/null || true; '
+        'else '
+        'shopt -u "${option}" 2>/dev/null || true; '
+        'fi; '
+        'fi; '
+        'done < "${HHS_SHOPTS_FILE}"; '
+        'fi; '
+    )
+
+
+def build_hhs_shopt_command() -> str:
+    """Build the Bash command used to run the __hhs_shopt listing function."""
+    return (
+        build_hhs_shopt_setup_command()
+        + build_hhs_shopt_load_saved_command()
+        + "__hhs_shopt -p"
+    )
+
+
+def build_hhs_shopt_action_command(operation: str, option_name: str) -> str:
+    """Build the Bash command used to set or unset a shell option."""
+    action = "-s" if operation == "set" else "-u"
+    return (
+        build_hhs_shopt_setup_command()
+        + f"__hhs_shopt {action} {shlex.quote(option_name)}"
+    )
+
+
 def build_hhs_hspm_command(operation: str, tool_name: str) -> str:
     """Build the Bash command used to run an hspm tool operation."""
     safe_operation = (
@@ -4048,6 +4497,27 @@ def run_hhs_tools() -> subprocess.CompletedProcess[str]:
     )
 
 
+def run_hhs_shopt() -> subprocess.CompletedProcess[str]:
+    """Run the __hhs_shopt HomeSetup function and return the completed process."""
+    return run_bash_command(
+        build_hhs_shopt_command(),
+        "Loading shell options...",
+        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+    )
+
+
+def run_hhs_shopt_action(
+    operation: str, option_name: str
+) -> subprocess.CompletedProcess[str]:
+    """Run a shell option set or unset action."""
+    return run_bash_command(
+        build_hhs_shopt_action_command(operation, option_name),
+        "Updating shell option...",
+        ttl_seconds=0,
+        use_cache=False,
+    )
+
+
 def run_hhs_tool_action(
     operation: str, tool_name: str
 ) -> subprocess.CompletedProcess[str]:
@@ -4375,6 +4845,11 @@ def refresh_home_tools_listing() -> subprocess.CompletedProcess[str]:
     return run_hhs_tools()
 
 
+def refresh_home_shopts_listing() -> subprocess.CompletedProcess[str]:
+    """Reissue the Home shell options listing command after a mutation."""
+    return run_hhs_shopt()
+
+
 def refresh_service_listing() -> subprocess.CompletedProcess[str]:
     """Reissue the services listing command after a mutation."""
     return run_hhs_services()
@@ -4413,6 +4888,19 @@ def filter_tool_rows(
 ) -> list[dict[str, str]]:
     """Return Home tools rows matching the selected UI filter."""
     if tools_filter == "Other":
+        return [row for row in rows if row_matches_text_filter(row, other_filter)]
+    return rows
+
+
+def filter_shopt_rows(
+    rows: list[dict[str, str]], shopt_filter: str = "All", other_filter: str = ""
+) -> list[dict[str, str]]:
+    """Return shell option rows matching the selected UI filter."""
+    if shopt_filter == "ON":
+        return [row for row in rows if row.get("State") == "ON"]
+    if shopt_filter == "OFF":
+        return [row for row in rows if row.get("State") == "OFF"]
+    if shopt_filter == "Other":
         return [row for row in rows if row_matches_text_filter(row, other_filter)]
     return rows
 
@@ -4493,6 +4981,38 @@ def parse_hhs_tools(output: str) -> list[dict[str, str]]:
                     "Tool": match.group(2).strip(),
                     "Status": f"{glyph} {status}",
                     "Path": (match.group(5) or "").strip(),
+                }
+            )
+    return rows
+
+
+def shopt_status_value(state: str) -> str:
+    """Return the visible shell option status with an on/off glyph."""
+    clean_state = state.strip().upper()
+    return f" {clean_state}" if clean_state == "ON" else f" {clean_state}"
+
+
+def shopt_description(option_name: str) -> str:
+    """Return a compact Bash shell option description."""
+    return SHOPT_DESCRIPTIONS.get(
+        option_name.strip(),
+        "Shell option available in this Bash version.",
+    )
+
+
+def parse_hhs_shopt(output: str) -> list[dict[str, str]]:
+    """Parse __hhs_shopt terminal output into table rows."""
+    rows = []
+    for line in strip_ansi(output).splitlines():
+        match = hhs_ui.SHOPT_LINE_PATTERN.match(line.strip())
+        if match:
+            state = match.group(2).strip().upper()
+            rows.append(
+                {
+                    "Status": shopt_status_value(state),
+                    "Option": match.group(3).strip(),
+                    "Description": shopt_description(match.group(3).strip()),
+                    "State": state,
                 }
             )
     return rows
@@ -5178,6 +5698,27 @@ def reset_home_tools_table_selection() -> None:
     st.session_state["home_tools_table_reset_counter"] = reset_counter + 1
 
 
+def home_shopts_table_key() -> str:
+    """Return the Home SHOPTS dataframe key for the current selection generation."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui.HOME_SHOPTS_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+        st.session_state[hhs_ui.HOME_SHOPTS_TABLE_RESET_COUNTER_KEY] = reset_counter
+    return f"{hhs_ui.HOME_SHOPTS_TABLE_KEY}_{reset_counter}"
+
+
+def reset_home_shopts_table_selection() -> None:
+    """Reset the Home SHOPTS dataframe selection for the next rerun."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui.HOME_SHOPTS_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[hhs_ui.HOME_SHOPTS_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
+
+
 def env_table_key() -> str:
     """Return the Streamlit dataframe key for the current selection generation."""
     reset_counter = st.session_state.setdefault(hhs_ui.ENV_TABLE_RESET_COUNTER_KEY, 0)
@@ -5527,6 +6068,21 @@ def apply_alias_delete(name: str) -> None:
         f"Unable to remove alias: {name}",
     )
     reset_alias_table_selection()
+    save_ui_state()
+
+
+def apply_home_shopt_action(operation: str, option_name: str) -> None:
+    """Set or unset a shell option from the Home SHOPTS table."""
+    result = run_hhs_shopt_action(operation, option_name)
+    cache_clear()
+    refresh_home_shopts_listing()
+    action_label = "set" if operation == "set" else "unset"
+    push_config_action_status(
+        result,
+        f'Shell option {option_name} {action_label}.',
+        f"Unable to {action_label} shell option: {option_name}",
+    )
+    reset_home_shopts_table_selection()
     save_ui_state()
 
 
@@ -7285,6 +7841,11 @@ def main() -> None:
         st.session_state["home_tools_filter"] = "All"
     st.session_state.setdefault("home_tools_other_filter", "")
     st.session_state.setdefault("home_tools_table_reset_counter", 0)
+    st.session_state.setdefault("home_shopts_filter", "All")
+    if st.session_state["home_shopts_filter"] not in hhs_ui.SHOPTS_FILTERS:
+        st.session_state["home_shopts_filter"] = "All"
+    st.session_state.setdefault("home_shopts_other_filter", "")
+    st.session_state.setdefault(hhs_ui.HOME_SHOPTS_TABLE_RESET_COUNTER_KEY, 0)
     st.session_state.setdefault("home_tool_action_execute_pending", None)
     st.session_state.setdefault("config_view", "ENV")
     if st.session_state["config_view"] not in hhs_ui.CONFIG_VIEWS:

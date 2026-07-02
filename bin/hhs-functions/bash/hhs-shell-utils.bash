@@ -314,7 +314,7 @@ function __hhs_shell_select() {
 # @param $1 [Req] : Same as shopt, ref: https://ss64.com/bash/shopt.html
 function __hhs_shopt() {
 
-  local shell_options option enable color
+  local shell_options option enable color line state
 
   enable=$(tr '[:upper:]' '[:lower:]' <<<"${1}")
   option="${2}"
@@ -337,7 +337,22 @@ function __hhs_shopt() {
     echo '  Notes:'
     echo '    If no option is provided, then, display all set & unset options.'
   elif [[ ${#} -eq 0 || ${enable} =~ on|off|-p ]]; then
-    IFS=$'\n' read -r -d '' -a shell_options < <(\shopt | awk '{print $1"="$2}')
+    if [[ -s "${HHS_SHOPTS_FILE}" ]]; then
+      while IFS= read -r line; do
+        if [[ ${line} =~ ^([a-zA-Z0-9_]+)[[:space:]]*=[[:space:]]*([Oo][Nn]|[Oo][Ff][Ff])$ ]]; then
+          option="${BASH_REMATCH[1]}"
+          state="$(tr '[:upper:]' '[:lower:]' <<<"${BASH_REMATCH[2]}")"
+          if [[ "${state}" == 'on' ]]; then
+            \shopt -s "${option}" &>/dev/null || true
+          elif [[ "${state}" == 'off' ]]; then
+            \shopt -u "${option}" &>/dev/null || true
+          fi
+        fi
+      done <"${HHS_SHOPTS_FILE}"
+    fi
+    IFS=$'\n' read -r -d '' -a shell_options < <(
+      \shopt | awk '{print $1"="$2}'
+    ) || true
     IFS="${OLDIFS}"
     echo ' '
     echo "${YELLOW}Available shell ${enable:-on and off} options (${#shell_options[@]}):"

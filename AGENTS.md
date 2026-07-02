@@ -9,7 +9,6 @@
 ## Requirement Clarifications
 
 1. Determine:
-
    * Operating system (default: macOS)
    * Shell (default: Bash)
 2. Request clarification whenever requirements are ambiguous.
@@ -39,5 +38,5 @@
 
 ## Testing and Commiting
 
-* Do not trigger tests all the time; only when the user requests it or prior to a commit
-* Prior to commiting, check older commits and follow the same style.
+* Do not run tests all the time; only when the user requests a commit; (ask if the user wants to run/fix the tests now)
+* Prior to commiting, check older commits and follow the same style. Create a maximum of 5 commits (if more are necessary ask the User).

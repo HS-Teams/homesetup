@@ -802,7 +802,11 @@ assert "border-top: 1px solid var(--hhs-floating-status-color)" in base_css
 assert "border-bottom: 1px solid" in base_css
 assert "justify-content: center" in base_css
 assert "text-align: center" in base_css
+assert "--hhs-footer-guard-height: 3.5rem" in base_css
 assert "bottom: 3.25rem" in base_css
+assert "font-size: 0.84rem" in base_css
+assert "min-height: 3.25rem" in base_css
+assert "height: 32px" in base_css
 assert "left: 0" in base_css
 assert "right: 0" in base_css
 assert "min-height: 1.85em" in base_css
@@ -821,14 +825,17 @@ assert "--hhs-theme-footer-status-info-color" in dracula_css
 assert "--hhs-theme-footer-status-warn-color" in dracula_css
 assert "--hhs-theme-footer-status-error-color" in dracula_css
 assert "--hhs-theme-footer-status-text-size" in dracula_css
+assert "--hhs-theme-footer-status-text-size: 1.176rem" in dracula_css
 assert "--hhs-theme-footer-status-info-color" in homesetup_css
 assert "--hhs-theme-footer-status-warn-color" in homesetup_css
 assert "--hhs-theme-footer-status-error-color" in homesetup_css
 assert "--hhs-theme-footer-status-text-size" in homesetup_css
+assert "--hhs-theme-footer-status-text-size: 1.176rem" in homesetup_css
 assert "--hhs-theme-footer-status-info-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-warn-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-error-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-text-size" in tokyo_night_css
+assert "--hhs-theme-footer-status-text-size: 1.176rem" in tokyo_night_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in dracula_css
 assert "border-color: var(--hhs-primary)" in dracula_css
 PY
@@ -917,12 +924,21 @@ tokyo-night-css
 
     streamlit.session_state.clear()
     streamlit.session_state["active_view"] = "Home"
+    streamlit.session_state[ui.hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = True
+    streamlit.session_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] = "TERMINAL"
+    streamlit.session_state[ui.hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] = "Home"
     ui.save_ui_state()
-    assert json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))["theme_selected"] == "tokyo-night"
+    saved_state = json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))
+    assert saved_state["theme_selected"] == "tokyo-night"
+    assert saved_state[ui.hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] is True
+    assert saved_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] == "TERMINAL"
+    assert saved_state[ui.hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] == "Home"
 
     streamlit.session_state.clear()
     ui.restore_ui_state()
     assert streamlit.session_state["theme_selected"] == "tokyo-night"
+    assert streamlit.session_state[ui.hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] is True
+    assert streamlit.session_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] == "TERMINAL"
     assert "tokyo-night-css" in ui.load_app_theme_css()
 
     config_options.clear()
@@ -983,7 +999,7 @@ PY
   run grep -q 'hhs_ui = importlib.reload(hhs_ui)' "${ui_file}"
   assert_success
 
-  run grep -q '"Home": " Home"' "${constants_file}"
+  run grep -q '"Home": " System"' "${constants_file}"
   assert_success
 
   run grep -q '"Configs": " Configs"' "${constants_file}"
@@ -1043,13 +1059,16 @@ PY
   run grep -q 'format_func=ai_view_label' "${ui_file}"
   assert_success
 
-  run grep -q 'HOME_VIEWS = ("System", "Tools")' "${constants_file}"
+  run grep -q 'HOME_VIEWS = ("System", "Tools", "SHOPTS")' "${constants_file}"
   assert_success
 
   run grep -q '"System": " Summary"' "${constants_file}"
   assert_success
 
   run grep -q '"Tools": " Tools"' "${constants_file}"
+  assert_success
+
+  run grep -q '"SHOPTS": " Shell Options"' "${constants_file}"
   assert_success
 
   run grep -q 'def home_view_label' "${ui_file}"
@@ -1074,6 +1093,39 @@ PY
   assert_success
 
   run grep -q '"home_tools_other_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q 'SHOPTS_FILTERS = ("All", "ON", "OFF", "Other")' "${constants_file}"
+  assert_success
+
+  run grep -q 'SHOPTS_FILTERS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q 'SHOPT_LINE_PATTERN' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q '"home_shopts_filter"' "${constants_file}"
+  assert_success
+
+  run grep -q '"home_shopts_other_filter"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def render_home_shopts_panel' "${ui_file}"
+  assert_success
+
+  run grep -q 'elif home_view == "SHOPTS"' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_home_shopts_panel()' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.SHOPTS_FILTERS' "${ui_file}"
+  assert_success
+
+  run grep -q '"home_shopts_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q '"home_shopts_other_filter"' "${ui_file}"
   assert_success
 
   run grep -q 'TABLE_CONTROLS_PANEL_TITLE = "Filters & Controls"' "${constants_file}"
@@ -1121,6 +1173,12 @@ PY
   run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-env_other_filter)' "${css_file}"
   assert_success
 
+  run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-home_shopts_other_filter)' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-home_shopts_other_filter input' "${css_file}"
+  assert_success
+
   run grep -q 'div\[data-testid="stColumn"\]:first-child' "${css_file}"
   assert_success
 
@@ -1148,6 +1206,12 @@ PY
   run grep -q 'HOME_TOOLS_TABLE_RESET_COUNTER_KEY = "home_tools_table_reset_counter"' "${constants_file}"
   assert_success
 
+  run grep -q 'HOME_SHOPTS_TABLE_KEY = "home_shopts_table"' "${constants_file}"
+  assert_success
+
+  run grep -q 'HOME_SHOPTS_TABLE_RESET_COUNTER_KEY = "home_shopts_table_reset_counter"' "${constants_file}"
+  assert_success
+
   run grep -q 'def home_tools_table_key' "${ui_file}"
   assert_success
 
@@ -1158,6 +1222,18 @@ PY
   assert_success
 
   run grep -q 'reset_home_tools_table_selection()' "${ui_file}"
+  assert_success
+
+  run grep -q 'def home_shopts_table_key' "${ui_file}"
+  assert_success
+
+  run grep -q 'def reset_home_shopts_table_selection' "${ui_file}"
+  assert_success
+
+  run grep -q 'key=home_shopts_table_key()' "${ui_file}"
+  assert_success
+
+  run grep -q 'reset_home_shopts_table_selection()' "${ui_file}"
   assert_success
 
   run grep -q 'if connected_ssh_host():' "${ui_file}"
@@ -2186,6 +2262,186 @@ PY
   run grep -q '" HANDBOOK"' "${ui_file}"
   assert_success
 
+  run grep -q '" TERMINAL"' "${ui_file}"
+  assert_success
+
+  run grep -q 'args=("TERMINAL",)' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_terminal_document_view' "${ui_file}"
+  assert_success
+
+  run grep -q 'document_key == "TERMINAL"' "${ui_file}"
+  assert_success
+
+  run grep -q '"document_view_active"' "${constants_file}"
+  assert_success
+
+  run grep -q '"document_selected"' "${constants_file}"
+  assert_success
+
+  run grep -q '"document_previous_view"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def open_document_view' "${ui_file}"
+  assert_success
+
+  run grep -q 'def close_document_view' "${ui_file}"
+  assert_success
+
+  run grep -q '<h2> Terminal</h2>' "${ui_file}"
+  assert_success
+
+  run grep -q 'def hhs_terminal_component' "${ui_file}"
+  assert_success
+
+  run grep -q 'components.declare_component(' "${ui_file}"
+  assert_success
+
+  run grep -q 'TERMINAL_COMPONENT_DIR = APP_DIR / "components/terminal"' "${constants_file}"
+  assert_success
+
+  run grep -q 'TERMINAL_LOG_FILE = (' "${constants_file}"
+  assert_success
+
+  run grep -q 'TERMINAL_TRANSCRIPT_MAX_CHARS = 10000' "${constants_file}"
+  assert_success
+
+  run grep -q 'def render_terminal_component' "${ui_file}"
+  assert_success
+
+  run grep -q 'height=0' "${ui_file}"
+  assert_success
+
+  run grep -q 'TERMINAL_READY_STATUS_SHOWN_KEY = "terminal_ready_status_shown"' "${constants_file}"
+  assert_success
+
+  run grep -q 'push_floating_status(' "${ui_file}"
+  assert_success
+
+  run grep -q 'def terminal_ready_status_message' "${ui_file}"
+  assert_success
+
+  run grep -q '"HomeSetup terminal ready. Session restored."' "${ui_file}"
+  assert_success
+
+  run grep -q '"HomeSetup terminal ready."' "${ui_file}"
+  assert_success
+
+  run grep -q 'push_floating_status(terminal_ready_status_message(restored_transcript), "info")' "${ui_file}"
+  assert_success
+
+  run grep -q 'restored_transcript = load_terminal_transcript()' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.TERMINAL_TRANSCRIPT_KEY, restored_transcript' "${ui_file}"
+  assert_success
+
+  run grep -q 'def execute_terminal_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'if clean_command in {"clear", "reset"}' "${ui_file}"
+  assert_success
+
+  run grep -q 'def clear_terminal_transcript' "${ui_file}"
+  assert_success
+
+  run grep -q 'def load_terminal_transcript' "${ui_file}"
+  assert_success
+
+  run grep -q 'def save_terminal_transcript' "${ui_file}"
+  assert_success
+
+  run grep -q 'def truncate_terminal_transcript' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.TERMINAL_TRANSCRIPT_MAX_CHARS' "${ui_file}"
+  assert_success
+
+  run grep -q 'def sendToTerminal(command: str)' "${ui_file}"
+  assert_success
+
+  run grep -q 'execute_terminal_command(command)' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_terminal_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_terminal_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'build_terminal_command(command, cwd)' "${ui_file}"
+  assert_success
+
+  run grep -q 'source "${HOME}/.hhsrc" >/dev/null 2>&1 || true' "${ui_file}"
+  assert_success
+
+  run grep -q 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-dirs.bash" >/dev/null 2>&1 || true' "${ui_file}"
+  assert_success
+
+  run grep -q 'source "${HHS_HOME}/dotfiles/bash/bash_aliases.bash" >/dev/null 2>&1 || true' "${ui_file}"
+  assert_success
+
+  run grep -q 'use_cache=False' "${ui_file}"
+  assert_success
+
+  run grep -q '@xterm/xterm@5.5.0' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'streamlit:setComponentValue' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'term.onData\|terminal.onData' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
+  assert_success
+
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
+  assert_success
+
+  run cmp -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2" "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
+  assert_success
+
+  run grep -q 'src: url("./Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2")' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
+  assert_success
+
+  run grep -q '#terminal-shell' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
+  assert_success
+
+  run grep -q 'padding: 0.75rem 0.75rem 2.5rem' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
+  assert_success
+
+  run grep -q 'terminalShell.style.height' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'fontSize: 14' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'function terminalHeight' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'PARENT_BOTTOM_GUARD_PX = 116' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'FRAME_HEIGHT_PADDING_PX' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_failure
+
+  run grep -q 'terminal.scrollToBottom()' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'window.parent.innerHeight' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q '.st-key-hhs_terminal_component iframe' "${css_file}"
+  assert_success
+
+  run grep -q 'overflow-y: auto !important' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/index.html"
+  assert_success
+
   run python3 - <<'PY'
 from pathlib import Path
 
@@ -2541,6 +2797,90 @@ PY
   run grep -q 'def run_hhs_alias_action' "${ui_file}"
   assert_success
 
+  run grep -q 'def build_hhs_shopt_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_shopt_setup_command' "${ui_file}"
+  assert_success
+
+  run grep -q '\[\[ ! -s "${HHS_SHOPTS_FILE}" \]\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'awk.*print \$1.*=.*\$2' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_shopt_load_saved_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_shopt_action_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_shopt' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_shopt_action' "${ui_file}"
+  assert_success
+
+  run grep -q 'def parse_hhs_shopt' "${ui_file}"
+  assert_success
+
+  run grep -q 'SHOPT_DESCRIPTIONS = {' "${ui_file}"
+  assert_success
+
+  run grep -q '"cdspell": "Corrects minor spelling errors in directory names used with cd."' "${ui_file}"
+  assert_success
+
+  run grep -q 'def shopt_description' "${ui_file}"
+  assert_success
+
+  run grep -q '"Description": shopt_description(match.group(3).strip())' "${ui_file}"
+  assert_success
+
+  run grep -q 'headers=\["Status", "Option", "Description"\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'SHOPT_LINE_PATTERN = re.compile' "${constants_file}"
+  assert_success
+
+  run grep -q 'def filter_shopt_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'def apply_home_shopt_action' "${ui_file}"
+  assert_success
+
+  run grep -q 'def refresh_home_shopts_listing' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"__hhs_shopt {action} {shlex.quote(option_name)}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'build_hhs_shopt_load_saved_command()' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhs_shopt -p' "${ui_file}"
+  assert_success
+
+  run grep -q 'shopt -s "${option}" 2>/dev/null || true' "${ui_file}"
+  assert_success
+
+  run grep -q 'shopt -u "${option}" 2>/dev/null || true' "${ui_file}"
+  assert_success
+
+  run grep -q '"Status": shopt_status_value(state)' "${ui_file}"
+  assert_success
+
+  run grep -q 'action_buttons=\[' "${ui_file}"
+  assert_success
+
+  run grep -q '"label": " Turn ON"' "${ui_file}"
+  assert_success
+
+  run grep -q '"label": " Turn OFF"' "${ui_file}"
+  assert_success
+
+  run grep -q 'action_column_weights=\[1, 1\]' "${ui_file}"
+  assert_success
+
   run grep -q 'f"__hhs_paths {action_args}"' "${ui_file}"
   assert_success
 
@@ -2809,6 +3149,7 @@ required_refresh_calls = {
     "apply_cmd_delete": "refresh_cmd_listing",
     "apply_selected_alias_value": "refresh_alias_listing",
     "apply_alias_delete": "refresh_alias_listing",
+    "apply_home_shopt_action": "refresh_home_shopts_listing",
     "execute_pending_home_tool_action": "refresh_home_tools_listing",
     "apply_selected_service_action": "refresh_service_listing",
     "apply_selected_process_kill": "refresh_process_listing",

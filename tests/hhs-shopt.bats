@@ -47,6 +47,19 @@ teardown() {
   assert_output --partial "ON"
 }
 
+# TC - 2.1
+@test "when-listing-with-p-then-should-load-saved-options" {
+  printf "nocaseglob = on\n" >"${HHS_SHOPTS_FILE}"
+  shopt -u nocaseglob
+
+  __hhs_shopt -p >"${BATS_TEST_TMPDIR}/shopt-output.txt"
+  run grep -E "ON.*nocaseglob" "${BATS_TEST_TMPDIR}/shopt-output.txt"
+  assert_success
+
+  run shopt -q nocaseglob
+  assert_success
+}
+
 # TC - 3
 @test "display-all-unset-options" {
   run __hhs_shopt off

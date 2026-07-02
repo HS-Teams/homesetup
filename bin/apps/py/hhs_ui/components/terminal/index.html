@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css"
+    />
+    <style>
+      @font-face {
+        font-display: swap;
+        font-family: "Droid Sans Mono for Powerline Nerd Font Complete";
+        font-style: normal;
+        font-weight: 400;
+        src: url("./Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2")
+          format("woff2");
+      }
+
+      :root {
+        --hhs-terminal-background: #17161f;
+        --hhs-terminal-border: #6d5c99;
+        --hhs-terminal-text: #f8f8f2;
+      }
+
+      html,
+      body {
+        background: transparent;
+        height: 100%;
+        margin: 0;
+        min-height: 100%;
+        overflow: hidden;
+      }
+
+      body {
+        box-sizing: border-box;
+        color: var(--hhs-terminal-text);
+        font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
+      }
+
+      #terminal-shell {
+        background: var(--hhs-terminal-background);
+        border: 1px solid var(--hhs-terminal-border);
+        border-radius: 8px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+        padding: 0.75rem 0.75rem 2.5rem;
+        width: 100%;
+      }
+
+      #terminal {
+        box-sizing: border-box;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        width: 100%;
+      }
+
+      #terminal .xterm {
+        height: 100%;
+      }
+
+      #terminal .xterm,
+      #terminal .xterm * {
+        font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace !important;
+      }
+
+      #terminal .xterm-viewport {
+        overflow-y: auto !important;
+        scrollbar-color: var(--hhs-terminal-border) var(--hhs-terminal-background);
+      }
+
+      .terminal-fallback {
+        align-items: center;
+        background: var(--hhs-terminal-background);
+        border: 1px solid var(--hhs-terminal-border);
+        border-radius: 8px;
+        box-sizing: border-box;
+        color: var(--hhs-terminal-text);
+        display: flex;
+        font-size: 1rem;
+        font-weight: 700;
+        height: 100%;
+        justify-content: center;
+        padding: 1rem;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="terminal-shell">
+      <div id="terminal"></div>
+    </div>
+    <script type="module" src="./terminal.js"></script>
+  </body>
+</html>
