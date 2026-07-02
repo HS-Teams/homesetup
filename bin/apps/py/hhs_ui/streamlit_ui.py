@@ -53,6 +53,10 @@ hhs_ui_constants = importlib.reload(hhs_ui_constants)
 hhs_ui = importlib.reload(hhs_ui)
 
 UPDATER_CHECK_INTERVAL_SECONDS = 7 * 24 * 60 * 60
+FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
+FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
+FLOATING_STATUS_QUEUE_LIMIT = 20
+FOOTER_REMOTE_WORKING_DIR_KEY = "_hhs_footer_remote_working_dir"
 AI_CONTEXT_UPLOAD_TYPES = (
     "txt",
     "md",
@@ -493,7 +497,24 @@ def open_document_view(document_key: str) -> None:
     )
     st.session_state[hhs_ui.DOCUMENT_SELECTED_KEY] = document_key
     st.session_state[hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = True
+    if document_key == "TERMINAL":
+        activate_terminal_document_view()
     save_ui_state()
+
+
+def activate_terminal_document_view() -> None:
+    """Set Terminal cwd to the same working directory shown in the footer."""
+    st.session_state[hhs_ui.TERMINAL_CWD_KEY] = footer_working_directory()
+
+
+def restore_terminal_document_view(was_terminal_active: bool) -> None:
+    """Restore the Terminal document view after a host-scoped state reset."""
+    if not was_terminal_active:
+        return
+    st.session_state[hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = True
+    st.session_state[hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] = "Home"
+    st.session_state[hhs_ui.DOCUMENT_SELECTED_KEY] = "TERMINAL"
+    activate_terminal_document_view()
 
 
 def close_document_view() -> None:
@@ -507,12 +528,21 @@ def close_document_view() -> None:
 
 def render_sidebar_terminal_button() -> None:
     """Render the sidebar shortcut that opens the Terminal view."""
+    if terminal_document_view_is_active():
+        return
     st.button(
         " Terminal",
         key="terminal_open_button",
         on_click=open_document_view,
         args=("TERMINAL",),
         width="stretch",
+    )
+
+
+def terminal_document_view_is_active() -> bool:
+    """Return whether the Terminal document view is currently active."""
+    return bool(st.session_state.get(hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY)) and (
+        st.session_state.get(hhs_ui.DOCUMENT_SELECTED_KEY) == "TERMINAL"
     )
 
 
@@ -1706,20 +1736,76 @@ def save_ui_state() -> None:
 def push_floating_status(
     message: str, kind: str = "info", timeout_seconds: float = 5.0
 ) -> None:
-    """Store a compact floating status message for the next render."""
+    """Queue a compact floating status message for the next footer render."""
     clean_message = clean_command_status_message(str(message))
     if not clean_message:
         return
+    status_queue = floating_status_queue()
+    status_queue.append(
+        {
+            "message": clean_message,
+            "kind": normalize_floating_status_kind(kind),
+            "timeout_seconds": max(1.0, min(float(timeout_seconds), 30.0)),
+        }
+    )
+    del status_queue[:-FLOATING_STATUS_QUEUE_LIMIT]
+    st.session_state[FLOATING_STATUS_QUEUE_KEY] = status_queue
+
+
+def normalize_floating_status_kind(kind: str) -> str:
+    """Return a supported floating status kind from a user-facing alias."""
     kind_aliases = {"success": "info", "warning": "warn"}
     clean_kind = kind_aliases.get(kind, kind)
     if clean_kind not in {"info", "warn", "error"}:
         clean_kind = "info"
-    st.session_state["_hhs_floating_status"] = {
-        "message": clean_message,
-        "kind": clean_kind,
-        "timeout_seconds": max(1.0, min(float(timeout_seconds), 30.0)),
-        "created_at": time.time(),
-    }
+    return clean_kind
+
+
+def floating_status_queue() -> list[dict[str, object]]:
+    """Return the floating status queue, migrating legacy single-message state."""
+    queue = st.session_state.get(FLOATING_STATUS_QUEUE_KEY)
+    if not isinstance(queue, list):
+        queue = []
+    legacy_status = st.session_state.pop(FLOATING_STATUS_LEGACY_KEY, None)
+    if isinstance(legacy_status, dict):
+        queue.append(legacy_status)
+    normalized_queue = [item for item in queue if isinstance(item, dict)]
+    st.session_state[FLOATING_STATUS_QUEUE_KEY] = normalized_queue
+    return normalized_queue
+
+
+def pop_floating_status() -> dict[str, object] | None:
+    """Remove and return the oldest queued floating status message."""
+    queue = floating_status_queue()
+    if not queue:
+        return None
+    status = queue.pop(0)
+    st.session_state[FLOATING_STATUS_QUEUE_KEY] = queue
+    return status
+
+
+def current_floating_status() -> dict[str, object] | None:
+    """Return the visible floating status, starting its timer on first render."""
+    queue = floating_status_queue()
+    while queue:
+        status = queue[0]
+        message = str(status.get("message", "")).strip()
+        if not message:
+            pop_floating_status()
+            queue = floating_status_queue()
+            continue
+        timeout = float(status.get("timeout_seconds", 5.0))
+        displayed_at = status.get("displayed_at")
+        if not isinstance(displayed_at, (int, float)):
+            status["displayed_at"] = time.time()
+            st.session_state[FLOATING_STATUS_QUEUE_KEY] = queue
+            return status
+        if time.time() - float(displayed_at) > timeout + 1.0:
+            pop_floating_status()
+            queue = floating_status_queue()
+            continue
+        return status
+    return None
 
 
 def floating_status_glyph(kind: str) -> str:
@@ -1733,7 +1819,7 @@ def floating_status_glyph(kind: str) -> str:
 
 def render_floating_status() -> None:
     """Render the compact floating status component above the footer."""
-    status = st.session_state.get("_hhs_floating_status")
+    status = current_floating_status()
     if not isinstance(status, dict):
         return
     message = html.escape(str(status.get("message", "")).strip())
@@ -1741,10 +1827,6 @@ def render_floating_status() -> None:
         return
     kind = str(status.get("kind", "info"))
     timeout = float(status.get("timeout_seconds", 5.0))
-    created_at = float(status.get("created_at", time.time()))
-    if time.time() - created_at > timeout + 1.0:
-        st.session_state.pop("_hhs_floating_status", None)
-        return
     glyph = html.escape(floating_status_glyph(kind))
     st.markdown(
         f"""
@@ -1761,7 +1843,7 @@ def render_floating_status() -> None:
 def render_footer() -> None:
     """Render the HomeSetup UI footer."""
     version = homesetup_version()
-    working_dir = html.escape(os.getcwd())
+    working_dir = html.escape(footer_working_directory())
     repository_url = html.escape(os.environ.get("HHS_GITHUB_URL", "#"), quote=True)
     working_dir_url = f"?{hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM}=1"
     update_url = f"?{hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM}=1"
@@ -2958,7 +3040,7 @@ def initialize_terminal_session_state() -> None:
     """Initialize terminal transcript, working directory, and command history."""
     restored_transcript = load_terminal_transcript()
     st.session_state.setdefault(hhs_ui.TERMINAL_TRANSCRIPT_KEY, restored_transcript)
-    st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, str(Path.home()))
+    st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, footer_working_directory())
     st.session_state.setdefault(hhs_ui.TERMINAL_COMMAND_HISTORY_KEY, [])
     st.session_state.setdefault(hhs_ui.TERMINAL_LAST_EVENT_ID_KEY, "")
     st.session_state.setdefault(hhs_ui.TERMINAL_RESET_COUNTER_KEY, 0)
@@ -3143,7 +3225,7 @@ def format_terminal_command_output(
     """Return command output formatted for the terminal transcript."""
     output = stdout
     if result.stderr:
-        output += result.stderr
+        output += strip_ssh_shared_connection_notice(result.stderr)
     if result.returncode != 0:
         output += f"\n[exit {result.returncode}]\n"
     if output and not output.endswith("\n"):
@@ -4245,6 +4327,7 @@ def restore_registered_ssh_connection_on_session_start() -> None:
     st.session_state["ssh_host_selected"] = host
     st.session_state["ssh_host_selector"] = host
     st.session_state["ssh_connection_error"] = ""
+    update_remote_footer_working_directory()
     save_ui_state()
 
 
@@ -4310,17 +4393,100 @@ def clear_disconnected_ssh_host(host: str) -> None:
     st.session_state["ssh_disconnect_pending"] = ""
     st.session_state["ssh_host_selected"] = local_hostname()
     st.session_state["ssh_host_selector"] = local_hostname()
+    st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)
     clear_registered_ssh_connection()
     cache_clear()
     save_ui_state()
 
 
+def clear_host_scoped_session_state() -> None:
+    """Clear UI state that belongs to the previously selected execution host."""
+    preserved_keys = {
+        hhs_ui.THEME_SELECTED_KEY,
+        "theme_last_seen",
+        "ssh_connect_pending",
+        "ssh_disconnect_pending",
+        "ssh_connection_status",
+        "ssh_connection_host",
+        "ssh_connection_error",
+        "ssh_connection_dialog_title",
+        "ssh_connection_restore_checked",
+        "ssh_host_selected",
+        "ssh_host_selector",
+        "footer_hhs_version_cache_loaded",
+        "footer_shell_version_dialog_title",
+        "footer_shell_version_output",
+    }
+    table_keys = {
+        hhs_ui.AI_MODEL_TABLE_KEY,
+        hhs_ui.ALIAS_TABLE_KEY,
+        hhs_ui.CMD_TABLE_KEY,
+        hhs_ui.DIR_TABLE_KEY,
+        hhs_ui.ENV_TABLE_KEY,
+        hhs_ui.HISTORY_COMMAND_TABLE_KEY,
+        hhs_ui.HISTORY_DIRECTORY_TABLE_KEY,
+        hhs_ui.HOME_SHOPTS_TABLE_KEY,
+        hhs_ui.HOME_TOOLS_TABLE_KEY,
+        hhs_ui.PATH_TABLE_KEY,
+        hhs_ui.PROCESS_TABLE_KEY,
+        hhs_ui.SERVICE_TABLE_KEY,
+        hhs_ui.SSH_TUNNEL_TABLE_KEY,
+    }
+    reset_counter = terminal_reset_counter() + 1
+
+    for key in list(st.session_state.keys()):
+        if key in preserved_keys:
+            continue
+        if (
+            key in hhs_ui.PERSISTED_UI_KEYS
+            or key in table_keys
+            or key.startswith(hhs_ui.PERSISTED_UI_KEY_PREFIXES)
+        ):
+            st.session_state.pop(key, None)
+
+    st.session_state["active_view"] = "Home"
+    st.session_state[hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = False
+    st.session_state[hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] = "Home"
+    st.session_state[hhs_ui.DOCUMENT_SELECTED_KEY] = "README"
+    st.session_state["ai_chat_messages"] = []
+    st.session_state["ai_context_output"] = ""
+    st.session_state["ai_context_error"] = ""
+    st.session_state["ai_prompt_editor"] = ""
+    st.session_state["ai_prompt_error"] = ""
+    st.session_state["ai_prompt_loaded"] = False
+    st.session_state["ai_view"] = "CHAT"
+    st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY] = ""
+    st.session_state[hhs_ui.TERMINAL_CWD_KEY] = "."
+    st.session_state[hhs_ui.TERMINAL_COMMAND_HISTORY_KEY] = []
+    st.session_state[hhs_ui.TERMINAL_LAST_EVENT_ID_KEY] = ""
+    st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = False
+    st.session_state[hhs_ui.TERMINAL_RESET_COUNTER_KEY] = reset_counter
+    try:
+        hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+    cache_clear()
+
+
 def ssh_shared_connection_closed(result: subprocess.CompletedProcess[str]) -> bool:
     """Return whether a failed SSH command reports a closed shared connection."""
-    if result.returncode == 0:
+    if result.returncode != 255:
         return False
     output = strip_ansi(f"{result.stdout or ''}\n{result.stderr or ''}").lower()
     return "shared connection to " in output and " closed" in output
+
+
+def strip_ssh_shared_connection_notice(value: str) -> str:
+    """Return command output without OpenSSH ControlMaster close notices."""
+    output_lines = []
+    for line in value.splitlines(keepends=True):
+        clean_line = strip_ansi(line).strip().lower()
+        if clean_line.startswith("shared connection to ") and clean_line.endswith(
+            " closed."
+        ):
+            continue
+        output_lines.append(line)
+    return "".join(output_lines)
 
 
 def ssh_output_is_only_shared_close(result: subprocess.CompletedProcess[str]) -> bool:
@@ -4394,6 +4560,7 @@ def execute_pending_ssh_connection() -> None:
     host = str(st.session_state.get("ssh_connect_pending", "")).strip()
     if not host:
         return
+    was_terminal_active = terminal_document_view_is_active()
     st.session_state["ssh_connect_pending"] = ""
     result = run_bash_command(
         build_ssh_connect_command(host),
@@ -4405,12 +4572,15 @@ def execute_pending_ssh_connection() -> None:
         cache_tag="ssh",
     )
     if result.returncode == 0:
+        clear_host_scoped_session_state()
         st.session_state["ssh_connection_status"] = "connected"
         st.session_state["ssh_connection_host"] = host
         st.session_state["ssh_host_selected"] = host
         st.session_state["ssh_host_selector"] = host
         st.session_state["ssh_connection_error"] = ""
         st.session_state["ssh_connection_dialog_title"] = ""
+        update_remote_footer_working_directory()
+        restore_terminal_document_view(was_terminal_active)
         push_floating_status(
             f"Connected to remote  {ssh_connection_display(host)}",
             "info",
@@ -4448,6 +4618,7 @@ def execute_pending_ssh_disconnection() -> None:
     st.session_state["ssh_connection_dialog_title"] = ""
     st.session_state["ssh_host_selected"] = local_hostname()
     st.session_state["ssh_host_selector"] = local_hostname()
+    st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)
     clear_registered_ssh_connection()
     cache_clear()
     save_ui_state()
@@ -4515,6 +4686,7 @@ def run_bash_command(
     force_local: bool = False,
     timeout_seconds: int | None = None,
     cache_tag: str = "default",
+    show_overlay: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run a Bash command with tagged command-result caching and a preloader."""
     remote_host = command_remote_host(force_local=force_local)
@@ -4536,7 +4708,8 @@ def run_bash_command(
             st.rerun()
         return result
 
-    set_overlay(True, loader_message, close_dialogs=close_dialogs)
+    if show_overlay:
+        set_overlay(True, loader_message, close_dialogs=close_dialogs)
     try:
         result = subprocess.run(
             [RUN_SHELL, "-lc", command_to_run],
@@ -4565,7 +4738,8 @@ def run_bash_command(
             st.rerun()
         return result
     finally:
-        set_overlay(False)
+        if show_overlay:
+            set_overlay(False)
 
 
 def load_ui_cache() -> dict[str, dict[str, object]]:
@@ -4815,6 +4989,11 @@ def build_open_directory_command(directory: str) -> str:
     )
 
 
+def build_footer_working_directory_command() -> str:
+    """Build the Bash command used to print the footer working directory."""
+    return r'printf "__HHS_UI_PWD__"; \pwd'
+
+
 def build_hhs_updater_command(operation: str) -> str:
     """Build the Bash command used to run the HomeSetup updater plug-in."""
     safe_operation = re.sub(r"[^A-Za-z_-]+", "", operation) or "check"
@@ -4866,6 +5045,48 @@ def run_shell_version() -> subprocess.CompletedProcess[str]:
         timeout_seconds=10,
         cache_tag="system",
     )
+
+
+def run_footer_working_directory() -> subprocess.CompletedProcess[str]:
+    """Run the active host shell command used by the footer working-directory status."""
+    return run_bash_command(
+        build_footer_working_directory_command(),
+        "Loading current working dir",
+        ttl_seconds=0,
+        use_cache=False,
+        timeout_seconds=10,
+        cache_tag="system",
+    )
+
+
+def parse_footer_working_directory_output(output: str) -> str:
+    """Return the marked working directory from noisy local or remote shell output."""
+    clean_output = strip_ansi(output or "").replace("\r", "")
+    marker = "__HHS_UI_PWD__"
+    marker_index = clean_output.rfind(marker)
+    if marker_index < 0:
+        return ""
+    marker_output = clean_output[marker_index + len(marker) :]
+    return marker_output.splitlines()[0].strip()
+
+
+def update_remote_footer_working_directory() -> None:
+    """Capture the connected SSH host working directory for footer rendering."""
+    result = run_footer_working_directory()
+    output = parse_footer_working_directory_output(result.stdout or "")
+    if output:
+        st.session_state[FOOTER_REMOTE_WORKING_DIR_KEY] = output
+    else:
+        st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)
+
+
+def footer_working_directory() -> str:
+    """Return the footer working directory from state or the local process cwd."""
+    if str(st.session_state.get("ssh_connection_status", "")).strip() == "connected":
+        remote_cwd = str(st.session_state.get(FOOTER_REMOTE_WORKING_DIR_KEY, "")).strip()
+        if remote_cwd:
+            return remote_cwd
+    return os.getcwd()
 
 
 def run_hhs_updater_check() -> subprocess.CompletedProcess[str]:
@@ -7734,10 +7955,8 @@ def render_envs_table() -> None:
     env_filter, other_filter = render_table_controls_panel(render_env_controls)
 
     result = run_hhs_envs(env_filter_pattern(env_filter, other_filter))
-    if result.returncode != 0:
-        st.error(result.stderr or "Unable to list environment variables.")
-        return
-    render_env_rows(parse_hhs_envs(result.stdout))
+    rows = parse_hhs_envs(result.stdout) if result.returncode == 0 else []
+    render_env_rows(rows)
 
 
 def render_paths_table() -> None:
@@ -7755,11 +7974,9 @@ def render_paths_table() -> None:
 
     path_filter, other_filter = render_table_controls_panel(render_path_controls)
     result = run_hhs_paths()
-    if result.returncode != 0:
-        st.error(result.stderr or "Unable to list PATH entries.")
-        return
+    rows = parse_hhs_paths(result.stdout) if result.returncode == 0 else []
     render_path_rows(
-        filter_path_rows(parse_hhs_paths(result.stdout), path_filter, other_filter)
+        filter_path_rows(rows, path_filter, other_filter)
     )
 
 
@@ -7778,11 +7995,9 @@ def render_dirs_table() -> None:
 
     dirs_filter, other_filter = render_table_controls_panel(render_dir_controls)
     result = run_hhs_dirs()
-    if result.returncode != 0:
-        st.error(result.stderr or "Unable to list saved directories.")
-        return
+    rows = parse_hhs_dirs(result.stdout) if result.returncode == 0 else []
     render_dir_rows(
-        filter_rows_by_text(parse_hhs_dirs(result.stdout), dirs_filter, other_filter),
+        filter_rows_by_text(rows, dirs_filter, other_filter),
     )
 
 
@@ -7801,13 +8016,9 @@ def render_cmds_table() -> None:
 
     cmds_filter, other_filter = render_table_controls_panel(render_cmd_controls)
     result = run_hhs_commands()
-    if result.returncode != 0:
-        st.error(result.stderr or "Unable to list saved commands.")
-        return
+    rows = parse_hhs_commands(result.stdout) if result.returncode == 0 else []
     render_cmd_rows(
-        filter_rows_by_text(
-            parse_hhs_commands(result.stdout), cmds_filter, other_filter
-        ),
+        filter_rows_by_text(rows, cmds_filter, other_filter),
     )
 
 
@@ -7826,13 +8037,9 @@ def render_aliases_table() -> None:
 
     alias_filter, other_filter = render_table_controls_panel(render_alias_controls)
     result = run_hhs_aliases()
-    if result.returncode != 0:
-        st.error(result.stderr or "Unable to list custom aliases.")
-        return
+    rows = parse_hhs_aliases(result.stdout) if result.returncode == 0 else []
     render_alias_rows(
-        filter_rows_by_text(
-            parse_hhs_aliases(result.stdout), alias_filter, other_filter
-        ),
+        filter_rows_by_text(rows, alias_filter, other_filter),
     )
 
 
@@ -9047,8 +9254,8 @@ def main() -> None:
     render_sidebar()
     render_main_view()
     render_folder_picker_dialog()
-    render_floating_status()
     render_footer()
+    render_floating_status()
 
 
 if __name__ == "__main__":

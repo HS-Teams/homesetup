@@ -368,6 +368,9 @@ setup() {
   run grep -q 'def ssh_shared_connection_closed' "${ui_file}"
   assert_success
 
+  run grep -q 'def strip_ssh_shared_connection_notice' "${ui_file}"
+  assert_success
+
   run grep -q 'def clear_disconnected_ssh_host' "${ui_file}"
   assert_success
 
@@ -393,6 +396,128 @@ setup() {
   assert_success
 
   run grep -q 'st.session_state\["ssh_host_selected"\] = local_hostname()' "${ui_file}"
+  assert_success
+}
+
+@test "when remote terminal command fails then SSH close trailer should not clear connection" {
+  run python3 - "${ui_file}" <<'PY'
+import subprocess
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def ssh_shared_connection_closed(")
+end = source.index("def ssh_output_is_only_shared_close(")
+namespace = {
+    "strip_ansi": lambda value: value,
+    "subprocess": subprocess,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+command_failure = subprocess.CompletedProcess(
+    ["ssh"],
+    2,
+    "",
+    "ls: unrecognized option '--long'\nShared connection to host closed.\n",
+)
+stale_connection = subprocess.CompletedProcess(
+    ["ssh"],
+    255,
+    "",
+    "Shared connection to host closed.\n",
+)
+assert not namespace["ssh_shared_connection_closed"](command_failure)
+assert namespace["ssh_shared_connection_closed"](stale_connection)
+assert (
+    namespace["strip_ssh_shared_connection_notice"](command_failure.stderr)
+    == "ls: unrecognized option '--long'\n"
+)
+PY
+  assert_success
+}
+
+@test "when SSH connects from Terminal view then Terminal should be restored" {
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+start = source.index("def restore_terminal_document_view(")
+end = source.index("def close_document_view(")
+session_state = {}
+activated = []
+namespace = {
+    "hhs_ui": SimpleNamespace(
+        DOCUMENT_VIEW_ACTIVE_KEY="document_view_active",
+        DOCUMENT_PREVIOUS_VIEW_KEY="document_previous_view",
+        DOCUMENT_SELECTED_KEY="document_selected",
+    ),
+    "st": SimpleNamespace(session_state=session_state),
+    "activate_terminal_document_view": lambda: activated.append(True),
+}
+exec(source[start:end], namespace)
+
+namespace["restore_terminal_document_view"](False)
+assert session_state == {}
+assert activated == []
+
+namespace["restore_terminal_document_view"](True)
+assert session_state["document_view_active"] is True
+assert session_state["document_previous_view"] == "Home"
+assert session_state["document_selected"] == "TERMINAL"
+assert activated == [True]
+PY
+  assert_success
+}
+
+@test "when footer statuses are queued then display timing should start on render" {
+  run python3 - "${ui_file}" <<'PY'
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+class Clock:
+    def __init__(self):
+        self.now = 100.0
+
+    def time(self):
+        return self.now
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def push_floating_status(")
+end = source.index("def floating_status_glyph(")
+clock = Clock()
+session_state = {}
+namespace = {
+    "FLOATING_STATUS_QUEUE_KEY": "_hhs_floating_status_queue",
+    "FLOATING_STATUS_LEGACY_KEY": "_hhs_floating_status",
+    "FLOATING_STATUS_QUEUE_LIMIT": 20,
+    "clean_command_status_message": lambda value: str(value).strip(),
+    "st": SimpleNamespace(session_state=session_state),
+    "time": clock,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+namespace["push_floating_status"]("First", "success", 5.0)
+clock.now = 150.0
+namespace["push_floating_status"]("Second", "warning", 5.0)
+queue = session_state["_hhs_floating_status_queue"]
+assert [item["message"] for item in queue] == ["First", "Second"]
+assert "displayed_at" not in queue[0]
+
+status = namespace["current_floating_status"]()
+assert status["message"] == "First"
+assert status["kind"] == "info"
+assert status["displayed_at"] == 150.0
+
+clock.now = 155.5
+assert namespace["current_floating_status"]()["message"] == "First"
+clock.now = 156.5
+assert namespace["current_floating_status"]()["message"] == "Second"
+assert session_state["_hhs_floating_status_queue"][0]["displayed_at"] == 156.5
+assert namespace["pop_floating_status"]()["message"] == "Second"
+assert namespace["pop_floating_status"]() is None
+PY
   assert_success
 }
 
@@ -751,6 +876,9 @@ assert 'class="hhs-footer-link hhs-footer-repository-link"' in ui_source
 assert 'class="hhs-footer-link hhs-footer-working-dir-link"' in ui_source
 assert 'class="hhs-footer-working-dir-value"' in ui_source
 assert 'href="{working_dir_url}" target="_self">Working dir: <span class="hhs-footer-working-dir-value">' in ui_source
+render_footer_body = ui_source.split("def render_footer()", 1)[1].split("\ndef ", 1)[0]
+assert 'working_dir = html.escape(footer_working_directory())' in render_footer_body
+assert 'os.getcwd()' not in render_footer_body
 assert 'class="hhs-footer-version-group"' in ui_source
 assert 'class="hhs-footer-spacer"' not in ui_source
 assert 'class="hhs-footer-update-link"' in ui_source
@@ -758,6 +886,23 @@ assert 'href="{update_url}" target="_self"' in ui_source
 assert '' in ui_source
 assert 'def build_open_directory_command' in ui_source
 assert 'def run_open_working_directory' in ui_source
+assert 'def build_footer_working_directory_command' in ui_source
+assert 'return r' in ui_source and '__HHS_UI_PWD__' in ui_source and '\\pwd' in ui_source
+assert 'def run_footer_working_directory' in ui_source
+run_footer_working_directory_body = ui_source.split("def run_footer_working_directory", 1)[1].split("\ndef ", 1)[0]
+assert "ttl_seconds=0" in run_footer_working_directory_body
+assert "use_cache=False" in run_footer_working_directory_body
+assert "force_local=True" not in run_footer_working_directory_body
+assert 'cache_tag="system"' in run_footer_working_directory_body
+assert '"Loading current working dir"' in run_footer_working_directory_body
+assert "show_overlay=False" not in run_footer_working_directory_body
+assert 'def parse_footer_working_directory_output' in ui_source
+assert 'def update_remote_footer_working_directory' in ui_source
+assert 'def footer_working_directory' in ui_source
+footer_working_directory_body = ui_source.split("def footer_working_directory", 1)[1].split("\ndef ", 1)[0]
+assert 'run_footer_working_directory()' not in footer_working_directory_body
+assert 'FOOTER_REMOTE_WORKING_DIR_KEY' in footer_working_directory_body
+assert 'return os.getcwd()' in footer_working_directory_body
 assert 'def run_shell_version' in ui_source
 assert 'def shell_version_command' in ui_source
 assert 'shlex.quote(RUN_SHELL)' in ui_source
@@ -793,6 +938,9 @@ assert 'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || 
 assert 'printf "y\\\\n" | ' in ui_source
 assert 'def handle_footer_actions' in ui_source
 assert 'def push_floating_status' in ui_source
+assert 'def pop_floating_status' in ui_source
+assert 'def current_floating_status' in ui_source
+assert 'FLOATING_STATUS_QUEUE_KEY' in ui_source
 assert 'def render_floating_status' in ui_source
 assert 'render_floating_status()' in ui_source
 assert 'class="hhs-floating-status ' in ui_source
@@ -873,6 +1021,8 @@ assert "right: 0" in base_css
 assert "min-height: 1.85em" in base_css
 assert "padding: 0.32em 2rem 0.32em var(--hhs-sidebar-inline-inset)" in base_css
 assert "animation-delay: var(--hhs-floating-status-timeout, 5s)" in base_css
+main_body = ui_source.split("def main()", 1)[1].split('if __name__ == "__main__"', 1)[0]
+assert main_body.index("render_footer()") < main_body.index("render_floating_status()")
 assert "color: var(--hhs-warning)" in base_css
 assert ".hhs-footer-spacer" not in base_css
 assert "gap: 0.8rem" in base_css
@@ -1359,7 +1509,13 @@ PY
   run grep -q 'HOME_TOOLS_TABLE_KEY = "home_tools_table"' "${constants_file}"
   assert_success
 
+  run grep -q 'HOME_TOOLS_TABLE_KEY' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
   run grep -q 'HOME_TOOLS_TABLE_RESET_COUNTER_KEY = "home_tools_table_reset_counter"' "${constants_file}"
+  assert_success
+
+  run grep -q 'HOME_TOOLS_TABLE_RESET_COUNTER_KEY' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
   assert_success
 
   run grep -q 'HOME_SHOPTS_TABLE_KEY = "home_shopts_table"' "${constants_file}"
@@ -1885,6 +2041,44 @@ PY
   assert_failure
 
   run grep -q 'st.session_state\["ssh_connection_status"\] = "connected"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def clear_host_scoped_session_state' "${ui_file}"
+  assert_success
+
+  run grep -q 'clear_host_scoped_session_state()' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\[hhs_ui.TERMINAL_CWD_KEY\] = "."' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)' "${ui_file}"
+  assert_success
+
+  run grep -q 'key in hhs_ui.PERSISTED_UI_KEYS' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+body = source.split("def execute_pending_ssh_connection", 1)[1].split("\ndef ", 1)[0]
+snapshot_index = body.index("was_terminal_active = terminal_document_view_is_active()")
+reset_index = body.index("clear_host_scoped_session_state()")
+status_index = body.index('st.session_state["ssh_connection_status"] = "connected"')
+remote_cwd_index = body.index("update_remote_footer_working_directory()")
+restore_index = body.index("restore_terminal_document_view(was_terminal_active)")
+assert snapshot_index < reset_index
+assert reset_index < status_index
+assert status_index < remote_cwd_index < restore_index
+assert "set_overlay(True" not in body
+assert "set_overlay(False" not in body
+assert "show_overlay=False" not in body
+assert "cache_clear()" in source.split("def clear_host_scoped_session_state", 1)[1].split("\ndef ", 1)[0]
+assert "cache_clear()" in source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
+disconnect_body = source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
+assert "st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)" in disconnect_body
+PY
   assert_success
 
   run grep -q 'def register_ssh_connection' "${ui_file}"
@@ -2464,10 +2658,19 @@ PY
   run grep -q 'args=("TERMINAL",)' "${ui_file}"
   assert_success
 
+  run grep -q 'def terminal_document_view_is_active' "${ui_file}"
+  assert_success
+
+  run grep -q 'if terminal_document_view_is_active():' "${ui_file}"
+  assert_success
+
   run python3 - <<'PY'
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+terminal_button_body = ui_source.split("def render_sidebar_terminal_button()", 1)[1].split("\ndef ", 1)[0]
+assert "if terminal_document_view_is_active():" in terminal_button_body
+assert "return" in terminal_button_body.split('st.button(', 1)[0]
 sidebar_body = ui_source.split("def render_sidebar()", 1)[1].split("\ndef ", 1)[0]
 terminal_index = sidebar_body.index("render_sidebar_terminal_button()")
 theme_index = sidebar_body.index('st.markdown("**Theme**")')
@@ -2494,6 +2697,18 @@ PY
   assert_success
 
   run grep -q 'def open_document_view' "${ui_file}"
+  assert_success
+
+  run grep -q 'def activate_terminal_document_view' "${ui_file}"
+  assert_success
+
+  run grep -q 'def restore_terminal_document_view' "${ui_file}"
+  assert_success
+
+  run grep -q 'activate_terminal_document_view()' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\[hhs_ui.TERMINAL_CWD_KEY\] = footer_working_directory()' "${ui_file}"
   assert_success
 
   run grep -q 'def close_document_view' "${ui_file}"
@@ -2536,6 +2751,9 @@ PY
   assert_success
 
   run grep -q 'TERMINAL_RESET_COUNTER_KEY = "terminal_reset_counter"' "${constants_file}"
+  assert_success
+
+  run grep -q 'st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, footer_working_directory())' "${ui_file}"
   assert_success
 
   run grep -q 'push_floating_status(' "${ui_file}"
@@ -3783,6 +4001,25 @@ LOGS
   run grep -q 'def render_aliases_table' "${ui_file}"
   assert_success
 
+  run python3 - <<'PY'
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+table_functions = (
+    "render_envs_table",
+    "render_paths_table",
+    "render_dirs_table",
+    "render_cmds_table",
+    "render_aliases_table",
+)
+for function_name in table_functions:
+    body = source.split(f"def {function_name}", 1)[1].split("\ndef ", 1)[0]
+    assert "st.error(" not in body, function_name
+    assert "if result.returncode != 0:" not in body, function_name
+    assert "if result.returncode == 0 else []" in body, function_name
+PY
+  assert_success
+
   run grep -q 'selected_editable=True' "${ui_file}"
   assert_success
 
@@ -4021,6 +4258,57 @@ assert display_rows[1]["Value"] == "${HHS_DIR}/log/app.log", display_rows
 assert display_rows[2]["Value"] == "/opt/tool", display_rows
 assert display_rows[3]["Value"] == "${HHS_HOME}/bin:${HHS_DIR}/bin", display_rows
 assert rows[0]["Value"] == "/Users/hjunior/HomeSetup/bin", rows
+PY
+  assert_success
+}
+
+@test "when parsing footer working directory then startup banners should be ignored" {
+  run python3 - "${ui_file}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def parse_footer_working_directory_output(")
+end = source.index("def footer_working_directory(")
+namespace = {
+    "strip_ansi": lambda value: re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", value),
+}
+exec(source[start:end], namespace)
+
+noisy_output = (
+    "[bash] HomeSetup is starting...\r\n"
+    "[Linux-ubuntu/bash] Welcome root to HomeSetup v1.9.18\r\n"
+    "__HHS_UI_PWD__/root\r\n"
+)
+assert namespace["parse_footer_working_directory_output"](noisy_output) == "/root"
+assert namespace["parse_footer_working_directory_output"]("banner only") == ""
+PY
+  assert_success
+}
+
+@test "when rendering footer working directory then local cwd should not issue pwd" {
+  run python3 - "${ui_file}" <<'PY'
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def footer_working_directory(")
+end = source.index("def run_hhs_updater_check(")
+session_state = {}
+namespace = {
+    "FOOTER_REMOTE_WORKING_DIR_KEY": "_hhs_footer_remote_working_dir",
+    "st": SimpleNamespace(session_state=session_state),
+    "os": SimpleNamespace(getcwd=lambda: "/local/cwd"),
+}
+exec(source[start:end], namespace)
+
+assert namespace["footer_working_directory"]() == "/local/cwd"
+session_state["ssh_connection_status"] = "connected"
+assert namespace["footer_working_directory"]() == "/local/cwd"
+session_state["_hhs_footer_remote_working_dir"] = "/remote/cwd"
+assert namespace["footer_working_directory"]() == "/remote/cwd"
 PY
   assert_success
 }
