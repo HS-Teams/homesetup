@@ -706,6 +706,8 @@ from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs_ui/streamlit_ui.css").read_text()
+terminal_html = Path("bin/apps/py/hhs_ui/components/terminal/index.html").read_text()
+terminal_js = Path("bin/apps/py/hhs_ui/components/terminal/terminal.js").read_text()
 dracula_css = Path("bin/apps/py/hhs_ui/themes/dracula.css").read_text()
 homesetup_css = Path("bin/apps/py/hhs_ui/themes/homesetup.css").read_text()
 tokyo_night_css = Path("bin/apps/py/hhs_ui/themes/tokyo-night.css").read_text()
@@ -735,6 +737,7 @@ assert 'class="hhs-footer-link hhs-footer-working-dir-link"' in ui_source
 assert 'class="hhs-footer-working-dir-value"' in ui_source
 assert 'href="{working_dir_url}" target="_self">Working dir: <span class="hhs-footer-working-dir-value">' in ui_source
 assert 'class="hhs-footer-version-group"' in ui_source
+assert 'class="hhs-footer-spacer"' not in ui_source
 assert 'class="hhs-footer-update-link"' in ui_source
 assert 'href="{update_url}" target="_self"' in ui_source
 assert '' in ui_source
@@ -811,10 +814,14 @@ assert "left: 0" in base_css
 assert "right: 0" in base_css
 assert "min-height: 1.85em" in base_css
 assert "padding: 0.32em 2rem 0.32em var(--hhs-sidebar-inline-inset)" in base_css
-assert "animation-delay: var(--hhs-floating-status-timeout, 4s)" in base_css
+assert "animation-delay: var(--hhs-floating-status-timeout, 5s)" in base_css
 assert "color: var(--hhs-warning)" in base_css
+assert ".hhs-footer-spacer" not in base_css
+assert "gap: 0.8rem" in base_css
 assert "margin-left: auto" in status_group_block
 assert "gap: 1.25rem" in status_group_block
+assert "gap: 0.8rem" in shell_status_block
+assert "gap: 0.8rem" in remote_status_block
 assert "margin-left" not in shell_status_block
 assert "margin-left" not in remote_status_block
 assert "border-bottom" not in base_block
@@ -838,6 +845,23 @@ assert "--hhs-theme-footer-status-text-size" in tokyo_night_css
 assert "--hhs-theme-footer-status-text-size: 1.176rem" in tokyo_night_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in dracula_css
 assert "border-color: var(--hhs-primary)" in dracula_css
+assert "--hhs-theme-heading-border-color: var(--hhs-theme-border-color)" in dracula_css
+assert "--hhs-theme-heading-border-color: var(--hhs-theme-border-color)" in tokyo_night_css
+assert "resolved custom property value" in ui_source
+assert 'borderColor=selected_theme_custom_property("hhs-theme-heading-border-color")' in ui_source
+assert "#6d5c99" not in terminal_html
+assert "#6d5c99" not in terminal_js
+assert "let commandCursor = 0" in terminal_js
+assert "function handleTerminalShortcut" in terminal_js
+assert "function previousWordCursor" in terminal_js
+assert "function nextWordCursor" in terminal_js
+assert "function clearVisibleTerminal" in terminal_js
+assert r'"\x1b[D": () => replaceCommandLine(commandBuffer, commandCursor - 1)' in terminal_js
+assert r'"\x1b[C": () => replaceCommandLine(commandBuffer, commandCursor + 1)' in terminal_js
+assert r'"\x01": () => replaceCommandLine(commandBuffer, 0)' in terminal_js
+assert r'"\x05": () => replaceCommandLine(commandBuffer, commandBuffer.length)' in terminal_js
+assert r'"\x0c": clearVisibleTerminal' in terminal_js
+assert r'"\x03": cancelCommandLine' in terminal_js
 PY
   assert_success
 
@@ -2289,7 +2313,16 @@ PY
   run grep -q 'def close_document_view' "${ui_file}"
   assert_success
 
-  run grep -q '<h2> Terminal</h2>' "${ui_file}"
+  run grep -q 'def terminal_document_title' "${ui_file}"
+  assert_success
+
+  run grep -q 'return "Remote Terminal"' "${ui_file}"
+  assert_success
+
+  run grep -q 'return "Terminal"' "${ui_file}"
+  assert_success
+
+  run grep -q '<h2> {html.escape(title)}</h2>' "${ui_file}"
   assert_success
 
   run grep -q 'def hhs_terminal_component' "${ui_file}"
@@ -2421,6 +2454,9 @@ PY
   run grep -q 'fontSize: 14' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
   assert_success
 
+  run grep -q 'cursorStyle: "underline"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
   run grep -q 'function terminalHeight' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
   assert_success
 
@@ -2431,6 +2467,12 @@ PY
   assert_failure
 
   run grep -q 'terminal.scrollToBottom()' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'function scrollTerminalToContent' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
+  assert_success
+
+  run grep -q 'terminal.write(`${transcriptText}${promptText}`, scrollTerminalToContent)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
   assert_success
 
   run grep -q 'window.parent.innerHeight' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/terminal/terminal.js"
@@ -2731,13 +2773,87 @@ PY
   run grep -q 'LOG_TAILOR_RULES' "${constants_file}"
   assert_success
 
+  run grep -q 'LOG_LEVELS = (' "${constants_file}"
+  assert_success
+
+  run grep -q 'LOG_LEVELS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q '"monitor_log_level"' "${constants_file}"
+  assert_success
+
   run grep -q 'def colorize_log_output' "${ui_file}"
+  assert_success
+
+  run grep -q 'def selected_monitor_log_level' "${ui_file}"
+  assert_success
+
+  run grep -q 'def monitor_log_level_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'def clear_monitor_log_file' "${ui_file}"
   assert_success
 
   run grep -q 'def render_monitor_logs_panel' "${ui_file}"
   assert_success
 
+  run grep -q 'label_col, input_col, level_label_col, level_col, tail_col, clear_col = st.columns' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="monitor_log_clear_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="monitor_log_level"' "${ui_file}"
+  assert_success
+
   run grep -q '__hhs logs' "${ui_file}"
+  assert_success
+
+  run grep -q 'shlex.quote(safe_log_level)' "${ui_file}"
+  assert_success
+
+  run grep -q 'run_hhs_logs(selected_log, 200, selected_level)' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'awk -v level="${level}" '\''toupper($3) == level'\''' "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/functions/built-ins.bash"
+  assert_success
+
+  run grep -q 'grep -i "${level}"' "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/functions/built-ins.bash"
+  assert_failure
+
+  run bash --noprofile --norc -c '
+    set -e
+    tmp_dir="$(mktemp -d)"
+    trap "rm -rf \"${tmp_dir}\"" EXIT
+    mkdir -p "${tmp_dir}/log"
+    cat > "${tmp_dir}/log/hhsrc.log" <<'"'"'LOGS'"'"'
+07-02-26 00:13:01   INFO  Loading dotfile
+07-02-26 00:13:02   WARN  Setting alias: "os-info" was skipped because it already exists !
+07-02-26 00:13:03   ERROR  Failed to load test
+LOGS
+    export HHS_LOG_DIR="${tmp_dir}/log"
+    export HHS_LOG_FILE="${tmp_dir}/log/hhsrc.log"
+    export APP_NAME="hhs"
+    NC= RED= GREEN= YELLOW= WHITE= BLUE= PURPLE= CYAN= VIOLET= POINTER_ICN=
+    function quit() { return "${1:-0}"; }
+    function list_contains() { [[ -n "${1}" && -n "${2}" && ${1} =~ (^|[[:space:]])${2}($|[[:space:]]) ]]; }
+    function __hhs_errcho() { printf "%s\n" "$*" >&2; }
+    source "${1}/bin/hhs-functions/bash/hhs-taylor.bash"
+    source "${1}/bin/apps/bash/hhs-app/functions/built-ins.bash"
+    output="$(logs hhsrc.log INFO)"
+    [[ "${output}" == *"INFO  Loading dotfile"* ]]
+    [[ "${output}" != *"os-info"* ]]
+    [[ "${output}" != *"WARN  Setting alias"* ]]
+  ' -- "${HHS_REPO_DIR}"
+  assert_success
+
+  run grep -q '.st-key-monitor_log_clear_button button' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-chrome-height: calc(14rem + 160px)' "${css_file}"
+  assert_success
+
+  run grep -q 'min-height: 8rem' "${css_file}"
   assert_success
 
   run grep -q '@st.fragment(run_every="5s")' "${ui_file}"

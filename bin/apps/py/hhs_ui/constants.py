@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.133"
+VERSION = "0.0.144"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -87,6 +87,20 @@ HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
 SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")
 SHOPTS_FILTERS = ("All", "ON", "OFF", "Other")
+LOG_LEVELS = (
+    "ALL_LEVELS",
+    "CRITICAL",
+    "DEBUG",
+    "ERROR",
+    "FATAL",
+    "FINE",
+    "INFO",
+    "OUT",
+    "TRACE",
+    "WARNING",
+    "WARN",
+    "SEVERE",
+)
 TABLE_CONTROLS_PANEL_TITLE = "Filters & Controls"
 THEME_SELECTED_KEY = "theme_selected"
 AI_CODE_BLOCK_WRAP_COLUMNS = 96
@@ -128,6 +142,7 @@ PERSISTED_UI_KEYS = (
     "monitor_disk_directory",
     "monitor_disk_top_n",
     "monitor_log_file",
+    "monitor_log_level",
     "monitor_logs_tail",
     "monitor_process_filter",
     "monitor_view",

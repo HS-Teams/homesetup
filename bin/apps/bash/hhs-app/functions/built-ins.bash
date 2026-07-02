@@ -161,7 +161,7 @@ function logs() {
   if [[ -z "${level}" || "${level}" == 'ALL_LEVELS' ]]; then
     __hhs_tailor "${tail_opts}" "${logfile}"
   else
-    __hhs_tailor "${tail_opts}" "${logfile}" | grep -i "${level}"
+    tail ${tail_opts} "${logfile}" | awk -v level="${level}" 'toupper($3) == level' | __hhs_tailor
   fi
 
   quit $?

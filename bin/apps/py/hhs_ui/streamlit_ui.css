@@ -3,7 +3,7 @@
   --hhs-bar-chart-height: max(12rem, min(380px, calc(100dvh - var(--hhs-bar-chart-chrome-height) - var(--hhs-footer-guard-height))));
   --hhs-footer-guard-height: 3.5rem;
   --hhs-inline-control-gap: 0.45rem;
-  --hhs-log-chrome-height: calc(14rem + 128px);
+  --hhs-log-chrome-height: calc(14rem + 160px);
   --hhs-danger: #dc2626;
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
@@ -140,6 +140,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 }
 
 .st-key-dir_folder_picker_button button,
+.st-key-monitor_log_clear_button button,
 .st-key-path_folder_picker_button button {
   align-items: center;
   border-radius: 4px;
@@ -155,8 +156,13 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 }
 
 .st-key-dir_folder_picker_button,
+.st-key-monitor_log_clear_button,
 .st-key-path_folder_picker_button {
   margin-top: 1.55rem;
+}
+
+.st-key-monitor_log_clear_button {
+  margin-top: 0;
 }
 
 .st-key-folder_picker_cancel_button button,
@@ -556,7 +562,7 @@ div[class*="st-key-monitor_process_kill_button_"] button {
   height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height));
   margin: 0.35rem 0 0;
   max-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height));
-  min-height: 12rem;
+  min-height: 8rem;
 }
 
 .hhs-home-tool-action-output {
@@ -785,7 +791,7 @@ div[class*="st-key-service_selected_value_"] input {
 .hhs-floating-status {
   align-items: center;
   animation: hhs-floating-status-hide 0.22s ease-out forwards;
-  animation-delay: var(--hhs-floating-status-timeout, 4s);
+  animation-delay: var(--hhs-floating-status-timeout, 5s);
   background: color-mix(
     in srgb,
     var(--hhs-floating-status-color) 16%,
@@ -842,7 +848,7 @@ div[class*="st-key-service_selected_value_"] input {
   display: flex;
   font-size: 0.84rem;
   font-weight: 650;
-  gap: 0;
+  gap: 0.8rem;
   left: 0;
   min-height: 3.25rem;
   padding: 0 2rem 0 var(--hhs-sidebar-inline-inset);
@@ -948,12 +954,6 @@ div[class*="st-key-service_selected_value_"] input {
   width: 32px;
 }
 
-.hhs-footer-spacer {
-  display: inline-flex;
-  flex: 0 0 20px;
-  width: 20px;
-}
-
 .hhs-footer-status-group {
   align-items: center;
   display: inline-flex;
@@ -968,7 +968,7 @@ div[class*="st-key-service_selected_value_"] input {
   color: var(--hhs-secondary);
   display: inline-flex;
   font-weight: 750;
-  gap: 0.4rem;
+  gap: 0.8rem;
   white-space: nowrap;
 }
 
@@ -977,6 +977,6 @@ div[class*="st-key-service_selected_value_"] input {
   color: var(--hhs-warning);
   display: inline-flex;
   font-weight: 750;
-  gap: 0.4rem;
+  gap: 0.8rem;
   white-space: nowrap;
 }

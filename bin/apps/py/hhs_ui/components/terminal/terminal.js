@@ -9,6 +9,7 @@ let terminal = null;
 let fitAddon = null;
 let promptText = "$ ";
 let commandBuffer = "";
+let commandCursor = 0;
 let commandHistory = [];
 let historyIndex = 0;
 let lastTranscript = null;
@@ -73,6 +74,25 @@ function normalizeTerminalText(value) {
 }
 
 /**
+ * Fit the terminal viewport and scroll to the latest terminal content.
+ */
+function scrollTerminalToContent() {
+  if (!terminal || !fitAddon) {
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    fitAddon.fit();
+    terminal.scrollToBottom();
+    terminal.focus();
+    setFrameHeight();
+    window.requestAnimationFrame(() => {
+      terminal.scrollToBottom();
+      setFrameHeight();
+    });
+  });
+}
+
+/**
  * Return the tallest terminal height that fits in the visible right panel.
  * @param {number} requestedHeight Explicit height provided by Python.
  * @returns {number} Terminal height in pixels.
@@ -104,7 +124,7 @@ function applyTheme(theme) {
     return;
   }
   const terminalBorderColor = String(
-    pendingRender?.args?.borderColor || theme.borderColor || theme.primaryColor || "#6d5c99",
+    pendingRender?.args?.borderColor || theme.borderColor || theme.primaryColor || "currentColor",
   );
   document.documentElement.style.setProperty(
     "--hhs-terminal-background",
@@ -119,24 +139,196 @@ function applyTheme(theme) {
     terminalBorderColor,
   );
   if (terminal) {
+    const terminalTheme = {
+      background: theme.secondaryBackgroundColor || theme.backgroundColor || "#17161f",
+      foreground: theme.textColor || "#f8f8f2",
+      cursor: theme.primaryColor || "#ffd866",
+    };
+    const selectionColor = theme.primaryColor || theme.borderColor;
+    if (selectionColor) {
+      terminalTheme.selectionBackground = `${selectionColor}55`;
+    }
     terminal.options = {
-      theme: {
-        background: theme.secondaryBackgroundColor || theme.backgroundColor || "#17161f",
-        foreground: theme.textColor || "#f8f8f2",
-        cursor: theme.primaryColor || "#ffd866",
-        selectionBackground: `${theme.primaryColor || "#6d5c99"}55`,
-      },
+      theme: terminalTheme,
     };
   }
 }
 
 /**
- * Replace the editable command line with a history entry.
- * @param {string} nextCommand Command line to show.
+ * Clamp the command cursor to the current editable command line.
+ * @param {number} nextCursor Requested command cursor offset.
+ * @returns {number} Valid command cursor offset.
  */
-function replaceCommandLine(nextCommand) {
-  terminal.write(`\x1b[2K\r${promptText}${nextCommand}`);
+function clampedCommandCursor(nextCursor) {
+  return Math.max(0, Math.min(nextCursor, commandBuffer.length));
+}
+
+/**
+ * Redraw the editable command line and place the xterm cursor at the command cursor.
+ */
+function renderCommandLine() {
+  commandCursor = clampedCommandCursor(commandCursor);
+  terminal.write(`\x1b[2K\r${promptText}${commandBuffer}`);
+  const charsToMoveLeft = commandBuffer.length - commandCursor;
+  if (charsToMoveLeft > 0) {
+    terminal.write(`\x1b[${charsToMoveLeft}D`);
+  }
+}
+
+/**
+ * Replace the editable command line.
+ * @param {string} nextCommand Command line to show.
+ * @param {number|undefined} nextCursor Cursor offset after replacement.
+ */
+function replaceCommandLine(nextCommand, nextCursor = nextCommand.length) {
   commandBuffer = nextCommand;
+  commandCursor = clampedCommandCursor(nextCursor);
+  renderCommandLine();
+}
+
+/**
+ * Insert printable text at the current command cursor.
+ * @param {string} text Text to insert.
+ */
+function insertCommandText(text) {
+  commandBuffer =
+    commandBuffer.slice(0, commandCursor) + text + commandBuffer.slice(commandCursor);
+  commandCursor += text.length;
+  renderCommandLine();
+}
+
+/**
+ * Delete a range from the current command line and redraw it.
+ * @param {number} startIndex First character offset to delete.
+ * @param {number} endIndex Character offset after the deleted range.
+ */
+function deleteCommandRange(startIndex, endIndex) {
+  const start = clampedCommandCursor(startIndex);
+  const end = clampedCommandCursor(endIndex);
+  if (end <= start) {
+    return;
+  }
+  commandBuffer = commandBuffer.slice(0, start) + commandBuffer.slice(end);
+  commandCursor = start;
+  renderCommandLine();
+}
+
+/**
+ * Return the cursor offset at the beginning of the previous shell word.
+ * @returns {number} Previous word offset.
+ */
+function previousWordCursor() {
+  let index = commandCursor;
+  while (index > 0 && /\s/.test(commandBuffer[index - 1])) {
+    index -= 1;
+  }
+  while (index > 0 && !/\s/.test(commandBuffer[index - 1])) {
+    index -= 1;
+  }
+  return index;
+}
+
+/**
+ * Return the cursor offset after the next shell word.
+ * @returns {number} Next word offset.
+ */
+function nextWordCursor() {
+  let index = commandCursor;
+  while (index < commandBuffer.length && /\s/.test(commandBuffer[index])) {
+    index += 1;
+  }
+  while (index < commandBuffer.length && !/\s/.test(commandBuffer[index])) {
+    index += 1;
+  }
+  return index;
+}
+
+/**
+ * Clear the visible terminal buffer while preserving the current editable line.
+ */
+function clearVisibleTerminal() {
+  terminal.clear();
+  renderCommandLine();
+  scrollTerminalToContent();
+}
+
+/**
+ * Cancel the current editable line without sending it to Streamlit.
+ */
+function cancelCommandLine() {
+  terminal.write("^C\r\n");
+  commandBuffer = "";
+  commandCursor = 0;
+  terminal.write(promptText);
+}
+
+/**
+ * Move through terminal command history.
+ * @param {number} direction Negative for previous, positive for next.
+ */
+function moveCommandHistory(direction) {
+  if (commandHistory.length === 0) {
+    return;
+  }
+  historyIndex = clampedHistoryIndex(historyIndex + direction);
+  replaceCommandLine(commandHistory[historyIndex] || "");
+}
+
+/**
+ * Clamp the command history index to available history entries.
+ * @param {number} nextIndex Requested history index.
+ * @returns {number} Valid history index.
+ */
+function clampedHistoryIndex(nextIndex) {
+  return Math.max(0, Math.min(nextIndex, commandHistory.length));
+}
+
+/**
+ * Emulate a terminal control or navigation shortcut in the UI.
+ * @param {string} data Input emitted by xterm.js.
+ * @returns {boolean} Whether the input was handled.
+ */
+function handleTerminalShortcut(data) {
+  const shortcuts = {
+    "\x1b[A": () => moveCommandHistory(-1),
+    "\x10": () => moveCommandHistory(-1),
+    "\x1b[B": () => moveCommandHistory(1),
+    "\x0e": () => moveCommandHistory(1),
+    "\x1b[D": () => replaceCommandLine(commandBuffer, commandCursor - 1),
+    "\x02": () => replaceCommandLine(commandBuffer, commandCursor - 1),
+    "\x1b[C": () => replaceCommandLine(commandBuffer, commandCursor + 1),
+    "\x06": () => replaceCommandLine(commandBuffer, commandCursor + 1),
+    "\x1b[H": () => replaceCommandLine(commandBuffer, 0),
+    "\x1bOH": () => replaceCommandLine(commandBuffer, 0),
+    "\x1b[1~": () => replaceCommandLine(commandBuffer, 0),
+    "\x01": () => replaceCommandLine(commandBuffer, 0),
+    "\x1b[F": () => replaceCommandLine(commandBuffer, commandBuffer.length),
+    "\x1bOF": () => replaceCommandLine(commandBuffer, commandBuffer.length),
+    "\x1b[4~": () => replaceCommandLine(commandBuffer, commandBuffer.length),
+    "\x05": () => replaceCommandLine(commandBuffer, commandBuffer.length),
+    "\x1bb": () => replaceCommandLine(commandBuffer, previousWordCursor()),
+    "\x1b[1;5D": () => replaceCommandLine(commandBuffer, previousWordCursor()),
+    "\x1bf": () => replaceCommandLine(commandBuffer, nextWordCursor()),
+    "\x1b[1;5C": () => replaceCommandLine(commandBuffer, nextWordCursor()),
+    "\x1b[3~": () => deleteCommandRange(commandCursor, commandCursor + 1),
+    "\x04": () => deleteCommandRange(commandCursor, commandCursor + 1),
+    "\u007f": () => deleteCommandRange(commandCursor - 1, commandCursor),
+    "\x08": () => deleteCommandRange(commandCursor - 1, commandCursor),
+    "\x0b": () => deleteCommandRange(commandCursor, commandBuffer.length),
+    "\x15": () => deleteCommandRange(0, commandCursor),
+    "\x17": () => deleteCommandRange(previousWordCursor(), commandCursor),
+    "\x0c": clearVisibleTerminal,
+    "\x03": cancelCommandLine,
+    "\x1b[5~": () => terminal.scrollPages(-1),
+    "\x1b[6~": () => terminal.scrollPages(1),
+    "\x1b": () => {},
+  };
+  const shortcut = shortcuts[data];
+  if (!shortcut) {
+    return false;
+  }
+  shortcut();
+  return true;
 }
 
 /**
@@ -148,21 +340,7 @@ function handleTerminalData(data) {
     return;
   }
 
-  if (data === "\x1b[A") {
-    if (commandHistory.length === 0) {
-      return;
-    }
-    historyIndex = Math.max(0, historyIndex - 1);
-    replaceCommandLine(commandHistory[historyIndex] || "");
-    return;
-  }
-
-  if (data === "\x1b[B") {
-    if (commandHistory.length === 0) {
-      return;
-    }
-    historyIndex = Math.min(commandHistory.length, historyIndex + 1);
-    replaceCommandLine(commandHistory[historyIndex] || "");
+  if (handleTerminalShortcut(data)) {
     return;
   }
 
@@ -175,28 +353,13 @@ function handleTerminalData(data) {
       }
       historyIndex = commandHistory.length;
       commandBuffer = "";
+      commandCursor = 0;
       submitCommand(command);
       return;
     }
 
-    if (char === "\u007f") {
-      if (commandBuffer.length > 0) {
-        commandBuffer = commandBuffer.slice(0, -1);
-        terminal.write("\b \b");
-      }
-      continue;
-    }
-
-    if (char === "\u0003") {
-      terminal.write("^C\r\n");
-      commandBuffer = "";
-      terminal.write(promptText);
-      continue;
-    }
-
     if (char >= " " || char === "\t") {
-      commandBuffer += char;
-      terminal.write(char);
+      insertCommandText(char);
     }
   }
 }
@@ -216,23 +379,21 @@ function renderTerminal(args) {
 
   if (transcript !== lastTranscript) {
     terminal.reset();
-    if (transcript) {
-      terminal.write(normalizeTerminalText(transcript));
-      if (!transcript.endsWith("\n")) {
-        terminal.write("\r\n");
-      }
+    const transcriptText = transcript
+      ? `${normalizeTerminalText(transcript)}${transcript.endsWith("\n") ? "" : "\r\n"}`
+      : "";
+    if (transcriptText) {
+      terminal.write(`${transcriptText}${promptText}`, scrollTerminalToContent);
+    } else {
+      terminal.write(promptText, scrollTerminalToContent);
     }
-    terminal.write(promptText);
     commandBuffer = "";
+    commandCursor = 0;
     lastTranscript = transcript;
+  } else {
+    scrollTerminalToContent();
   }
 
-  window.requestAnimationFrame(() => {
-    fitAddon.fit();
-    terminal.scrollToBottom();
-    terminal.focus();
-    setFrameHeight();
-  });
   setFrameHeight();
 }
 
@@ -273,6 +434,7 @@ async function initializeTerminal() {
     terminal = new Terminal({
       allowProposedApi: false,
       cursorBlink: true,
+      cursorStyle: "underline",
       fontFamily: "Droid Sans Mono for Powerline Nerd Font Complete, monospace",
       fontSize: 14,
       scrollback: 5000,
@@ -280,7 +442,6 @@ async function initializeTerminal() {
         background: "#17161f",
         foreground: "#f8f8f2",
         cursor: "#ffd866",
-        selectionBackground: "#6d5c9955",
       },
     });
     fitAddon = new FitAddon();
@@ -291,8 +452,7 @@ async function initializeTerminal() {
       if (pendingRender) {
         renderTerminal(pendingRender.args || {});
       } else {
-        fitAddon.fit();
-        setFrameHeight();
+        scrollTerminalToContent();
       }
     });
     terminalReady = true;

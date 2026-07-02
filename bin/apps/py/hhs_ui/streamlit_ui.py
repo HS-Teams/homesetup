@@ -241,13 +241,26 @@ def load_app_theme_css() -> str:
     return theme_css_file(selected_theme).read_text(encoding="utf-8")
 
 
-def selected_theme_custom_property(property_name: str, default: str) -> str:
-    """Return a custom property value from the selected HomeSetup UI theme."""
+def selected_theme_custom_property(property_name: str, default: str = "") -> str:
+    """Return a resolved custom property value from the selected HomeSetup UI theme."""
     selected_theme = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
     theme_properties = css_custom_properties(
         theme_css_file(selected_theme).read_text(encoding="utf-8")
     )
-    return theme_properties.get(property_name, default)
+    property_value = theme_properties.get(property_name, default)
+    visited_properties: set[str] = set()
+    while True:
+        variable_match = re.fullmatch(r"var\(\s*--([A-Za-z0-9_-]+)\s*\)", property_value)
+        if not variable_match:
+            return property_value
+        referenced_property = variable_match.group(1)
+        if (
+            referenced_property in visited_properties
+            or referenced_property not in theme_properties
+        ):
+            return default
+        visited_properties.add(referenced_property)
+        property_value = theme_properties[referenced_property]
 
 
 def persist_theme_selection(theme_name: str) -> None:
@@ -1267,6 +1280,41 @@ def hhs_log_files() -> list[str]:
     return sorted(path.name for path in log_dir.glob("*.log") if path.is_file())
 
 
+def hhs_log_file_path(log_file: str) -> Path:
+    """Return the safe path for a HomeSetup log file name."""
+    return hhs_log_dir() / Path(log_file).name
+
+
+def selected_monitor_log_level() -> str:
+    """Return the selected monitor log level normalized to a supported value."""
+    level = str(st.session_state.get("monitor_log_level", "ALL_LEVELS")).strip().upper()
+    if level not in hhs_ui.LOG_LEVELS:
+        return "ALL_LEVELS"
+    return level
+
+
+def monitor_log_level_label(level: str) -> str:
+    """Return the display label for a monitor log level."""
+    return "All" if level == "ALL_LEVELS" else level
+
+
+def clear_monitor_log_file() -> None:
+    """Empty the selected monitor log file and keep it available for logging."""
+    selected_log = str(st.session_state.get("monitor_log_file", "")).strip()
+    log_path = hhs_log_file_path(selected_log)
+    if not selected_log or log_path.name not in hhs_log_files():
+        push_floating_status("Unable to clear log file.", "error")
+        return
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("", encoding="utf-8")
+    except OSError as error:
+        push_floating_status(f"Unable to clear log file: {error}", "error")
+        return
+    cache_clear()
+    push_floating_status(f"Log file cleared: {log_path.name}", "info")
+
+
 def is_persisted_ui_key(key: str) -> bool:
     """Return whether a Streamlit session key should be persisted."""
     if key.endswith("_button"):
@@ -1405,7 +1453,7 @@ def save_ui_state() -> None:
 
 
 def push_floating_status(
-    message: str, kind: str = "info", timeout_seconds: float = 4.0
+    message: str, kind: str = "info", timeout_seconds: float = 5.0
 ) -> None:
     """Store a compact floating status message for the next render."""
     clean_message = clean_command_status_message(str(message))
@@ -1441,7 +1489,7 @@ def render_floating_status() -> None:
     if not message:
         return
     kind = str(status.get("kind", "info"))
-    timeout = float(status.get("timeout_seconds", 4.0))
+    timeout = float(status.get("timeout_seconds", 5.0))
     created_at = float(status.get("created_at", time.time()))
     if time.time() - created_at > timeout + 1.0:
         st.session_state.pop("_hhs_floating_status", None)
@@ -1508,9 +1556,7 @@ def render_footer() -> None:
           <span class="hhs-footer-version-group">
             <a class="hhs-footer-link hhs-footer-repository-link" href="{repository_url}" target="_blank" rel="noopener noreferrer">HomeSetup - v{version}</a>{updater_markup}
           </span>
-          <span class="hhs-footer-spacer"></span>
           <span class="hhs-footer-glyph"></span>
-          <span class="hhs-footer-spacer"></span>
           <a class="hhs-footer-link hhs-footer-working-dir-link" href="{working_dir_url}" target="_self">Working dir: <span class="hhs-footer-working-dir-value">{working_dir}</span></a>
           {status_group_markup}
         </footer>
@@ -2503,10 +2549,11 @@ def render_document_view() -> None:
 
 def render_terminal_document_view() -> None:
     """Render the line-oriented xterm.js terminal document view."""
+    title = terminal_document_title()
     st.markdown(
-        """
+        f"""
         <section class="hhs-view-heading">
-          <h2> Terminal</h2>
+          <h2> {html.escape(title)}</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -2522,6 +2569,13 @@ def render_terminal_document_view() -> None:
     handle_terminal_event(terminal_event)
 
 
+def terminal_document_title() -> str:
+    """Return the terminal document title for local or SSH-connected sessions."""
+    if str(st.session_state.get("ssh_connection_status", "")).strip() == "connected":
+        return "Remote Terminal"
+    return "Terminal"
+
+
 def hhs_terminal_component(**kwargs: object) -> object:
     """Render the HomeSetup terminal custom component and return its value."""
     component = components.declare_component(
@@ -2534,15 +2588,12 @@ def render_terminal_component(
     transcript: str, prompt: str, history: list[str], height: int
 ) -> dict[str, object] | None:
     """Render the xterm.js terminal component and return submitted command events."""
-    border_color = selected_theme_custom_property(
-        "hhs-theme-heading-border-color", "var(--hhs-theme-border-color)"
-    )
     value = hhs_terminal_component(
         transcript=transcript,
         prompt=prompt,
         history=history,
         height=height,
-        borderColor=border_color,
+        borderColor=selected_theme_custom_property("hhs-theme-heading-border-color"),
         key="hhs_terminal_component",
         default=None,
     )
@@ -4258,10 +4309,13 @@ def build_hhs_process_kill_command(process_name: str) -> str:
     )
 
 
-def build_hhs_logs_command(log_file: str, tail_lines: int = 200) -> str:
+def build_hhs_logs_command(
+    log_file: str, tail_lines: int = 200, log_level: str = "ALL_LEVELS"
+) -> str:
     """Build the Bash command used to run the __hhs logs command."""
     safe_log_file = Path(log_file).name
     safe_tail_lines = max(1, min(int(tail_lines), 5000))
+    safe_log_level = log_level if log_level in hhs_ui.LOG_LEVELS else "ALL_LEVELS"
     return (
         'export HHS_HOME="${HHS_HOME}"; '
         'export HHS_LOG_DIR="${HHS_LOG_DIR:-${HHS_DIR}/log}"; '
@@ -4272,7 +4326,7 @@ def build_hhs_logs_command(log_file: str, tail_lines: int = 200) -> str:
         'source "${HHS_HOME}/bin/apps/bash/hhs-app/functions/built-ins.bash"; '
         'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; return "${exit_code}"; }; '
         'function __hhs() { if [[ "$1" == "logs" ]]; then shift; logs "$@"; else return 127; fi; }; '
-        f"__hhs logs -n {safe_tail_lines} {shlex.quote(safe_log_file)}"
+        f"__hhs logs -n {safe_tail_lines} {shlex.quote(safe_log_file)} {shlex.quote(safe_log_level)}"
     )
 
 
@@ -4613,11 +4667,11 @@ def run_ssh_tunnels(host: str) -> subprocess.CompletedProcess[str]:
 
 
 def run_hhs_logs(
-    log_file: str, tail_lines: int = 200
+    log_file: str, tail_lines: int = 200, log_level: str = "ALL_LEVELS"
 ) -> subprocess.CompletedProcess[str]:
     """Run the __hhs logs command and return the completed process."""
     return run_bash_command(
-        build_hhs_logs_command(log_file, tail_lines),
+        build_hhs_logs_command(log_file, tail_lines, log_level),
         "Loading logs...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
     )
@@ -7175,8 +7229,10 @@ def render_monitor_logs_panel() -> None:
     selected_log = st.session_state.get("monitor_log_file", "")
     if selected_log not in log_files:
         st.session_state["monitor_log_file"] = log_files[0]
-    label_col, input_col, tail_col = st.columns(
-        [0.55, 3.0, 0.45], vertical_alignment="center"
+    if selected_monitor_log_level() != st.session_state.get("monitor_log_level"):
+        st.session_state["monitor_log_level"] = selected_monitor_log_level()
+    label_col, input_col, level_label_col, level_col, tail_col, clear_col = st.columns(
+        [0.55, 2.65, 0.62, 0.82, 0.45, 0.16], vertical_alignment="center"
     )
     with label_col:
         st.markdown(
@@ -7191,31 +7247,53 @@ def render_monitor_logs_panel() -> None:
             label_visibility="collapsed",
             on_change=save_ui_state,
         )
+    with level_label_col:
+        st.markdown(
+            '<span class="hhs-inline-form-label">Log level</span>',
+            unsafe_allow_html=True,
+        )
+    with level_col:
+        selected_level = st.selectbox(
+            "Log level",
+            options=hhs_ui.LOG_LEVELS,
+            key="monitor_log_level",
+            format_func=monitor_log_level_label,
+            label_visibility="collapsed",
+            on_change=save_ui_state,
+        )
     with tail_col:
         tail_enabled = st.checkbox(
             "Tail",
             key="monitor_logs_tail",
             on_change=save_ui_state,
         )
+    with clear_col:
+        st.button(
+            "",
+            key="monitor_log_clear_button",
+            help="Clear selected log file",
+            on_click=clear_monitor_log_file,
+            width="stretch",
+        )
     st.markdown(
         f'<div class="hhs-log-file-title"><code>{html.escape(selected_log)}</code></div>',
         unsafe_allow_html=True,
     )
     if tail_enabled:
-        render_monitor_logs_tail(selected_log)
+        render_monitor_logs_tail(selected_log, selected_level)
     else:
-        render_monitor_logs_once(selected_log)
+        render_monitor_logs_once(selected_log, selected_level)
 
 
 @st.fragment(run_every="5s")
-def render_monitor_logs_tail(selected_log: str) -> None:
+def render_monitor_logs_tail(selected_log: str, selected_level: str) -> None:
     """Render a tail-like log pane that refreshes only while LOGS is active."""
-    render_monitor_logs_once(selected_log)
+    render_monitor_logs_once(selected_log, selected_level)
 
 
-def render_monitor_logs_once(selected_log: str) -> None:
+def render_monitor_logs_once(selected_log: str, selected_level: str) -> None:
     """Render the selected log once without automatic refresh."""
-    result = run_hhs_logs(selected_log, 200)
+    result = run_hhs_logs(selected_log, 200, selected_level)
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
@@ -7867,6 +7945,8 @@ def main() -> None:
         st.session_state.get("monitor_disk_top_n")
     )
     st.session_state.setdefault("monitor_log_file", "")
+    st.session_state.setdefault("monitor_log_level", "ALL_LEVELS")
+    st.session_state["monitor_log_level"] = selected_monitor_log_level()
     st.session_state.setdefault("monitor_logs_tail", True)
     st.session_state.setdefault("alias_filter", "All")
     if st.session_state["alias_filter"] not in hhs_ui.LIST_FILTERS:

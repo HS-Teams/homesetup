@@ -38,5 +38,6 @@
 
 ## Testing and Commiting
 
-* Do not run tests all the time; only when the user requests a commit; (ask if the user wants to run/fix the tests now)
-* Prior to commiting, check older commits and follow the same style. Create a maximum of 5 commits (if more are necessary ask the User).
+* Do not run regression tests all the time
+* When the user requests a commit; ask if the user wants to run/fix the regressions tests before the commit.
+* Prior to commiting, check older commits and follow the same style and create a maximum of 5 commits (if more are necessary ask the User).
