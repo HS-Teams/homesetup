@@ -856,12 +856,19 @@ assert "function handleTerminalShortcut" in terminal_js
 assert "function previousWordCursor" in terminal_js
 assert "function nextWordCursor" in terminal_js
 assert "function clearVisibleTerminal" in terminal_js
+assert "function clearPersistedTerminal" in terminal_js
+assert "function handleTerminalKeydown" in terminal_js
 assert r'"\x1b[D": () => replaceCommandLine(commandBuffer, commandCursor - 1)' in terminal_js
 assert r'"\x1b[C": () => replaceCommandLine(commandBuffer, commandCursor + 1)' in terminal_js
 assert r'"\x01": () => replaceCommandLine(commandBuffer, 0)' in terminal_js
 assert r'"\x05": () => replaceCommandLine(commandBuffer, commandBuffer.length)' in terminal_js
-assert r'"\x0c": clearVisibleTerminal' in terminal_js
+assert r'"\x0c": clearPersistedTerminal' in terminal_js
+assert r'"\x0b": clearPersistedTerminal' in terminal_js
 assert r'"\x03": cancelCommandLine' in terminal_js
+assert 'terminalHost.addEventListener("keydown", handleTerminalKeydown, true)' in terminal_js
+assert 'commandBuffer = "";' in terminal_js
+assert 'submitCommand("clear")' in terminal_js
+assert 'if clean_command in {"clear", "cls", "reset"}' in ui_source
 PY
   assert_success
 
@@ -1041,7 +1048,7 @@ PY
   run grep -q 'SSH_VIEW: " SSH"' "${constants_file}"
   assert_success
 
-  run grep -q 'AI_VIEW: " AI"' "${constants_file}"
+  run grep -q 'AI_VIEW: " AI"' "${constants_file}"
   assert_success
 
   run grep -q '<h2> System</h2>' "${ui_file}"
@@ -1083,10 +1090,13 @@ PY
   run grep -q 'format_func=ai_view_label' "${ui_file}"
   assert_success
 
-  run grep -q 'HOME_VIEWS = ("System", "Tools", "SHOPTS")' "${constants_file}"
+  run grep -q 'HOME_VIEWS = ("System", "Docker", "Tools", "SHOPTS")' "${constants_file}"
   assert_success
 
   run grep -q '"System": " Summary"' "${constants_file}"
+  assert_success
+
+  run grep -q '"Docker": " Docker"' "${constants_file}"
   assert_success
 
   run grep -q '"Tools": " Tools"' "${constants_file}"
@@ -1099,6 +1109,30 @@ PY
   assert_success
 
   run grep -q 'format_func=home_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'elif home_view == "Docker"' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_home_docker_panel()' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_home_docker_panel' "${ui_file}"
+  assert_success
+
+  run grep -q 'Docker Containers' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_docker_ps' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_docker_images' "${ui_file}"
+  assert_success
+
+  run grep -q 'return "docker ps"' "${ui_file}"
+  assert_success
+
+  run grep -q 'return "docker images"' "${ui_file}"
   assert_success
 
   run grep -q '"home_tools_filter"' "${constants_file}"
@@ -2373,7 +2407,7 @@ PY
   run grep -q 'def execute_terminal_command' "${ui_file}"
   assert_success
 
-  run grep -q 'if clean_command in {"clear", "reset"}' "${ui_file}"
+  run grep -q 'if clean_command in {"clear", "cls", "reset"}' "${ui_file}"
   assert_success
 
   run grep -q 'def clear_terminal_transcript' "${ui_file}"
@@ -2389,6 +2423,9 @@ PY
   assert_success
 
   run grep -q 'hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)' "${ui_file}"
+  assert_success
+
+  run grep -q 'push_floating_status("Session was reset", "info")' "${ui_file}"
   assert_success
 
   run grep -q 'hhs_ui.TERMINAL_TRANSCRIPT_MAX_CHARS' "${ui_file}"
@@ -3468,6 +3505,35 @@ PY
   assert_success
 
   run grep -q 'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")";' "${ui_file}"
+  assert_success
+}
+
+@test "when parsing Docker command output then markdown tables should preserve columns" {
+  run python3 - "${ui_file}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def escape_markdown_table_cell(")
+end = source.index("def command_env(")
+namespace = {"re": re, "strip_ansi": lambda value: value}
+exec(source[start:end], namespace)
+
+sample = (
+    "CONTAINER ID   IMAGE                          COMMAND                  CREATED      STATUS       PORTS                    NAMES\n"
+    "f9eae755ef6e   yorevs/homeselect:ui-0.0.7.6   \"/docker-entrypoint\"   2 days ago   Up 2 days    127.0.0.1:8888->80/tcp   homeselect-webapp\n"
+)
+
+table = namespace["docker_cli_markdown_table"](sample)
+assert "| CONTAINER ID | IMAGE | COMMAND | CREATED | STATUS | PORTS | NAMES |" in table
+assert (
+    "| f9eae755ef6e | yorevs/homeselect:ui-0.0.7.6 | "
+    "\"/docker-entrypoint\" | 2 days ago | Up 2 days | "
+    "127.0.0.1:8888->80/tcp | homeselect-webapp |"
+) in table
+assert namespace["docker_cli_markdown_table"]("") == ""
+PY
   assert_success
 }
 

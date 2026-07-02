@@ -1630,6 +1630,8 @@ def render_home_view() -> None:
     st.write("")
     if home_view == "System":
         render_home_system_panel()
+    elif home_view == "Docker":
+        render_home_docker_panel()
     elif home_view == "Tools":
         render_home_tools_panel()
     elif home_view == "SHOPTS":
@@ -1648,6 +1650,38 @@ def render_home_system_panel() -> None:
         st.error(result.stderr or "Unable to load system information.")
         return
     st.markdown(format_hhs_sysinfo_markdown(result.stdout))
+
+
+def render_home_docker_panel() -> None:
+    """Render Docker container and image listings on the Home view."""
+    st.markdown(
+        """
+        <section class="hhs-view-heading">
+          <h2> Docker Containers</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    render_docker_markdown_table("docker ps", run_docker_ps())
+    st.write("")
+    render_docker_markdown_table("docker images", run_docker_images())
+
+
+def render_docker_markdown_table(
+    title: str, result: subprocess.CompletedProcess[str]
+) -> None:
+    """Render a Docker command result as a Markdown table."""
+    st.markdown(f"##### {title}")
+    if result.returncode != 0:
+        st.error(strip_ansi(result.stderr or result.stdout) or f"{title} failed.")
+        return
+
+    table = docker_cli_markdown_table(result.stdout)
+    if table:
+        st.markdown(table)
+        return
+
+    st.info("No rows returned.")
 
 
 def home_shopt_is_on(row: dict[str, str]) -> bool:
@@ -2648,7 +2682,7 @@ def sendToTerminal(command: str) -> None:
 def execute_terminal_command(command: str) -> None:
     """Execute a terminal command and append its output to the transcript."""
     clean_command = command.strip()
-    if clean_command in {"clear", "reset"}:
+    if clean_command in {"clear", "cls", "reset"}:
         clear_terminal_transcript()
         return
     if not clean_command:
@@ -2711,7 +2745,8 @@ def clear_terminal_transcript() -> None:
     try:
         hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)
     except OSError:
-        return
+        pass
+    push_floating_status("Session was reset", "info")
 
 
 def build_terminal_command(command: str, cwd: str) -> str:
@@ -3169,13 +3204,23 @@ def relative_disk_usage_path(path: str, directory: str) -> str:
     return path
 
 
+def escape_markdown_table_cell(value: str) -> str:
+    """Return a cell value escaped for a Markdown table."""
+    return value.replace("|", "\\|")
+
+
 def markdown_table(headers: list[str], rows: list[list[str]]) -> str:
     """Return a Markdown table for the provided headers and rows."""
     if not headers or not rows:
         return ""
-    header_line = "| " + " | ".join(headers) + " |"
+    safe_headers = [escape_markdown_table_cell(header) for header in headers]
+    safe_rows = [
+        [escape_markdown_table_cell(cell) for cell in row[: len(headers)]]
+        for row in rows
+    ]
+    header_line = "| " + " | ".join(safe_headers) + " |"
     separator_line = "| " + " | ".join(["---"] * len(headers)) + " |"
-    row_lines = ["| " + " | ".join(row[: len(headers)]) + " |" for row in rows]
+    row_lines = ["| " + " | ".join(row) + " |" for row in safe_rows]
     return "\n".join([header_line, separator_line, *row_lines])
 
 
@@ -3235,6 +3280,33 @@ def format_hhs_sysinfo_markdown(output: str) -> str:
 
     flush_table()
     return "\n".join(markdown_lines).strip()
+
+
+def parse_fixed_width_cli_table(output: str) -> tuple[list[str], list[list[str]]]:
+    """Parse a whitespace-aligned command table into headers and rows."""
+    lines = [
+        line.rstrip()
+        for line in strip_ansi(output).splitlines()
+        if line.strip() and set(line.strip()) != {"-"}
+    ]
+    if not lines:
+        return [], []
+
+    headers = re.split(r"\s{2,}", lines[0].strip())
+    if len(headers) < 2:
+        return [], []
+
+    rows: list[list[str]] = []
+    for line in lines[1:]:
+        parts = re.split(r"\s{2,}", line.strip(), maxsplit=len(headers) - 1)
+        rows.append(normalize_markdown_table_row(headers, parts))
+    return headers, rows
+
+
+def docker_cli_markdown_table(output: str) -> str:
+    """Return a Markdown table from Docker's default command output."""
+    headers, rows = parse_fixed_width_cli_table(output)
+    return markdown_table(headers, rows)
 
 
 def command_env() -> dict[str, str]:
@@ -4189,6 +4261,16 @@ def build_hhs_shopt_action_command(operation: str, option_name: str) -> str:
     )
 
 
+def build_docker_ps_command() -> str:
+    """Build the Bash command used to list Docker containers."""
+    return "docker ps"
+
+
+def build_docker_images_command() -> str:
+    """Build the Bash command used to list Docker images."""
+    return "docker images"
+
+
 def build_hhs_hspm_command(operation: str, tool_name: str) -> str:
     """Build the Bash command used to run an hspm tool operation."""
     safe_operation = (
@@ -4569,6 +4651,26 @@ def run_hhs_shopt_action(
         "Updating shell option...",
         ttl_seconds=0,
         use_cache=False,
+    )
+
+
+def run_docker_ps() -> subprocess.CompletedProcess[str]:
+    """Run docker ps and return the completed process."""
+    return run_bash_command(
+        build_docker_ps_command(),
+        "Loading Docker containers...",
+        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        timeout_seconds=10,
+    )
+
+
+def run_docker_images() -> subprocess.CompletedProcess[str]:
+    """Run docker images and return the completed process."""
+    return run_bash_command(
+        build_docker_images_command(),
+        "Loading Docker images...",
+        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        timeout_seconds=10,
     )
 
 

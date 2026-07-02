@@ -253,6 +253,18 @@ function clearVisibleTerminal() {
 }
 
 /**
+ * Clear the visible terminal and ask Streamlit to clear the persisted transcript.
+ */
+function clearPersistedTerminal() {
+  terminal.clear();
+  commandBuffer = "";
+  commandCursor = 0;
+  terminal.write(promptText);
+  scrollTerminalToContent();
+  submitCommand("clear");
+}
+
+/**
  * Cancel the current editable line without sending it to Streamlit.
  */
 function cancelCommandLine() {
@@ -314,10 +326,10 @@ function handleTerminalShortcut(data) {
     "\x04": () => deleteCommandRange(commandCursor, commandCursor + 1),
     "\u007f": () => deleteCommandRange(commandCursor - 1, commandCursor),
     "\x08": () => deleteCommandRange(commandCursor - 1, commandCursor),
-    "\x0b": () => deleteCommandRange(commandCursor, commandBuffer.length),
+    "\x0b": clearPersistedTerminal,
     "\x15": () => deleteCommandRange(0, commandCursor),
     "\x17": () => deleteCommandRange(previousWordCursor(), commandCursor),
-    "\x0c": clearVisibleTerminal,
+    "\x0c": clearPersistedTerminal,
     "\x03": cancelCommandLine,
     "\x1b[5~": () => terminal.scrollPages(-1),
     "\x1b[6~": () => terminal.scrollPages(1),
@@ -329,6 +341,19 @@ function handleTerminalShortcut(data) {
   }
   shortcut();
   return true;
+}
+
+/**
+ * Handle browser-level terminal shortcuts that xterm.js does not emit as data.
+ * @param {KeyboardEvent} event Keyboard event emitted by the terminal host.
+ */
+function handleTerminalKeydown(event) {
+  if (event.key.toLowerCase() !== "k" || (!event.metaKey && !event.ctrlKey)) {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  clearPersistedTerminal();
 }
 
 /**
@@ -448,6 +473,7 @@ async function initializeTerminal() {
     terminal.loadAddon(fitAddon);
     terminal.open(terminalHost);
     terminal.onData(handleTerminalData);
+    terminalHost.addEventListener("keydown", handleTerminalKeydown, true);
     window.addEventListener("resize", () => {
       if (pendingRender) {
         renderTerminal(pendingRender.args || {});
