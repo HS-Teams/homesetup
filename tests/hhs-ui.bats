@@ -22,6 +22,8 @@ setup() {
   constants_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/constants.py"
   css_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.css"
   ask_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"
+  ask_prompt_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md"
+  hhsrc_file="${HHS_REPO_DIR}/dotfiles/bash/hhsrc.bash"
   hspm_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"
   ui_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/ui.bash"
 }
@@ -2690,6 +2692,9 @@ PY
   run grep -q 'APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"' "${constants_file}"
   assert_success
 
+  run test -s "${ask_prompt_file}"
+  assert_success
+
   run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/images/user.png"
   assert_success
 
@@ -2705,6 +2710,9 @@ PY
   run grep -q 'build_hhs_ask_execute_command(\["-c"\])' "${ui_file}"
   assert_success
 
+  run grep -q 'build_hhs_ask_execute_command(\["-p"\])' "${ui_file}"
+  assert_success
+
   run grep -q 'build_hhs_ask_execute_command(\["-r"\])' "${ui_file}"
   assert_success
 
@@ -2717,7 +2725,55 @@ PY
   run grep -q 'def render_ai_context_panel' "${ui_file}"
   assert_success
 
+  run grep -q 'def render_ai_prompt_file_panel' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_ai_context_output_panel' "${ui_file}"
+  assert_success
+
   run grep -q 'def refresh_ai_context' "${ui_file}"
+  assert_success
+
+  run grep -q 'def clear_ai_context_history' "${ui_file}"
+  assert_success
+
+  run grep -q 'def refresh_ai_prompt' "${ui_file}"
+  assert_success
+
+  run grep -q 'def refresh_ai_prompt_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'def save_ai_prompt_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'def revert_ai_prompt_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_ask_prompt_file_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_save_ask_prompt_file_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_revert_ask_prompt_file_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_ask_prompt_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_save_ask_prompt_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_hhs_revert_ask_prompt_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'cat "${HHS_OLLAMA_PROMPT_FILE}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'prompt_file="${HHS_OLLAMA_PROMPT_FILE}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'cp -f "${HHS_OLLAMA_PROMPT_SOURCE}" "${HHS_OLLAMA_PROMPT_FILE}"' "${ui_file}"
   assert_success
 
   run grep -q 'def ingest_ai_context_upload' "${ui_file}"
@@ -2762,21 +2818,62 @@ from pathlib import Path
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 refresh_body = ui_source.split("def refresh_ai_context", 1)[1].split("\ndef ", 1)[0]
 context_body = ui_source.split("def render_ai_context_panel", 1)[1].split("\ndef ", 1)[0]
+clear_context_body = ui_source.split("def clear_ai_context_history", 1)[1].split("\ndef ", 1)[0]
 assert "run_hhs_ask_context()" in refresh_body
 assert "run_hhs_ask_context()" not in context_body
+assert "run_hhs_ask_prompt()" not in context_body
+assert "render_ai_prompt_file_panel()" in context_body
+assert "render_ai_context_output_panel()" in context_body
+assert "run_hhs_ask_reset(close_dialogs=True)" in clear_context_body
+assert 'st.session_state["ai_context_output"] = ""' in clear_context_body
+assert 'st.session_state["ai_context_error"] = ""' in clear_context_body
+assert 'st.session_state["ai_chat_messages"] = []' not in clear_context_body
 PY
   assert_success
 
   run grep -q 'key="ai_refresh_context_button"' "${ui_file}"
   assert_success
 
+  run grep -q 'key="ai_clear_context_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click=clear_ai_context_history' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ai_prompt_context_button"' "${ui_file}"
+  assert_failure
+
   run grep -q '" Refresh"' "${ui_file}"
   assert_success
 
-  run grep -q 'upload_col, ingest_col, refresh_col = st.columns(' "${ui_file}"
+  run grep -q '" Prompt"' "${ui_file}"
+  assert_failure
+
+  run grep -q 'with st.expander("Prompt", expanded=False):' "${ui_file}"
   assert_success
 
-  run grep -q '\[1.4, 0.7, 0.8\], vertical_alignment="center"' "${ui_file}"
+  run grep -q 'with st.expander("History", expanded=True):' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ai_prompt_editor"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ai_prompt_save_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ai_prompt_revert_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click=save_ai_prompt_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click=revert_ai_prompt_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'upload_col, ingest_col, clear_col, refresh_col = st.columns(' "${ui_file}"
+  assert_success
+
+  run grep -q '\[1.35, 0.7, 0.7, 0.8\], vertical_alignment="center"' "${ui_file}"
   assert_success
 
   run grep -q 'st.session_state\["ai_context_output"\]' "${ui_file}"
@@ -2791,10 +2888,28 @@ PY
   run grep -q '"ai_context_error"' "${constants_file}"
   assert_success
 
+  run grep -q '"ai_prompt_editor"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ai_prompt_error"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ai_prompt_loaded"' "${constants_file}"
+  assert_success
+
   run grep -q 'st.session_state.setdefault("ai_context_output", "")' "${ui_file}"
   assert_success
 
   run grep -q 'st.session_state.setdefault("ai_context_error", "")' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state.setdefault("ai_prompt_editor", "")' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state.setdefault("ai_prompt_error", "")' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state.setdefault("ai_prompt_loaded", False)' "${ui_file}"
   assert_success
 
   run grep -q 'st.markdown("### AI context is clear")' "${ui_file}"
@@ -2829,6 +2944,88 @@ PY
 
   run grep -q -- '-i|--ingest' "${ask_file}"
   assert_success
+
+  run grep -q -- '-p | --prompt' "${ask_file}"
+  assert_success
+
+  run grep -q 'function show_prompt' "${ask_file}"
+  assert_success
+
+  run grep -q 'function seed_ollama_prompt_file' "${ask_file}"
+  assert_failure
+
+  run grep -q 'function load_ollama_prompt' "${ask_file}"
+  assert_success
+
+  run grep -q 'function render_ollama_prompt_template' "${ask_file}"
+  assert_success
+
+  run grep -q 'HHS_OLLAMA_PROMPT_SOURCE="${HHS_OLLAMA_PROMPT_SOURCE:-${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md}"' "${ask_file}"
+  assert_success
+
+  run grep -q 'HHS_OLLAMA_PROMPT_FILE="${HHS_OLLAMA_PROMPT_FILE:-${HHS_DIR}/hhs-ask-ollama.md}"' "${ask_file}"
+  assert_success
+
+  run grep -q 'HHS_OLLAMA_PROMPT="### INSTRUCTIONS ###' "${ask_file}"
+  assert_failure
+
+  run grep -q 'copy_file "${INSTALL_DIR}/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md" "${HHS_DIR}/hhs-ask-ollama.md"' "${HHS_REPO_DIR}/install.bash"
+  assert_success
+
+  run grep -q 'export HHS_OLLAMA_PROMPT_SOURCE="${HHS_HOME}"/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md' "${hhsrc_file}"
+  assert_success
+
+  run grep -q 'export HHS_OLLAMA_PROMPT_FILE="${HHS_DIR}"/hhs-ask-ollama.md' "${hhsrc_file}"
+  assert_success
+
+  run grep -q 'if ! \[\[ -s "${HHS_OLLAMA_PROMPT_FILE}" \]\]; then' "${hhsrc_file}"
+  assert_success
+
+  run grep -q '\\cp -f "${HHS_OLLAMA_PROMPT_SOURCE}" "${HHS_OLLAMA_PROMPT_FILE}"' "${hhsrc_file}"
+  assert_success
+
+  run bash --noprofile --norc -c '
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_OLLAMA_HISTORY_FILE="${2}/history.md"
+    export HHS_SETUP_FILE="${2}/setup.toml"
+    export HHS_MY_SHELL="bash"
+    export HHS_MY_OS="Darwin"
+    export HHS_MY_OS_RELEASE="test"
+    export HHS_GITHUB_URL="https://example.invalid/hhs"
+    export IS_PIPED=0
+    mkdir -p "${HHS_DIR}"
+    cp "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md" "${HHS_DIR}/hhs-ask-ollama.md"
+    function __hhs_toml_get() { printf "hhs_ollama_model=llama3.1:latest\n"; }
+    function quit() { return "${1:-0}"; }
+    source "${1}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"
+    [[ -s "${HHS_DIR}/hhs-ask-ollama.md" ]]
+    show_prompt
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}"
+  assert_success
+  assert_output --partial '### INSTRUCTIONS ###'
+  assert_output --partial 'You execute inside a bash shell on test'
+  refute_output --partial '${HHS_MY_SHELL}'
+  refute_output --partial '${HHS_HOME}'
+
+  run bash --noprofile --norc -c '
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/override-hhs"
+    export HHS_OLLAMA_HISTORY_FILE="${2}/history.md"
+    export HHS_SETUP_FILE="${2}/setup.toml"
+    export HHS_MY_SHELL="bash"
+    export HHS_MY_OS="Darwin"
+    export HHS_MY_OS_RELEASE="test"
+    export HHS_GITHUB_URL="https://example.invalid/hhs"
+    export HHS_OLLAMA_PROMPT="custom prompt"
+    export IS_PIPED=0
+    function __hhs_toml_get() { printf "hhs_ollama_model=llama3.1:latest\n"; }
+    function quit() { return "${1:-0}"; }
+    source "${1}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"
+    show_prompt
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}"
+  assert_success
+  assert_output 'custom prompt'
 
   run grep -q 'function ingest_context' "${ask_file}"
   assert_success
@@ -2867,6 +3064,48 @@ PY
   assert_success
 
   run grep -q 'timeout_seconds=hhs_ask_timeout_seconds()' "${ui_file}"
+  assert_success
+
+  run grep -q 'AI_PERFORMANCE_TIMING_LIMIT = 100' "${constants_file}"
+  assert_success
+
+  run grep -q 'AI_PERFORMANCE_MIN_SAMPLES' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q 'AI_PERFORMANCE_RECALC_INTERVAL' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q 'AI_PERFORMANCE_TIMING_LIMIT' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q '"ai_model_performance_timings"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ai_model_performance_averages"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ai_model_performance_sample_counts"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def record_ai_model_request_duration' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ai_model_performance_timings' "${ui_file}"
+  assert_success
+
+  run grep -q -- '-hhs_ui.AI_PERFORMANCE_TIMING_LIMIT' "${ui_file}"
+  assert_success
+
+  run grep -q 'use_cache=False' "${ui_file}"
+  assert_success
+
+  run grep -q 'ask_started_at = time.perf_counter()' "${ui_file}"
+  assert_success
+
+  run grep -q 'record_ai_model_request_duration(ollama_model, request_duration)' "${ui_file}"
+  assert_success
+
+  run grep -q 'Latency: ' "${ui_file}"
   assert_success
 
   run grep -q 'def parse_ollama_model_rows' "${ui_file}"

@@ -16,7 +16,7 @@
   APP_NAME="${0##*/}"
 
   # HomeSetup Installation version
-  VERSION="1.9.19"
+  VERSION="1.9.20"
 
   # Help message to be displayed by the script
   USAGE="
@@ -729,6 +729,7 @@ usage: $APP_NAME [OPTIONS] <args>
     copy_file "${INSTALL_DIR}/dotfiles/homesetup.toml" "${HHS_DIR}/.homesetup.toml"
     copy_file "${INSTALL_DIR}/dotfiles/glow.yml" "${HHS_DIR}/.glow.yml"
     copy_file "${INSTALL_DIR}/dotfiles/inputrc" "${HOME}/.inputrc"
+    copy_file "${INSTALL_DIR}/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md" "${HHS_DIR}/hhs-ask-ollama.md"
 
     # HomeSetup key bindings
     copy_file "${INSTALL_DIR}/dotfiles/hhs-bindings" "${HHS_DIR}/.hhs-bindings"

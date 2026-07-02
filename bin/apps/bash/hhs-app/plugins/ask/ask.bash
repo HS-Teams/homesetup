@@ -14,11 +14,11 @@
 PLUGIN_NAME="ask"
 
 # Current script version.
-VERSION="1.0.0"
+VERSION="1.2.0"
 
 # Namespace cleanup
 UNSETS=(
-  help version cleanup execute show_context clear_context is_text_context_file ingest_context show_models start_ollama select_ollama_model ensure_ollama
+  help version cleanup execute render_ollama_prompt_template load_ollama_prompt show_context show_prompt clear_context is_text_context_file ingest_context show_models start_ollama select_ollama_model ensure_ollama
 )
 
 # Usage message
@@ -37,6 +37,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <question> [options]
       -h | --help                      : Show this help message and exit.
       -v | --version                   : Show version and exit.
       -c | --context                   : Show current Ollama context (history) and exit.
+      -p | --prompt                    : Show the main Ollama system prompt and exit.
       -i | --ingest [file]             : Set Ollama context from a text-based file and exit.
       -r | --reset                     : Reset history before executing (fresh new session) and exit.
       -m | --models                    : List available Ollama models and exit.
@@ -74,35 +75,9 @@ EOF
 [[ "${IS_PIPED}" -eq 1 ]] &&
   read -t 0 < /dev/stdin && CONTEXT="$(cat -)"
 
-# Ollama prompt
-HHS_OLLAMA_PROMPT="### INSTRUCTIONS ###
-You are an advanced AI assistant integrated into HomeSetup (acronym: hhs)
-Your responsibilities include system setup, configuration, diagnostics, and management
-You execute inside a ${HHS_MY_SHELL} shell on ${HHS_MY_OS_RELEASE}
-Always prefer ${HHS_MY_OS}-specific commands, falling back to generic POSIX/Linux only when unavoidable
-
-### HomeSetup Information ###
-- Installation path: ${HHS_HOME}
-- Usage docs: ${HHS_HOME}/docs/USAGE.md
-- Handbook: ${HHS_HOME}/docs/handbook/handbook.md
-- Repository: ${HHS_GITHUB_URL}
-
-### SYSTEM RULES ###
-
-1. You MUST ALWAYS read and analyze the CONTEXT fully before answering, from the most recent to the oldest entries
-3. Only when the CONTEXT does not contain the required information, ignore it and rely on your internal knowledge
-4. When providing terminal commands:
-   - keep them minimal
-   - no unnecessary flags
-   - add at most a one-line explanation when possible
-5. Keep all answers short, direct, and technically accurate
-6. Avoid any unnecessary explanations, filler, or narrative text
-7. Do NOT guess. If uncertain, respond exactly: **\"Sorry, but I don't know.\"**
-8. When the user provides a personal or generic queries: answer politely, briefly, and without bias
-
-### TASK ###
-Answer the user’s question accurately and always be helpful. Provide continuation questions when applicable.
-"
+# Ollama prompt files.
+HHS_OLLAMA_PROMPT_SOURCE="${HHS_OLLAMA_PROMPT_SOURCE:-${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md}"
+HHS_OLLAMA_PROMPT_FILE="${HHS_OLLAMA_PROMPT_FILE:-${HHS_DIR}/hhs-ask-ollama.md}"
 
 # Keep response file after execution flag
 KEEP=
@@ -114,6 +89,25 @@ OLLAMA_MODEL="${OLLAMA_MODEL//\"/}"
 OLLAMA_MODEL="${OLLAMA_MODEL//\'/}"
 
 [[ -s "${HHS_DIR}/bin/app-commons.bash" ]] && source "${HHS_DIR}/bin/app-commons.bash"
+
+# @purpose: Render supported HomeSetup placeholders in an ollama prompt template.
+function render_ollama_prompt_template() {
+  local prompt="${1}"
+
+  prompt="${prompt//\$\{HHS_MY_SHELL\}/${HHS_MY_SHELL}}"
+  prompt="${prompt//\$\{HHS_MY_OS_RELEASE\}/${HHS_MY_OS_RELEASE}}"
+  prompt="${prompt//\$\{HHS_MY_OS\}/${HHS_MY_OS}}"
+  prompt="${prompt//\$\{HHS_HOME\}/${HHS_HOME}}"
+  prompt="${prompt//\$\{HHS_GITHUB_URL\}/${HHS_GITHUB_URL}}"
+  printf "%s" "${prompt}"
+}
+
+# @purpose: Load the ollama prompt from override variable or editable prompt file.
+function load_ollama_prompt() {
+  [[ -n "${HHS_OLLAMA_PROMPT:-}" ]] && return 0
+  [[ -r "${HHS_OLLAMA_PROMPT_FILE}" ]] || quit 2 "Unable to read ollama prompt file: ${HHS_OLLAMA_PROMPT_FILE}"
+  HHS_OLLAMA_PROMPT="$(render_ollama_prompt_template "$(< "${HHS_OLLAMA_PROMPT_FILE}")")"
+}
 
 # @purpose: HHS plugin required function
 function help() {
@@ -175,6 +169,13 @@ function show_context() {
   fi
 
   quit 1 "${RED}Ollama history file not found${NC}"
+}
+
+# @purpose: Show main ollama system prompt.
+function show_prompt() {
+  load_ollama_prompt
+  printf "%s\n" "${HHS_OLLAMA_PROMPT}"
+  quit 0
 }
 
 # @purpose: Clear ollama history file (context)
@@ -368,6 +369,7 @@ function execute() {
   kb_size=${ctx_window#*:}
 
   ensure_context_size "${kb_size}"
+  load_ollama_prompt
 
   [[ "$#" -eq 0 ]] && usage 1 "No question provided."
 
@@ -375,6 +377,7 @@ function execute() {
     -h|--help) usage 0 ;;
     -v|--version) version ;;
     -c|--context) show_context ;;
+    -p|--prompt) show_prompt ;;
     -i|--ingest) shift; ingest_context "$1" ;;
     -r|--reset) clear_context ;;
     -m|--models) show_models ;;

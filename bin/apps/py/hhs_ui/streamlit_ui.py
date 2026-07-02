@@ -520,6 +520,19 @@ def clear_ai_chat_history() -> None:
     save_ui_state()
 
 
+def clear_ai_context_history() -> None:
+    """Reset the backend ask history and clear the current context display."""
+    result = run_hhs_ask_reset(close_dialogs=True)
+    cache_delete_tag("ai")
+    st.session_state["ai_context_output"] = ""
+    st.session_state["ai_context_error"] = ""
+    if result.returncode == 0:
+        push_floating_status("AI context history cleared.", "info")
+    else:
+        push_floating_status("Unable to clear AI context history.", "error")
+    save_ui_state()
+
+
 def confirm_ai_chat_clear() -> None:
     """Schedule the AI chat history reset after closing dialogs."""
     st.session_state["ai_clear_chat_execute_pending"] = True
@@ -558,6 +571,72 @@ def refresh_ai_context() -> None:
         if result.returncode == 0
         else clean_output or "Unable to load Ollama context."
     )
+    save_ui_state()
+
+
+def refresh_ai_prompt() -> None:
+    """Fetch and store the backend ask prompt for the Context tab."""
+    result = run_hhs_ask_prompt()
+    output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
+    clean_output = strip_ansi(output or "").strip()
+    st.session_state["ai_context_output"] = (
+        clean_output or "No Ollama prompt available."
+    )
+    st.session_state["ai_context_error"] = (
+        ""
+        if result.returncode == 0
+        else clean_output or "Unable to load Ollama prompt."
+    )
+    save_ui_state()
+
+
+def refresh_ai_prompt_file() -> None:
+    """Fetch and store the editable backend ask prompt file for the Prompt panel."""
+    result = run_hhs_ask_prompt_file()
+    output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
+    clean_output = strip_ansi(output or "")
+    if result.returncode == 0:
+        st.session_state["ai_prompt_editor"] = clean_output
+        st.session_state["ai_prompt_error"] = ""
+        st.session_state["ai_prompt_loaded"] = True
+    else:
+        st.session_state["ai_prompt_error"] = (
+            clean_output.strip() or "Unable to load Ollama prompt file."
+        )
+    save_ui_state()
+
+
+def save_ai_prompt_file() -> None:
+    """Persist the editable backend ask prompt file from the Prompt panel."""
+    prompt_text = str(st.session_state.get("ai_prompt_editor", ""))
+    result = run_hhs_save_ask_prompt_file(prompt_text)
+    output = strip_ansi(result.stdout or result.stderr or "").strip()
+    if result.returncode == 0:
+        cache_delete_tag("ai")
+        st.session_state["ai_prompt_error"] = ""
+        st.session_state["ai_prompt_loaded"] = True
+        push_floating_status(output or "Ollama prompt saved.", "info")
+    else:
+        st.session_state["ai_prompt_error"] = output or "Unable to save Ollama prompt."
+        push_floating_status(st.session_state["ai_prompt_error"], "error")
+    save_ui_state()
+
+
+def revert_ai_prompt_file() -> None:
+    """Restore the editable backend ask prompt file from the bundled source file."""
+    result = run_hhs_revert_ask_prompt_file()
+    output = strip_ansi(result.stdout or result.stderr or "")
+    if result.returncode == 0:
+        cache_delete_tag("ai")
+        st.session_state["ai_prompt_editor"] = output
+        st.session_state["ai_prompt_error"] = ""
+        st.session_state["ai_prompt_loaded"] = True
+        push_floating_status("Ollama prompt reverted.", "info")
+    else:
+        st.session_state["ai_prompt_error"] = (
+            output.strip() or "Unable to revert Ollama prompt."
+        )
+        push_floating_status(st.session_state["ai_prompt_error"], "error")
     save_ui_state()
 
 
@@ -3288,6 +3367,116 @@ def ollama_model_context_size(ollama_model: str) -> str:
     return "?"
 
 
+def ai_model_performance_timings() -> list[dict[str, str | float]]:
+    """Return the persisted AI request timing circular buffer."""
+    timings = st.session_state.setdefault("ai_model_performance_timings", [])
+    if not isinstance(timings, list):
+        timings = []
+    normalized_timings = [
+        {"model": str(timing["model"]), "duration": float(timing["duration"])}
+        for timing in timings
+        if isinstance(timing, dict)
+        and isinstance(timing.get("model"), str)
+        and isinstance(timing.get("duration"), int | float)
+        and float(timing["duration"]) >= 0
+    ][-hhs_ui.AI_PERFORMANCE_TIMING_LIMIT :]
+    st.session_state["ai_model_performance_timings"] = normalized_timings
+    return normalized_timings
+
+
+def ai_model_performance_averages() -> dict[str, float]:
+    """Return cached average AI request durations by model."""
+    averages = st.session_state.setdefault("ai_model_performance_averages", {})
+    if not isinstance(averages, dict):
+        averages = {}
+    normalized_averages = {
+        str(model): float(duration)
+        for model, duration in averages.items()
+        if isinstance(model, str)
+        and isinstance(duration, int | float)
+        and float(duration) >= 0
+    }
+    st.session_state["ai_model_performance_averages"] = normalized_averages
+    return normalized_averages
+
+
+def ai_model_performance_sample_counts() -> dict[str, int]:
+    """Return total recorded AI request sample counts by model."""
+    sample_counts = st.session_state.setdefault("ai_model_performance_sample_counts", {})
+    if not isinstance(sample_counts, dict):
+        sample_counts = {}
+    normalized_counts = {
+        str(model): int(count)
+        for model, count in sample_counts.items()
+        if isinstance(model, str) and isinstance(count, int | float) and int(count) >= 0
+    }
+    st.session_state["ai_model_performance_sample_counts"] = normalized_counts
+    return normalized_counts
+
+
+def timing_durations_for_model(model_name: str) -> list[float]:
+    """Return timing durations from the circular buffer for a single model."""
+    clean_model = model_name.strip() or "unknown"
+    return [
+        float(timing["duration"])
+        for timing in ai_model_performance_timings()
+        if timing.get("model") == clean_model
+    ]
+
+
+def record_ai_model_request_duration(model_name: str, duration_seconds: float) -> None:
+    """Record one AI request duration and periodically recalculate its average."""
+    clean_model = model_name.strip() or "unknown"
+    timings = ai_model_performance_timings()
+    timings.append({"model": clean_model, "duration": max(duration_seconds, 0.0)})
+    st.session_state["ai_model_performance_timings"] = timings[
+        -hhs_ui.AI_PERFORMANCE_TIMING_LIMIT :
+    ]
+    sample_counts = ai_model_performance_sample_counts()
+    sample_counts[clean_model] = sample_counts.get(clean_model, 0) + 1
+    model_sample_count = sample_counts[clean_model]
+    if (
+        model_sample_count >= hhs_ui.AI_PERFORMANCE_MIN_SAMPLES
+        and model_sample_count % hhs_ui.AI_PERFORMANCE_RECALC_INTERVAL == 0
+    ):
+        model_durations = timing_durations_for_model(clean_model)
+        if model_durations:
+            ai_model_performance_averages()[clean_model] = sum(model_durations) / len(
+                model_durations
+            )
+
+
+def ai_model_average_duration_seconds(model_name: str) -> float | None:
+    """Return the cached AI request average duration once enough samples exist."""
+    clean_model = model_name.strip() or "unknown"
+    sample_count = ai_model_performance_sample_counts().get(clean_model, 0)
+    if sample_count < hhs_ui.AI_PERFORMANCE_MIN_SAMPLES:
+        return None
+    return ai_model_performance_averages().get(clean_model)
+
+
+def format_ai_request_duration(duration_seconds: float) -> str:
+    """Return an AI request duration using millis, seconds, or minutes."""
+    if duration_seconds < 1:
+        return f"{max(round(duration_seconds * 1000), 1)} millis"
+    if duration_seconds < 60:
+        return f"{duration_seconds:.1f} sec"
+    return f"{duration_seconds / 60:.1f} minutes"
+
+
+def ai_model_performance_meta_html(model_name: str) -> str:
+    """Return the AI model performance meta row HTML, or an empty string."""
+    average_duration = ai_model_average_duration_seconds(model_name)
+    if average_duration is None:
+        formatted_duration = "-"
+    else:
+        formatted_duration = html.escape(format_ai_request_duration(average_duration))
+    return (
+        '<span>Latency: '
+        f'<strong class="hhs-ai-chat-duration">{formatted_duration}</strong></span>'
+    )
+
+
 def format_ai_chat_prefix(
     role: str, username: str, ollama_model: str, context_size: str
 ) -> str:
@@ -4724,6 +4913,14 @@ def build_hhs_logs_command(
 def build_hhs_ask_execute_command(arguments: list[str]) -> str:
     """Build the Bash command used to run the __hhs ask execute command."""
     safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
+    return build_hhs_ask_plugin_command(
+        'function __hhs() { if [[ "$1" == "ask" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
+        f"__hhs ask execute {safe_arguments}"
+    )
+
+
+def build_hhs_ask_plugin_command(command: str) -> str:
+    """Build a Bash command that loads the ask plugin support before running a command."""
     return (
         'export HHS_HOME="${HHS_HOME}"; '
         'export HHS_DIR="${HHS_DIR}"; '
@@ -4742,8 +4939,7 @@ def build_hhs_ask_execute_command(arguments: list[str]) -> str:
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-toml.bash"; '
         'source "${HHS_HOME}/bin/apps/bash/app-commons.bash"; '
         'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"; '
-        'function __hhs() { if [[ "$1" == "ask" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
-        f"__hhs ask execute {safe_arguments}"
+        f"{command}"
     )
 
 
@@ -4755,6 +4951,56 @@ def build_hhs_ask_command(message: str) -> str:
 def build_hhs_ask_context_command() -> str:
     """Build the Bash command used to show the current Ollama ask context."""
     return build_hhs_ask_execute_command(["-c"])
+
+
+def build_hhs_ask_prompt_command() -> str:
+    """Build the Bash command used to show the main Ollama ask prompt."""
+    return build_hhs_ask_execute_command(["-p"])
+
+
+def build_hhs_ask_prompt_file_command() -> str:
+    """Build the Bash command used to read the editable Ollama ask prompt file."""
+    return build_hhs_ask_plugin_command(
+        '[[ -r "${HHS_OLLAMA_PROMPT_FILE}" ]] || { '
+        'echo "Ollama prompt file not found: ${HHS_OLLAMA_PROMPT_FILE}" >&2; '
+        "exit 2; "
+        "}; "
+        'cat "${HHS_OLLAMA_PROMPT_FILE}"'
+    )
+
+
+def build_hhs_save_ask_prompt_file_command(prompt_text: str) -> str:
+    """Build the Bash command used to save the editable Ollama ask prompt file."""
+    encoded_prompt = b64encode(prompt_text.encode("utf-8")).decode("ascii")
+    return build_hhs_ask_plugin_command(
+        f"encoded_prompt={shlex.quote(encoded_prompt)}; "
+        'prompt_file="${HHS_OLLAMA_PROMPT_FILE}"; '
+        'mkdir -p "$(dirname "${prompt_file}")" || exit 2; '
+        'tmp_prompt="$(mktemp "${TMPDIR:-/tmp}/hhs-ask-prompt.XXXXXX")" || exit 2; '
+        'if printf "%s" "${encoded_prompt}" | base64 --decode >"${tmp_prompt}" 2>/dev/null '
+        '|| printf "%s" "${encoded_prompt}" | base64 -d >"${tmp_prompt}" 2>/dev/null '
+        '|| printf "%s" "${encoded_prompt}" | base64 -D >"${tmp_prompt}" 2>/dev/null; then '
+        'mv "${tmp_prompt}" "${prompt_file}" || exit 2; '
+        'printf "Saved prompt: %s\\n" "${prompt_file}"; '
+        "else "
+        'rm -f "${tmp_prompt}"; '
+        'echo "Unable to decode prompt content." >&2; '
+        "exit 2; "
+        "fi"
+    )
+
+
+def build_hhs_revert_ask_prompt_file_command() -> str:
+    """Build the Bash command used to restore the editable Ollama ask prompt file."""
+    return build_hhs_ask_plugin_command(
+        '[[ -r "${HHS_OLLAMA_PROMPT_SOURCE}" ]] || { '
+        'echo "Ollama prompt source file not found: ${HHS_OLLAMA_PROMPT_SOURCE}" >&2; '
+        "exit 2; "
+        "}; "
+        'mkdir -p "$(dirname "${HHS_OLLAMA_PROMPT_FILE}")" || exit 2; '
+        'cp -f "${HHS_OLLAMA_PROMPT_SOURCE}" "${HHS_OLLAMA_PROMPT_FILE}" || exit 2; '
+        'cat "${HHS_OLLAMA_PROMPT_FILE}"'
+    )
 
 
 def build_hhs_ask_reset_command() -> str:
@@ -5113,6 +5359,7 @@ def run_hhs_ask(message: str) -> subprocess.CompletedProcess[str]:
         build_hhs_ask_command(message),
         "Asking Ollama...",
         timeout_seconds=hhs_ask_timeout_seconds(),
+        use_cache=False,
         cache_tag="ai",
     )
 
@@ -5122,6 +5369,45 @@ def run_hhs_ask_context() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_ask_context_command(),
         "Loading Ollama context...",
+        cache_tag="ai",
+    )
+
+
+def run_hhs_ask_prompt() -> subprocess.CompletedProcess[str]:
+    """Run the __hhs ask prompt command and return the completed process."""
+    return run_bash_command(
+        build_hhs_ask_prompt_command(),
+        "Loading Ollama prompt...",
+        cache_tag="ai",
+    )
+
+
+def run_hhs_ask_prompt_file() -> subprocess.CompletedProcess[str]:
+    """Read the editable Ollama prompt file and return the completed process."""
+    return run_bash_command(
+        build_hhs_ask_prompt_file_command(),
+        "Loading Ollama prompt file...",
+        use_cache=False,
+        cache_tag="ai",
+    )
+
+
+def run_hhs_save_ask_prompt_file(prompt_text: str) -> subprocess.CompletedProcess[str]:
+    """Save the editable Ollama prompt file and return the completed process."""
+    return run_bash_command(
+        build_hhs_save_ask_prompt_file_command(prompt_text),
+        "Saving Ollama prompt file...",
+        use_cache=False,
+        cache_tag="ai",
+    )
+
+
+def run_hhs_revert_ask_prompt_file() -> subprocess.CompletedProcess[str]:
+    """Revert the editable Ollama prompt file and return the completed process."""
+    return run_bash_command(
+        build_hhs_revert_ask_prompt_file_command(),
+        "Reverting Ollama prompt file...",
+        use_cache=False,
         cache_tag="ai",
     )
 
@@ -7969,6 +8255,7 @@ def render_ai_chat_panel() -> None:
         else "unknown"
     )
     context_size = ollama_model_context_size(ollama_model)
+    performance_html = ai_model_performance_meta_html(ollama_model)
     meta_col, clear_col = st.columns([3.6, 0.4], vertical_alignment="center")
     with meta_col:
         st.markdown(
@@ -7976,6 +8263,7 @@ def render_ai_chat_panel() -> None:
             <div class="hhs-ai-chat-meta">
               <span>User: <strong class="hhs-ai-chat-user">{html.escape(username)}</strong></span>
               <span>Model: <strong class="hhs-ai-chat-model">{html.escape(ollama_model)}[{html.escape(context_size)}]</strong></span>
+              {performance_html}
             </div>
             """,
             unsafe_allow_html=True,
@@ -8029,7 +8317,10 @@ def render_ai_chat_panel() -> None:
                 else None
             ),
         ):
+            ask_started_at = time.perf_counter()
             result = run_hhs_ask(prompt)
+            request_duration = time.perf_counter() - ask_started_at
+            record_ai_model_request_duration(ollama_model, request_duration)
             if result.returncode != 0:
                 answer = strip_ansi(
                     result.stderr or result.stdout or "Unable to ask Ollama."
@@ -8065,10 +8356,57 @@ def style_ai_model_row(row: pd.Series) -> list[str]:
     return [""] * len(row)
 
 
-def render_ai_context_panel() -> None:
-    """Render the current HomeSetup Ollama context output."""
-    upload_col, ingest_col, refresh_col = st.columns(
-        [1.4, 0.7, 0.8], vertical_alignment="center"
+def render_ai_prompt_file_panel() -> None:
+    """Render the editable runtime Ollama prompt file panel."""
+    if not st.session_state.get("ai_prompt_loaded"):
+        refresh_ai_prompt_file()
+
+    load_col, save_col, revert_col = st.columns(
+        [0.8, 0.75, 0.8], vertical_alignment="center"
+    )
+    with load_col:
+        st.button(
+            " Load",
+            key="ai_prompt_load_button",
+            help="Reload the runtime Ollama prompt file",
+            on_click=refresh_ai_prompt_file,
+            width="stretch",
+        )
+    with save_col:
+        st.button(
+            " Save",
+            key="ai_prompt_save_button",
+            help="Save changes to the runtime Ollama prompt file",
+            on_click=save_ai_prompt_file,
+            width="stretch",
+        )
+    with revert_col:
+        st.button(
+            " Revert",
+            key="ai_prompt_revert_button",
+            help="Restore the runtime Ollama prompt file from the bundled template",
+            on_click=revert_ai_prompt_file,
+            width="stretch",
+        )
+
+    prompt_error = str(st.session_state.get("ai_prompt_error", "")).strip()
+    if prompt_error:
+        st.error(prompt_error)
+
+    prompt_text = str(st.session_state.get("ai_prompt_editor", ""))
+    prompt_line_count = max(prompt_text.count("\n") + 1, 10)
+    st.text_area(
+        "Prompt",
+        key="ai_prompt_editor",
+        height=max(280, min(620, prompt_line_count * 22)),
+        label_visibility="collapsed",
+    )
+
+
+def render_ai_context_output_panel() -> None:
+    """Render the current HomeSetup Ollama context output panel."""
+    upload_col, ingest_col, clear_col, refresh_col = st.columns(
+        [1.35, 0.7, 0.7, 0.8], vertical_alignment="center"
     )
     with upload_col:
         uploaded_context = st.file_uploader(
@@ -8085,6 +8423,14 @@ def render_ai_context_panel() -> None:
             width="stretch",
         ):
             ingest_ai_context_upload(uploaded_context)
+    with clear_col:
+        st.button(
+            " Clear",
+            key="ai_clear_context_button",
+            help="Clear current Ollama context history",
+            on_click=clear_ai_context_history,
+            width="stretch",
+        )
     with refresh_col:
         st.button(
             " Refresh",
@@ -8103,6 +8449,14 @@ def render_ai_context_panel() -> None:
         st.markdown("### AI context is clear")
         return
     render_terminal_output(context_output)
+
+
+def render_ai_context_panel() -> None:
+    """Render foldable AI prompt and context panels."""
+    with st.expander("Prompt", expanded=False):
+        render_ai_prompt_file_panel()
+    with st.expander("History", expanded=True):
+        render_ai_context_output_panel()
 
 
 def render_ai_model_select_dialog(old_model: str, new_model: str) -> None:
@@ -8363,8 +8717,26 @@ def main() -> None:
     st.session_state.setdefault("ai_model_delete_pending", None)
     st.session_state.setdefault("ai_model_delete_execute_pending", None)
     st.session_state.setdefault("ai_model_delete_error", "")
+    st.session_state.setdefault("ai_model_performance_timings", [])
+    if not isinstance(st.session_state["ai_model_performance_timings"], list):
+        st.session_state["ai_model_performance_timings"] = []
+    st.session_state.setdefault("ai_model_performance_averages", {})
+    if not isinstance(st.session_state["ai_model_performance_averages"], dict):
+        st.session_state["ai_model_performance_averages"] = {}
+    st.session_state.setdefault("ai_model_performance_sample_counts", {})
+    if not isinstance(st.session_state["ai_model_performance_sample_counts"], dict):
+        st.session_state["ai_model_performance_sample_counts"] = {}
     st.session_state.setdefault("ai_context_output", "")
     st.session_state.setdefault("ai_context_error", "")
+    st.session_state.setdefault("ai_prompt_editor", "")
+    if not isinstance(st.session_state["ai_prompt_editor"], str):
+        st.session_state["ai_prompt_editor"] = ""
+    st.session_state.setdefault("ai_prompt_error", "")
+    if not isinstance(st.session_state["ai_prompt_error"], str):
+        st.session_state["ai_prompt_error"] = ""
+    st.session_state.setdefault("ai_prompt_loaded", False)
+    if not isinstance(st.session_state["ai_prompt_loaded"], bool):
+        st.session_state["ai_prompt_loaded"] = False
     st.session_state.setdefault("ai_view", "CHAT")
     if st.session_state["ai_view"] not in hhs_ui.AI_VIEWS:
         st.session_state["ai_view"] = "CHAT"

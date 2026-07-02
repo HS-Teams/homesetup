@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.152"
+VERSION = "0.0.157"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -105,6 +105,9 @@ LOG_LEVELS = (
 TABLE_CONTROLS_PANEL_TITLE = "Filters & Controls"
 THEME_SELECTED_KEY = "theme_selected"
 AI_CODE_BLOCK_WRAP_COLUMNS = 96
+AI_PERFORMANCE_MIN_SAMPLES = 5
+AI_PERFORMANCE_RECALC_INTERVAL = 5
+AI_PERFORMANCE_TIMING_LIMIT = 100
 PROCESS_TABLE_KEY = "monitor_process_table"
 PERSISTED_UI_KEYS = (
     "active_view",
@@ -112,8 +115,14 @@ PERSISTED_UI_KEYS = (
     "ai_clear_chat_execute_pending",
     "ai_context_error",
     "ai_context_output",
+    "ai_model_performance_averages",
+    "ai_model_performance_sample_counts",
+    "ai_model_performance_timings",
     "ai_model_delete_execute_pending",
     "ai_model_select_execute_pending",
+    "ai_prompt_editor",
+    "ai_prompt_error",
+    "ai_prompt_loaded",
     "ai_view",
     "alias_filter",
     "alias_other_filter",
