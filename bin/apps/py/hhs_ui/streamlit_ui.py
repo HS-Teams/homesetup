@@ -35,6 +35,7 @@ import time
 from base64 import b64encode
 from collections.abc import Callable
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import TypeVar
 
@@ -191,11 +192,52 @@ SHOPT_DESCRIPTIONS = {
     "xpg_echo": "Makes echo expand backslash escape sequences by default.",
 }
 TableControlsResult = TypeVar("TableControlsResult")
+UI_CACHE_MEMORY: dict[str, dict[str, object]] = {}
+UI_CACHE_MEMORY_MTIME: float | None = None
+
+
+def file_mtime_token(file_path: Path) -> float:
+    """Return a cache token that changes when a filesystem asset changes."""
+    try:
+        return file_path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+@lru_cache(maxsize=128)
+def cached_text_file(file_path: str, mtime_token: float) -> str:
+    """Return a UTF-8 text file body cached by path and modification time."""
+    del mtime_token
+    try:
+        return Path(file_path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def load_text_file(file_path: Path) -> str:
+    """Load a UTF-8 text file through the static asset cache."""
+    return cached_text_file(str(file_path), file_mtime_token(file_path))
+
+
+@lru_cache(maxsize=64)
+def cached_data_uri(file_path: str, mime_type: str, mtime_token: float) -> str:
+    """Return a browser data URI cached by path, MIME type, and modification time."""
+    del mtime_token
+    try:
+        encoded_data = b64encode(Path(file_path).read_bytes()).decode("ascii")
+    except OSError:
+        encoded_data = ""
+    return f"data:{mime_type};base64,{encoded_data}"
+
+
+def load_data_uri(file_path: Path, mime_type: str) -> str:
+    """Load a binary file as a browser data URI through the static asset cache."""
+    return cached_data_uri(str(file_path), mime_type, file_mtime_token(file_path))
 
 
 def load_app_css() -> str:
     """Load the HomeSetup Streamlit UI stylesheet."""
-    return hhs_ui.APP_CSS_FILE.read_text(encoding="utf-8")
+    return load_text_file(hhs_ui.APP_CSS_FILE)
 
 
 def available_theme_options() -> tuple[str, ...]:
@@ -244,6 +286,17 @@ def css_custom_properties(css_source: str) -> dict[str, str]:
     return properties
 
 
+@lru_cache(maxsize=32)
+def cached_css_custom_properties(css_source: str) -> dict[str, str]:
+    """Return parsed CSS custom properties cached by stylesheet source."""
+    return css_custom_properties(css_source)
+
+
+def theme_custom_properties(theme_name: object) -> dict[str, str]:
+    """Return parsed CSS custom properties for a selectable UI theme."""
+    return cached_css_custom_properties(load_text_file(theme_css_file(theme_name)))
+
+
 def css_theme_bool(value: str) -> bool | str:
     """Return a boolean value for CSS boolean tokens or the original string."""
     normalized_value = value.strip().lower()
@@ -256,9 +309,7 @@ def css_theme_bool(value: str) -> bool | str:
 
 def theme_config_options(theme_name: object) -> dict[str, object]:
     """Return Streamlit native theme options parsed from a selectable CSS theme."""
-    theme_properties = css_custom_properties(
-        theme_css_file(theme_name).read_text(encoding="utf-8")
-    )
+    theme_properties = theme_custom_properties(theme_name)
     option_tokens = {
         "theme.base": "hhs-theme-base",
         "theme.primaryColor": "hhs-theme-primary-color",
@@ -287,15 +338,13 @@ def theme_config_options(theme_name: object) -> dict[str, object]:
 def load_app_theme_css() -> str:
     """Load the selected HomeSetup Streamlit UI theme stylesheet."""
     selected_theme = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
-    return theme_css_file(selected_theme).read_text(encoding="utf-8")
+    return load_text_file(theme_css_file(selected_theme))
 
 
 def selected_theme_custom_property(property_name: str, default: str = "") -> str:
     """Return a resolved custom property value from the selected HomeSetup UI theme."""
     selected_theme = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
-    theme_properties = css_custom_properties(
-        theme_css_file(selected_theme).read_text(encoding="utf-8")
-    )
+    theme_properties = theme_custom_properties(selected_theme)
     property_value = theme_properties.get(property_name, default)
     visited_properties: set[str] = set()
     while True:
@@ -338,14 +387,12 @@ def request_theme_reload() -> None:
 
 def load_app_font_data_uri() -> str:
     """Load the HomeSetup UI font as a browser-embeddable data URI."""
-    font_data = b64encode(hhs_ui.APP_FONT_FILE.read_bytes()).decode("ascii")
-    return f"data:font/woff2;base64,{font_data}"
+    return load_data_uri(hhs_ui.APP_FONT_FILE, "font/woff2")
 
 
 def load_app_image_data_uri(image_file: Path, mime_type: str) -> str:
     """Load a HomeSetup UI image as a browser-embeddable data URI."""
-    image_data = b64encode(image_file.read_bytes()).decode("ascii")
-    return f"data:{mime_type};base64,{image_data}"
+    return load_data_uri(image_file, mime_type)
 
 
 def load_app_font_face_css() -> str:
@@ -461,7 +508,7 @@ def close_document_view() -> None:
 def clear_ai_chat_history() -> None:
     """Reset the backend ask history and clear the current AI chat history."""
     result = run_hhs_ask_reset(close_dialogs=True)
-    cache_clear()
+    cache_delete_tag("ai")
     st.session_state["ai_chat_messages"] = []
     st.session_state["ai_context_output"] = ""
     st.session_state["ai_context_error"] = ""
@@ -606,7 +653,8 @@ def execute_pending_ai_model_selection() -> None:
             )
         else:
             st.session_state["ai_model_select_error"] = ""
-            cache_clear()
+            cache_delete_tag("ai_models")
+            cache_delete_tag("ai")
             refresh_ai_model_listing()
             reset_ai_model_table_selection()
             push_floating_status(
@@ -660,7 +708,8 @@ def execute_pending_ai_model_deletion() -> None:
             )
         else:
             st.session_state["ai_model_delete_error"] = ""
-            cache_clear()
+            cache_delete_tag("ai_models")
+            cache_delete_tag("ai")
             model_result = refresh_ai_model_listing()
             push_floating_status(
                 status_message or f"Deleted AI model: {model_name}", "info"
@@ -685,7 +734,8 @@ def execute_pending_ai_model_deletion() -> None:
                             "error",
                         )
                     else:
-                        cache_clear()
+                        cache_delete_tag("ai_models")
+                        cache_delete_tag("ai")
                         refresh_ai_model_listing()
                         push_floating_status(
                             fallback_status
@@ -1305,11 +1355,54 @@ def normalized_monitor_disk_top_n(value: object) -> int:
 
 
 def handle_monitor_disk_top_n_change() -> None:
-    """Persist the monitor disk Top N widget value."""
-    st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
+    """Persist the pending monitor disk Top N widget value."""
+    st.session_state["monitor_disk_top_n_input"] = normalized_monitor_disk_top_n(
         st.session_state.get("monitor_disk_top_n_input")
     )
     save_ui_state()
+
+
+def apply_monitor_disk_controls() -> None:
+    """Apply pending disk monitor controls before the next command refresh."""
+    directory = str(st.session_state.get("monitor_disk_directory", "")).strip()
+    st.session_state["monitor_disk_directory_applied"] = (
+        directory or monitor_default_disk_directory()
+    )
+    st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
+        st.session_state.get("monitor_disk_top_n_input")
+    )
+    cache_delete_tag("monitor_disk")
+    save_ui_state()
+
+
+def applied_monitor_disk_directory() -> str:
+    """Return the directory currently applied to the disk monitor command."""
+    directory = str(
+        st.session_state.get(
+            "monitor_disk_directory_applied",
+            st.session_state.get("monitor_disk_directory", ""),
+        )
+    ).strip()
+    return directory or monitor_default_disk_directory()
+
+
+def apply_monitor_process_filter() -> None:
+    """Apply the pending process monitor filter before the next command refresh."""
+    st.session_state["monitor_process_filter_applied"] = str(
+        st.session_state.get("monitor_process_filter", "")
+    ).strip()
+    cache_delete_tag("monitor_process")
+    save_ui_state()
+
+
+def applied_monitor_process_filter() -> str:
+    """Return the process filter currently applied to the monitor command."""
+    return str(
+        st.session_state.get(
+            "monitor_process_filter_applied",
+            st.session_state.get("monitor_process_filter", ""),
+        )
+    ).strip()
 
 
 def hhs_log_dir() -> Path:
@@ -1361,7 +1454,7 @@ def clear_monitor_log_file() -> None:
     except OSError as error:
         push_floating_status(f"Unable to clear log file: {error}", "error")
         return
-    cache_clear()
+    cache_delete_tag("monitor_logs")
     push_floating_status(f"Log file cleared: {log_path.name}", "info")
 
 
@@ -2381,7 +2474,7 @@ def render_table_filter_controls(
             horizontal=True,
             index=index,
             key=key,
-            on_change=save_ui_state,
+            on_change=handle_monitor_disk_top_n_change,
         )
 
     other_filter = ""
@@ -2915,6 +3008,7 @@ def run_terminal_command(
         ttl_seconds=0,
         use_cache=False,
         timeout_seconds=120,
+        cache_tag="terminal",
     )
 
 
@@ -3746,6 +3840,7 @@ def ssh_connection_is_alive(host: str) -> bool:
         use_cache=False,
         force_local=True,
         timeout_seconds=5,
+        cache_tag="ssh",
     )
     return result.returncode == 0
 
@@ -3923,6 +4018,7 @@ def execute_pending_ssh_connection() -> None:
         use_cache=False,
         force_local=True,
         timeout_seconds=15,
+        cache_tag="ssh",
     )
     if result.returncode == 0:
         st.session_state["ssh_connection_status"] = "connected"
@@ -3960,6 +4056,7 @@ def execute_pending_ssh_disconnection() -> None:
         use_cache=False,
         force_local=True,
         timeout_seconds=10,
+        cache_tag="ssh",
     )
     st.session_state["ssh_connection_status"] = ""
     st.session_state["ssh_connection_host"] = ""
@@ -4033,14 +4130,15 @@ def run_bash_command(
     use_cache: bool = True,
     force_local: bool = False,
     timeout_seconds: int | None = None,
+    cache_tag: str = "default",
 ) -> subprocess.CompletedProcess[str]:
-    """Run a Bash command with hash-keyed command-result caching and a preloader."""
+    """Run a Bash command with tagged command-result caching and a preloader."""
     remote_host = command_remote_host(force_local=force_local)
     command_to_run = effective_bash_command(command, force_local=force_local)
     effective_timeout = timeout_seconds
     if effective_timeout is None and command_to_run != command:
         effective_timeout = 60
-    cache_key = command_cache_key(command_to_run)
+    cache_key = command_cache_key(command_to_run, cache_tag)
     cached_value = cache_get(cache_key) if use_cache else None
     if use_cache and cached_value is not None:
         result = completed_process_from_cache(command_to_run, cached_value)
@@ -4088,33 +4186,61 @@ def run_bash_command(
 
 def load_ui_cache() -> dict[str, dict[str, object]]:
     """Load the UI cache file and lazily prune expired entries."""
+    global UI_CACHE_MEMORY, UI_CACHE_MEMORY_MTIME
+    cache_mtime = ui_cache_mtime()
+    if UI_CACHE_MEMORY_MTIME == cache_mtime:
+        pruned_cache = prune_ui_cache_entries(UI_CACHE_MEMORY)
+        if pruned_cache != UI_CACHE_MEMORY:
+            save_ui_cache(pruned_cache)
+        return pruned_cache
     if not hhs_ui.UI_CACHE_FILE.exists():
+        UI_CACHE_MEMORY = {}
+        UI_CACHE_MEMORY_MTIME = 0.0
         return {}
     try:
         data = json.loads(hhs_ui.UI_CACHE_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        UI_CACHE_MEMORY = {}
+        UI_CACHE_MEMORY_MTIME = cache_mtime
         return {}
     if not isinstance(data, dict):
+        UI_CACHE_MEMORY = {}
+        UI_CACHE_MEMORY_MTIME = cache_mtime
         return {}
     cache = {
         key: value
         for key, value in data.items()
         if isinstance(key, str)
-        and key.startswith("command_hash:")
+        and (key.startswith("command_hash:") or key.startswith("command_tag:"))
         and isinstance(value, dict)
     }
     pruned_cache = prune_ui_cache_entries(cache)
     if pruned_cache != cache or len(cache) != len(data):
         save_ui_cache(pruned_cache)
+    else:
+        UI_CACHE_MEMORY = dict(pruned_cache)
+        UI_CACHE_MEMORY_MTIME = cache_mtime
     return pruned_cache
+
+
+def ui_cache_mtime() -> float:
+    """Return the UI cache file modification time used for memory cache coherency."""
+    try:
+        return hhs_ui.UI_CACHE_FILE.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def save_ui_cache(cache: dict[str, dict[str, object]]) -> None:
     """Persist the UI cache file."""
+    global UI_CACHE_MEMORY, UI_CACHE_MEMORY_MTIME
     try:
+        hhs_ui.UI_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         hhs_ui.UI_CACHE_FILE.write_text(
             json.dumps(cache, indent=2) + "\n", encoding="utf-8"
         )
+        UI_CACHE_MEMORY = dict(cache)
+        UI_CACHE_MEMORY_MTIME = ui_cache_mtime()
     except OSError:
         return
 
@@ -4188,6 +4314,17 @@ def cache_delete(key_prefix: str) -> None:
         save_ui_cache(updated_cache)
 
 
+def cache_delete_tag(cache_tag: str) -> None:
+    """Delete all UI cache entries for a specific command-result tag."""
+    cache = load_ui_cache()
+    tag_prefix = f"command_tag:{safe_cache_tag(cache_tag)}:"
+    updated_cache = {
+        key: value for key, value in cache.items() if not key.startswith(tag_prefix)
+    }
+    if updated_cache != cache:
+        save_ui_cache(updated_cache)
+
+
 def cache_clear() -> None:
     """Delete all UI cache entries."""
     save_ui_cache({})
@@ -4216,9 +4353,16 @@ def cache_value_from_completed_process(
     }
 
 
-def command_cache_key(command: str) -> str:
-    """Return a stable cache key based on the full command string."""
-    return f"command_hash:{hashlib.sha256(command.encode('utf-8')).hexdigest()}"
+def safe_cache_tag(cache_tag: str) -> str:
+    """Return a filesystem-safe cache tag token for command-result cache keys."""
+    normalized_tag = re.sub(r"[^A-Za-z0-9_-]+", "_", cache_tag.strip())
+    return normalized_tag or "default"
+
+
+def command_cache_key(command: str, cache_tag: str = "default") -> str:
+    """Return a stable tagged cache key based on the full command string."""
+    command_hash = hashlib.sha256(command.encode("utf-8")).hexdigest()
+    return f"command_tag:{safe_cache_tag(cache_tag)}:{command_hash}"
 
 
 def build_hhs_envs_command(prefix_filter: str | None) -> str:
@@ -4313,6 +4457,7 @@ def run_open_working_directory() -> subprocess.CompletedProcess[str]:
         "Opening working directory...",
         ttl_seconds=0,
         use_cache=False,
+        cache_tag="system",
     )
 
 
@@ -4325,6 +4470,7 @@ def run_shell_version() -> subprocess.CompletedProcess[str]:
         use_cache=False,
         force_local=True,
         timeout_seconds=10,
+        cache_tag="system",
     )
 
 
@@ -4337,6 +4483,7 @@ def run_hhs_updater_check() -> subprocess.CompletedProcess[str]:
         use_cache=False,
         force_local=True,
         timeout_seconds=45,
+        cache_tag="updater",
     )
 
 
@@ -4349,6 +4496,7 @@ def run_hhs_updater_update() -> subprocess.CompletedProcess[str]:
         use_cache=False,
         force_local=True,
         timeout_seconds=600,
+        cache_tag="updater",
     )
 
 
@@ -4761,6 +4909,7 @@ def run_hhs_envs(prefix_filter: str | None) -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_envs_command(prefix_filter),
         "Loading environment variables...",
+        cache_tag="env",
     )
 
 
@@ -4773,6 +4922,7 @@ def run_hhs_env_action(
         "Updating environment variables...",
         ttl_seconds=0,
         use_cache=False,
+        cache_tag="env",
     )
 
 
@@ -4782,6 +4932,7 @@ def run_hhs_sysinfo() -> subprocess.CompletedProcess[str]:
         build_hhs_sysinfo_command(),
         "Loading system information...",
         ttl_seconds=hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        cache_tag="system",
     )
 
 
@@ -4791,6 +4942,7 @@ def run_hhs_tools() -> subprocess.CompletedProcess[str]:
         build_hhs_tools_command(),
         "Loading tool checks...",
         ttl_seconds=hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        cache_tag="tools",
     )
 
 
@@ -4800,6 +4952,7 @@ def run_hhs_shopt() -> subprocess.CompletedProcess[str]:
         build_hhs_shopt_command(),
         "Loading shell options...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        cache_tag="shopt",
     )
 
 
@@ -4812,6 +4965,7 @@ def run_hhs_shopt_action(
         "Updating shell option...",
         ttl_seconds=0,
         use_cache=False,
+        cache_tag="shopt",
     )
 
 
@@ -4822,6 +4976,7 @@ def run_docker_ps() -> subprocess.CompletedProcess[str]:
         "Loading Docker containers...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
         timeout_seconds=10,
+        cache_tag="docker",
     )
 
 
@@ -4832,6 +4987,7 @@ def run_docker_images() -> subprocess.CompletedProcess[str]:
         "Loading Docker images...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
         timeout_seconds=10,
+        cache_tag="docker",
     )
 
 
@@ -4843,6 +4999,7 @@ def run_hhs_tool_action(
         build_hhs_hspm_command(operation, tool_name),
         f"Running hspm {operation} for {tool_name}...",
         use_cache=False,
+        cache_tag="tools",
     )
 
 
@@ -4852,6 +5009,7 @@ def run_tool_tldr(tool_name: str) -> subprocess.CompletedProcess[str]:
         build_tool_tldr_command(tool_name),
         f"Loading TLDR for {tool_name}...",
         use_cache=False,
+        cache_tag="tools",
     )
 
 
@@ -4860,6 +5018,7 @@ def run_hhs_history() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_history_command(),
         "Loading command history...",
+        cache_tag="history",
     )
 
 
@@ -4868,6 +5027,7 @@ def run_hhs_history_dirs() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_history_dirs_command(),
         "Loading directory history...",
+        cache_tag="history",
     )
 
 
@@ -4876,6 +5036,7 @@ def run_hhs_history_stats(top_n: int = 10) -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_history_stats_command(top_n),
         "Loading history stats...",
+        cache_tag="history",
     )
 
 
@@ -4887,6 +5048,7 @@ def run_hhs_disk_usage(
         build_hhs_disk_usage_command(directory, top_n),
         "Loading disk usage...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        cache_tag="monitor_disk",
     )
 
 
@@ -4898,6 +5060,7 @@ def run_process_monitor(
         build_process_monitor_command(metric, top_n),
         f"Loading {metric.lower()} usage...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        cache_tag="monitor_process",
     )
 
 
@@ -4907,6 +5070,7 @@ def run_hhs_process_list(process_filter: str) -> subprocess.CompletedProcess[str
         build_hhs_process_list_command(process_filter),
         "Loading processes...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        cache_tag="monitor_process",
     )
 
 
@@ -4916,6 +5080,7 @@ def run_hhs_process_kill(process_name: str) -> subprocess.CompletedProcess[str]:
         build_hhs_process_kill_command(process_name),
         "Killing process...",
         use_cache=False,
+        cache_tag="monitor_process",
     )
 
 
@@ -4926,6 +5091,7 @@ def run_ssh_tunnels(host: str) -> subprocess.CompletedProcess[str]:
         "Loading SSH tunnels...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
         force_local=True,
+        cache_tag="ssh",
     )
 
 
@@ -4937,6 +5103,7 @@ def run_hhs_logs(
         build_hhs_logs_command(log_file, tail_lines, log_level),
         "Loading logs...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        cache_tag="monitor_logs",
     )
 
 
@@ -4946,6 +5113,7 @@ def run_hhs_ask(message: str) -> subprocess.CompletedProcess[str]:
         build_hhs_ask_command(message),
         "Asking Ollama...",
         timeout_seconds=hhs_ask_timeout_seconds(),
+        cache_tag="ai",
     )
 
 
@@ -4954,6 +5122,7 @@ def run_hhs_ask_context() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_ask_context_command(),
         "Loading Ollama context...",
+        cache_tag="ai",
     )
 
 
@@ -4964,6 +5133,7 @@ def run_hhs_ask_reset(close_dialogs: bool = False) -> subprocess.CompletedProces
         "Resetting Ollama context...",
         close_dialogs=close_dialogs,
         use_cache=False,
+        cache_tag="ai",
     )
 
 
@@ -4973,6 +5143,7 @@ def run_hhs_ask_ingest(file_path: str) -> subprocess.CompletedProcess[str]:
         build_hhs_ask_ingest_command(file_path),
         "Ingesting Ollama context...",
         use_cache=False,
+        cache_tag="ai",
     )
 
 
@@ -4982,6 +5153,7 @@ def run_hhs_ask_models() -> subprocess.CompletedProcess[str]:
         build_hhs_ask_models_command(),
         "Loading Ollama model...",
         ttl_seconds=hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        cache_tag="ai_models",
     )
 
 
@@ -4996,6 +5168,7 @@ def run_hhs_ask_select_model(
         loader_message,
         close_dialogs=close_dialogs,
         use_cache=False,
+        cache_tag="ai_models",
     )
 
 
@@ -5008,6 +5181,7 @@ def run_ollama_delete_model(
         "Deleting model...",
         close_dialogs=close_dialogs,
         use_cache=False,
+        cache_tag="ai_models",
     )
 
 
@@ -5016,6 +5190,7 @@ def run_hhs_paths() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_paths_command(),
         "Loading PATH entries...",
+        cache_tag="path",
     )
 
 
@@ -5028,6 +5203,7 @@ def run_hhs_path_action(
         "Updating PATH entries...",
         ttl_seconds=0,
         use_cache=False,
+        cache_tag="path",
     )
 
 
@@ -5036,6 +5212,7 @@ def run_hhs_dirs() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_dirs_command(),
         "Loading saved directories...",
+        cache_tag="dirs",
     )
 
 
@@ -5048,6 +5225,7 @@ def run_hhs_dir_action(
         "Updating saved directories...",
         ttl_seconds=0,
         use_cache=False,
+        cache_tag="dirs",
     )
 
 
@@ -5056,6 +5234,7 @@ def run_hhs_commands() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_commands_command(),
         "Loading saved commands...",
+        cache_tag="cmds",
     )
 
 
@@ -5068,6 +5247,7 @@ def run_hhs_command_action(
         "Updating saved commands...",
         ttl_seconds=0,
         use_cache=False,
+        cache_tag="cmds",
     )
 
 
@@ -5076,6 +5256,7 @@ def run_hhs_aliases() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_aliases_command(),
         "Loading custom aliases...",
+        cache_tag="aliases",
     )
 
 
@@ -5088,6 +5269,7 @@ def run_hhs_alias_action(
         "Updating custom aliases...",
         ttl_seconds=0,
         use_cache=False,
+        cache_tag="aliases",
     )
 
 
@@ -5097,6 +5279,7 @@ def run_hhs_services() -> subprocess.CompletedProcess[str]:
         build_hhs_services_command(),
         "Loading services...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        cache_tag="services",
     )
 
 
@@ -5106,6 +5289,7 @@ def run_hhs_services_quietly() -> subprocess.CompletedProcess[str]:
         build_hhs_services_command(),
         "Loading services...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        cache_tag="services",
     )
 
 
@@ -5117,6 +5301,7 @@ def run_hhs_service_action(
         build_hhs_services_command(operation, service_name),
         f"{operation.capitalize()}ing service...",
         use_cache=False,
+        cache_tag="services",
     )
 
 
@@ -5681,6 +5866,7 @@ def remote_port_is_reachable(host: str, port: int | None) -> bool:
         "Checking SSH tunnel status...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
         timeout_seconds=3,
+        cache_tag="ssh",
     )
     return result.returncode == 0
 
@@ -6202,7 +6388,7 @@ def apply_selected_env_value(name: str, value: str) -> bool:
     """Persist a selected environment value and store it for table rerenders."""
     result = run_hhs_env_action("add", name, value)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_clear()
+    cache_delete_tag("env")
     refresh_env_listing()
     if result.returncode == 0:
         os.environ[name] = value
@@ -6224,7 +6410,7 @@ def apply_env_delete(name: str) -> None:
     """Delete a custom environment value and reset the table selection."""
     result = run_hhs_env_action("del", name)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_clear()
+    cache_delete_tag("env")
     refresh_env_listing()
     if result.returncode == 0:
         os.environ.pop(name, None)
@@ -6268,7 +6454,7 @@ def push_config_action_status(
 def apply_selected_path_value(old_path: str, new_path: str) -> bool:
     """Persist an edited PATH entry and store it for table rerenders."""
     result = run_hhs_path_action("edit", new_path, old_path)
-    cache_clear()
+    cache_delete_tag("path")
     refresh_path_listing()
     if result.returncode == 0:
         path_values = [entry for entry in path_entries() if entry != old_path]
@@ -6288,7 +6474,7 @@ def apply_selected_path_value(old_path: str, new_path: str) -> bool:
 def apply_path_delete(path_value: str) -> None:
     """Delete a PATH entry and reset the table selection."""
     result = run_hhs_path_action("del", path_value)
-    cache_clear()
+    cache_delete_tag("path")
     refresh_path_listing()
     if result.returncode == 0:
         os.environ["PATH"] = ":".join(
@@ -6307,7 +6493,7 @@ def apply_path_delete(path_value: str) -> None:
 def apply_selected_dir_value(name: str, value: str) -> bool:
     """Persist a saved directory value."""
     result = run_hhs_dir_action("add", name, value)
-    cache_clear()
+    cache_delete_tag("dirs")
     refresh_dir_listing()
     push_config_action_status(
         result,
@@ -6321,7 +6507,7 @@ def apply_selected_dir_value(name: str, value: str) -> bool:
 def apply_dir_delete(name: str) -> None:
     """Delete a saved directory and reset the table selection."""
     result = run_hhs_dir_action("del", name)
-    cache_clear()
+    cache_delete_tag("dirs")
     refresh_dir_listing()
     push_config_action_status(
         result,
@@ -6335,7 +6521,7 @@ def apply_dir_delete(name: str) -> None:
 def apply_selected_cmd_value(name: str, value: str) -> bool:
     """Persist a saved command value."""
     result = run_hhs_command_action("add", name, value)
-    cache_clear()
+    cache_delete_tag("cmds")
     refresh_cmd_listing()
     push_config_action_status(
         result,
@@ -6349,7 +6535,7 @@ def apply_selected_cmd_value(name: str, value: str) -> bool:
 def apply_cmd_delete(name: str) -> None:
     """Delete a saved command and reset the table selection."""
     result = run_hhs_command_action("del", name)
-    cache_clear()
+    cache_delete_tag("cmds")
     refresh_cmd_listing()
     push_config_action_status(
         result,
@@ -6363,7 +6549,7 @@ def apply_cmd_delete(name: str) -> None:
 def apply_selected_alias_value(name: str, value: str) -> bool:
     """Persist a custom alias value."""
     result = run_hhs_alias_action("add", name, value)
-    cache_clear()
+    cache_delete_tag("aliases")
     refresh_alias_listing()
     push_config_action_status(
         result,
@@ -6377,7 +6563,7 @@ def apply_selected_alias_value(name: str, value: str) -> bool:
 def apply_alias_delete(name: str) -> None:
     """Delete a custom alias and reset the table selection."""
     result = run_hhs_alias_action("del", name)
-    cache_clear()
+    cache_delete_tag("aliases")
     refresh_alias_listing()
     push_config_action_status(
         result,
@@ -6391,7 +6577,7 @@ def apply_alias_delete(name: str) -> None:
 def apply_home_shopt_action(operation: str, option_name: str) -> None:
     """Set or unset a shell option from the Home SHOPTS table."""
     result = run_hhs_shopt_action(operation, option_name)
-    cache_clear()
+    cache_delete_tag("shopt")
     refresh_home_shopts_listing()
     action_label = "set" if operation == "set" else "unset"
     push_config_action_status(
@@ -6812,7 +6998,7 @@ def execute_pending_home_tool_action() -> None:
 
     result = run_hhs_tool_action(operation, tool_name)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_clear()
+    cache_delete_tag("tools")
     refresh_home_tools_listing()
     close_home_tool_tldr_dialog()
     st.session_state["home_tool_action_operation"] = operation
@@ -6942,7 +7128,7 @@ def apply_selected_service_action(operation: str, service_name: str) -> None:
     """Run a service action and reset the service selection."""
     result = run_hhs_service_action(operation, service_name)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_clear()
+    cache_delete_tag("services")
     refresh_service_listing()
     st.session_state["service_action_message"] = status_message
     st.session_state["service_action_succeeded"] = result.returncode == 0
@@ -6963,7 +7149,7 @@ def apply_selected_process_kill(process_name: str) -> None:
     """Kill the selected process name and store the action result."""
     result = run_hhs_process_kill(process_name)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_clear()
+    cache_delete_tag("monitor_process")
     refresh_process_listing()
     st.session_state["monitor_process_action_message"] = status_message
     st.session_state["monitor_process_action_succeeded"] = result.returncode == 0
@@ -7280,11 +7466,18 @@ def render_monitor_disk_chart() -> None:
     st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
         st.session_state.get("monitor_disk_top_n")
     )
-    st.session_state["monitor_disk_top_n_input"] = st.session_state[
-        "monitor_disk_top_n"
-    ]
-    dir_label_col, dir_input_col, top_label_col, top_input_col, spacer_col = st.columns(
-        [0.85, 3.25, 0.55, 0.95, 0.15],
+    st.session_state["monitor_disk_top_n_input"] = st.session_state.get(
+        "monitor_disk_top_n_input",
+        st.session_state["monitor_disk_top_n"],
+    )
+    (
+        dir_label_col,
+        dir_input_col,
+        top_label_col,
+        top_input_col,
+        action_col,
+    ) = st.columns(
+        [0.85, 3.0, 0.55, 0.75, 0.45],
         vertical_alignment="center",
     )
     with dir_label_col:
@@ -7293,7 +7486,7 @@ def render_monitor_disk_chart() -> None:
             unsafe_allow_html=True,
         )
     with dir_input_col:
-        directory = st.text_input(
+        st.text_input(
             "Directory",
             key="monitor_disk_directory",
             label_visibility="collapsed",
@@ -7304,17 +7497,28 @@ def render_monitor_disk_chart() -> None:
             '<span class="hhs-inline-form-label">Top N</span>', unsafe_allow_html=True
         )
     with top_input_col:
-        top_n = st.number_input(
+        st.number_input(
             "Top N",
             min_value=1,
             max_value=100,
             step=1,
             key="monitor_disk_top_n_input",
             label_visibility="collapsed",
-            on_change=handle_monitor_disk_top_n_change,
+            on_change=save_ui_state,
         )
-    selected_directory = directory.strip() or monitor_default_disk_directory()
-    result = run_hhs_disk_usage(selected_directory, int(top_n))
+    with action_col:
+        st.button(
+            "",
+            key="monitor_disk_apply_button",
+            help="Apply",
+            on_click=apply_monitor_disk_controls,
+            width="stretch",
+        )
+    selected_directory = applied_monitor_disk_directory()
+    applied_top_n = normalized_monitor_disk_top_n(
+        st.session_state.get("monitor_disk_top_n")
+    )
+    result = run_hhs_disk_usage(selected_directory, applied_top_n)
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
@@ -7332,7 +7536,7 @@ def render_monitor_disk_chart() -> None:
     if not rows:
         st.caption("No disk usage entries found.")
         return
-    st.markdown(f"##### Top {int(top_n)} disk usage at `{selected_directory}`")
+    st.markdown(f"##### Top {applied_top_n} disk usage at `{selected_directory}`")
     render_bar_chart(
         rows,
         x=alt.X(
@@ -7434,20 +7638,31 @@ def render_monitor_processes_panel() -> None:
 
     def render_process_controls() -> str:
         """Render process table controls and return the filter text."""
-        label_col, input_col = st.columns([0.55, 3.45], vertical_alignment="center")
+        label_col, input_col, action_col = st.columns(
+            [0.55, 3.0, 0.45], vertical_alignment="center"
+        )
         with label_col:
             st.markdown(
                 '<span class="hhs-inline-form-label">Filters</span>',
                 unsafe_allow_html=True,
             )
         with input_col:
-            return st.text_input(
+            st.text_input(
                 "Filters",
                 key="monitor_process_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
                 placeholder="Type process filter",
             )
+        with action_col:
+            st.button(
+                "",
+                key="monitor_process_filter_apply_button",
+                help="Apply",
+                on_click=apply_monitor_process_filter,
+                width="stretch",
+            )
+        return applied_monitor_process_filter()
 
     process_filter = render_table_controls_panel(render_process_controls)
     result = run_hhs_process_list(process_filter)
@@ -8200,10 +8415,18 @@ def main() -> None:
         st.session_state["monitor_view"] = "DISK"
     st.session_state.setdefault("monitor_process_filter", "")
     st.session_state.setdefault(
+        "monitor_process_filter_applied",
+        st.session_state["monitor_process_filter"],
+    )
+    st.session_state.setdefault(
         "monitor_disk_directory", monitor_default_disk_directory()
     )
     if not str(st.session_state["monitor_disk_directory"]).strip():
         st.session_state["monitor_disk_directory"] = monitor_default_disk_directory()
+    st.session_state.setdefault(
+        "monitor_disk_directory_applied",
+        st.session_state["monitor_disk_directory"],
+    )
     st.session_state.setdefault("monitor_disk_top_n", 10)
     st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
         st.session_state.get("monitor_disk_top_n")
