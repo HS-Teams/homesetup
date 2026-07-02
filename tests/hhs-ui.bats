@@ -858,6 +858,10 @@ assert "function nextWordCursor" in terminal_js
 assert "function clearVisibleTerminal" in terminal_js
 assert "function clearPersistedTerminal" in terminal_js
 assert "function handleTerminalKeydown" in terminal_js
+assert "let lastResetCounter = null" in terminal_js
+assert "const resetCounter = Number(args.resetCounter || 0)" in terminal_js
+assert "resetCounter !== lastResetCounter" in terminal_js
+assert "lastResetCounter = resetCounter" in terminal_js
 assert r'"\x1b[D": () => replaceCommandLine(commandBuffer, commandCursor - 1)' in terminal_js
 assert r'"\x1b[C": () => replaceCommandLine(commandBuffer, commandCursor + 1)' in terminal_js
 assert r'"\x01": () => replaceCommandLine(commandBuffer, 0)' in terminal_js
@@ -1096,7 +1100,7 @@ PY
   run grep -q '"System": " Summary"' "${constants_file}"
   assert_success
 
-  run grep -q '"Docker": " Docker"' "${constants_file}"
+  run grep -q '"Docker": " Docker"' "${constants_file}"
   assert_success
 
   run grep -q '"Tools": " Tools"' "${constants_file}"
@@ -1129,7 +1133,13 @@ PY
   run grep -q 'def run_docker_images' "${ui_file}"
   assert_success
 
-  run grep -q 'return "docker ps"' "${ui_file}"
+  run grep -q 'render_docker_markdown_table("All containers", run_docker_ps())' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_docker_markdown_table("Available Images", run_docker_images())' "${ui_file}"
+  assert_success
+
+  run grep -q 'return "docker ps -a"' "${ui_file}"
   assert_success
 
   run grep -q 'return "docker images"' "${ui_file}"
@@ -2383,10 +2393,16 @@ PY
   run grep -q 'TERMINAL_READY_STATUS_SHOWN_KEY = "terminal_ready_status_shown"' "${constants_file}"
   assert_success
 
+  run grep -q 'TERMINAL_RESET_COUNTER_KEY = "terminal_reset_counter"' "${constants_file}"
+  assert_success
+
   run grep -q 'push_floating_status(' "${ui_file}"
   assert_success
 
   run grep -q 'def terminal_ready_status_message' "${ui_file}"
+  assert_success
+
+  run grep -q 'def terminal_reset_counter' "${ui_file}"
   assert_success
 
   run grep -q '"HomeSetup terminal ready. Session restored."' "${ui_file}"
@@ -2402,6 +2418,12 @@ PY
   assert_success
 
   run grep -q 'hhs_ui.TERMINAL_TRANSCRIPT_KEY, restored_transcript' "${ui_file}"
+  assert_success
+
+  run grep -q 'reset_counter=terminal_reset_counter()' "${ui_file}"
+  assert_success
+
+  run grep -q 'resetCounter=reset_counter' "${ui_file}"
   assert_success
 
   run grep -q 'def execute_terminal_command' "${ui_file}"
@@ -2426,6 +2448,9 @@ PY
   assert_success
 
   run grep -q 'push_floating_status("Session was reset", "info")' "${ui_file}"
+  assert_success
+
+  run grep -q 'TERMINAL_RESET_COUNTER_KEY' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
   assert_success
 
   run grep -q 'hhs_ui.TERMINAL_TRANSCRIPT_MAX_CHARS' "${ui_file}"

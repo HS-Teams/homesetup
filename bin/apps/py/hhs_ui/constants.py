@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.145"
+VERSION = "0.0.146"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -56,7 +56,7 @@ AI_VIEW_LABELS = {
 HOME_VIEWS = ("System", "Docker", "Tools", "SHOPTS")
 HOME_VIEW_LABELS = {
     "System": " Summary",
-    "Docker": " Docker",
+    "Docker": " Docker",
     "Tools": " Tools",
     "SHOPTS": " Shell Options",
 }
@@ -277,6 +277,7 @@ TERMINAL_COMMAND_HISTORY_KEY = "terminal_command_history"
 TERMINAL_CWD_KEY = "terminal_cwd"
 TERMINAL_LAST_EVENT_ID_KEY = "terminal_last_event_id"
 TERMINAL_READY_STATUS_SHOWN_KEY = "terminal_ready_status_shown"
+TERMINAL_RESET_COUNTER_KEY = "terminal_reset_counter"
 TERMINAL_TRANSCRIPT_KEY = "terminal_transcript"
 DOCUMENTS = {
     "README": ("README", "README.md"),

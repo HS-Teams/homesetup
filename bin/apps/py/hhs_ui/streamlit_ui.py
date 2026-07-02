@@ -1662,9 +1662,9 @@ def render_home_docker_panel() -> None:
         """,
         unsafe_allow_html=True,
     )
-    render_docker_markdown_table("docker ps", run_docker_ps())
+    render_docker_markdown_table("All containers", run_docker_ps())
     st.write("")
-    render_docker_markdown_table("docker images", run_docker_images())
+    render_docker_markdown_table("Available Images", run_docker_images())
 
 
 def render_docker_markdown_table(
@@ -2598,6 +2598,7 @@ def render_terminal_document_view() -> None:
         transcript=str(st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY]),
         prompt=terminal_prompt(str(st.session_state[hhs_ui.TERMINAL_CWD_KEY])),
         history=list(st.session_state[hhs_ui.TERMINAL_COMMAND_HISTORY_KEY]),
+        reset_counter=terminal_reset_counter(),
         height=0,
     )
     handle_terminal_event(terminal_event)
@@ -2619,13 +2620,14 @@ def hhs_terminal_component(**kwargs: object) -> object:
 
 
 def render_terminal_component(
-    transcript: str, prompt: str, history: list[str], height: int
+    transcript: str, prompt: str, history: list[str], reset_counter: int, height: int
 ) -> dict[str, object] | None:
     """Render the xterm.js terminal component and return submitted command events."""
     value = hhs_terminal_component(
         transcript=transcript,
         prompt=prompt,
         history=history,
+        resetCounter=reset_counter,
         height=height,
         borderColor=selected_theme_custom_property("hhs-theme-heading-border-color"),
         key="hhs_terminal_component",
@@ -2641,9 +2643,19 @@ def initialize_terminal_session_state() -> None:
     st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, str(Path.home()))
     st.session_state.setdefault(hhs_ui.TERMINAL_COMMAND_HISTORY_KEY, [])
     st.session_state.setdefault(hhs_ui.TERMINAL_LAST_EVENT_ID_KEY, "")
+    st.session_state.setdefault(hhs_ui.TERMINAL_RESET_COUNTER_KEY, 0)
     if not bool(st.session_state.get(hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY, False)):
         push_floating_status(terminal_ready_status_message(restored_transcript), "info")
         st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = True
+
+
+def terminal_reset_counter() -> int:
+    """Return the terminal reset counter as a valid integer."""
+    reset_counter = st.session_state.setdefault(hhs_ui.TERMINAL_RESET_COUNTER_KEY, 0)
+    if isinstance(reset_counter, int):
+        return reset_counter
+    st.session_state[hhs_ui.TERMINAL_RESET_COUNTER_KEY] = 0
+    return 0
 
 
 def terminal_ready_status_message(restored_transcript: str) -> str:
@@ -2742,6 +2754,7 @@ def save_terminal_transcript(value: str) -> None:
 def clear_terminal_transcript() -> None:
     """Clear the terminal transcript session state and persisted buffer."""
     st.session_state[hhs_ui.TERMINAL_TRANSCRIPT_KEY] = ""
+    st.session_state[hhs_ui.TERMINAL_RESET_COUNTER_KEY] = terminal_reset_counter() + 1
     try:
         hhs_ui.TERMINAL_LOG_FILE.unlink(missing_ok=True)
     except OSError:
@@ -4263,7 +4276,7 @@ def build_hhs_shopt_action_command(operation: str, option_name: str) -> str:
 
 def build_docker_ps_command() -> str:
     """Build the Bash command used to list Docker containers."""
-    return "docker ps"
+    return "docker ps -a"
 
 
 def build_docker_images_command() -> str:

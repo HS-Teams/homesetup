@@ -13,6 +13,7 @@ let commandCursor = 0;
 let commandHistory = [];
 let historyIndex = 0;
 let lastTranscript = null;
+let lastResetCounter = null;
 let pendingRender = null;
 let terminalReady = false;
 
@@ -396,13 +397,14 @@ function handleTerminalData(data) {
 function renderTerminal(args) {
   const height = terminalHeight(Number(args.height || 0));
   const transcript = String(args.transcript || "");
+  const resetCounter = Number(args.resetCounter || 0);
   promptText = String(args.prompt || "$ ");
   commandHistory = Array.isArray(args.history) ? args.history : commandHistory;
   historyIndex = commandHistory.length;
   terminalShell.style.height = `${height}px`;
   terminalShell.style.minHeight = `${height}px`;
 
-  if (transcript !== lastTranscript) {
+  if (transcript !== lastTranscript || resetCounter !== lastResetCounter) {
     terminal.reset();
     const transcriptText = transcript
       ? `${normalizeTerminalText(transcript)}${transcript.endsWith("\n") ? "" : "\r\n"}`
@@ -415,6 +417,7 @@ function renderTerminal(args) {
     commandBuffer = "";
     commandCursor = 0;
     lastTranscript = transcript;
+    lastResetCounter = resetCounter;
   } else {
     scrollTerminalToContent();
   }
