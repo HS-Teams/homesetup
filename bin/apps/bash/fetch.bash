@@ -12,7 +12,7 @@
 # Copyright (c) 2025, HomeSetup team
 
 # https://semver.org/; major.minor.patch
-VERSION="1.1.0"
+VERSION="1.1.2"
 
 # Application name.
 APP_NAME="$(basename "$0")"
@@ -100,6 +100,12 @@ trim_whitespace() {
   printf '%s' "${trimmed}"
 }
 
+# @purpose: Convert text to uppercase using Bash 3-compatible syntax.
+# @param $1 [Req]: Text to convert
+uppercase_text() {
+  printf '%s' "${1}" | tr '[:lower:]' '[:upper:]'
+}
+
 # @purpose: Ensure that a required argument is provided
 # @param $1 [Req]: Argument value
 require_arg() {
@@ -113,7 +119,8 @@ require_arg() {
 # @purpose: Validate the HTTP method
 # @param $1 [Req]: The HTTP method
 validate_method() {
-  local method="${1^^}"  # uppercase
+  local method
+  method="$(uppercase_text "${1}")"
   [[ -z "${METHOD}" ]] && \
     __hhs_errcho "${APP_NAME}" "Missing required argument <method>" && quit 1
   case "${method}" in
@@ -194,7 +201,7 @@ parse_args() {
 # @purpose: Run curl request using constructed args
 # @purpose: Run curl request using constructed args, no tempfile
 fetch_with_curl() {
-  local status http_status curl_opts response ret_val=1
+  local status http_status curl_opts response response_len ret_val=1
 
   curl_opts=(
     '--silent' '--fail' '--location'
@@ -211,8 +218,14 @@ fetch_with_curl() {
   # Run curl and capture both response and status code in one go
   response="$("${curl_cmd[@]}" 2>/dev/null)"
   status=$?
-  http_status="${response: -3}"              # last 3 characters = HTTP status
-  RESPONSE="${response:: -3}"                # all but last 3 = body
+  response_len="${#response}"
+  if [[ ${response_len} -ge 3 ]]; then
+    http_status="${response:$((response_len - 3)):3}"
+    RESPONSE="${response:0:$((response_len - 3))}"
+  else
+    http_status=0
+    RESPONSE="${response}"
+  fi
   STATUS="${http_status}"
 
   case "${status}" in

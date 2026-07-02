@@ -33,23 +33,80 @@ STAR_ICN="*"
 POINTER_ICN="->"
 
 # Maintain stubbed metadata for command resolution.
-declare -Ag STUB_TOOL_STATES=()
-declare -Ag STUB_COMMAND_PATHS=()
-declare -Ag STUB_ALIAS_BODIES=()
+STUB_TOOL_NAMES=()
+STUB_TOOL_STATES=()
+STUB_COMMAND_PATHS=()
+STUB_ALIAS_BODIES=()
+STUB_TOOL_INDEX=-1
+
+# @purpose: Resolve a stubbed tool index by name.
+# @param $1 [Req]: Tool name
+stub_tool_index() {
+  local tool="$1" idx=0
+  STUB_TOOL_INDEX=-1
+  while [[ ${idx} -lt ${#STUB_TOOL_NAMES[@]} ]]; do
+    if [[ "${STUB_TOOL_NAMES[${idx}]}" == "${tool}" ]]; then
+      STUB_TOOL_INDEX="${idx}"
+      return 0
+    fi
+    idx=$((idx + 1))
+  done
+  return 1
+}
+
+# @purpose: Resolve or create a stubbed tool index by name.
+# @param $1 [Req]: Tool name
+stub_tool_slot() {
+  local tool="$1"
+  if stub_tool_index "${tool}"; then
+    return 0
+  fi
+  STUB_TOOL_INDEX="${#STUB_TOOL_NAMES[@]}"
+  STUB_TOOL_NAMES[${STUB_TOOL_INDEX}]="${tool}"
+}
+
+# @purpose: Return the stubbed state for a tool.
+# @param $1 [Req]: Tool name
+stub_tool_state() {
+  local tool="$1"
+  if stub_tool_index "${tool}"; then
+    printf '%s' "${STUB_TOOL_STATES[${STUB_TOOL_INDEX}]}"
+  fi
+}
+
+# @purpose: Return the stubbed command path for a tool.
+# @param $1 [Req]: Tool name
+stub_command_path() {
+  local tool="$1"
+  if stub_tool_index "${tool}"; then
+    printf '%s' "${STUB_COMMAND_PATHS[${STUB_TOOL_INDEX}]}"
+  fi
+}
+
+# @purpose: Return the stubbed alias body for a tool.
+# @param $1 [Req]: Tool name
+stub_alias_body() {
+  local tool="$1"
+  if stub_tool_index "${tool}"; then
+    printf '%s' "${STUB_ALIAS_BODIES[${STUB_TOOL_INDEX}]}"
+  fi
+}
 
 # Override command -v lookups to use stubbed metadata when available.
 command() {
   if [[ "$1" == "-v" ]]; then
     local tool="$2"
-    local kind="${STUB_TOOL_STATES[$tool]}"
+    local kind
+    kind="$(stub_tool_state "${tool}")"
     case "${kind}" in
     path)
-      local path_result="${STUB_COMMAND_PATHS[$tool]}"
+      local path_result
+      path_result="$(stub_command_path "${tool}")"
       printf '%s' "${path_result:-/usr/bin/${tool}}"
       return 0
       ;;
     alias)
-      printf "alias %s='%s'" "${tool}" "${STUB_ALIAS_BODIES[$tool]}"
+      printf "alias %s='%s'" "${tool}" "$(stub_alias_body "${tool}")"
       return 0
       ;;
     function)
@@ -69,8 +126,8 @@ command() {
 alias() {
   if [[ "$#" -eq 1 && "$1" != "-p" ]]; then
     local tool="$1"
-    if [[ "${STUB_TOOL_STATES[$tool]}" == "alias" ]]; then
-      printf "alias %s='%s'\n" "${tool}" "${STUB_ALIAS_BODIES[$tool]}"
+    if [[ "$(stub_tool_state "${tool}")" == "alias" ]]; then
+      printf "alias %s='%s'\n" "${tool}" "$(stub_alias_body "${tool}")"
       return 0
     fi
     return 1
@@ -87,7 +144,7 @@ __hhs_has() {
   fi
 
   local tool="$1"
-  case "${STUB_TOOL_STATES[$tool]}" in
+  case "$(stub_tool_state "${tool}")" in
   path | alias | function)
     return 0
     ;;
@@ -98,9 +155,11 @@ __hhs_has() {
 }
 
 setup() {
+  STUB_TOOL_NAMES=()
   STUB_TOOL_STATES=()
   STUB_COMMAND_PATHS=()
   STUB_ALIAS_BODIES=()
+  STUB_TOOL_INDEX=-1
   OLDIFS="${IFS}"
 }
 
@@ -112,25 +171,35 @@ teardown() {
 stub_path_tool() {
   local tool="$1"
   local path="$2"
-  STUB_TOOL_STATES["${tool}"]='path'
-  STUB_COMMAND_PATHS["${tool}"]="${path}"
+  stub_tool_slot "${tool}"
+  STUB_TOOL_STATES[${STUB_TOOL_INDEX}]='path'
+  STUB_COMMAND_PATHS[${STUB_TOOL_INDEX}]="${path}"
+  STUB_ALIAS_BODIES[${STUB_TOOL_INDEX}]=""
 }
 
 stub_alias_tool() {
   local tool="$1"
   local body="$2"
-  STUB_TOOL_STATES["${tool}"]='alias'
-  STUB_ALIAS_BODIES["${tool}"]="${body}"
+  stub_tool_slot "${tool}"
+  STUB_TOOL_STATES[${STUB_TOOL_INDEX}]='alias'
+  STUB_COMMAND_PATHS[${STUB_TOOL_INDEX}]=""
+  STUB_ALIAS_BODIES[${STUB_TOOL_INDEX}]="${body}"
 }
 
 stub_function_tool() {
   local tool="$1"
-  STUB_TOOL_STATES["${tool}"]='function'
+  stub_tool_slot "${tool}"
+  STUB_TOOL_STATES[${STUB_TOOL_INDEX}]='function'
+  STUB_COMMAND_PATHS[${STUB_TOOL_INDEX}]=""
+  STUB_ALIAS_BODIES[${STUB_TOOL_INDEX}]=""
 }
 
 stub_missing_tool() {
   local tool="$1"
-  STUB_TOOL_STATES["${tool}"]='missing'
+  stub_tool_slot "${tool}"
+  STUB_TOOL_STATES[${STUB_TOOL_INDEX}]='missing'
+  STUB_COMMAND_PATHS[${STUB_TOOL_INDEX}]=""
+  STUB_ALIAS_BODIES[${STUB_TOOL_INDEX}]=""
 }
 
 # TC - 1

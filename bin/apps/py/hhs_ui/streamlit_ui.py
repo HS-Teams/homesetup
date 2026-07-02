@@ -84,6 +84,55 @@ AI_CONTEXT_UPLOAD_TYPES = (
     "php",
     "sql",
 )
+RUN_SHELL_ENV_KEY = "RUN_SHELL"
+
+
+def resolve_run_shell() -> str:
+    """Return the Bash executable used for all HomeSetup UI commands."""
+    run_shell = ""
+    brew_commands = (
+        ["brew", "--prefix", "bash"],
+        ["/opt/homebrew/bin/brew", "--prefix", "bash"],
+        ["/usr/local/bin/brew", "--prefix", "bash"],
+    )
+    for brew_command in brew_commands:
+        try:
+            brew_result = subprocess.run(
+                brew_command,
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=5,
+            )
+            if brew_result.returncode == 0:
+                run_shell = brew_result.stdout.strip()
+                break
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            continue
+
+    candidates = []
+    if run_shell:
+        candidates.extend((Path(run_shell) / "bin" / "bash", Path(run_shell)))
+    candidates.extend(
+        (
+            Path("/opt/homebrew/opt/bash/bin/bash"),
+            Path("/usr/local/opt/bash/bin/bash"),
+            Path("/bin/bash"),
+        )
+    )
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return "/bin/bash"
+
+
+def shell_version_command() -> str:
+    """Return the command that prints the resolved command shell version."""
+    return f"{shlex.quote(RUN_SHELL)} --version"
+
+
+RUN_SHELL = resolve_run_shell()
+os.environ[RUN_SHELL_ENV_KEY] = RUN_SHELL
 SHOPT_DESCRIPTIONS = {
     "assoc_expand_once": "Suppresses repeated evaluation of associative array subscripts.",
     "autocd": "Runs a directory name as if it were the argument to cd.",
@@ -910,6 +959,7 @@ def close_all_dialogs() -> None:
     st.session_state["ai_model_delete_pending"] = None
     st.session_state["home_tool_action_execute_pending"] = None
     st.session_state["ssh_connection_dialog_title"] = ""
+    st.session_state["footer_shell_version_dialog_title"] = ""
     st.session_state.pop("home_tool_action_operation", None)
     st.session_state.pop("home_tool_action_name", None)
     st.session_state.pop("home_tool_action_message", None)
@@ -1514,6 +1564,7 @@ def render_footer() -> None:
     repository_url = html.escape(os.environ.get("HHS_GITHUB_URL", "#"), quote=True)
     working_dir_url = f"?{hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM}=1"
     update_url = f"?{hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM}=1"
+    shell_version_url = f"?{hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM}=1"
     updater_markup = ""
     if bool(st.session_state.get("updater_update_available", False)):
         updater_markup = (
@@ -1524,9 +1575,10 @@ def render_footer() -> None:
     shell_status_markup = ""
     if shell_name:
         shell_status_markup = (
-            f'<span class="hhs-footer-shell-status">'
+            f'<a class="hhs-footer-shell-status" href="{shell_version_url}" '
+            f'target="_self" title="Show bash version" aria-label="Show bash version">'
             f'<span class="hhs-footer-glyph"></span>'
-            f"<span>{shell_name}</span></span>"
+            f'<span class="hhs-footer-shell-name">{shell_name}</span></a>'
         )
     connected_host = str(st.session_state.get("ssh_connection_host", "")).strip()
     remote_status_markup = ""
@@ -1577,8 +1629,59 @@ def remove_query_param(name: str) -> None:
         del st.query_params[name]
 
 
+def clear_footer_shell_version_dialog() -> None:
+    """Clear the footer shell version dialog state."""
+    st.session_state["footer_shell_version_dialog_title"] = ""
+    st.session_state["footer_shell_version_output"] = ""
+
+
+def shell_version_output_html(output: str) -> str:
+    """Return shell version output escaped with visible HTML line breaks."""
+    escaped_output = html.escape(output)
+    return re.sub(r"\r\n|\n|\r", "<br>", escaped_output)
+
+
+def render_footer_shell_version_dialog() -> bool:
+    """Render the footer shell version dialog when requested."""
+    title = str(
+        st.session_state.get("footer_shell_version_dialog_title", "")
+    ).strip()
+    if not title:
+        return False
+
+    def render_body() -> None:
+        """Render the shell version command output inside the dialog."""
+        output = str(st.session_state.get("footer_shell_version_output", "")).strip()
+        render_terminal_output(
+            shell_version_output_html(output or "No output."),
+            css_classes="hhs-shell-version-output",
+            content_is_html=True,
+        )
+
+    return pop_dialog(
+        title=title,
+        buttons=(
+            {
+                "label": "Close",
+                "key": "footer_shell_version_dialog_close_button",
+            },
+        ),
+        body=render_body,
+        close_callback=clear_footer_shell_version_dialog,
+    )
+
+
 def handle_footer_actions() -> None:
     """Run footer actions requested through Streamlit query parameters."""
+    if query_param_requested(hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM):
+        remove_query_param(hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM)
+        result = run_shell_version()
+        output = strip_ansi(result.stdout or result.stderr or "").strip()
+        st.session_state["footer_shell_version_dialog_title"] = "Shell version"
+        st.session_state["footer_shell_version_output"] = (
+            output or "bash --version returned no output."
+        )
+
     if query_param_requested(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM)
         result = run_hhs_updater_update()
@@ -2252,6 +2355,12 @@ def render_table_controls_panel(
         return render_controls()
 
 
+def clear_table_other_filter(other_key: str) -> None:
+    """Clear a typed Other table filter and persist the updated UI state."""
+    st.session_state[other_key] = ""
+    save_ui_state()
+
+
 def render_table_filter_controls(
     options: tuple[str, ...],
     key: str,
@@ -2262,8 +2371,8 @@ def render_table_filter_controls(
     placeholder: str = "Type filter text",
 ) -> tuple[str, str]:
     """Render normalized table filter controls and return the selected filter text."""
-    filter_col, other_filter_col = st.columns(
-        columns, vertical_alignment="bottom", gap="small"
+    filter_col, other_filter_col, clear_filter_col = st.columns(
+        [*columns, 0.18], vertical_alignment="bottom", gap="small"
     )
     with filter_col:
         selected_filter = st.radio(
@@ -2284,6 +2393,16 @@ def render_table_filter_controls(
                 label_visibility="collapsed",
                 on_change=save_ui_state,
                 placeholder=placeholder,
+            )
+        with clear_filter_col:
+            st.button(
+                "",
+                key=f"{other_key}_clear",
+                help="Clear filter text",
+                on_click=clear_table_other_filter,
+                args=(other_key,),
+                disabled=not bool(str(other_filter)),
+                width="content",
             )
     return selected_filter, other_filter
 
@@ -3343,6 +3462,7 @@ def command_env() -> dict[str, str]:
     return {
         **os.environ,
         "COLUMNS": hhs_ui.COMMAND_COLUMNS,
+        RUN_SHELL_ENV_KEY: RUN_SHELL,
         "TERM": os.environ.get("TERM", "xterm-256color"),
     }
 
@@ -3748,7 +3868,7 @@ def completed_disconnected_ssh_process(
 ) -> subprocess.CompletedProcess[str]:
     """Build a failed command result for a detected stale SSH connection."""
     return subprocess.CompletedProcess(
-        ["bash", "-lc", command],
+        [RUN_SHELL, "-lc", command],
         255,
         "",
         f"Shared connection to {ssh_config_hostname(host)} closed.",
@@ -3937,7 +4057,7 @@ def run_bash_command(
     set_overlay(True, loader_message, close_dialogs=close_dialogs)
     try:
         result = subprocess.run(
-            ["bash", "-lc", command_to_run],
+            [RUN_SHELL, "-lc", command_to_run],
             capture_output=True,
             check=False,
             env=command_env(),
@@ -3954,7 +4074,7 @@ def run_bash_command(
         return result
     except subprocess.TimeoutExpired as error:
         result = subprocess.CompletedProcess(
-            ["bash", "-lc", command_to_run],
+            [RUN_SHELL, "-lc", command_to_run],
             124,
             error.stdout or "",
             error.stderr or f"Command timed out after {effective_timeout} seconds.",
@@ -4078,7 +4198,7 @@ def completed_process_from_cache(
 ) -> subprocess.CompletedProcess[str]:
     """Build a CompletedProcess from a cached command result."""
     return subprocess.CompletedProcess(
-        ["bash", "-lc", command],
+        [RUN_SHELL, "-lc", command],
         int(cached_value.get("returncode", 0)),
         str(cached_value.get("stdout", "")),
         str(cached_value.get("stderr", "")),
@@ -4193,6 +4313,18 @@ def run_open_working_directory() -> subprocess.CompletedProcess[str]:
         "Opening working directory...",
         ttl_seconds=0,
         use_cache=False,
+    )
+
+
+def run_shell_version() -> subprocess.CompletedProcess[str]:
+    """Run the local Bash version command used by the footer shell status."""
+    return run_bash_command(
+        shell_version_command(),
+        "Checking shell version...",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        timeout_seconds=10,
     )
 
 
@@ -7642,7 +7774,7 @@ def render_ai_chat_panel() -> None:
             width="stretch",
         )
     if not st.session_state["ai_chat_messages"]:
-        st.markdown("### There is. no chat yet to display")
+        st.markdown("### There is no chat history")
     for message in st.session_state["ai_chat_messages"]:
         if message["role"] == "assistant":
             avatar_file = hhs_ui.APP_AI_OLLAMA_AVATAR_FILE
@@ -7720,11 +7852,9 @@ def style_ai_model_row(row: pd.Series) -> list[str]:
 
 def render_ai_context_panel() -> None:
     """Render the current HomeSetup Ollama context output."""
-    label_col, upload_col, ingest_col, refresh_col = st.columns(
-        [2.2, 1.0, 0.4, 0.4], vertical_alignment="center"
+    upload_col, ingest_col, refresh_col = st.columns(
+        [1.4, 0.7, 0.8], vertical_alignment="center"
     )
-    with label_col:
-        st.markdown("### AI Context")
     with upload_col:
         uploaded_context = st.file_uploader(
             "Ingest context",
@@ -7755,7 +7885,7 @@ def render_ai_context_panel() -> None:
         st.error(context_error)
         return
     if not context_output:
-        st.markdown("### There is. no context yet to display")
+        st.markdown("### AI context is clear")
         return
     render_terminal_output(context_output)
 
@@ -7992,8 +8122,11 @@ def main() -> None:
     st.session_state.setdefault("updater_last_check_epoch", 0.0)
     st.session_state.setdefault("updater_last_check_output", "")
     st.session_state.setdefault("updater_update_available", False)
+    st.session_state.setdefault("footer_shell_version_dialog_title", "")
+    st.session_state.setdefault("footer_shell_version_output", "")
     render_styles()
     handle_footer_actions()
+    render_footer_shell_version_dialog()
     execute_due_updater_check()
     if st.session_state.get("theme_reload_pending"):
         render_theme_reload_overlay()

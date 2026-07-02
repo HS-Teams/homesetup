@@ -17,6 +17,7 @@ load test_helper
 load_bats_libs
 
 setup() {
+  cd "${HHS_REPO_DIR}"
   ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.py"
   constants_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/constants.py"
   css_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.css"
@@ -716,6 +717,9 @@ assert 'class="hhs-footer-logo"' in ui_source
 assert 'class="hhs-footer-logo-link"' in ui_source
 assert 'hhs-footer-link' in ui_source
 assert 'class="hhs-footer-shell-status"' in ui_source
+assert 'class="hhs-footer-shell-name">{shell_name}</span>' in ui_source
+assert 'href="{shell_version_url}"' in ui_source
+assert 'target="_self" title="Show bash version" aria-label="Show bash version"' in ui_source
 assert 'os.environ.get("HHS_MY_SHELL", "").strip().upper()' in ui_source
 assert 'class="hhs-footer-remote-status"' in ui_source
 footer_template = ui_source.split('<footer class="hhs-app-footer">', 1)[1].split('</footer>', 1)[0]
@@ -727,8 +731,11 @@ assert 'class="hhs-footer-glyph"></span>' in ui_source
 assert 'Connected to remote  {connected_host_display}' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
 constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
+init_source = Path("bin/apps/py/hhs_ui/__init__.py").read_text()
 assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in constants_source
 assert 'FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"' in constants_source
+assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM = "hhs_show_shell_version"' in constants_source
+assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in init_source
 assert '"updater_last_check_epoch"' in constants_source
 assert '"updater_last_check_output"' in constants_source
 assert '"updater_update_available"' in constants_source
@@ -743,6 +750,23 @@ assert 'href="{update_url}" target="_self"' in ui_source
 assert '' in ui_source
 assert 'def build_open_directory_command' in ui_source
 assert 'def run_open_working_directory' in ui_source
+assert 'def run_shell_version' in ui_source
+assert 'def shell_version_command' in ui_source
+assert 'shlex.quote(RUN_SHELL)' in ui_source
+assert 'shell_version_command()' in ui_source
+assert '"Checking shell version..."' in ui_source
+assert 'def shell_version_output_html' in ui_source
+assert 'html.escape(output)' in ui_source
+assert 're.sub(r"\\r\\n|\\n|\\r", "<br>", escaped_output)' in ui_source
+assert 'def render_footer_shell_version_dialog' in ui_source
+assert 'render_footer_shell_version_dialog()' in ui_source
+assert 'shell_version_output_html(output or "No output.")' in ui_source
+assert 'css_classes="hhs-shell-version-output"' in ui_source
+assert 'content_is_html=True' in ui_source
+assert 'footer_shell_version_dialog_title' in ui_source
+assert 'footer_shell_version_output' in ui_source
+assert 'hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in ui_source
+assert 'footer_shell_version_dialog_close_button' in ui_source
 assert 'def build_hhs_updater_command' in ui_source
 assert 'def run_hhs_updater_check' in ui_source
 assert 'def run_hhs_updater_update' in ui_source
@@ -770,7 +794,10 @@ base_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", base_css).group(1)
 link_block = re.search(r"\.hhs-footer-link,[^{]+\{([^}]*)\}", base_css).group(1)
 logo_link_block = re.search(r"\.hhs-footer-logo-link,[^{]+\{([^}]*)\}", base_css).group(1)
 logo_block = re.search(r"\.hhs-footer-logo\s*\{([^}]*)\}", base_css).group(1)
-shell_status_block = re.search(r"\.hhs-footer-shell-status\s*\{([^}]*)\}", base_css).group(1)
+shell_status_block = re.search(r"\.hhs-footer-shell-status,[^{]+\{([^}]*)\}", base_css).group(1)
+shell_status_hover_block = re.search(r"\.hhs-footer-shell-status:hover,[^{]+\{([^}]*)\}", base_css).group(1)
+shell_name_block = re.search(r"\.hhs-footer-shell-name\s*\{([^}]*)\}", base_css).group(1)
+shell_name_hover_block = re.search(r"\.hhs-footer-shell-status:hover \.hhs-footer-shell-name,[^{]+\{([^}]*)\}", base_css).group(1)
 remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", base_css).group(1)
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
 theme_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", dracula_css).group(1)
@@ -785,6 +812,24 @@ assert ".hhs-footer-remote-status" in base_css
 assert ".hhs-footer-status-group" in base_css
 assert ".hhs-footer-repository-link:hover" in base_css
 assert ".hhs-footer-working-dir-link:hover" in base_css
+assert ".hhs-footer-shell-status:hover" in base_css
+assert ".hhs-footer-shell-name" in base_css
+assert "text-decoration: none !important" in shell_name_block
+assert "text-decoration: underline !important" in shell_name_hover_block
+assert "text-decoration: underline" not in shell_status_hover_block
+assert 'div[role="dialog"]:has(.hhs-shell-version-output)' in base_css
+assert ".hhs-shell-version-output" in base_css
+assert "max-height: 88dvh" in base_css
+assert "max-width: 92vw" in base_css
+assert "width: max-content" in base_css
+assert '[data-testid="stHorizontalBlock"]:has(.st-key-footer_shell_version_dialog_close_button)' in base_css
+assert "justify-content: center" in base_css
+assert "margin-top: 1rem" in base_css
+assert '[data-testid="stColumn"]:has(.st-key-footer_shell_version_dialog_close_button)' in base_css
+assert "flex: 0 0 120px !important" in base_css
+assert "width: 120px !important" in base_css
+assert "max-height: calc(88dvh - 8rem)" in base_css
+assert "max-width: calc(92vw - 4rem)" in base_css
 assert ".hhs-footer-working-dir-value" in base_css
 assert "color: var(--hhs-secondary)" in base_css
 assert "text-decoration: underline !important" in base_css
@@ -1214,6 +1259,18 @@ PY
   run grep -q 'def render_table_filter_controls' "${ui_file}"
   assert_success
 
+  run grep -q 'def clear_table_other_filter' "${ui_file}"
+  assert_success
+
+  run grep -q 'key=f"{other_key}_clear"' "${ui_file}"
+  assert_success
+
+  run grep -q '""' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click=clear_table_other_filter' "${ui_file}"
+  assert_success
+
   run grep -q 'def render_env_add_controls' "${ui_file}"
   assert_success
 
@@ -1259,7 +1316,22 @@ PY
   run grep -q 'flex: 0 0 auto !important' "${css_file}"
   assert_success
 
+  run grep -q 'div\[data-testid="stColumn"\]:nth-child(2)' "${css_file}"
+  assert_success
+
   run grep -q 'flex: 1 1 auto !important' "${css_file}"
+  assert_success
+
+  run grep -q 'flex: 0 0 2.1rem !important' "${css_file}"
+  assert_success
+
+  run grep -q 'align-self: center !important' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="_other_filter_clear"\] button' "${css_file}"
+  assert_success
+
+  run grep -q 'height: 2rem' "${css_file}"
   assert_success
 
   run grep -q 'max-width: none' "${css_file}"
@@ -1757,11 +1829,12 @@ for node in ast.walk(tree):
         and isinstance(func.value, ast.Name)
         and func.value.id == "subprocess"
     )
-    if is_subprocess_run and enclosing_function(node) != "run_bash_command":
+    allowed_functions = {"resolve_run_shell", "run_bash_command"}
+    if is_subprocess_run and enclosing_function(node) not in allowed_functions:
         violations.append(f"line {node.lineno}")
 
 if violations:
-    raise SystemExit("subprocess.run outside run_bash_command: " + ", ".join(violations))
+    raise SystemExit("subprocess.run outside command runners: " + ", ".join(violations))
 PY
   assert_success
 
@@ -1902,6 +1975,45 @@ PY
 
   run grep -q 'def effective_bash_command' "${ui_file}"
   assert_success
+
+  run grep -q 'def resolve_run_shell' "${ui_file}"
+  assert_success
+
+  run grep -q '\["brew", "--prefix", "bash"\]' "${ui_file}"
+  assert_success
+
+  run grep -q '\["/opt/homebrew/bin/brew", "--prefix", "bash"\]' "${ui_file}"
+  assert_success
+
+  run grep -q '\["/usr/local/bin/brew", "--prefix", "bash"\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'Path(run_shell) / "bin" / "bash"' "${ui_file}"
+  assert_success
+
+  run grep -q 'Path("/opt/homebrew/opt/bash/bin/bash")' "${ui_file}"
+  assert_success
+
+  run grep -q 'Path("/usr/local/opt/bash/bin/bash")' "${ui_file}"
+  assert_success
+
+  run grep -q 'Path("/bin/bash")' "${ui_file}"
+  assert_success
+
+  run grep -q 'RUN_SHELL = resolve_run_shell()' "${ui_file}"
+  assert_success
+
+  run grep -q 'os.environ\[RUN_SHELL_ENV_KEY\] = RUN_SHELL' "${ui_file}"
+  assert_success
+
+  run grep -q 'RUN_SHELL_ENV_KEY: RUN_SHELL' "${ui_file}"
+  assert_success
+
+  run grep -q '\[RUN_SHELL, "-lc", command_to_run\]' "${ui_file}"
+  assert_success
+
+  run grep -q '\["bash", "-lc"' "${ui_file}"
+  assert_failure
 
   run grep -q 'source "{hhs_home}' "${ui_file}"
   assert_failure
@@ -2620,6 +2732,18 @@ PY
   run grep -q 'st.file_uploader(' "${ui_file}"
   assert_success
 
+  run grep -q '\[data-testid="stFileUploader"\] button' "${css_file}"
+  assert_success
+
+  run grep -q '\[data-testid="stFileUploader"\] button \*' "${css_file}"
+  assert_success
+
+  run grep -q '.stButton button' "${css_file}"
+  assert_success
+
+  run grep -q '.stButton button \*' "${css_file}"
+  assert_success
+
   run grep -q 'type=AI_CONTEXT_UPLOAD_TYPES' "${ui_file}"
   assert_success
 
@@ -2649,10 +2773,10 @@ PY
   run grep -q '" Refresh"' "${ui_file}"
   assert_success
 
-  run grep -q 'label_col, upload_col, ingest_col, refresh_col = st.columns(' "${ui_file}"
+  run grep -q 'upload_col, ingest_col, refresh_col = st.columns(' "${ui_file}"
   assert_success
 
-  run grep -q '\[2.2, 1.0, 0.4, 0.4\], vertical_alignment="center"' "${ui_file}"
+  run grep -q '\[1.4, 0.7, 0.8\], vertical_alignment="center"' "${ui_file}"
   assert_success
 
   run grep -q 'st.session_state\["ai_context_output"\]' "${ui_file}"
@@ -2673,7 +2797,7 @@ PY
   run grep -q 'st.session_state.setdefault("ai_context_error", "")' "${ui_file}"
   assert_success
 
-  run grep -q 'st.markdown("### There is. no context yet to display")' "${ui_file}"
+  run grep -q 'st.markdown("### AI context is clear")' "${ui_file}"
   assert_success
 
   run grep -q 'elif ai_view == "CONTEXT"' "${ui_file}"
@@ -2721,7 +2845,7 @@ PY
   run grep -q 'disabled=not st.session_state\["ai_chat_messages"\]' "${ui_file}"
   assert_failure
 
-  run grep -q 'st.markdown("### There is. no chat yet to display")' "${ui_file}"
+  run grep -q 'st.markdown("### There is no chat history")' "${ui_file}"
   assert_success
 
   run grep -q 'meta_col, clear_col = st.columns(\[3.6, 0.4\], vertical_alignment="center")' "${ui_file}"

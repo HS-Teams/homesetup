@@ -19,7 +19,7 @@ function __hhs_history() {
 
   if [[ $- != *i* && -f "${HISTFILE:-${HOME}/.bash_history}" ]]; then
     set -o history
-    history -r "${HISTFILE:-${HOME}/.bash_history}"
+    history -r "${HISTFILE:-${HOME}/.bash_history}" >/dev/null 2>&1
   fi
 
   filter="${*}"
@@ -152,7 +152,7 @@ function __hhs_hist_stats() {
 
   if [[ $- != *i* && -f "${HISTFILE:-${HOME}/.bash_history}" ]]; then
     set -o history
-    history -r "${HISTFILE:-${HOME}/.bash_history}"
+    history -r "${HISTFILE:-${HOME}/.bash_history}" >/dev/null 2>&1
   fi
 
   # Generic parser – handles user/date/timestamped history formats

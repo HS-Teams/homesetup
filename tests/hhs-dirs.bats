@@ -4,8 +4,8 @@ load test_helper
 load "${HHS_FUNCTIONS_DIR}/hhs-dirs.bash"
 load_bats_libs
 
-declare -ag __HHS_MSELECT_STUB_RESPONSES=()
-declare -g __HHS_MSELECT_STUB_STATUS=""
+__HHS_MSELECT_STUB_RESPONSES=()
+__HHS_MSELECT_STUB_STATUS=""
 
 setup() {
   __HHS_ORIG_PWD="$PWD"

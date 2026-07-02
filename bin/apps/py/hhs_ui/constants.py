@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.0.146"
+VERSION = "0.0.151"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -285,3 +285,4 @@ DOCUMENTS = {
 }
 FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"
 FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"
+FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM = "hhs_show_shell_version"

@@ -57,14 +57,20 @@ STUB
   run __hhs_ls_sorted name
 
   assert_success
-  mapfile -t sorted_names < <(printf '%s\n' "$output" | awk '{print $9}' | grep -E 'apple|banana')
+  sorted_names=()
+  while IFS= read -r sorted_name; do
+    sorted_names+=("${sorted_name}")
+  done < <(printf '%s\n' "$output" | awk '{print $9}' | grep -E 'apple|banana')
   assert_equal "${sorted_names[0]}" "apple"
   assert_equal "${sorted_names[1]}" "banana"
 
   run __hhs_ls_sorted name -reverse
 
   assert_success
-  mapfile -t reversed_names < <(printf '%s\n' "$output" | awk '{print $9}' | grep -E 'apple|banana')
+  reversed_names=()
+  while IFS= read -r reversed_name; do
+    reversed_names+=("${reversed_name}")
+  done < <(printf '%s\n' "$output" | awk '{print $9}' | grep -E 'apple|banana')
   assert_equal "${reversed_names[0]}" "banana"
   assert_equal "${reversed_names[1]}" "apple"
 }
