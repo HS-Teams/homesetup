@@ -1319,6 +1319,13 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   white-space: nowrap;
 }
 
+.hhs-footer-shell-group {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--hhs-element-std-gap);
+  white-space: nowrap;
+}
+
 .hhs-footer-shell-status,
 .hhs-footer-shell-status:visited,
 .hhs-footer-shell-status:hover,
@@ -1346,6 +1353,29 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 .hhs-footer-shell-status:hover .hhs-footer-shell-name,
 .hhs-footer-shell-status:focus .hhs-footer-shell-name {
   text-decoration: underline !important;
+}
+
+.hhs-footer-cache-clear-button,
+.hhs-footer-cache-clear-button:visited,
+.hhs-footer-cache-clear-button:hover,
+.hhs-footer-cache-clear-button:focus {
+  align-items: center;
+  border-radius: 4px;
+  color: var(--hhs-danger);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  height: 1.18rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0 0.12rem;
+  text-decoration: none !important;
+}
+
+.hhs-footer-cache-clear-button:hover,
+.hhs-footer-cache-clear-button:focus {
+  background: color-mix(in srgb, var(--hhs-danger) 14%, transparent);
+  filter: brightness(1.15);
 }
 
 .hhs-footer-remote-status {

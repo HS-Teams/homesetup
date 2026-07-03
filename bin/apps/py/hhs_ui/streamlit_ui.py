@@ -198,6 +198,14 @@ HOST_SWITCH_BACKGROUND_JOBS = (
     MONITOR_MEM_JOB,
     MONITOR_PROCESS_LIST_JOB,
 )
+CACHE_CLEAR_BACKGROUND_JOBS = (
+    FOOTER_VERSION_JOB,
+    ALIAS_LIST_JOB,
+    SERVICE_LIST_JOB,
+    MONITOR_CPU_JOB,
+    MONITOR_MEM_JOB,
+    MONITOR_PROCESS_LIST_JOB,
+)
 HOST_SWITCH_STATE_KEYS = (
     "monitor_cpu_error",
     "monitor_mem_error",
@@ -1243,6 +1251,14 @@ def render_preloader(
             const overlay = doc.createElement("div");
             overlay.id = "hhs-command-overlay";
             overlay.className = {json.dumps(loader_class)};
+            overlay.style.position = "fixed";
+            overlay.style.inset = "0";
+            overlay.style.width = "100vw";
+            overlay.style.height = "100dvh";
+            overlay.style.display = "flex";
+            overlay.style.alignItems = "center";
+            overlay.style.justifyContent = "center";
+            overlay.style.zIndex = "999999";
             overlay.innerHTML = `
               <div class="hhs-tab-loader-panel">
                 <span class="hhs-tab-loader-spinner"></span>
@@ -2233,6 +2249,7 @@ def render_footer() -> None:
     working_dir_url = f"?{hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM}=1"
     update_url = f"?{hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM}=1"
     shell_version_url = f"?{hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM}=1"
+    cache_clear_url = f"?{hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM}=1"
     updater_markup = ""
     if bool(st.session_state.get("updater_update_available", False)):
         updater_markup = (
@@ -2241,12 +2258,19 @@ def render_footer() -> None:
         )
     shell_name = html.escape(os.environ.get("HHS_MY_SHELL", "").strip().upper())
     shell_status_markup = ""
+    cache_clear_markup = ""
     if shell_name:
         shell_status_markup = (
             f'<a class="hhs-footer-shell-status" href="{shell_version_url}" '
             f'target="_self" title="Show bash version" aria-label="Show bash version">'
             f'<span class="hhs-footer-glyph"></span>'
             f'<span class="hhs-footer-shell-name">{shell_name}</span></a>'
+        )
+        cache_clear_markup = (
+            f'<span class="hhs-footer-glyph"></span>'
+            f'<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}" '
+            f'target="_self" title="Clear cache" aria-label="Clear cache">'
+            f'<span>🗑</span></a>'
         )
     connected_host = str(st.session_state.get("ssh_connection_host", "")).strip()
     remote_status_markup = ""
@@ -2260,9 +2284,15 @@ def render_footer() -> None:
             f'<span class="hhs-footer-glyph"></span>'
             f"<span>Connected to remote  {connected_host_display}</span></span>"
         )
+    shell_controls_markup = ""
+    if shell_status_markup:
+        shell_controls_markup = (
+            f'<span class="hhs-footer-shell-group">'
+            f"{shell_status_markup}{cache_clear_markup}</span>"
+        )
     status_group_markup = (
         f'<span class="hhs-footer-status-group">'
-        f"{remote_status_markup}{shell_status_markup}"
+        f"{remote_status_markup}{shell_controls_markup}"
         f"</span>"
     )
     logo_data_uri = load_app_image_data_uri(
@@ -2367,6 +2397,10 @@ def handle_footer_actions() -> None:
             output or "bash --version returned no output."
         )
         st.session_state["footer_shell_version_dialog_title"] = "Shell version"
+
+    if query_param_requested(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM):
+        remove_query_param(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM)
+        clear_cached_ui_data_preserving_state()
 
     if query_param_requested(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM)
@@ -6580,6 +6614,22 @@ def stop_background_jobs(job_names: tuple[str, ...]) -> None:
         stop_background_job(job_name)
 
 
+def stop_background_jobs_with_state_prefix(state_key_prefix: str) -> None:
+    """Stop and forget background jobs whose Streamlit state key has a prefix."""
+    for state_key in list(st.session_state):
+        if not str(state_key).startswith(state_key_prefix):
+            continue
+        job = st.session_state.get(state_key)
+        if not isinstance(job, dict):
+            st.session_state.pop(state_key, None)
+            continue
+        process = background_job_process(job)
+        if process is not None:
+            stop_process(process)
+        st.session_state.pop(state_key, None)
+        cleanup_background_job_files(job)
+
+
 def background_job_elapsed_seconds(job: dict[str, object]) -> float:
     """Return the elapsed runtime for a background command job."""
     try:
@@ -6989,6 +7039,18 @@ def cache_clear() -> None:
     }
     save_ui_cache(metadata_cache)
     command_result_snapshot_clear()
+
+
+def clear_cached_ui_data_preserving_state() -> None:
+    """Clear cached command data while preserving UI selections and metadata."""
+    stop_background_jobs(CACHE_CLEAR_BACKGROUND_JOBS)
+    stop_background_jobs_with_state_prefix(background_job_state_key("cached_"))
+    cache_clear()
+    st.session_state["footer_hhs_version_cache_loaded"] = False
+    for state_key in list(st.session_state):
+        if str(state_key).startswith("_hhs_cached_command_error_"):
+            st.session_state.pop(state_key, None)
+    push_floating_status("Cache cleared.", "info")
 
 
 def expire_host_scoped_command_state() -> None:

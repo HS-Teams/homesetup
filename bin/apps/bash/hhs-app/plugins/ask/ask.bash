@@ -18,7 +18,9 @@ VERSION="1.2.0"
 
 # Namespace cleanup
 UNSETS=(
-  help version cleanup execute render_ollama_prompt_template load_ollama_prompt show_context show_prompt clear_context is_text_context_file ingest_context show_models start_ollama select_ollama_model ensure_ollama
+  help version cleanup execute render_ollama_prompt_template render_ollama_response
+  load_ollama_prompt show_context show_prompt clear_context is_text_context_file
+  ingest_context show_models start_ollama select_ollama_model ensure_ollama
 )
 
 # Usage message
@@ -100,6 +102,122 @@ function render_ollama_prompt_template() {
   prompt="${prompt//\$\{HHS_HOME\}/${HHS_HOME}}"
   prompt="${prompt//\$\{HHS_GITHUB_URL\}/${HHS_GITHUB_URL}}"
   printf "%s" "${prompt}"
+}
+
+# @purpose: Render terminal cursor-control escapes from an ollama response into plain text.
+function render_ollama_response() {
+  local file_path="${1}"
+
+  awk '
+    function write_char(ch) {
+      while (length(line) < cursor) {
+        line = line " "
+      }
+      line = substr(line, 1, cursor) ch substr(line, cursor + 2)
+      cursor++
+    }
+
+    function flush_line() {
+      print line
+      line = ""
+      cursor = 0
+    }
+
+    function apply_csi(params, final, parts, count, mode) {
+      gsub(/\?/, "", params)
+      split(params, parts, ";")
+      count = parts[1] == "" ? 1 : parts[1] + 0
+
+      if (final == "D") {
+        cursor -= count
+        if (cursor < 0) {
+          cursor = 0
+        }
+      } else if (final == "C") {
+        cursor += count
+        while (length(line) < cursor) {
+          line = line " "
+        }
+      } else if (final == "G") {
+        cursor = count > 0 ? count - 1 : 0
+        while (length(line) < cursor) {
+          line = line " "
+        }
+      } else if (final == "K") {
+        mode = parts[1] == "" ? 0 : parts[1] + 0
+        if (mode == 0) {
+          line = substr(line, 1, cursor)
+        } else if (mode == 1) {
+          line = substr(line, cursor + 1)
+          cursor = 0
+        } else if (mode == 2) {
+          line = ""
+          cursor = 0
+        }
+      }
+    }
+
+    function has_stripped_csi(position, remaining) {
+      remaining = substr(text, position + 1)
+      return remaining ~ /^[0-9;?]+[CDGJKm]/ || (stripped_csi_active && remaining ~ /^K/)
+    }
+
+    function parse_csi(position, stripped, params) {
+      params = ""
+      while (position <= length(text)) {
+        ch = substr(text, position, 1)
+        if (ch ~ /^[0-9;?]$/) {
+          params = params ch
+          position++
+          continue
+        }
+        apply_csi(params, ch)
+        stripped_csi_active = stripped
+        return position
+      }
+      return position
+    }
+
+    BEGIN {
+      esc = sprintf("%c", 27)
+    }
+
+    {
+      text = $0
+      gsub(/\\033\[/, esc "[", text)
+      gsub(/\\x1[Bb]\[/, esc "[", text)
+      gsub(/\\e\[/, esc "[", text)
+      text = text "\n"
+
+      for (i = 1; i <= length(text); i++) {
+        ch = substr(text, i, 1)
+
+        if (ch == esc) {
+          if (substr(text, i + 1, 1) == "[") {
+            i = parse_csi(i + 2, 0)
+          } else {
+            i++
+          }
+        } else if (ch == "[" && has_stripped_csi(i)) {
+          i = parse_csi(i + 1, 1)
+        } else if (ch == "\r") {
+          cursor = 0
+          stripped_csi_active = 0
+        } else if (ch == "\b") {
+          if (cursor > 0) {
+            cursor--
+          }
+          stripped_csi_active = 0
+        } else if (ch == "\n") {
+          flush_line()
+          stripped_csi_active = 0
+        } else {
+          write_char(ch)
+          stripped_csi_active = 0
+        }
+      }
+    }
+  ' "${file_path}"
 }
 
 # @purpose: Load the ollama prompt from override variable or editable prompt file.
@@ -194,7 +312,10 @@ function is_text_context_file() {
 
   extension="$(printf "%s" "${file_path##*.}" | tr '[:upper:]' '[:lower:]')"
   case "${extension}" in
-    txt|md|markdown|csv|tsv|json|jsonl|yaml|yml|toml|ini|conf|cfg|log|xml|html|css|js|ts|py|sh|bash|zsh|java|kt|go|rs|rb|php|sql)
+    txt|md|markdown|csv|tsv|json|jsonl|yaml|yml|toml|ini|conf|cfg|log|xml|html|css|js|ts)
+      return 0
+    ;;
+    py|sh|bash|zsh|java|kt|go|rs|rb|php|sql)
       return 0
     ;;
   esac
@@ -361,7 +482,7 @@ function ensure_context_size() {
 
 # @purpose: HHS plugin required function
 function execute() {
-  local args ans query resp ret_val ctx kb_size ctx_window model hint
+  local args ans query resp rendered_resp ret_val ctx kb_size ctx_window model hint
   declare -a args=()
 
   ctx_window=$(get_context_window)
@@ -412,19 +533,28 @@ function execute() {
     tee -a "${resp}"
   ret_val=${PIPESTATUS[1]}
 
-  # Display the response
+  # Interpret escape codes and display the response
   if [[ -s "${resp}" ]]; then
-    echo -e "### [$(date '+%H:%M')] AI: \n$(cat "${resp}")" >> "${HHS_OLLAMA_HISTORY_FILE}"
+    rendered_resp="$(mktemp /tmp/hhs-"${OLLAMA_MODEL}"-rendered.XXXXXX)" || quit 1 "Failed to create rendered response."
+    if ! render_ollama_response "${resp}" > "${rendered_resp}"; then
+      rm -f "${rendered_resp}" &> /dev/null
+      quit 2 "Unable to render ollama response."
+    fi
+    {
+      printf '### [%s] AI: \n' "$(date '+%H:%M')"
+      cat "${rendered_resp}"
+    } >> "${HHS_OLLAMA_HISTORY_FILE}"
     printf '\033[H\033[2J\033[3J'
     echo -e "✨ ${GREEN}${OLLAMA_MODEL}[${ctx}K]:"
     echo -e "${GRAY}${resp}${NC}"
-    ${HHS_OLLAMA_MD_VIEWER:-cat} < "${resp}"
+    ${HHS_OLLAMA_MD_VIEWER:-cat} < "${rendered_resp}"
   else
     echo -e "${ERROR_ICN} ${RED}Ollama failed to respond${NC}"
     ret_val=1
   fi
 
   # Cleanup
+  [[ -f "${rendered_resp:-}" ]] && rm -f "${rendered_resp}" &> /dev/null
   [[ -z "${KEEP}" && -f "${resp}" ]] && rm -f "${resp}" &> /dev/null
 
   quit "${ret_val}"

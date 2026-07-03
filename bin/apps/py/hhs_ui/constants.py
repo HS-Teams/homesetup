@@ -361,3 +361,4 @@ DOCUMENTS = {
 FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"
 FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"
 FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM = "hhs_show_shell_version"
+FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"

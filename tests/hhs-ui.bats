@@ -935,7 +935,7 @@ assert 'os.environ.get("HHS_MY_SHELL", "").strip().upper()' in ui_source
 assert 'class="hhs-footer-remote-status"' in ui_source
 footer_template = ui_source.split('<footer class="hhs-app-footer">', 1)[1].split('</footer>', 1)[0]
 assert 'status_group_markup = (' in ui_source
-assert 'f"{remote_status_markup}{shell_status_markup}"' in ui_source
+assert 'f"{remote_status_markup}{shell_controls_markup}"' in ui_source
 assert "{status_group_markup}" in footer_template
 assert "st.html(" in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source
@@ -952,7 +952,9 @@ init_source = Path("bin/apps/py/hhs_ui/__init__.py").read_text()
 assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in constants_source
 assert 'FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"' in constants_source
 assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM = "hhs_show_shell_version"' in constants_source
+assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"' in constants_source
 assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in init_source
+assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM' in init_source
 assert '"updater_last_check_epoch"' in constants_source
 assert '"updater_last_check_output"' in constants_source
 assert '"updater_update_available"' in constants_source
@@ -968,6 +970,14 @@ assert 'class="hhs-footer-spacer"' not in ui_source
 assert 'class="hhs-footer-update-link"' in ui_source
 assert 'href="{update_url}" target="_self"' in ui_source
 assert '' in ui_source
+assert 'class="hhs-footer-shell-group"' in ui_source
+assert 'class="hhs-footer-cache-clear-button"' in ui_source
+assert 'href="{cache_clear_url}"' in ui_source
+assert 'title="Clear cache" aria-label="Clear cache">' in ui_source
+assert 'f\'<span class="hhs-footer-glyph"></span>\'' in ui_source
+assert 'f\'<span>🗑</span></a>\'' in ui_source
+assert '<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}"' in ui_source
+assert '<span class="hhs-footer-glyph"></span><span>🗑</span></a>' not in ui_source
 assert 'def build_open_directory_command' in ui_source
 assert 'def run_open_working_directory' in ui_source
 assert 'def build_footer_working_directory_command' in ui_source
@@ -1017,8 +1027,15 @@ shell_title_index = footer_actions_body.index('st.session_state["footer_shell_ve
 assert shell_result_index < shell_output_index < shell_title_index
 assert 'cache_delete_tag("env")' in footer_actions_body
 assert 'st.session_state["footer_hhs_version_cache_loaded"] = False' in footer_actions_body
+assert 'hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM' in footer_actions_body
+assert 'clear_cached_ui_data_preserving_state()' in footer_actions_body
 assert 'def cache_delete_command' in ui_source
 assert 'cache_delete_command(command, "env")' in ui_source
+clear_cache_body = ui_source.split("def clear_cached_ui_data_preserving_state", 1)[1].split("\ndef ", 1)[0]
+assert "cache_clear()" in clear_cache_body
+assert "st.session_state.clear()" not in clear_cache_body
+assert "UI_STATE_FILE" not in clear_cache_body
+assert "push_floating_status" in clear_cache_body
 assert 'def updater_output_has_updates' in ui_source
 assert 'def updater_check_due' in ui_source
 assert 'def store_updater_check_result' in ui_source
@@ -1059,6 +1076,8 @@ shell_name_block = re.search(r"\.hhs-footer-shell-name\s*\{([^}]*)\}", base_css)
 shell_name_hover_block = re.search(r"\.hhs-footer-shell-status:hover \.hhs-footer-shell-name,[^{]+\{([^}]*)\}", base_css).group(1)
 remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", base_css).group(1)
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
+shell_group_block = re.search(r"\.hhs-footer-shell-group\s*\{([^}]*)\}", base_css).group(1)
+cache_clear_block = re.search(r"\.hhs-footer-cache-clear-button,[^{]+\{([^}]*)\}", base_css).group(1)
 block_container_block = re.search(r"\.block-container\s*\{([^}]*)\}", base_css).group(1)
 main_block_gap_block = re.search(r"\[data-testid=\"stMainBlockContainer\"\] > \[data-testid=\"stVerticalBlock\"\],[^{]+\{([^}]*)\}", base_css).group(1)
 active_view_block = re.search(r"\.st-key-active_view\s*\{([^}]*)\}", base_css).group(1)
@@ -1078,6 +1097,8 @@ assert "filter: none" in logo_link_block
 assert "height:" in logo_block
 assert "width:" in logo_block
 assert ".hhs-footer-shell-status" in base_css
+assert ".hhs-footer-shell-group" in base_css
+assert ".hhs-footer-cache-clear-button" in base_css
 assert ".hhs-footer-remote-status" in base_css
 assert ".hhs-footer-status-group" in base_css
 assert ".hhs-footer-repository-link:hover" in base_css
@@ -1087,6 +1108,13 @@ assert ".hhs-footer-shell-name" in base_css
 assert "text-decoration: none !important" in shell_name_block
 assert "text-decoration: underline !important" in shell_name_hover_block
 assert "text-decoration: underline" not in shell_status_hover_block
+assert "gap: var(--hhs-element-std-gap)" in shell_group_block
+assert "border:" not in cache_clear_block
+assert "gap:" not in cache_clear_block
+assert "padding: 0 0.12rem" in cache_clear_block
+assert "height: 1.18rem" in cache_clear_block
+assert "var(--hhs-danger)" in cache_clear_block
+assert ".hhs-footer-cache-clear-button .hhs-footer-glyph" not in base_css
 assert 'div[role="dialog"]:has(.hhs-shell-version-output)' in base_css
 assert ".hhs-shell-version-output" in base_css
 assert "max-height: 88dvh" in base_css
@@ -2927,6 +2955,18 @@ PY
   assert_success
 
   run grep -q 'overlay.id = "hhs-command-overlay"' "${ui_file}"
+  assert_success
+
+  run grep -q 'overlay.style.inset = "0"' "${ui_file}"
+  assert_success
+
+  run grep -q 'overlay.style.height = "100dvh"' "${ui_file}"
+  assert_success
+
+  run grep -q 'overlay.style.alignItems = "center"' "${ui_file}"
+  assert_success
+
+  run grep -q 'overlay.style.justifyContent = "center"' "${ui_file}"
   assert_success
 
   run grep -q 'doc.body.appendChild(overlay)' "${ui_file}"
