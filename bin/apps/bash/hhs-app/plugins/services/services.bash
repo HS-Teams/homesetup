@@ -20,7 +20,7 @@ VERSION="1.0.1"
 # Namespace cleanup
 UNSETS=(
   help version cleanup execute detect_os service_manager lowercase is_hhs_streamlit_ui_running add_hhs_services
-  manage_service list_services_status
+  manage_service service_status_manager service_status_is_up service_matches_filter list_services_status
 )
 
 # Streamlit UI port.
@@ -42,8 +42,8 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <operation> [service_name] [options]
       -v | --version            : Display current plugin version.
 
     arguments:
-      operation                 : start | stop | restart | status.
-      service_name              : Target service (required except when listing all statuses).
+      operation                 : start | stop | restart | status | service filter.
+      service_name              : Target service (required for start, stop, and restart).
 
     examples:
       Check status for all services:
@@ -82,6 +82,8 @@ function cleanup() {
 
 # @purpose: Detect the underlying OS (alpine, debian, fedora, centos, darwin)
 function detect_os() {
+  local os=""
+
   if [[ "$(uname)" == "Darwin" ]]; then
     os="darwin"
   elif [[ -f /etc/alpine-release ]]; then
@@ -105,15 +107,15 @@ function service_manager() {
 
   case "${os}" in
     darwin)
-      manager="$(command -v brew)"
+      manager="$(command -v brew 2>/dev/null || true)"
       [[ -z "${manager}" && -x /opt/homebrew/bin/brew ]] && manager="/opt/homebrew/bin/brew"
       [[ -z "${manager}" && -x /usr/local/bin/brew ]] && manager="/usr/local/bin/brew"
       ;;
     alpine)
-      manager="$(command -v rc-service)"
+      manager="$(command -v rc-service 2>/dev/null || true)"
       ;;
     debian|fedora|centos)
-      manager="$(command -v systemctl)"
+      manager="$(command -v systemctl 2>/dev/null || true)"
       ;;
   esac
 
@@ -121,10 +123,65 @@ function service_manager() {
   echo "${manager}"
 }
 
+# @param $1 [Req]: detected OS
+# @purpose: Return the service status executable for the current OS.
+function service_status_manager() {
+  local os="${1}" manager=""
+
+  case "${os}" in
+    darwin|debian|fedora|centos)
+      manager="$(service_manager "${os}")" || return $?
+      ;;
+    alpine)
+      manager="$(command -v rc-status 2>/dev/null || true)"
+      ;;
+  esac
+
+  [[ -n "${manager}" ]] || quit 1 "Service status manager not found for OS: ${os}"
+  echo "${manager}"
+}
+
 # @param $1 [Req]: Value to lowercase.
 # @purpose: Lowercase text in a Bash 3 compatible way.
 function lowercase() {
   printf '%s' "${1}" | tr '[:upper:]' '[:lower:]'
+}
+
+# @param $1 [Req]: service status
+# @purpose: Return whether a service status should be displayed as up.
+function service_status_is_up() {
+  [[ "$(lowercase "${1}")" =~ ^(started|running|enabled|active)$ ]]
+}
+
+# @param $1 [Req]: service name
+# @param $2 [Req]: service status
+# @param $3 [Opt]: service name or status filter
+# @purpose: Return whether a service entry matches the selected filter.
+function service_matches_filter() {
+  local service_lc status_lc filter_lc
+
+  service_lc="$(lowercase "${1}")"
+  status_lc="$(lowercase "${2}")"
+  filter_lc="$(lowercase "${3:-}")"
+
+  case "${filter_lc}" in
+    ""|all)
+      return 0
+      ;;
+    up|started|running|enabled|active)
+      service_status_is_up "${status_lc}"
+      return $?
+      ;;
+    down|stopped|inactive|disabled|dead)
+      service_status_is_up "${status_lc}"
+      [[ $? -ne 0 ]]
+      return $?
+      ;;
+    *)
+      [[ "${service_lc}" == *"${filter_lc}"* ]]
+      return $?
+      ;;
+  esac
 }
 
 # @purpose: Check whether the HomeSetup Streamlit UI port is accepting connections.
@@ -158,7 +215,17 @@ function manage_service() {
   manager="$(service_manager "${os}")" || return $?
 
   case "${os}" in
-    darwin) "${manager}" services "${action}" "${service}" ;;
+    darwin)
+      case "${action}" in
+        start) "${manager}" services start "${service}" ;;
+        stop) "${manager}" services stop "${service}" ;;
+        restart)
+          "${manager}" services stop "${service}" &&
+            "${manager}" services start "${service}"
+          ;;
+        *) "${manager}" services "${action}" "${service}" ;;
+      esac
+      ;;
     alpine) "${manager}" "${service}" "${action}" ;;
     debian|fedora|centos) "${manager}" "${action}" "${service}" ;;
     *) quit 1 "Unsupported OS: ${os}" ;;
@@ -170,13 +237,12 @@ function manage_service() {
 # @param $1 [Opt]: service filter (case-insensitive)
 # @purpose: List all services with standardized indexed, dot-padded and colorized status
 function list_services_status() {
-  local filter="${1:-}" os service status longest=0 line service_entry="" manager filter_lc service_lc
+  local filter="${1:-}" os service status longest=0 line service_entry="" manager
   local -a raw_services=()
   local i total width service_name padded_line
 
   os="$(detect_os)"
-  manager="$(service_manager "${os}")" || return $?
-  filter_lc="$(lowercase "${filter}")"
+  manager="$(service_status_manager "${os}")" || return $?
 
   # Populate raw_services array
   case "${os}" in
@@ -188,16 +254,22 @@ function list_services_status() {
     alpine)
       while IFS= read -r line; do
         raw_services+=("${line}")
-      done < <(rc-status -a | awk '{ print $1 ":" $2 }')
+      done < <("${manager}" -a | awk '
+        /\[/ {
+          status=$0;
+          sub(/^.*\[ */, "", status);
+          sub(/ *\].*$/, "", status);
+          print $1 ":" status;
+        }')
       ;;
     debian|fedora|centos)
       while IFS= read -r line; do
         raw_services+=("${line}")
-      done < <(systemctl list-units --type=service --all --no-pager | awk '
+      done < <("${manager}" list-units --type=service --all --no-pager | awk '
         NR>1 && $1 ~ /\.service$/ {
           name=$1;
           sub(/\.service$/, "", name);
-          state=$4;
+          state=$3;
           print name ":" state;
         }')
       ;;
@@ -214,8 +286,8 @@ function list_services_status() {
   # First pass: find longest service name (filtered only)
   for line in "${raw_services[@]}"; do
     service="${line%%:*}"
-    service_lc="$(lowercase "${service}")"
-    [[ -n "${filter_lc}" && ! "${service_lc}" =~ ${filter_lc} ]] && continue
+    status="${line##*:}"
+    service_matches_filter "${service}" "${status}" "${filter}" || continue
     [[ ${#service} -gt ${longest} ]] && longest=${#service}
   done
 
@@ -227,12 +299,11 @@ function list_services_status() {
   for line in "${raw_services[@]}"; do
     service="${line%%:*}"
     status="${line##*:}"
-    service_lc="$(lowercase "${service}")"
-    [[ -n "${filter_lc}" && ! "${service_lc}" =~ ${filter_lc} ]] && continue
+    service_matches_filter "${service}" "${status}" "${filter}" || continue
     printf -v service_entry "%${width}d: %s" "${i}" "${service}"
     while [[ ${#service_entry} -lt $((width + 2 + longest + 3)) ]]; do service_entry+="."; done
     ((i++))
-    [[ "${status}" =~ ^(started|running|enabled|active)$ ]] &&
+    service_status_is_up "${status}" &&
       { printf "  %b %b\n" "${HHS_HIGHLIGHT_COLOR}${service_entry}${NC}" "${GREEN} Up${NC}"; continue; }
     printf "  %b %b\n" "${HHS_HIGHLIGHT_COLOR}${service_entry}${NC}" "${RED} Down${NC}"
   done
@@ -240,14 +311,12 @@ function list_services_status() {
 
 # @purpose: HHS plugin required function to route service commands
 function execute() {
-  local operation="${1:-status}" service="${2:-}" os
-
-  os="$(detect_os)"
+  local operation="${1:-status}" service="${2:-}"
 
   case "${operation}" in
-    help)
+    -h|--help|help)
       help ;;
-    version)
+    -v|--version|version)
       version ;;
     start|stop|restart)
       [[ -z "${service}" ]] && quit 1 "Missing service name."
@@ -260,9 +329,13 @@ function execute() {
       echo -e "${YELLOW}Fetching services statuses...${NC}\n"
       list_services_status "${service}"
       ;;
+    -*)
+      usage 1 "Invalid ${PLUGIN_NAME} option: \"${operation}\" !"
+      return $?
+      ;;
     *)
-      echo -e "${RED}Unknown operation: \"${operation}\"\n"
-      quit 2 "${YELLOW}${TIP_ICON} Tip: Try one of: start, stop, restart, status${NC}"
+      echo -e "${YELLOW}Fetching services statuses...${NC}\n"
+      list_services_status "${operation}"
       ;;
   esac
 
