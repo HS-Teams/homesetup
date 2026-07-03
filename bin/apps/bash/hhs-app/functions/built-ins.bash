@@ -234,7 +234,7 @@ function help() {
 # @purpose: Clear HomeSetup logs, backups and caches and restore original HomeSetup files.
 function reset() {
 
-  local all_files filtered_files file matched_file title mchoose_file colorls_dir ret_val=0
+  local all_files filtered_files file matched_file title mchoose_file colorls_dir was_set ret_val=0
   local -a matched_files=()
 
   all_files=(
@@ -247,6 +247,7 @@ function reset() {
     "${HHS_SETUP_FILE}"
     "${HHS_SHOPTS_FILE}"
     "${HHS_OLLAMA_HISTORY_FILE}"
+    "${HHS_OLLAMA_PROMPT_FILE}"
   )
 
   __hhs_has 'colorls' && gem which colorls &>/dev/null && {
@@ -283,16 +284,24 @@ function reset() {
       fi
       echo -en "${HHS_HIGHLIGHT_COLOR}Deleting file ${WHITE}"
       echo -n "${file} $(printf '\056%.0s' {1..60})" | head -c 60
-      if [[ ${#matched_files[@]} -gt 0 ]] && \rm -f -- "${matched_files[@]}" &> /dev/null; then
-        echo -e "${WHITE}${GREEN} OK${NC}"
+      shopt -q nullglob
+      was_set=$?
+      shopt -s nullglob
+      if [[ ${#matched_files[@]} -gt 0 ]]; then
+        if \rm -fv -- "${matched_files[@]}" &> /dev/null; then
+          echo -e "${GREEN} OK${NC}"
+        else
+          echo -e "${RED} FAILED${NC}"
+          ret_val=1
+        fi
       else
-        echo -e "${WHITE}${RED} FAILED${NC}"
-        ret_val=1
+        echo -e "${YELLOW} SKIPPED${NC}"
       fi
     done < "${mchoose_file}"
     echo ''
   fi
-  [[ -f "${mchoose_file}" ]] && \rm -f "${mchoose_file}" &> /dev/null
+  [[ -f "${mchoose_file}" ]] && \rm -fv "${mchoose_file}" &> /dev/null
+  (( was_set != 0 )) && shopt -u nullglob
   echo -e "${YELLOW}Some changes will take effect after you 'reopen' your terminal!${NC}"
 
   return $ret_val

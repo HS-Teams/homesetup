@@ -2396,6 +2396,11 @@ assert reset_index < restore_reconnect_index < status_index
 disconnect_body = source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
 assert "st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)" in disconnect_body
 assert 'st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""' in disconnect_body
+clear_disconnect_body = source.split("def clear_completed_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
+disconnect_snapshot_index = clear_disconnect_body.index("disconnect_view_state = reconnect_view_state_snapshot()")
+disconnect_reset_index = clear_disconnect_body.index("clear_host_scoped_session_state()")
+disconnect_restore_index = clear_disconnect_body.index("restore_reconnect_view_state(disconnect_view_state)")
+assert disconnect_snapshot_index < disconnect_reset_index < disconnect_restore_index
 restore_body = source.split("def restore_registered_ssh_connection_on_session_start", 1)[1].split("\ndef ", 1)[0]
 assert "registered_ssh_connection_host() or reconnect_host" in restore_body
 assert "clear_disconnected_ssh_host(host)" not in restore_body
@@ -3720,6 +3725,57 @@ PY
   assert_success
 
   run grep -q '" Ingest"' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+import ast
+import re
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+tree = ast.parse(source)
+functions = {
+    node.name: ast.get_source_segment(source, node)
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
+}
+namespace = {
+    "re": re,
+    "hhs_ui": SimpleNamespace(
+        ANSI_ESCAPE_PATTERN=re.compile(
+            r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[()][A-Za-z0-9])"
+        ),
+        ESCAPED_ANSI_ESCAPE_PATTERN=re.compile(
+            r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
+        ),
+    ),
+}
+exec(
+    "from __future__ import annotations\n"
+    + "\n\n".join(
+        functions[name]
+        for name in (
+            "strip_ansi",
+            "interpret_terminal_edit_sequences",
+            "clean_hhs_ask_output",
+        )
+    ),
+    namespace,
+)
+raw_output = (
+    "\x1b[H\x1b[2J\x1b[3J"
+    "✨ llama3.1:latest[128K]:\n"
+    "allows for fr\x1b[2D\x1b[Kfree use\n"
+    "Using HomeSe\x1b[6D\x1b[KHomeSetup\n"
+)
+clean_output = namespace["clean_hhs_ask_output"](raw_output)
+assert "allows for free use" in clean_output
+assert "Using HomeSetup" in clean_output
+assert "[2D" not in clean_output
+assert "[K" not in clean_output
+assert "frfree" not in clean_output
+PY
   assert_success
 
   run python3 - <<'PY'

@@ -416,7 +416,8 @@ function execute() {
   if [[ -s "${resp}" ]]; then
     echo -e "### [$(date '+%H:%M')] AI: \n$(cat "${resp}")" >> "${HHS_OLLAMA_HISTORY_FILE}"
     printf '\033[H\033[2J\033[3J'
-    echo -e "✨ ${GREEN}${OLLAMA_MODEL}[${ctx}K]:\t${GRAY}${resp}\n${NC}"
+    echo -e "✨ ${GREEN}${OLLAMA_MODEL}[${ctx}K]:"
+    echo -e "${GRAY}${resp}${NC}"
     ${HHS_OLLAMA_MD_VIEWER:-cat} < "${resp}"
   else
     echo -e "${ERROR_ICN} ${RED}Ollama failed to respond${NC}"

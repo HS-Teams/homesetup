@@ -63,7 +63,6 @@ export HHS_LOG_FILE="${HHS_LOG_DIR}"/hhsrc.log
 export HHS_MOTD_DIR="${HHS_DIR}"/motd
 export HHS_PROMPTS_DIR="${HHS_DIR}"/askai/prompts
 export HHS_SETUP_FILE="${HHS_DIR}"/.homesetup.toml
-export HHS_OLLAMA_PROMPT_SOURCE="${HHS_HOME}"/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md
 export HHS_OLLAMA_PROMPT_FILE="${HHS_DIR}"/hhs-ask-ollama.md
 export HHS_BLESH_DIR="${HHS_DIR}"/ble-sh
 export HHS_VENV_PATH="${HHS_DIR}"/venv
@@ -175,7 +174,7 @@ fi
 # Ask AI prompt
 if ! [[ -s "${HHS_OLLAMA_PROMPT_FILE}" ]]; then
   __hhs_log "WARN" "'${HHS_OLLAMA_PROMPT_FILE}' file was copied because it was not found at: ${HHS_DIR}"
-  \cp -f "${HHS_OLLAMA_PROMPT_SOURCE}" "${HHS_OLLAMA_PROMPT_FILE}"
+  \cp -f "${HHS_HOME}"/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md "${HHS_OLLAMA_PROMPT_FILE}"
 fi
 
 # -----------------------------------------------------------------------------------
@@ -410,7 +409,7 @@ if [[ ${HHS_NO_AUTO_UPDATE} -ne 1 ]]; then
   fi
 fi
 
-# Remove PATH duplicates.
+# Remove PATH duplicates
 PATH=$(awk -F: '{for (i=1;i<=NF;i++) { if ( !x[$i]++ ) printf("%s:",$i); }}' <<<"${PATH}")
 export PATH
 
@@ -421,13 +420,20 @@ function command_not_found_handle() {
   return 127
 }
 
-# Print HomeSetup MOTDs.
+# Print HomeSetup MOTDs
 echo -en "\033[H\033[J"
 if [[ -d "${HHS_MOTD_DIR}" ]]; then
   all=$(find "${HHS_MOTD_DIR}" -type f | sort | uniq)
   for motd in ${all}; do
     echo -e "$(eval "echo -e \"$(<"${motd}")\"")"
   done
+fi
+
+# Print System MOTDs after HomeSetup's
+if [[ -s /run/motd.dynamic ]]; then
+    cat /run/motd.dynamic        # Ubuntu/Debian with update-motd
+elif [[ -s /etc/motd ]]; then
+    cat /etc/motd                # RHEL, CentOS, Fedora, macOS, etc.
 fi
 
 # -----------------------------------------------------------------------------------

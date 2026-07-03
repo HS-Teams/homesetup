@@ -4841,13 +4841,57 @@ def filter_log_output(value: str, log_filter: str, text_filter: str = "") -> str
     )
 
 
+def interpret_terminal_edit_sequences(output: str) -> str:
+    """Return output after applying simple terminal cursor edit sequences."""
+    lines: list[str] = []
+    current: list[str] = []
+    cursor = 0
+    index = 0
+    length = len(output)
+    while index < length:
+        char = output[index]
+        if char in ("\n", "\r"):
+            lines.append("".join(current))
+            current = []
+            cursor = 0
+            index += 1
+            continue
+        if char != "\x1b":
+            if cursor >= len(current):
+                current.extend(" " for _ in range(cursor - len(current)))
+                current.append(char)
+            else:
+                current[cursor] = char
+            cursor += 1
+            index += 1
+            continue
+        match = re.match(r"\x1b\[([0-9;?]*)([A-Za-z])", output[index:])
+        if not match:
+            index += 1
+            continue
+        params = match.group(1).replace("?", "")
+        command = match.group(2)
+        amount = int(params.split(";", 1)[0] or "1") if params else 1
+        if command == "D":
+            cursor = max(0, cursor - amount)
+        elif command == "C":
+            cursor += amount
+        elif command == "G":
+            cursor = max(0, amount - 1)
+        elif command == "K":
+            current = current[:cursor]
+        index += len(match.group(0))
+    lines.append("".join(current))
+    return "\n".join(lines)
+
+
 def clean_hhs_ask_output(output: str) -> str:
     """Return user-facing ask output without terminal control decoration."""
     final_output = output
     for marker in ("\x1b[H\x1b[2J\x1b[3J", "\033[H\033[2J\033[3J"):
         if marker in final_output:
             final_output = final_output.rsplit(marker, 1)[-1]
-    clean_output = strip_ansi(final_output)
+    clean_output = strip_ansi(interpret_terminal_edit_sequences(final_output))
     lines = []
     for line in clean_output.splitlines():
         stripped = line.strip()
@@ -6185,10 +6229,8 @@ def execute_pending_ssh_connection() -> None:
         return
     loader_message = str(st.session_state.get("ssh_connect_pending_message", "")).strip()
     loader_message = loader_message or f"Connecting to SSH host {host}..."
-    restore_reconnect_state = bool(
-        st.session_state.pop("ssh_reconnect_restore_view_state", False)
-    )
-    reconnect_state = reconnect_view_state_snapshot() if restore_reconnect_state else {}
+    st.session_state.pop("ssh_reconnect_restore_view_state", False)
+    reconnect_state = reconnect_view_state_snapshot()
     was_terminal_active = terminal_document_view_is_active()
     st.session_state["ssh_connect_pending"] = ""
     st.session_state["ssh_connect_pending_message"] = ""
@@ -6233,7 +6275,9 @@ def clear_completed_ssh_disconnection(
     host: str, result: subprocess.CompletedProcess[str]
 ) -> None:
     """Clear UI connection state after an SSH disconnect command finishes."""
+    disconnect_view_state = reconnect_view_state_snapshot()
     clear_host_scoped_session_state()
+    restore_reconnect_view_state(disconnect_view_state)
     st.session_state["ssh_connection_status"] = ""
     st.session_state["ssh_connection_host"] = ""
     st.session_state["ssh_connection_error"] = ""
