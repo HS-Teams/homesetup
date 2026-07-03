@@ -395,7 +395,7 @@ setup() {
   run grep -q 'handle_remote_command_result(remote_host, result)' "${ui_file}"
   assert_success
 
-  run grep -q 'result = completed_process_from_cache(command_to_run, cached_value)' "${ui_file}"
+  run grep -q 'sanitize_remote_command_result(' "${ui_file}"
   assert_success
 
   run grep -q 'if use_cache and not ssh_shared_connection_closed(result)' "${ui_file}"
@@ -414,6 +414,49 @@ setup() {
   assert_success
 
   run grep -q 'st.session_state\["ssh_host_selected"\] = local_hostname()' "${ui_file}"
+  assert_success
+}
+
+@test "when remote commands print HomeSetup startup chatter then command output should be sanitized" {
+  run python3 - "${ui_file}" <<'PY'
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def remote_command_startup_line_is_noise(")
+end = source.index("def ssh_output_is_only_shared_close(")
+namespace = {
+    "re": re,
+    "subprocess": subprocess,
+    "strip_ansi": lambda value: value,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+noisy_stdout = (
+    "[bash] HomeSetup is starting...\n"
+    "\n"
+    "[Linux-ubuntu/bash]   Welcome root to HomeSetup v1.9.19 \n"
+    "\n"
+    "GNU bash, version 5.2.21(1)-release\n"
+)
+noisy_stderr = "Shell option expand_aliases set to on\nreal error\n"
+result = subprocess.CompletedProcess(["cmd"], 0, noisy_stdout, noisy_stderr)
+remote = namespace["sanitize_remote_command_result"]("remote-host", result)
+assert remote.stdout == "GNU bash, version 5.2.21(1)-release\n"
+assert remote.stderr == "real error\n"
+
+local = namespace["sanitize_remote_command_result"]("", result)
+assert local.stdout == noisy_stdout
+assert local.stderr == noisy_stderr
+
+closed = subprocess.CompletedProcess(
+    ["cmd"], 255, "", "Shared connection to 167.99.120.81 closed.\n"
+)
+sanitized_closed = namespace["sanitize_remote_command_result"]("remote-host", closed)
+assert sanitized_closed.stderr == closed.stderr
+PY
   assert_success
 }
 
@@ -507,9 +550,11 @@ end = source.index("def floating_status_glyph(")
 clock = Clock()
 session_state = {}
 namespace = {
-    "FLOATING_STATUS_QUEUE_KEY": "_hhs_floating_status_queue",
-    "FLOATING_STATUS_LEGACY_KEY": "_hhs_floating_status",
-    "FLOATING_STATUS_QUEUE_LIMIT": 20,
+    "hhs_ui_constants": SimpleNamespace(
+        FLOATING_STATUS_QUEUE_KEY="_hhs_floating_status_queue",
+        FLOATING_STATUS_LEGACY_KEY="_hhs_floating_status",
+        FLOATING_STATUS_QUEUE_LIMIT=20,
+    ),
     "clean_command_status_message": lambda value: str(value).strip(),
     "st": SimpleNamespace(session_state=session_state),
     "time": clock,
@@ -714,10 +759,22 @@ PY
   run grep -q 'color: #dc2626' "${css_file}"
   assert_success
 
-  run grep -q 'UI_CACHE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-cache"' "${constants_file}"
+  run grep -q 'HHS_DIR = Path(os.environ.get("HHS_DIR", str(APP_DIR)))' "${constants_file}"
   assert_success
 
-  run grep -q 'UI_CACHE_FILE = Path(os.environ.get("HHS_CACHE_DIR"' "${constants_file}"
+  run grep -q 'HHS_CACHE_DIR = Path(os.environ.get("HHS_CACHE_DIR", str(HHS_DIR / "cache")))' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_STATE_FILE = HHS_CACHE_DIR / ".streamlit-ui-state"' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_CACHE_FILE = HHS_CACHE_DIR / ".streamlit-ui-cache"' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_CACHE_SSH_CONNECTION_KEY = "ui:ssh_connection"' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_SSH_CONNECTION_FILE' "${constants_file}"
   assert_failure
 
   run grep -q 'UI_CACHE_REALTIME_TTL_SECONDS = 15' "${constants_file}"
@@ -854,6 +911,8 @@ ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs_ui/streamlit_ui.css").read_text()
 dracula_css = Path("bin/apps/py/hhs_ui/themes/dracula.css").read_text()
 homesetup_css = Path("bin/apps/py/hhs_ui/themes/homesetup.css").read_text()
+jetpack_css = Path("bin/apps/py/hhs_ui/themes/jetpack.css").read_text()
+pastel_powerline_css = Path("bin/apps/py/hhs_ui/themes/pastel-powerline.css").read_text()
 tokyo_night_css = Path("bin/apps/py/hhs_ui/themes/tokyo-night.css").read_text()
 
 assert 'class="hhs-footer-logo"' in ui_source
@@ -910,20 +969,22 @@ assert "ttl_seconds=0" in run_footer_working_directory_body
 assert "use_cache=False" in run_footer_working_directory_body
 assert "force_local=True" not in run_footer_working_directory_body
 assert 'cache_tag="system"' in run_footer_working_directory_body
-assert '"Loading current working dir"' in run_footer_working_directory_body
+assert '"Loading remote working dir"' in run_footer_working_directory_body
 assert "show_overlay=False" not in run_footer_working_directory_body
 assert 'def parse_footer_working_directory_output' in ui_source
 assert 'def update_remote_footer_working_directory' in ui_source
 assert 'def footer_working_directory' in ui_source
 footer_working_directory_body = ui_source.split("def footer_working_directory", 1)[1].split("\ndef ", 1)[0]
 assert 'run_footer_working_directory()' not in footer_working_directory_body
-assert 'FOOTER_REMOTE_WORKING_DIR_KEY' in footer_working_directory_body
+assert 'hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY' in footer_working_directory_body
 assert 'return os.getcwd()' in footer_working_directory_body
 assert 'def run_shell_version' in ui_source
 assert 'def shell_version_command' in ui_source
-assert 'shlex.quote(RUN_SHELL)' in ui_source
+assert r"return r'${BASH:-bash} --version'" in ui_source
 assert 'shell_version_command()' in ui_source
 assert '"Checking shell version..."' in ui_source
+run_shell_version_body = ui_source.split("def run_shell_version", 1)[1].split("\ndef ", 1)[0]
+assert "force_local=True" not in run_shell_version_body
 assert 'def shell_version_output_html' in ui_source
 assert 'html.escape(output)' in ui_source
 assert 're.sub(r"\\r\\n|\\n|\\r", "<br>", escaped_output)' in ui_source
@@ -940,6 +1001,11 @@ assert 'def build_hhs_updater_command' in ui_source
 assert 'def run_hhs_updater_check' in ui_source
 assert 'def run_hhs_updater_update' in ui_source
 footer_actions_body = ui_source.split("def handle_footer_actions", 1)[1].split("\ndef ", 1)[0]
+assert "clear_footer_shell_version_dialog()" in footer_actions_body
+shell_result_index = footer_actions_body.index("result = run_shell_version()")
+shell_output_index = footer_actions_body.index('st.session_state["footer_shell_version_output"]')
+shell_title_index = footer_actions_body.index('st.session_state["footer_shell_version_dialog_title"] = "Shell version"')
+assert shell_result_index < shell_output_index < shell_title_index
 assert 'cache_delete_tag("env")' in footer_actions_body
 assert 'st.session_state["footer_hhs_version_cache_loaded"] = False' in footer_actions_body
 assert 'def cache_delete_command' in ui_source
@@ -949,6 +1015,13 @@ assert 'def updater_check_due' in ui_source
 assert 'def store_updater_check_result' in ui_source
 assert 'def execute_due_updater_check' in ui_source
 assert 'execute_due_updater_check()' in ui_source
+constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
+assert "UPDATER_CHECK_INTERVAL_SECONDS = 24 * 60 * 60" in constants_source
+store_updater_body = ui_source.split("def store_updater_check_result", 1)[1].split("\ndef ", 1)[0]
+assert 'st.session_state["updater_last_check_epoch"] = time.time()' in store_updater_body
+assert 'st.session_state["updater_last_check_output"] = output' in store_updater_body
+assert 'result.returncode == 0 and updater_output_has_updates(output)' in store_updater_body
+assert 'save_ui_state()' in store_updater_body
 assert '__hhs updater execute "{safe_operation}"' in ui_source
 assert 'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")";' in ui_source
 assert 'printf "y\\\\n" | ' in ui_source
@@ -956,7 +1029,7 @@ assert 'def handle_footer_actions' in ui_source
 assert 'def push_floating_status' in ui_source
 assert 'def pop_floating_status' in ui_source
 assert 'def current_floating_status' in ui_source
-assert 'FLOATING_STATUS_QUEUE_KEY' in ui_source
+assert 'hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY' in ui_source
 assert 'def render_floating_status' in ui_source
 assert 'render_floating_status()' in ui_source
 assert 'class="hhs-floating-status ' in ui_source
@@ -979,6 +1052,12 @@ remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", bas
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
 block_container_block = re.search(r"\.block-container\s*\{([^}]*)\}", base_css).group(1)
 main_block_gap_block = re.search(r"\[data-testid=\"stMainBlockContainer\"\] > \[data-testid=\"stVerticalBlock\"\],[^{]+\{([^}]*)\}", base_css).group(1)
+active_view_block = re.search(r"\.st-key-active_view\s*\{([^}]*)\}", base_css).group(1)
+sub_view_button_group_block = re.search(r"\.st-key-home_view \[data-baseweb=\"button-group\"\],[^{]+\{([^}]*)\}", base_css).group(1)
+expander_block = re.search(r"\[data-testid=\"stExpander\"\]\s*\{([^}]*)\}", base_css).group(1)
+docker_expander_block = re.search(r"\.st-key-home_docker_panel \[data-testid=\"stExpander\"\]\s*\{([^}]*)\}", base_css).group(1)
+docker_expander_details_block = re.search(r"\.st-key-home_docker_panel \[data-testid=\"stExpanderDetails\"\] > \[data-testid=\"stVerticalBlock\"\]\s*\{([^}]*)\}", base_css).group(1)
+hidden_streamlit_block = re.search(r"\[data-testid=\"stMain\"\] \[data-testid=\"stVerticalBlock\"\] > div:empty,[^{]+\{([^}]*)\}", base_css).group(1)
 view_key_block = re.search(r"\.st-key-active_view,[^{]+\{([^}]*)\}", base_css).group(1)
 active_view_tabs_block = re.search(r"\.st-key-active_view \[role=\"radiogroup\"\]\s*\{([^}]*)\}", base_css).group(1)
 streamlit_chrome_block = re.search(r"\[data-testid=\"stHeader\"\],[^{]+\{([^}]*)\}", base_css).group(1)
@@ -1029,11 +1108,30 @@ assert "var(--hhs-theme-footer-status-warn-color)" in base_css
 assert "var(--hhs-theme-footer-status-error-color)" in base_css
 assert "font-size: var(--hhs-theme-footer-status-text-size)" in base_css
 assert "--hhs-streamlit-toolbar-guard-width: 8rem" in base_css
+assert "--hhs-ttyd-max-height: 760px" in base_css
+assert "--hhs-view-gap: 0.95rem" in base_css
+assert "--hhs-view-section-gap: 0.8rem" in base_css
 assert "padding-top: 0 !important" in block_container_block
 assert '[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]' in base_css
 assert ".block-container > [data-testid=\"stVerticalBlock\"]" in base_css
 assert "gap: 0 !important" in main_block_gap_block
 assert "row-gap: 0 !important" in main_block_gap_block
+assert "margin-bottom: var(--hhs-view-gap) !important" in active_view_block
+assert "margin: 0 0 var(--hhs-view-gap) !important" in sub_view_button_group_block
+assert "margin: var(--hhs-view-section-gap) 0" in expander_block
+assert "margin: 0 0 var(--hhs-inline-control-gap)" in docker_expander_block
+assert "gap: 0 !important" in docker_expander_details_block
+assert "row-gap: 0 !important" in docker_expander_details_block
+assert "display: none !important" in hidden_streamlit_block
+assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stDataFrame"])' in base_css
+assert "margin-top: 0.35rem !important" in base_css
+assert '[data-testid="stMain"] [data-testid="stMarkdownContainer"] h5' in base_css
+assert "margin: var(--hhs-view-section-gap) 0 0.55rem !important" in base_css
+assert '[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.hhs-inline-form-label)' in base_css
+assert "margin-bottom: var(--hhs-view-section-gap)" in base_css
+assert '.st-key-home_docker_panel [data-testid="stVerticalBlock"] > div:has([data-testid="stDataFrame"])' in base_css
+assert '.st-key-home_docker_panel [data-testid="stElementContainer"][style*="height: 0px"]' in base_css
+assert '.st-key-home_docker_panel [data-testid="stElementContainer"][style*="width:0px"]' in base_css
 assert ".st-key-home_view" in base_css
 assert ".st-key-config_view" in base_css
 assert ".st-key-history_view" in base_css
@@ -1063,11 +1161,17 @@ assert "bottom: 3.25rem" in base_css
 assert "font-size: 0.84rem" in base_css
 assert "min-height: 3.25rem" in base_css
 assert "height: 32px" in base_css
+assert "background: rgba(15, 23, 42, 0.66)" in homesetup_css
+assert "background: rgba(25, 24, 31, 0.82)" in jetpack_css
+assert "background: rgba(20, 17, 31, 0.82)" in pastel_powerline_css
 assert "left: 0" in base_css
 assert "right: 0" in base_css
 assert "min-height: 1.85em" in base_css
 assert "padding: 0.32em 2rem 0.32em var(--hhs-sidebar-inline-inset)" in base_css
+assert "--hhs-floating-status-timeout: 5s" in base_css
 assert "animation-delay: var(--hhs-floating-status-timeout, 5s)" in base_css
+assert "font-family: var(--hhs-ui-font-family)" in base_css
+assert "var(--hhs-font-family)" not in base_css
 main_body = ui_source.split("def main()", 1)[1].split('if __name__ == "__main__"', 1)[0]
 assert main_body.index("render_footer()") < main_body.index("render_floating_status()")
 assert "color: var(--hhs-warning)" in base_css
@@ -1362,6 +1466,9 @@ PY
   run grep -q 'def render_home_docker_panel' "${ui_file}"
   assert_success
 
+  run grep -q 'with st.container(key="home_docker_panel")' "${ui_file}"
+  assert_success
+
   run grep -q 'def render_docker_agent_required_view' "${ui_file}"
   assert_success
 
@@ -1464,6 +1571,8 @@ for function_name in ("run_docker_ps", "run_docker_images"):
     assert "use_cache=False" not in body, function_name
 agent_body = source.split("def docker_agent_is_running", 1)[1].split("\ndef ", 1)[0]
 assert "use_cache=False" not in agent_body
+assert "timeout_seconds=2" in agent_body
+assert "show_overlay=False" in agent_body
 docker_body = source.split("def render_home_docker_panel", 1)[1].split("\ndef ", 1)[0]
 required_index = docker_body.index("render_docker_agent_required_view()")
 containers_index = docker_body.index('st.expander("All Containers"')
@@ -1708,6 +1817,18 @@ PY
   run grep -q 'def render_selected_table_item' "${ui_file}"
   assert_success
 
+  run grep -q 'def table_component_key' "${ui_file}"
+  assert_success
+
+  run grep -q 'table_empty_hint' "${ui_file}"
+  assert_success
+
+  run grep -q 'table_selected_panel_' "${ui_file}"
+  assert_success
+
+  run grep -q 'table_actions_' "${ui_file}"
+  assert_success
+
   run grep -q 'selected_editable: bool | Callable' "${ui_file}"
   assert_success
 
@@ -1807,6 +1928,21 @@ PY
   assert_success
 
   run grep -q 'div\[class\*="_selected_editing_"\] button' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="_table_empty_hint"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="_table_selected_panel_"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[class\*="_table_actions_"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-top: var(--hhs-view-section-gap) !important' "${css_file}"
+  assert_success
+
+  run grep -q 'gap: var(--hhs-inline-control-gap) !important' "${css_file}"
   assert_success
 
   run grep -q 'div\[class\*="st-key-env_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
@@ -2152,8 +2288,11 @@ PY
   run grep -q 'def build_ssh_disconnect_command' "${ui_file}"
   assert_success
 
-  run grep -q 'UI_SSH_CONNECTION_FILE' "${constants_file}"
+  run grep -q 'UI_CACHE_SSH_CONNECTION_KEY' "${constants_file}"
   assert_success
+
+  run grep -q 'UI_SSH_CONNECTION_FILE' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_failure
 
   run grep -q 'def restore_registered_ssh_connection_on_session_start' "${ui_file}"
   assert_success
@@ -2171,6 +2310,15 @@ PY
   assert_success
 
   run grep -q 'f"Reconnecting to {ssh_connection_display(reconnect_host)}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ssh_reconnect_restore_view_state"\] = True' "${ui_file}"
+  assert_success
+
+  run grep -q 'def reconnect_view_state_snapshot' "${ui_file}"
+  assert_success
+
+  run grep -q 'def restore_reconnect_view_state' "${ui_file}"
   assert_success
 
   run grep -q 'loader_message = str(' "${ui_file}"
@@ -2215,14 +2363,20 @@ assert "set_overlay(False" not in body
 assert "show_overlay=False" not in body
 assert "cache_clear()" in source.split("def clear_host_scoped_session_state", 1)[1].split("\ndef ", 1)[0]
 assert "cache_clear()" in source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
+assert 'st.session_state.pop("ssh_reconnect_restore_view_state", False)' in body
+assert "reconnect_view_state_snapshot()" in body
+assert "restore_reconnect_view_state(reconnect_state)" in body
+restore_reconnect_index = body.index("restore_reconnect_view_state(reconnect_state)")
+assert reset_index < restore_reconnect_index < status_index
 disconnect_body = source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
-assert "st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)" in disconnect_body
+assert "st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)" in disconnect_body
 assert 'st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""' in disconnect_body
 restore_body = source.split("def restore_registered_ssh_connection_on_session_start", 1)[1].split("\ndef ", 1)[0]
 assert "registered_ssh_connection_host() or reconnect_host" in restore_body
 assert "clear_disconnected_ssh_host(host)" not in restore_body
 assert 'st.session_state["ssh_connect_pending"] = reconnect_host' in restore_body
 assert 'st.session_state["ssh_connect_pending_message"] = (' in restore_body
+assert 'st.session_state["ssh_reconnect_restore_view_state"] = True' in restore_body
 PY
   assert_success
 
@@ -2230,6 +2384,18 @@ PY
   assert_success
 
   run grep -q 'def clear_registered_ssh_connection' "${ui_file}"
+  assert_success
+
+  run grep -q 'def legacy_ssh_connection_files' "${ui_file}"
+  assert_success
+
+  run grep -q 'def unlink_legacy_ssh_connection_files' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'cache[hhs_ui.UI_CACHE_SSH_CONNECTION_KEY] = {"value": {"host": clean_host}}' "${ui_file}"
+  assert_success
+
+  run grep -q 'ui_cache_metadata_key(key)' "${ui_file}"
   assert_success
 
   run grep -q 'def request_ssh_host_connect' "${ui_file}"
@@ -2358,10 +2524,10 @@ PY
   run grep -q 'RUN_SHELL = resolve_run_shell()' "${ui_file}"
   assert_success
 
-  run grep -q 'os.environ\[RUN_SHELL_ENV_KEY\] = RUN_SHELL' "${ui_file}"
+  run grep -q 'os.environ\[hhs_ui_constants.RUN_SHELL_ENV_KEY\] = RUN_SHELL' "${ui_file}"
   assert_success
 
-  run grep -q 'RUN_SHELL_ENV_KEY: RUN_SHELL' "${ui_file}"
+  run grep -q 'hhs_ui_constants.RUN_SHELL_ENV_KEY: RUN_SHELL' "${ui_file}"
   assert_success
 
   run grep -q '\[RUN_SHELL, "-lc", command_to_run\]' "${ui_file}"
@@ -2686,46 +2852,34 @@ PY
   assert_success
 
   run grep -q 'def render_footer_visibility_script' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'render_footer_visibility_script(hidden=True)' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'render_footer_visibility_script(hidden=False)' "${ui_file}"
-  assert_success
-
-  run grep -q 'doc.documentElement.classList' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'hhs-footer-hidden' "${ui_file}"
-  assert_success
+  assert_failure
+
+  run grep -q 'classList.add("hhs-main-hidden")' "${ui_file}"
+  assert_failure
+
+  run grep -q 'classList.remove("hhs-main-hidden")' "${ui_file}"
+  assert_failure
+
+  run grep -q '.hhs-main-hidden \[data-testid="stMain"\]' "${css_file}"
+  assert_failure
 
   run grep -q '_hhs_footer_visibility_sequence' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'dataset.hhsFooterVisibilitySequence' "${ui_file}"
-  assert_success
-
-  run grep -q 'sequence < current_sequence' "${ui_file}"
-  assert_success
-
-  run grep -q 'window.setTimeout(apply_visibility, delay)' "${ui_file}"
-  assert_success
-
-  run grep -q 'window.requestAnimationFrame(apply_visibility)' "${ui_file}"
-  assert_success
-
-  run grep -q 'doc.querySelectorAll(".hhs-app-footer")' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q '.hhs-footer-hidden .hhs-app-footer' "${css_file}"
-  assert_success
-
-  run grep -q 'visibility: hidden !important' "${css_file}"
-  assert_success
-
-  run grep -q 'pointer-events: none !important' "${css_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'def close_all_dialogs()' "${ui_file}"
   assert_success
@@ -2776,6 +2930,24 @@ PY
   assert_success
 
   run grep -q 'set_overlay(False)' "${ui_file}"
+  assert_success
+
+  run grep -q 'def run_bash_subprocess' "${ui_file}"
+  assert_success
+
+  run grep -q 'result = run_bash_subprocess(command_to_run, effective_timeout)' "${ui_file}"
+  assert_success
+
+  run grep -q 'subprocess.Popen(' "${ui_file}"
+  assert_success
+
+  run grep -q 'start_new_session=True' "${ui_file}"
+  assert_success
+
+  run grep -q 'stop_process(process)' "${ui_file}"
+  assert_success
+
+  run grep -q 'Command timed out after {timeout_seconds} seconds.' "${ui_file}"
   assert_success
 
   run grep -q 'hhs-tab-loader' "${css_file}"
@@ -2996,7 +3168,67 @@ PY
   run grep -q 'data:{mime_type};base64,{encoded_font}' "${ui_file}"
   assert_success
 
+  run grep -q 'background:#000000!important;' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-ttyd-font-index-v10' "${ui_file}"
+  assert_success
+
+  run grep -q 'padding:0!important;' "${ui_file}"
+  assert_success
+
+  run grep -q 'left:0!important;' "${ui_file}"
+  assert_success
+
+  run grep -q 'top:0!important;' "${ui_file}"
+  assert_success
+
+  run grep -q 'right:0!important;' "${ui_file}"
+  assert_success
+
+  run grep -q 'bottom:0!important;' "${ui_file}"
+  assert_success
+
+  run grep -q 'scrollbar-gutter:stable!important;' "${ui_file}"
+  assert_success
+
+  run grep -q '::-webkit-scrollbar-thumb' "${ui_file}"
+  assert_success
+
+  run grep -q 'transform:translate(5px,5px)!important;' "${ui_file}"
+  assert_failure
+
+  run grep -q 'const inset = 5' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'frame.style.left = `${{rect.left + inset}}px`' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'frame.style.width = `${{Math.max(0, rect.width - (inset * 2))}}px`' "${ui_file}"
+  assert_success
+
+  run grep -q 'background:transparent!important;' "${ui_file}"
+  assert_success
+
+  run grep -q 'width:calc(100% - 10px)!important;' "${ui_file}"
+  assert_failure
+
+  run grep -q 'def ttyd_bridge_script' "${ui_file}"
+  assert_success
+
+  run grep -q 'registerOscHandler(777' "${ui_file}"
+  assert_success
+
+  run grep -q "window.term.clear()" "${ui_file}"
+  assert_success
+
+  run grep -q "hhs-ttyd-event" "${ui_file}"
+  assert_success
+
   run grep -q 'TTYD_INDEX_FILE = (' "${constants_file}"
+  assert_failure
+
+  run grep -q 'TTYD_INDEX_FILE = HHS_CACHE_DIR / ".streamlit-ttyd-index.html"' "${constants_file}"
   assert_success
 
   run grep -q '"TTYD_INDEX_FILE"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
@@ -3008,7 +3240,31 @@ PY
   run grep -q 'def build_ttyd_command' "${ui_file}"
   assert_success
 
+  run grep -q 'def ttyd_shell_hook_script' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_ttyd_hooked_bash_command' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhs_ttyd_emit_cwd "cd"' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhs_ttyd_emit_cwd "pushd"' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhs_ttyd_emit_cwd "popd"' "${ui_file}"
+  assert_success
+
+  run grep -q 'elif \[\[ -r "${HOME}/.bashrc" \]\]; then' "${ui_file}"
+  assert_success
+
   run grep -q 'fontFamily={ttyd_font_family()}, monospace' "${ui_file}"
+  assert_success
+
+  run grep -q 'theme={"background":"#000000"}' "${ui_file}"
+  assert_success
+
+  run grep -q 'cursorBlink=true' "${ui_file}"
   assert_success
 
   run grep -q 'command.extend(("-I", index_file))' "${ui_file}"
@@ -3036,6 +3292,18 @@ PY
   run grep -q 'def cleanup_session_resources' "${ui_file}"
   assert_success
 
+  run grep -q 'def store_ttyd_event' "${ui_file}"
+  assert_success
+
+  run grep -q 'def normalize_ttyd_event' "${ui_file}"
+  assert_success
+
+  run grep -q 'def sync_ttyd_event_state' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ttyd_event_url' "${ui_file}"
+  assert_success
+
   run grep -q 'def ensure_ttyd_cleanup_server' "${ui_file}"
   assert_success
 
@@ -3049,6 +3317,9 @@ PY
   assert_success
 
   run grep -q 'parentWindow.addEventListener("beforeunload", cleanup, {{ once: true }})' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.addEventListener("message"' "${ui_file}"
   assert_success
 
   run grep -q 'cleanup_all_registered_sessions' "${ui_file}"
@@ -3088,12 +3359,15 @@ ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
 disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
 connect_index = main_body.index("execute_pending_ssh_connection()")
+footer_actions_index = main_body.index("handle_footer_actions()")
+shell_dialog_index = main_body.index("render_footer_shell_version_dialog()")
 cleanup_index = main_body.index("render_browser_cleanup_script()")
 sidebar_index = main_body.index("render_sidebar()")
 main_view_index = main_body.index("render_main_view()")
 footer_index = main_body.index("render_footer()")
 floating_status_index = main_body.index("render_floating_status()")
-assert disconnect_index < connect_index < sidebar_index < main_view_index
+assert disconnect_index < connect_index < footer_actions_index < shell_dialog_index
+assert shell_dialog_index < sidebar_index < main_view_index
 assert footer_index < floating_status_index < cleanup_index
 PY
   assert_success
@@ -3101,7 +3375,16 @@ PY
   run grep -q 'def render_ttyd_terminal_frame' "${ui_file}"
   assert_success
 
-  run grep -q 'class="hhs-ttyd-terminal-frame"' "${ui_file}"
+  run grep -q 'hhs-persistent-ttyd-frame' "${ui_file}"
+  assert_success
+
+  run grep -q 'dataset.src !== src' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_ttyd_terminal_frame_cleanup_script' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_ttyd_terminal_frame_cleanup_script()' "${ui_file}"
   assert_success
 
   run grep -q 'stop_ttyd_session()' "${ui_file}"
@@ -3140,11 +3423,34 @@ PY
   run grep -q '.hhs-ttyd-terminal-frame' "${css_file}"
   assert_success
 
-  run grep -q 'height: calc(100dvh - var(--hhs-footer-guard-height) - 7.25rem)' "${css_file}"
+  run grep -q '.hhs-ttyd-terminal-placeholder' "${css_file}"
   assert_success
 
-  run grep -q 'max-height: var(--hhs-ttyd-max-height, 720px)' "${css_file}"
+  run grep -q 'padding: 5px' "${css_file}"
   assert_success
+
+  run grep -q 'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem)' "${css_file}"
+  assert_success
+
+  run grep -q 'max-height: var(--hhs-ttyd-max-height, 760px)' "${css_file}"
+  assert_success
+
+  run grep -q 'background: var(--hhs-terminal-background-color, #000000)' "${css_file}"
+  assert_success
+
+  run grep -q 'height: calc(100% - 10px)' "${css_file}"
+  assert_success
+
+  run grep -q 'width: calc(100% - 10px)' "${css_file}"
+  assert_success
+
+  for theme_file in "${HHS_REPO_DIR}"/bin/apps/py/hhs_ui/themes/*.css; do
+    run grep -q -- '--hhs-terminal-background-color: #000000' "${theme_file}"
+    assert_success
+
+    run grep -q 'background: var(--hhs-terminal-background-color)' "${theme_file}"
+    assert_success
+  done
 
   run python3 - <<'PY'
 from pathlib import Path
@@ -3319,7 +3625,7 @@ PY
   run grep -q 'def run_hhs_ask_ingest' "${ui_file}"
   assert_success
 
-  run grep -q 'AI_CONTEXT_UPLOAD_TYPES = (' "${ui_file}"
+  run grep -q 'AI_CONTEXT_UPLOAD_TYPES = (' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/constants.py"
   assert_success
 
   run grep -q 'st.file_uploader(' "${ui_file}"
@@ -3337,7 +3643,7 @@ PY
   run grep -q '.stButton button \*' "${css_file}"
   assert_success
 
-  run grep -q 'type=AI_CONTEXT_UPLOAD_TYPES' "${ui_file}"
+  run grep -q 'type=hhs_ui_constants.AI_CONTEXT_UPLOAD_TYPES' "${ui_file}"
   assert_success
 
   run grep -q 'key="ai_context_upload"' "${ui_file}"
@@ -4579,8 +4885,10 @@ namespace = {
         SERVICE_TABLE_KEY="service_vars_table",
         SSH_TUNNEL_TABLE_KEY="ssh_tunnel_table",
     ),
+    "hhs_ui_constants": SimpleNamespace(
+        TABLE_SELECTION_SNAPSHOT_KEY="_hhs_table_selection_snapshots",
+    ),
     "st": SimpleNamespace(session_state=session_state),
-    "TABLE_SELECTION_SNAPSHOT_KEY": "_hhs_table_selection_snapshots",
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
@@ -4595,8 +4903,10 @@ snapshot_start = source.index("def command_result_snapshots()")
 snapshot_end = source.index("def cache_set(")
 snapshot_namespace = {
     "st": SimpleNamespace(session_state={}),
-    "COMMAND_RESULT_SNAPSHOT_KEY": "_hhs_command_result_snapshots",
-    "COMMAND_RESULT_SNAPSHOT_LIMIT": 2,
+    "hhs_ui_constants": SimpleNamespace(
+        COMMAND_RESULT_SNAPSHOT_KEY="_hhs_command_result_snapshots",
+        COMMAND_RESULT_SNAPSHOT_LIMIT=2,
+    ),
     "safe_cache_tag": lambda value: value,
 }
 exec("from __future__ import annotations\n" + source[snapshot_start:snapshot_end], snapshot_namespace)
@@ -4647,8 +4957,11 @@ start = source.index("def footer_working_directory(")
 end = source.index("def run_hhs_updater_check(")
 session_state = {}
 namespace = {
-    "FOOTER_LOCAL_WORKING_DIR_KEY": "_hhs_footer_local_working_dir",
-    "FOOTER_REMOTE_WORKING_DIR_KEY": "_hhs_footer_remote_working_dir",
+    "hhs_ui_constants": SimpleNamespace(
+        FOOTER_LOCAL_WORKING_DIR_KEY="_hhs_footer_local_working_dir",
+        FOOTER_REMOTE_WORKING_DIR_KEY="_hhs_footer_remote_working_dir",
+    ),
+    "sync_ttyd_event_state": lambda: None,
     "st": SimpleNamespace(session_state=session_state),
     "os": SimpleNamespace(getcwd=lambda: "/local/cwd"),
 }

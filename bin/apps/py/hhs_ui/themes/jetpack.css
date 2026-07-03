@@ -22,6 +22,7 @@
   --hhs-theme-dataframe-border-color: rgba(171, 157, 242, 0.46);
   --hhs-theme-dataframe-header-background-color: #221f2b;
   --hhs-theme-code-background-color: #14131a;
+  --hhs-terminal-background-color: #000000;
   --hhs-theme-text-color-accent: #ffd866;
   --hhs-theme-base-radius: 0.4rem;
   --hhs-theme-button-radius: 0.25rem;
@@ -183,7 +184,7 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 }
 
 .hhs-terminal-panel {
-  background: rgba(20, 19, 26, 0.88);
+  background: var(--hhs-terminal-background-color);
   border: 1px solid rgba(255, 97, 136, 0.3);
   color: var(--hhs-foreground);
 }
@@ -243,7 +244,7 @@ div[class*="st-key-service_selected_value_"] textarea {
 }
 
 .hhs-tab-loader {
-  background: rgba(25, 24, 31, 0.62);
+  background: rgba(25, 24, 31, 0.82);
 }
 
 .hhs-tab-loader-panel {

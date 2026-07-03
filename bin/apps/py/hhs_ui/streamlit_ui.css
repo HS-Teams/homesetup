@@ -5,10 +5,13 @@
   --hhs-inline-control-gap: 0.45rem;
   --hhs-log-chrome-height: calc(14rem + 160px);
   --hhs-streamlit-toolbar-guard-width: 8rem;
+  --hhs-view-gap: 0.95rem;
+  --hhs-view-section-gap: 0.8rem;
   --hhs-danger: #dc2626;
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
   --hhs-sidebar-inline-inset: 20px;
+  --hhs-ttyd-max-height: 760px;
   --hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
 }
 
@@ -27,14 +30,14 @@ textarea,
 [data-testid="stDataFrame"] *,
 [role="grid"],
 [role="grid"] * {
-  font-family: var(--hhs-ui-font-family) !important;
+  font-family: var(--hhs-ui-font-family), monospace !important;
 }
 
 [data-testid="stIconMaterial"],
 [data-testid="stIconMaterial"] *,
 [class*="material-icons"],
 [class*="material-symbols"] {
-  font-family: "Material Symbols Rounded", "Material Icons" !important;
+  font-family: "Material Symbols Rounded", "Material Icons", monospace !important;
   font-feature-settings: "liga";
   font-style: normal;
   font-weight: normal;
@@ -352,6 +355,10 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
   padding-top: 0 !important;
 }
 
+.st-key-active_view {
+  margin-bottom: var(--hhs-view-gap) !important;
+}
+
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-active_view),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-home_view),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-config_view),
@@ -368,7 +375,7 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 .st-key-history_view [data-baseweb="button-group"],
 .st-key-monitor_view [data-baseweb="button-group"],
 .st-key-ai_view [data-baseweb="button-group"] {
-  margin: 0 !important;
+  margin: 0 0 var(--hhs-view-gap) !important;
 }
 
 .st-key-active_view [role="radiogroup"] {
@@ -404,7 +411,7 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 }
 
 .hhs-view-heading {
-  margin: 0 0 0.75rem;
+  margin: 0 0 var(--hhs-view-gap);
   padding: 0;
 }
 
@@ -414,6 +421,19 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
   letter-spacing: 0;
   line-height: 1;
   margin: 0;
+}
+
+[data-testid="stMain"] [data-testid="stMarkdownContainer"] h5 {
+  margin: var(--hhs-view-section-gap) 0 0.55rem !important;
+}
+
+[data-testid="stMain"] [data-testid="stVegaLiteChart"],
+[data-testid="stMain"] .hhs-terminal-panel {
+  margin-top: 0.35rem;
+}
+
+[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.hhs-inline-form-label) {
+  margin-bottom: var(--hhs-view-section-gap);
 }
 
 .hhs-remote-connect-required {
@@ -605,7 +625,7 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 }
 
 .hhs-sysinfo-output {
-  font-family: var(--hhs-ui-font-family) !important;
+  font-family: var(--hhs-ui-font-family), monospace !important;
   font-size: 0.92rem;
   line-height: 1.45;
   margin: 0;
@@ -617,7 +637,7 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 .hhs-terminal-panel {
   border-radius: 0.4rem;
   box-sizing: border-box;
-  font-family: var(--hhs-ui-font-family) !important;
+  font-family: var(--hhs-ui-font-family), monospace !important;
   font-size: 0.92rem;
   line-height: 1.45;
   overflow: auto;
@@ -632,20 +652,20 @@ div[role="dialog"]:has(.hhs-shell-version-output) {
   width: max-content;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output)
+div[role="dialog"]:has(.hhs-shell-version-output),
   [data-testid="stVerticalBlock"]:has(.hhs-shell-version-output) {
   max-width: calc(92vw - 4rem);
   width: max-content;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output)
+div[role="dialog"]:has(.hhs-shell-version-output),
   [data-testid="stHorizontalBlock"]:has(.st-key-footer_shell_version_dialog_close_button) {
   display: flex;
   justify-content: center;
   margin-top: 1rem;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output)
+div[role="dialog"]:has(.hhs-shell-version-output),
   [data-testid="stColumn"]:has(.st-key-footer_shell_version_dialog_close_button) {
   flex: 0 0 120px !important;
   width: 120px !important;
@@ -659,25 +679,30 @@ div[role="dialog"]:has(.hhs-shell-version-output)
 }
 
 .hhs-ttyd-terminal-shell {
-  background: var(--hhs-theme-bg-color);
+  background: var(--hhs-terminal-background-color, #000000);
   border: 1px solid var(--hhs-theme-heading-border-color);
   border-radius: 0.4rem;
   box-sizing: border-box;
-  height: calc(100dvh - var(--hhs-footer-guard-height) - 7.25rem);
+  height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem);
   margin: 0;
-  max-height: var(--hhs-ttyd-max-height, 720px);
+  max-height: var(--hhs-ttyd-max-height, 760px);
   min-height: 360px;
   overflow: hidden;
-  padding: 0;
+  padding: 5px;
   width: 100%;
 }
 
 .hhs-ttyd-terminal-frame {
-  background: var(--hhs-theme-bg-color);
+  background: var(--hhs-terminal-background-color, #000000);
   border: 0;
   display: block;
   height: 100%;
   width: 100%;
+}
+
+.hhs-ttyd-terminal-placeholder {
+  height: calc(100% - 10px);
+  width: calc(100% - 10px);
 }
 
 .hhs-log-output {
@@ -711,7 +736,16 @@ div[role="dialog"]:has(.hhs-shell-version-output)
 }
 
 [data-testid="stExpander"] {
-  margin-bottom: var(--hhs-inline-control-gap);
+  margin: var(--hhs-view-section-gap) 0;
+}
+
+.st-key-home_docker_panel [data-testid="stExpander"] {
+  margin: 0 0 var(--hhs-inline-control-gap);
+}
+
+.st-key-home_docker_panel [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"] {
+  gap: 0 !important;
+  row-gap: 0 !important;
 }
 
 [data-testid="stExpander"] details {
@@ -820,7 +854,7 @@ div[class*="_other_filter_clear"] {
 div[class*="_other_filter_clear"] button {
   align-items: center;
   display: inline-flex;
-  font-family: var(--hhs-font-family);
+  font-family: var(--hhs-ui-font-family), monospace;
   font-size: 0.95rem;
   height: 2rem;
   justify-content: center;
@@ -887,11 +921,39 @@ div[class*="st-key-service_selected_value_"] input {
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(iframe[style*="height: 0px"]),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stIFrame"][height="0"]),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stAppIframeResizerAnchor"]) {
+  display: none !important;
   height: 0 !important;
   margin: 0 !important;
   min-height: 0 !important;
   overflow: hidden !important;
   padding: 0 !important;
+}
+
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stDataFrame"]) {
+  margin-top: 0.35rem !important;
+}
+
+div[class*="_table_empty_hint"],
+div[class*="_table_action_hint_"],
+div[class*="_table_selected_panel_"],
+div[class*="_table_actions_"] {
+  margin-top: var(--hhs-view-section-gap) !important;
+}
+
+div[class*="_table_selected_panel_"] [data-testid="stHorizontalBlock"],
+div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
+  gap: var(--hhs-inline-control-gap) !important;
+}
+
+.st-key-home_docker_panel [data-testid="stVerticalBlock"] > div:has([data-testid="stDataFrame"]) {
+  margin-top: 0 !important;
+}
+
+.st-key-home_docker_panel [data-testid="stElementContainer"][style*="height: 0px"],
+.st-key-home_docker_panel [data-testid="stElementContainer"][style*="height:0px"],
+.st-key-home_docker_panel [data-testid="stElementContainer"][style*="width: 0px"],
+.st-key-home_docker_panel [data-testid="stElementContainer"][style*="width:0px"] {
+  display: none !important;
 }
 
 .hhs-tab-loader {
@@ -967,6 +1029,7 @@ div[class*="st-key-service_selected_value_"] input {
 .hhs-floating-status {
   align-items: center;
   animation: hhs-floating-status-hide 0.22s ease-out forwards;
+  --hhs-floating-status-timeout: 5s;
   animation-delay: var(--hhs-floating-status-timeout, 5s);
   background: color-mix(
     in srgb,
@@ -1031,12 +1094,6 @@ div[class*="st-key-service_selected_value_"] input {
   position: fixed;
   right: 0;
   z-index: 1000000;
-}
-
-.hhs-footer-hidden .hhs-app-footer {
-  opacity: 0 !important;
-  pointer-events: none !important;
-  visibility: hidden !important;
 }
 
 .hhs-footer-glyph {

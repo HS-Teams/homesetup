@@ -2186,6 +2186,12 @@ def selected_item_editing_key(table_key: str | None, selected_index: int) -> str
     return f"{safe_key}_selected_editing_{selected_index}"
 
 
+def table_component_key(table_key: str | None, suffix: str) -> str:
+    """Return a stable Streamlit key for table-adjacent helper components."""
+    safe_key = table_key or "hhs_table"
+    return f"{safe_key}_{suffix}"
+
+
 def enable_selected_item_edit(
     editing_key: str, edit_key: str | None = None, edit_value: str = ""
 ) -> None:
@@ -2598,7 +2604,8 @@ def render_table(
     selected_rows = selection.selection.rows if selection else []
     if not selected_rows or selected_rows[0] >= len(rows):
         if empty_hint:
-            st.caption(empty_hint)
+            with st.container(key=table_component_key(key, "table_empty_hint")):
+                st.caption(empty_hint)
         return None, None
 
     selected_index = selected_rows[0]
@@ -2607,33 +2614,41 @@ def render_table(
         selected_action_buttons or [], selected_row, selected_index, reset_selection
     )
     if action_hint:
-        st.caption(action_hint)
+        with st.container(
+            key=table_component_key(key, f"table_action_hint_{selected_index}")
+        ):
+            st.caption(action_hint)
     if selected_label is not None:
         label = selected_label(selected_row, selected_index)
         selected_item_label, selected_item_value = selected_label_parts(label)
-        render_selected_table_item(
-            selected_item_label,
-            selected_item_value,
-            selected_index,
-            key,
-            table_editable_flag(selected_editable, selected_row, selected_index),
-            edit_key=(
-                table_edit_key(selected_edit_key, selected_row, selected_index)
-                if selected_edit_key is not None
-                else None
-            ),
-            edit_value=table_edit_value(
-                selected_edit_value, selected_row, selected_index
-            ),
-            edit_label=selected_edit_label,
-            edit_height=selected_edit_height,
-            edit_max_chars=selected_edit_max_chars,
-            edit_on_change=selected_edit_on_change,
-            edit_args=table_edit_args(selected_edit_args, selected_row, selected_index),
-            edit_folder_picker=selected_edit_folder_picker,
-            reset_selection=reset_selection,
-            selected_actions=visible_selected_actions,
-        )
+        with st.container(
+            key=table_component_key(key, f"table_selected_panel_{selected_index}")
+        ):
+            render_selected_table_item(
+                selected_item_label,
+                selected_item_value,
+                selected_index,
+                key,
+                table_editable_flag(selected_editable, selected_row, selected_index),
+                edit_key=(
+                    table_edit_key(selected_edit_key, selected_row, selected_index)
+                    if selected_edit_key is not None
+                    else None
+                ),
+                edit_value=table_edit_value(
+                    selected_edit_value, selected_row, selected_index
+                ),
+                edit_label=selected_edit_label,
+                edit_height=selected_edit_height,
+                edit_max_chars=selected_edit_max_chars,
+                edit_on_change=selected_edit_on_change,
+                edit_args=table_edit_args(
+                    selected_edit_args, selected_row, selected_index
+                ),
+                edit_folder_picker=selected_edit_folder_picker,
+                reset_selection=reset_selection,
+                selected_actions=visible_selected_actions,
+            )
 
     visible_actions = [
         action
@@ -2641,23 +2656,26 @@ def render_table(
         if table_action_visible(action, selected_row, selected_index)
     ]
     if visible_actions:
-        weights = action_column_weights or [1.0] * len(visible_actions)
-        columns = st.columns(weights)
-        for column, action in zip(columns, visible_actions):
-            label = str(action["label"])
-            key_prefix = str(action.get("key_prefix", label.lower().replace(" ", "_")))
-            with column:
-                st.button(
-                    label,
-                    disabled=table_action_disabled(
-                        action, selected_row, selected_index
-                    ),
-                    help=action.get("help"),
-                    key=f"{key_prefix}_{selected_index}",
-                    on_click=action.get("on_click"),
-                    args=table_action_args(action, selected_row, selected_index),
-                    width=str(action.get("width", "stretch")),
+        with st.container(key=table_component_key(key, f"table_actions_{selected_index}")):
+            weights = action_column_weights or [1.0] * len(visible_actions)
+            columns = st.columns(weights)
+            for column, action in zip(columns, visible_actions):
+                label = str(action["label"])
+                key_prefix = str(
+                    action.get("key_prefix", label.lower().replace(" ", "_"))
                 )
+                with column:
+                    st.button(
+                        label,
+                        disabled=table_action_disabled(
+                            action, selected_row, selected_index
+                        ),
+                        help=action.get("help"),
+                        key=f"{key_prefix}_{selected_index}",
+                        on_click=action.get("on_click"),
+                        args=table_action_args(action, selected_row, selected_index),
+                        width=str(action.get("width", "stretch")),
+                    )
 
     return selected_index, selected_row
 
@@ -3171,7 +3189,7 @@ def ttyd_font_format(font_file: Path) -> str:
 def ttyd_index_signature(binary: str, event_url: str = "") -> str:
     """Return a stable cache signature for the ttyd index and terminal font."""
     font_file = ttyd_font_file()
-    parts = ["hhs-ttyd-font-index-v8", binary, event_url]
+    parts = ["hhs-ttyd-font-index-v10", binary, event_url]
     for path in (Path(binary), font_file):
         try:
             stat = path.stat()
@@ -3256,16 +3274,26 @@ def ttyd_font_face_style() -> str:
         "}"
         "#terminal,.terminal,.xterm{"
         "box-sizing:border-box!important;"
-        "padding:5px!important;"
+        "padding:0!important;"
         "}"
         ".xterm .xterm-viewport{"
-        "left:5px!important;"
-        "top:5px!important;"
-        "right:5px!important;"
-        "bottom:5px!important;"
+        "left:0!important;"
+        "top:0!important;"
+        "right:0!important;"
+        "bottom:0!important;"
+        "scrollbar-gutter:stable!important;"
         "}"
-        ".xterm .xterm-screen,.xterm .xterm-helpers{"
-        "transform:translate(5px,5px)!important;"
+        ".xterm .xterm-viewport::-webkit-scrollbar{"
+        "background:#000000!important;"
+        "width:12px!important;"
+        "}"
+        ".xterm .xterm-viewport::-webkit-scrollbar-track{"
+        "background:#000000!important;"
+        "}"
+        ".xterm .xterm-viewport::-webkit-scrollbar-thumb{"
+        "background:#6b7280!important;"
+        "border:2px solid #000000!important;"
+        "border-radius:999px!important;"
         "}"
         "</style>"
     )
@@ -3664,12 +3692,13 @@ def render_ttyd_terminal_frame(ttyd_url: str) -> None:
             }}
             const syncFrame = () => {{
               const rect = anchor.getBoundingClientRect();
+              const inset = 5;
               const visible = rect.width > 0 && rect.height > 0;
               frame.style.display = visible ? "block" : "none";
-              frame.style.left = `${{rect.left}}px`;
-              frame.style.top = `${{rect.top}}px`;
-              frame.style.width = `${{rect.width}}px`;
-              frame.style.height = `${{rect.height}}px`;
+              frame.style.left = `${{rect.left + inset}}px`;
+              frame.style.top = `${{rect.top + inset}}px`;
+              frame.style.width = `${{Math.max(0, rect.width - (inset * 2))}}px`;
+              frame.style.height = `${{Math.max(0, rect.height - (inset * 2))}}px`;
             }};
             if (window.parent.__hhsTtydFrameSyncCleanup) {{
               window.parent.__hhsTtydFrameSyncCleanup();

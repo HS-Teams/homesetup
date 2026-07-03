@@ -10,6 +10,7 @@
   --hhs-theme-dataframe-border-color: #8a98d7;
   --hhs-theme-dataframe-header-background-color: #24283b;
   --hhs-theme-code-background-color: #16161e;
+  --hhs-terminal-background-color: #000000;
   --hhs-theme-text-color-accent: var(--hhs-success);
   --hhs-theme-base-radius: 0.4rem;
   --hhs-theme-button-radius: 0.25rem;
@@ -166,7 +167,7 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 }
 
 .hhs-terminal-panel {
-  background: var(--hhs-panel);
+  background: var(--hhs-terminal-background-color);
   border: 1px solid var(--hhs-comment);
   color: var(--hhs-foreground);
 }
