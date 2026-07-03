@@ -777,7 +777,7 @@ PY
   run grep -q 'UI_SSH_CONNECTION_FILE' "${constants_file}"
   assert_failure
 
-  run grep -q 'UI_CACHE_REALTIME_TTL_SECONDS = 15' "${constants_file}"
+  run grep -q 'UI_CACHE_REALTIME_TTL_SECONDS = 30' "${constants_file}"
   assert_success
 
   run grep -q 'UI_CACHE_NORMAL_TTL_SECONDS = 300' "${constants_file}"
@@ -1119,7 +1119,7 @@ assert "row-gap: 0 !important" in main_block_gap_block
 assert "margin-bottom: var(--hhs-view-gap) !important" in active_view_block
 assert "margin: 0 0 var(--hhs-view-gap) !important" in sub_view_button_group_block
 assert "margin: var(--hhs-view-section-gap) 0" in expander_block
-assert "margin: 0 0 var(--hhs-inline-control-gap)" in docker_expander_block
+assert "margin: 0 0 var(--hhs-element-std-gap)" in docker_expander_block
 assert "gap: 0 !important" in docker_expander_details_block
 assert "row-gap: 0 !important" in docker_expander_details_block
 assert "display: none !important" in hidden_streamlit_block
@@ -1691,16 +1691,19 @@ PY
   run grep -q 'PATH_FILTER_COLUMNS = \[2.25, 1.75\]' "${constants_file}"
   assert_success
 
-  run grep -q -- '--hhs-inline-control-gap: 0.45rem' "${css_file}"
+  run grep -q -- '--hhs-element-std-gap: 1rem' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-filter-control-gap: 1rem' "${css_file}"
+  run grep -q -- '--hhs-filter-control-gap' "${css_file}"
+  assert_failure
+
+  run grep -q -- '--hhs-inline-control-gap' "${css_file}"
+  assert_failure
+
+  run grep -q 'gap: var(--hhs-element-std-gap)' "${css_file}"
   assert_success
 
-  run grep -q 'gap: var(--hhs-inline-control-gap)' "${css_file}"
-  assert_success
-
-  run grep -q 'gap: var(--hhs-filter-control-gap) !important' "${css_file}"
+  run grep -q 'gap: var(--hhs-element-std-gap) !important' "${css_file}"
   assert_success
 
   run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-env_other_filter)' "${css_file}"
@@ -1948,7 +1951,7 @@ PY
   run grep -q 'margin-top: var(--hhs-view-section-gap) !important' "${css_file}"
   assert_success
 
-  run grep -q 'gap: var(--hhs-inline-control-gap) !important' "${css_file}"
+  run grep -q 'gap: var(--hhs-element-std-gap) !important' "${css_file}"
   assert_success
 
   run grep -q 'div\[class\*="st-key-env_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
@@ -4113,7 +4116,17 @@ PY
   run grep -q 'hhs-ai-model-action-footer-guard' "${css_file}"
   assert_success
 
-  run grep -q 'min-height: 8rem' "${css_file}"
+  run python3 - "${css_file}" <<'PY'
+import sys
+from pathlib import Path
+
+css = Path(sys.argv[1]).read_text(encoding="utf-8")
+assert ".hhs-ai-model-action-footer-guard" in css
+assert "min-height: 8rem" in css[
+    css.index(".hhs-ai-model-action-footer-guard"):
+    css.index(".st-key-ai_confirm_clear_button")
+]
+PY
   assert_success
 
   run grep -q 'status == "Downloaded"' "${ui_file}"
@@ -4134,6 +4147,15 @@ PY
   run grep -q 'PROCESS_LIST_LINE_PATTERN' "${constants_file}"
   assert_success
 
+  run grep -q 'PROCESS_FILTERS = ("All", "Active", "Inactive", "Ghost", "Other")' "${constants_file}"
+  assert_success
+
+  run grep -q 'PROCESS_FILTER_COLUMNS = \[2.65, 1.35\]' "${constants_file}"
+  assert_success
+
+  run grep -q '"monitor_process_other_filter"' "${constants_file}"
+  assert_success
+
   run grep -q 'def build_hhs_process_list_command' "${ui_file}"
   assert_success
 
@@ -4152,7 +4174,90 @@ PY
   run grep -q '"monitor_process_filter"' "${ui_file}"
   assert_success
 
+  run grep -q '"monitor_process_other_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.PROCESS_FILTERS' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.PROCESS_FILTER_COLUMNS' "${ui_file}"
+  assert_success
+
+  run grep -q 'def filter_process_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'filter_process_rows(' "${ui_file}"
+  assert_success
+
   run grep -q 'render_table_controls_panel(render_process_controls)' "${ui_file}"
+  assert_success
+
+  run grep -q 'monitor_process_filter_apply_button' "${ui_file}"
+  assert_failure
+
+  run grep -q 'apply_monitor_process_filter' "${ui_file}"
+  assert_failure
+
+  run grep -q '.st-key-monitor_process_other_filter' "${css_file}"
+  assert_success
+}
+
+@test "when filtering monitor processes then status and other filters should use parsed rows" {
+  run python3 - "${ui_file}" <<'PY'
+import ast
+import re
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+tree = ast.parse(source)
+functions = {
+    node.name: ast.get_source_segment(source, node)
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
+}
+namespace = {
+    "re": re,
+    "hhs_ui": SimpleNamespace(
+        ANSI_ESCAPE_PATTERN=re.compile(
+            r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[()][A-Za-z0-9])"
+        ),
+        ESCAPED_ANSI_ESCAPE_PATTERN=re.compile(
+            r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
+        ),
+        PROCESS_LIST_LINE_PATTERN=re.compile(
+            r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s+(?:\S+\s+)?(active|inactive|ghost) process$",
+            re.IGNORECASE,
+        ),
+    ),
+}
+exec(
+    "from __future__ import annotations\n"
+    + "\n\n".join(
+        functions[name]
+        for name in (
+            "strip_ansi",
+            "row_matches_text_filter",
+            "filter_process_rows",
+            "parse_hhs_process_list",
+        )
+    ),
+    namespace,
+)
+output = """
+  501  1001     1 python                                  ✓ active process
+  501  1002     1 stale-worker                            ✕ ghost process
+  501  1003     1 stopped-worker                          ✕ inactive process
+"""
+rows = namespace["parse_hhs_process_list"](output)
+assert [row["Status"] for row in rows] == ["Active", "Ghost", "Inactive"], rows
+assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Active")] == ["1001"]
+assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Ghost")] == ["1002"]
+assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Inactive")] == ["1003"]
+assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Other", "stale")] == ["1002"]
+assert namespace["filter_process_rows"](rows, "All") == rows
+PY
   assert_success
 }
 
@@ -4185,7 +4290,40 @@ PY
   run grep -q 'def render_monitor_logs_panel' "${ui_file}"
   assert_success
 
-  run grep -q 'label_col, input_col, level_label_col, level_col, tail_col, clear_col = st.columns' "${ui_file}"
+  run grep -q 'def render_log_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'def toggle_monitor_logs_tail' "${ui_file}"
+  assert_success
+
+  run grep -q 'selected_log, selected_level, tail_enabled = render_table_controls_panel(' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_log_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.container(key="monitor_log_controls")' "${ui_file}"
+  assert_success
+
+  run grep -q '\[0.42, 1.0, 0.52, 1.0, 0.16, 0.16\], vertical_alignment="center"' "${ui_file}"
+  assert_success
+
+  run grep -q 'Log file:' "${ui_file}"
+  assert_success
+
+  run grep -q 'Log level:' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="monitor_logs_tail_button"' "${ui_file}"
+  assert_success
+
+  run grep -q '"" if tail_enabled_value else ""' "${ui_file}"
+  assert_success
+
+  run grep -q 'tail_enabled_value = st.checkbox' "${ui_file}"
+  assert_failure
+
+  run grep -q 'on_click=toggle_monitor_logs_tail' "${ui_file}"
   assert_success
 
   run grep -q 'key="monitor_log_clear_button"' "${ui_file}"
@@ -4238,16 +4376,70 @@ LOGS
   run grep -q '.st-key-monitor_log_clear_button button' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-log-chrome-height: calc(14rem + 160px)' "${css_file}"
+  run grep -q '.st-key-monitor_logs_tail_button button' "${css_file}"
   assert_success
 
-  run grep -q 'min-height: 8rem' "${css_file}"
+  run grep -q '.st-key-monitor_log_controls \[data-testid="stHorizontalBlock"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'gap: var(--hhs-element-std-gap) !important' "${css_file}"
+  assert_success
+
+  run grep -q 'flex-wrap: nowrap !important' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-monitor_log_controls \[data-testid="stHorizontalBlock"\] > div\[data-testid="stColumn"\]:nth-child(1)' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-monitor_log_controls \[data-testid="stHorizontalBlock"\] > div\[data-testid="stColumn"\]:nth-child(3)' "${css_file}"
+  assert_success
+
+  run grep -q 'min-width: max-content' "${css_file}"
+  assert_success
+
+  run grep -q 'flex: 1 1 0 !important' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-monitor_log_controls \[data-testid="stHorizontalBlock"\] > div\[data-testid="stColumn"\]:nth-child(5)' "${css_file}"
+  assert_success
+
+  run grep -q 'flex: 0 0 2rem !important' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-chrome-height: 8.5rem' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-expander-height: 230px' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height) - var(--hhs-log-expander-height))' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-max-height: calc(var(--hhs-ttyd-max-height, 760px) - var(--hhs-log-expander-height))' "${css_file}"
+  assert_success
+
+  run grep -q 'height: var(--hhs-log-height)' "${css_file}"
+  assert_success
+
+  run grep -q 'max-height: min(var(--hhs-log-height), var(--hhs-log-max-height))' "${css_file}"
+  assert_success
+
+  run grep -q 'min-height: 280px' "${css_file}"
   assert_success
 
   run grep -q '@st.fragment(run_every="5s")' "${ui_file}"
   assert_success
 
   run grep -q 'white-space: pre' "${css_file}"
+  assert_success
+
+  run grep -q 'margin: 0.55rem 0 var(--hhs-element-std-gap)' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-log-output' "${css_file}"
+  assert_success
+
+  run grep -q 'margin: 0;' "${css_file}"
   assert_success
 }
 

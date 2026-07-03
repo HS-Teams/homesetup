@@ -1481,25 +1481,6 @@ def applied_monitor_disk_directory() -> str:
     return directory or monitor_default_disk_directory()
 
 
-def apply_monitor_process_filter() -> None:
-    """Apply the pending process monitor filter before the next command refresh."""
-    st.session_state["monitor_process_filter_applied"] = str(
-        st.session_state.get("monitor_process_filter", "")
-    ).strip()
-    cache_delete_tag("monitor_process")
-    save_ui_state()
-
-
-def applied_monitor_process_filter() -> str:
-    """Return the process filter currently applied to the monitor command."""
-    return str(
-        st.session_state.get(
-            "monitor_process_filter_applied",
-            st.session_state.get("monitor_process_filter", ""),
-        )
-    ).strip()
-
-
 def hhs_log_dir() -> Path:
     """Return the HomeSetup log directory used by monitor logs."""
     return Path(
@@ -1551,6 +1532,14 @@ def clear_monitor_log_file() -> None:
         return
     cache_delete_tag("monitor_logs")
     push_floating_status(f"Log file cleared: {log_path.name}", "info")
+
+
+def toggle_monitor_logs_tail() -> None:
+    """Toggle automatic monitor log tail refresh and persist the updated state."""
+    st.session_state["monitor_logs_tail"] = not bool(
+        st.session_state.get("monitor_logs_tail", True)
+    )
+    save_ui_state()
 
 
 def is_persisted_ui_key(key: str) -> bool:
@@ -7236,8 +7225,7 @@ def refresh_service_listing() -> subprocess.CompletedProcess[str]:
 
 def refresh_process_listing() -> subprocess.CompletedProcess[str]:
     """Reissue the current process listing command after a mutation."""
-    process_filter = str(st.session_state.get("monitor_process_filter", ""))
-    return run_hhs_process_list(process_filter)
+    return run_hhs_process_list(".")
 
 
 def refresh_ai_model_listing() -> subprocess.CompletedProcess[str]:
@@ -7335,6 +7323,23 @@ def filter_service_rows(
     if service_filter == "Other":
         return [row for row in rows if row_matches_text_filter(row, text_filter)]
     return rows
+
+
+def filter_process_rows(
+    rows: list[dict[str, str]],
+    process_filter: str,
+    text_filter: str = "",
+) -> list[dict[str, str]]:
+    """Return process rows matching the selected process status filter."""
+    if process_filter == "Other":
+        return [row for row in rows if row_matches_text_filter(row, text_filter)]
+    if process_filter == "All":
+        return rows
+    return [
+        row
+        for row in rows
+        if row.get("Status", "").lower() == process_filter.strip().lower()
+    ]
 
 
 def parse_hhs_envs(output: str) -> list[dict[str, str]]:
@@ -7999,7 +8004,7 @@ def parse_hhs_process_list(output: str) -> list[dict[str, str]]:
                 "PID": match.group(2),
                 "PPID": match.group(3),
                 "Command": match.group(4).strip(),
-                "Status": "Active",
+                "Status": match.group(5).strip().title(),
             }
         )
     return rows
@@ -9624,36 +9629,18 @@ def render_monitor_processes_panel() -> None:
         else:
             st.error(clean_command_status_message(action_message))
 
-    def render_process_controls() -> str:
-        """Render process table controls and return the filter text."""
-        label_col, input_col, action_col = st.columns(
-            [0.55, 3.0, 0.45], vertical_alignment="center"
+    def render_process_controls() -> tuple[str, str]:
+        """Render process table controls and return the selected filter."""
+        return render_table_filter_controls(
+            hhs_ui.PROCESS_FILTERS,
+            "monitor_process_filter",
+            "monitor_process_other_filter",
+            hhs_ui.PROCESS_FILTER_COLUMNS,
+            placeholder="Type process filter",
         )
-        with label_col:
-            st.markdown(
-                '<span class="hhs-inline-form-label">Filters</span>',
-                unsafe_allow_html=True,
-            )
-        with input_col:
-            st.text_input(
-                "Filters",
-                key="monitor_process_filter",
-                label_visibility="collapsed",
-                on_change=save_ui_state,
-                placeholder="Type process filter",
-            )
-        with action_col:
-            st.button(
-                "",
-                key="monitor_process_filter_apply_button",
-                help="Apply",
-                on_click=apply_monitor_process_filter,
-                width="stretch",
-            )
-        return applied_monitor_process_filter()
 
-    process_filter = render_table_controls_panel(render_process_controls)
-    result = run_hhs_process_list(process_filter)
+    process_filter, other_filter = render_table_controls_panel(render_process_controls)
+    result = run_hhs_process_list(".")
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
@@ -9661,7 +9648,9 @@ def render_monitor_processes_panel() -> None:
             )
         )
         return
-    rows = parse_hhs_process_list(result.stdout)
+    rows = filter_process_rows(
+        parse_hhs_process_list(result.stdout), process_filter, other_filter
+    )
     if not rows:
         st.caption("No processes found.")
         return
@@ -9697,50 +9686,75 @@ def render_monitor_logs_panel() -> None:
         st.session_state["monitor_log_file"] = log_files[0]
     if selected_monitor_log_level() != st.session_state.get("monitor_log_level"):
         st.session_state["monitor_log_level"] = selected_monitor_log_level()
-    label_col, input_col, level_label_col, level_col, tail_col, clear_col = st.columns(
-        [0.55, 2.65, 0.62, 0.82, 0.45, 0.16], vertical_alignment="center"
+
+    def render_log_controls() -> tuple[str, str, bool]:
+        """Render log controls and return the selected file, level, and tail state."""
+        with st.container(key="monitor_log_controls"):
+            (
+                label_col,
+                input_col,
+                level_label_col,
+                level_col,
+                tail_col,
+                clear_col,
+            ) = st.columns(
+                [0.42, 1.0, 0.52, 1.0, 0.16, 0.16], vertical_alignment="center"
+            )
+            with label_col:
+                st.markdown(
+                    '<span class="hhs-inline-form-label">Log file:</span>',
+                    unsafe_allow_html=True,
+                )
+            with input_col:
+                selected_log_value = st.selectbox(
+                    "Log file:",
+                    options=log_files,
+                    key="monitor_log_file",
+                    label_visibility="collapsed",
+                    on_change=save_ui_state,
+                )
+            with level_label_col:
+                st.markdown(
+                    '<span class="hhs-inline-form-label">Log level:</span>',
+                    unsafe_allow_html=True,
+                )
+            with level_col:
+                selected_level_value = st.selectbox(
+                    "Log level:",
+                    options=hhs_ui.LOG_LEVELS,
+                    key="monitor_log_level",
+                    format_func=monitor_log_level_label,
+                    label_visibility="collapsed",
+                    on_change=save_ui_state,
+                )
+            with tail_col:
+                tail_enabled_value = bool(
+                    st.session_state.get("monitor_logs_tail", True)
+                )
+                st.button(
+                    "" if tail_enabled_value else "",
+                    key="monitor_logs_tail_button",
+                    help=(
+                        "Disable tail refresh"
+                        if tail_enabled_value
+                        else "Enable tail refresh"
+                    ),
+                    on_click=toggle_monitor_logs_tail,
+                    width="stretch",
+                )
+            with clear_col:
+                st.button(
+                    "",
+                    key="monitor_log_clear_button",
+                    help="Clear selected log file",
+                    on_click=clear_monitor_log_file,
+                    width="stretch",
+                )
+        return str(selected_log_value), str(selected_level_value), bool(tail_enabled_value)
+
+    selected_log, selected_level, tail_enabled = render_table_controls_panel(
+        render_log_controls
     )
-    with label_col:
-        st.markdown(
-            '<span class="hhs-inline-form-label">Log file</span>',
-            unsafe_allow_html=True,
-        )
-    with input_col:
-        selected_log = st.selectbox(
-            "Log file",
-            options=log_files,
-            key="monitor_log_file",
-            label_visibility="collapsed",
-            on_change=save_ui_state,
-        )
-    with level_label_col:
-        st.markdown(
-            '<span class="hhs-inline-form-label">Log level</span>',
-            unsafe_allow_html=True,
-        )
-    with level_col:
-        selected_level = st.selectbox(
-            "Log level",
-            options=hhs_ui.LOG_LEVELS,
-            key="monitor_log_level",
-            format_func=monitor_log_level_label,
-            label_visibility="collapsed",
-            on_change=save_ui_state,
-        )
-    with tail_col:
-        tail_enabled = st.checkbox(
-            "Tail",
-            key="monitor_logs_tail",
-            on_change=save_ui_state,
-        )
-    with clear_col:
-        st.button(
-            "",
-            key="monitor_log_clear_button",
-            help="Clear selected log file",
-            on_click=clear_monitor_log_file,
-            width="stretch",
-        )
     st.markdown(
         f'<div class="hhs-log-file-title"><code>{html.escape(selected_log)}</code></div>',
         unsafe_allow_html=True,
@@ -10489,11 +10503,14 @@ def main() -> None:
     st.session_state.setdefault("monitor_view", "DISK")
     if st.session_state["monitor_view"] not in hhs_ui.MONITOR_VIEWS:
         st.session_state["monitor_view"] = "DISK"
-    st.session_state.setdefault("monitor_process_filter", "")
-    st.session_state.setdefault(
-        "monitor_process_filter_applied",
-        st.session_state["monitor_process_filter"],
-    )
+    st.session_state.setdefault("monitor_process_filter", "All")
+    st.session_state.setdefault("monitor_process_other_filter", "")
+    monitor_process_filter = str(st.session_state["monitor_process_filter"]).strip()
+    if not monitor_process_filter:
+        st.session_state["monitor_process_filter"] = "All"
+    elif monitor_process_filter not in hhs_ui.PROCESS_FILTERS:
+        st.session_state["monitor_process_other_filter"] = monitor_process_filter
+        st.session_state["monitor_process_filter"] = "Other"
     st.session_state.setdefault(
         "monitor_disk_directory", monitor_default_disk_directory()
     )

@@ -1,10 +1,12 @@
 :root {
   --hhs-bar-chart-chrome-height: calc(14rem + 172px);
   --hhs-bar-chart-height: max(12rem, min(380px, calc(100dvh - var(--hhs-bar-chart-chrome-height) - var(--hhs-footer-guard-height))));
-  --hhs-filter-control-gap: 1rem;
+  --hhs-element-std-gap: 1rem;
   --hhs-footer-guard-height: 3.5rem;
-  --hhs-inline-control-gap: 0.45rem;
-  --hhs-log-chrome-height: calc(14rem + 160px);
+  --hhs-log-chrome-height: 8.5rem;
+  --hhs-log-expander-height: 230px;
+  --hhs-log-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height) - var(--hhs-log-expander-height));
+  --hhs-log-max-height: calc(var(--hhs-ttyd-max-height, 760px) - var(--hhs-log-expander-height));
   --hhs-streamlit-toolbar-guard-width: 8rem;
   --hhs-view-gap: 0.95rem;
   --hhs-view-section-gap: 0.8rem;
@@ -100,7 +102,7 @@ textarea,
 .hhs-selected-item-line {
   align-items: baseline;
   display: inline-flex;
-  gap: var(--hhs-inline-control-gap);
+  gap: var(--hhs-element-std-gap);
   max-width: 100%;
 }
 
@@ -170,6 +172,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 
 .st-key-dir_folder_picker_button button,
 .st-key-monitor_log_clear_button button,
+.st-key-monitor_logs_tail_button button,
 .st-key-path_folder_picker_button button {
   align-items: center;
   border-radius: 4px;
@@ -186,12 +189,41 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 
 .st-key-dir_folder_picker_button,
 .st-key-monitor_log_clear_button,
+.st-key-monitor_logs_tail_button,
 .st-key-path_folder_picker_button {
   margin-top: 1.55rem;
 }
 
-.st-key-monitor_log_clear_button {
+.st-key-monitor_log_clear_button,
+.st-key-monitor_logs_tail_button {
   margin-top: 0;
+}
+
+.st-key-monitor_log_controls [data-testid="stHorizontalBlock"] {
+  align-items: center;
+  flex-wrap: nowrap !important;
+  gap: var(--hhs-element-std-gap) !important;
+}
+
+.st-key-monitor_log_controls [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(1),
+.st-key-monitor_log_controls [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(3) {
+  flex: 0 0 auto !important;
+  min-width: max-content;
+  width: auto !important;
+}
+
+.st-key-monitor_log_controls [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(2),
+.st-key-monitor_log_controls [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(4) {
+  flex: 1 1 0 !important;
+  min-width: 12rem;
+  width: auto !important;
+}
+
+.st-key-monitor_log_controls [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(5),
+.st-key-monitor_log_controls [data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:nth-child(6) {
+  flex: 0 0 2rem !important;
+  min-width: 2rem;
+  width: 2rem !important;
 }
 
 .st-key-folder_picker_cancel_button button,
@@ -216,7 +248,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 .st-key-folder_picker_action_grid [data-testid="stVerticalBlock"] {
   align-items: center;
   display: grid !important;
-  gap: var(--hhs-inline-control-gap);
+  gap: var(--hhs-element-std-gap);
   grid-auto-flow: column;
   grid-template-columns: repeat(4, 2rem);
   justify-content: center;
@@ -238,7 +270,7 @@ div[class*="st-key-path_selected_value_"] [data-testid="stTextInput"],
 div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] {
   align-items: center;
   display: grid;
-  gap: var(--hhs-inline-control-gap);
+  gap: var(--hhs-element-std-gap);
   grid-template-columns: max-content minmax(0, 1fr);
 }
 
@@ -707,10 +739,10 @@ div[role="dialog"]:has(.hhs-shell-version-output),
 }
 
 .hhs-log-output {
-  height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height));
-  margin: 0.35rem 0 0;
-  max-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height));
-  min-height: 8rem;
+  height: var(--hhs-log-height);
+  margin: 0;
+  max-height: min(var(--hhs-log-height), var(--hhs-log-max-height));
+  min-height: 280px;
 }
 
 .hhs-home-tool-action-output {
@@ -726,9 +758,11 @@ div[role="dialog"]:has(.hhs-shell-version-output),
 }
 
 .hhs-log-file-title {
+  display: block;
   font-size: 0.92rem;
   font-weight: 800;
-  margin: 0.55rem 0 0;
+  line-height: 1.25;
+  margin: 0.55rem 0 var(--hhs-element-std-gap);
 }
 
 .hhs-log-file-title code {
@@ -741,7 +775,7 @@ div[role="dialog"]:has(.hhs-shell-version-output),
 }
 
 .st-key-home_docker_panel [data-testid="stExpander"] {
-  margin: 0 0 var(--hhs-inline-control-gap);
+  margin: 0 0 var(--hhs-element-std-gap);
 }
 
 .st-key-home_docker_panel [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"] {
@@ -766,6 +800,7 @@ div[role="dialog"]:has(.hhs-shell-version-output),
 .st-key-home_tools_other_filter,
 .st-key-history_commands_other_filter,
 .st-key-history_directories_other_filter,
+.st-key-monitor_process_other_filter,
 .st-key-path_other_filter,
 .st-key-service_other_filter {
   max-width: none;
@@ -780,9 +815,10 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-home_shopts_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) {
-  gap: var(--hhs-filter-control-gap) !important;
+  gap: var(--hhs-element-std-gap) !important;
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-testid="stColumn"]:first-child,
@@ -793,6 +829,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-home_shopts_other_filter) > div
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:first-child {
   flex: 0 0 auto !important;
@@ -808,6 +845,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-home_shopts_other_filter) > div
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter) > div[data-testid="stColumn"]:nth-child(2),
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) > div[data-testid="stColumn"]:nth-child(2),
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:nth-child(2),
+div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter) > div[data-testid="stColumn"]:nth-child(2),
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:nth-child(2),
 div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:nth-child(2) {
   flex: 1 1 auto !important;
@@ -823,6 +861,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-home_shopts_other_filter) > div
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:last-child {
   align-self: center !important;
@@ -839,6 +878,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[dat
 .st-key-home_tools_other_filter input,
 .st-key-history_commands_other_filter input,
 .st-key-history_directories_other_filter input,
+.st-key-monitor_process_other_filter input,
 .st-key-path_other_filter input,
 .st-key-service_other_filter input {
   min-height: 2rem;
@@ -943,7 +983,7 @@ div[class*="_table_actions_"] {
 
 div[class*="_table_selected_panel_"] [data-testid="stHorizontalBlock"],
 div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
-  gap: var(--hhs-inline-control-gap) !important;
+  gap: var(--hhs-element-std-gap) !important;
 }
 
 .st-key-home_docker_panel [data-testid="stVerticalBlock"] > div:has([data-testid="stDataFrame"]) {
