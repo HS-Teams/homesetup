@@ -1830,11 +1830,11 @@ def render_folder_picker_dialog() -> bool:
 
 def homesetup_version(refresh_cache: bool = False) -> str:
     """Return the cached HomeSetup product version from the shell environment."""
-    if refresh_cache or not st.session_state.get("footer_hhs_version_cache_loaded"):
+    if refresh_cache:
         result = run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)
         if result.returncode == 0:
             st.session_state["footer_hhs_version_cache_loaded"] = True
-            for row in parse_hhs_envs(result.stdout):
+            for row in parse_rows_cached("env", result.stdout, parse_hhs_envs):
                 if row["Name"] == "HHS_VERSION" and row["Value"]:
                     return row["Value"]
 
@@ -1847,7 +1847,7 @@ def homesetup_version(refresh_cache: bool = False) -> str:
     result, fresh_cache = cached_background_command_result(command, "env")
     if result is not None and result.returncode == 0:
         st.session_state["footer_hhs_version_cache_loaded"] = True
-        for row in parse_hhs_envs(result.stdout):
+        for row in parse_rows_cached("env", result.stdout, parse_hhs_envs):
             if row["Name"] == "HHS_VERSION" and row["Value"]:
                 return row["Value"]
 
@@ -2117,8 +2117,9 @@ def restore_ui_state() -> None:
 
 def save_ui_state() -> None:
     """Persist selected Streamlit UI values to disk."""
+    current_state = load_ui_state()
     persisted_theme = validated_theme_name(
-        load_ui_state().get(hhs_ui.THEME_SELECTED_KEY, "")
+        current_state.get(hhs_ui.THEME_SELECTED_KEY, "")
     )
     data = {
         key: st.session_state[key]
@@ -2133,6 +2134,8 @@ def save_ui_state() -> None:
         data[hhs_ui.THEME_SELECTED_KEY] = persisted_theme
     else:
         data.pop(hhs_ui.THEME_SELECTED_KEY, None)
+    if data == current_state:
+        return
     hhs_ui.UI_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     hhs_ui.UI_STATE_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
@@ -3076,6 +3079,33 @@ def remember_table_selection(key: str | None, selection_state: object) -> None:
     snapshots[str(key)] = table_selection_rows(selection_state)
 
 
+def scroll_to_table_selection_content(anchor_key: str) -> None:
+    """Scroll the browser viewport to the bottom of a selected table row component."""
+    selector = f'div[class*="st-key-{anchor_key}"]'
+    components.html(
+        f"""
+        <script>
+          const selector = {selector!r};
+          const scroll_to_table_selection = () => {{
+            const doc = window.parent.document;
+            const target = doc.querySelector(selector);
+            if (!target) {{
+              return;
+            }}
+            target.scrollIntoView({{
+              behavior: "smooth",
+              block: "end",
+              inline: "nearest"
+            }});
+          }};
+          window.setTimeout(scroll_to_table_selection, 75);
+          window.setTimeout(scroll_to_table_selection, 250);
+        </script>
+        """,
+        height=0,
+    )
+
+
 def render_table(
     rows: list[dict[str, str]],
     key: str | None,
@@ -3217,6 +3247,13 @@ def render_table(
                         width=str(action.get("width", "stretch")),
                     )
 
+    anchor_key = table_component_key(key, f"table_selected_bottom_{selected_index}")
+    with st.container(key=anchor_key):
+        st.markdown(
+            '<span class="hhs-table-selected-bottom-anchor"></span>',
+            unsafe_allow_html=True,
+        )
+    scroll_to_table_selection_content(anchor_key)
     return selected_index, selected_row
 
 
@@ -3341,7 +3378,7 @@ def render_table_filter_controls(
             index=index,
             key=key,
             label_visibility="collapsed",
-            on_change=handle_monitor_disk_top_n_change,
+            on_change=save_ui_state,
         )
 
     other_filter = ""
@@ -3536,7 +3573,7 @@ def render_home_tools_panel() -> None:
     if result.returncode != 0:
         st.error(result.stderr or result.stdout or "Unable to load tool checks.")
         return
-    rows = parse_hhs_tools(result.stdout)
+    rows = parse_rows_cached("tools", result.stdout, parse_hhs_tools)
     if not rows:
         st.caption("No tool checks found.")
         return
@@ -3607,7 +3644,7 @@ def render_home_shopts_panel() -> None:
     if result.returncode != 0:
         st.error(result.stderr or result.stdout or "Unable to load shell options.")
         return
-    rows = parse_hhs_shopt(result.stdout)
+    rows = parse_rows_cached("shopt", result.stdout, parse_hhs_shopt)
     if not rows:
         st.caption("No shell options found.")
         return
@@ -5016,7 +5053,7 @@ def parse_downloaded_ollama_models(output: str) -> set[str]:
 def first_downloaded_ollama_model(output: str, excluded_model: str = "") -> str:
     """Return the first downloaded Ollama model listed in the available models table."""
     downloaded_models = parse_downloaded_ollama_models(output)
-    for row in parse_ollama_model_rows(output):
+    for row in parse_rows_cached("ollama_models", output, parse_ollama_model_rows):
         model_name = row["Name"]
         if model_name != excluded_model and model_name in downloaded_models:
             return model_name
@@ -5124,7 +5161,11 @@ def model_characteristics_tooltip_html(
     model_row = next(
         (
             row
-            for row in parse_ollama_model_rows(model_output, ollama_model)
+            for row in parse_rows_cached(
+                f"ollama_models_{ollama_model}",
+                model_output,
+                lambda output: parse_ollama_model_rows(output, ollama_model),
+            )
             if row["Name"] == ollama_model
         ),
         {},
@@ -6855,14 +6896,12 @@ def poll_background_job_completion(job_name: str) -> None:
 
 
 def load_ui_cache() -> dict[str, dict[str, object]]:
-    """Load the UI cache file and lazily prune expired entries."""
+    """Load the UI cache file and prune expired entries without writing on reads."""
     global UI_CACHE_MEMORY, UI_CACHE_MEMORY_MTIME
     cache_mtime = ui_cache_mtime()
     if UI_CACHE_MEMORY_MTIME == cache_mtime:
-        pruned_cache = prune_ui_cache_entries(UI_CACHE_MEMORY)
-        if pruned_cache != UI_CACHE_MEMORY:
-            save_ui_cache(pruned_cache)
-        return pruned_cache
+        UI_CACHE_MEMORY = prune_ui_cache_entries(UI_CACHE_MEMORY)
+        return dict(UI_CACHE_MEMORY)
     if not hhs_ui.UI_CACHE_FILE.exists():
         UI_CACHE_MEMORY = {}
         UI_CACHE_MEMORY_MTIME = 0.0
@@ -6883,11 +6922,8 @@ def load_ui_cache() -> dict[str, dict[str, object]]:
         if ui_cache_key_is_supported(key) and isinstance(value, dict)
     }
     pruned_cache = prune_ui_cache_entries(cache)
-    if pruned_cache != cache or len(cache) != len(data):
-        save_ui_cache(pruned_cache)
-    else:
-        UI_CACHE_MEMORY = dict(pruned_cache)
-        UI_CACHE_MEMORY_MTIME = cache_mtime
+    UI_CACHE_MEMORY = dict(pruned_cache)
+    UI_CACHE_MEMORY_MTIME = cache_mtime
     return pruned_cache
 
 
@@ -7019,6 +7055,80 @@ def command_result_snapshot_clear() -> None:
     st.session_state[hhs_ui_constants.COMMAND_RESULT_SNAPSHOT_KEY] = {}
 
 
+def parsed_rows_cache() -> dict[str, list[dict[str, object]]]:
+    """Return the in-session parsed rows cache used across selection reruns."""
+    cache = st.session_state.setdefault(hhs_ui_constants.PARSED_ROWS_CACHE_KEY, {})
+    if not isinstance(cache, dict):
+        cache = {}
+        st.session_state[hhs_ui_constants.PARSED_ROWS_CACHE_KEY] = cache
+    return cache
+
+
+def parsed_rows_cache_key(parser_name: str, output: str) -> str:
+    """Return a stable parsed-row cache key for one parser and command output."""
+    output_hash = hashlib.sha256(output.encode("utf-8")).hexdigest()
+    return f"{parser_name}:{output_hash}"
+
+
+def parse_rows_cached(
+    parser_name: str,
+    output: str,
+    parser: Callable[[str], list[dict[str, object]]],
+) -> list[dict[str, object]]:
+    """Return parsed rows from an in-session cache keyed by parser and output."""
+    cache = parsed_rows_cache()
+    cache_key = parsed_rows_cache_key(parser_name, output)
+    cached_rows = cache.get(cache_key)
+    if isinstance(cached_rows, list):
+        return [dict(row) for row in cached_rows if isinstance(row, dict)]
+    rows = parser(output)
+    cache[cache_key] = [dict(row) for row in rows]
+    while len(cache) > hhs_ui_constants.PARSED_ROWS_CACHE_LIMIT:
+        cache.pop(next(iter(cache)))
+    return [dict(row) for row in rows]
+
+
+def clear_parsed_rows_cache() -> None:
+    """Delete all in-session parsed command rows."""
+    st.session_state[hhs_ui_constants.PARSED_ROWS_CACHE_KEY] = {}
+
+
+def log_render_cache() -> dict[str, str]:
+    """Return the in-session rendered log output cache."""
+    cache = st.session_state.setdefault(hhs_ui_constants.LOG_RENDER_CACHE_KEY, {})
+    if not isinstance(cache, dict):
+        cache = {}
+        st.session_state[hhs_ui_constants.LOG_RENDER_CACHE_KEY] = cache
+    return cache
+
+
+def rendered_log_output_cached(
+    output: str, log_filter: str, log_text_filter: str
+) -> str:
+    """Return filtered and highlighted log output from an in-session cache."""
+    filter_key = f"{log_filter}\0{log_text_filter}"
+    output_hash = hashlib.sha256(output.encode("utf-8")).hexdigest()
+    cache_key = f"{filter_key}:{output_hash}"
+    cache = log_render_cache()
+    cached_output = cache.get(cache_key)
+    if isinstance(cached_output, str):
+        return cached_output
+    rendered_output = colorize_log_output(
+        filter_log_output(output, log_filter, log_text_filter),
+        log_text_filter if log_filter == "Containing" else "",
+    )
+    cache[cache_key] = rendered_output
+    while len(cache) > hhs_ui_constants.LOG_RENDER_CACHE_LIMIT:
+        cache.pop(next(iter(cache)))
+    return rendered_output
+
+
+def clear_render_caches() -> None:
+    """Delete in-session render caches derived from command results."""
+    clear_parsed_rows_cache()
+    st.session_state[hhs_ui_constants.LOG_RENDER_CACHE_KEY] = {}
+
+
 def cache_set(
     key: str,
     value: dict[str, object],
@@ -7079,6 +7189,7 @@ def cache_clear() -> None:
     }
     save_ui_cache(metadata_cache)
     command_result_snapshot_clear()
+    clear_render_caches()
 
 
 def clear_cached_ui_data_preserving_state() -> None:
@@ -7098,8 +7209,11 @@ def expire_host_scoped_command_state() -> None:
     stop_background_jobs(HOST_SWITCH_BACKGROUND_JOBS)
     for cache_tag in HOST_SWITCH_CACHE_TAGS:
         cache_delete_tag(cache_tag)
+    clear_render_caches()
     for state_key in HOST_SWITCH_STATE_KEYS:
         st.session_state.pop(state_key, None)
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = False
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = False
     for table_key in (
         hhs_ui.ENV_TABLE_KEY,
         hhs_ui.PROCESS_TABLE_KEY,
@@ -7338,7 +7452,9 @@ def cached_hhs_services_result() -> (
 ):
     """Return a cached service-list result and whether it came from fresh cache."""
     command, _command_to_run, _remote_host, _cache_key = hhs_services_command_context()
-    return cached_background_command_result(command, "services")
+    result, fresh_cache = cached_background_command_result(command, "services")
+    remember_ollama_service_availability(result)
+    return result, fresh_cache
 
 
 def start_hhs_services_list_refresh() -> bool:
@@ -7356,11 +7472,13 @@ def start_hhs_services_list_refresh() -> bool:
 
 def complete_hhs_services_list_refresh() -> subprocess.CompletedProcess[str] | None:
     """Complete a background services-list refresh and cache successful output."""
-    return complete_cached_background_command(
+    result = complete_cached_background_command(
         SERVICE_LIST_JOB,
         "service_list_error",
         "Unable to list services.",
     )
+    remember_ollama_service_availability(result)
+    return result
 
 
 def monitor_metric_job_name(metric: str) -> str:
@@ -10261,22 +10379,36 @@ def service_is_down(row: dict[str, str]) -> bool:
 
 def ollama_service_is_available_from_output(output: str) -> bool:
     """Return whether the parsed services output has a non-down Ollama service row."""
-    for row in parse_hhs_services(output):
+    for row in parse_rows_cached("services", output, parse_hhs_services):
         if row.get("Name", "").strip() == "ollama":
             return not service_is_down(row)
     return False
 
 
+def remember_ollama_service_availability(
+    result: subprocess.CompletedProcess[str] | None,
+) -> bool:
+    """Store Ollama service availability when a successful services result exists."""
+    if result is None or result.returncode != 0:
+        return bool(
+            st.session_state.get(hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY, False)
+        )
+    available = ollama_service_is_available_from_output(result.stdout)
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = available
+    return available
+
+
 def ollama_service_is_available() -> bool:
-    """Return whether the current execution host reports Ollama as available."""
-    complete_hhs_services_list_refresh()
-    result, fresh_cache = cached_hhs_services_result()
-    if not fresh_cache and not background_job_is_running(SERVICE_LIST_JOB):
-        start_hhs_services_list_refresh()
-    poll_background_job_completion(SERVICE_LIST_JOB)
-    if not fresh_cache or result is None or result.returncode != 0:
-        return False
-    return ollama_service_is_available_from_output(result.stdout)
+    """Return the last known Ollama service availability without starting commands."""
+    return bool(st.session_state.get(hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY, False))
+
+
+def initialize_ollama_service_availability() -> None:
+    """Seed AI tab visibility from cached service data without starting commands."""
+    if st.session_state.get(hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY):
+        return
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = True
+    cached_hhs_services_result()
 
 
 def main_views() -> tuple[str, ...]:
@@ -10611,7 +10743,11 @@ def render_envs_table() -> None:
     )
     if result is None:
         return
-    rows = parse_hhs_envs(result.stdout) if result.returncode == 0 else []
+    rows = (
+        parse_rows_cached("env", result.stdout, parse_hhs_envs)
+        if result.returncode == 0
+        else []
+    )
     render_env_rows(rows)
 
 
@@ -10639,7 +10775,11 @@ def render_paths_table() -> None:
     )
     if result is None:
         return
-    rows = parse_hhs_paths(result.stdout) if result.returncode == 0 else []
+    rows = (
+        parse_rows_cached("path", result.stdout, parse_hhs_paths)
+        if result.returncode == 0
+        else []
+    )
     render_path_rows(filter_path_rows(rows, path_filter, other_filter))
 
 
@@ -10667,7 +10807,11 @@ def render_dirs_table() -> None:
     )
     if result is None:
         return
-    rows = parse_hhs_dirs(result.stdout) if result.returncode == 0 else []
+    rows = (
+        parse_rows_cached("dirs", result.stdout, parse_hhs_dirs)
+        if result.returncode == 0
+        else []
+    )
     render_dir_rows(
         filter_rows_by_text(rows, dirs_filter, other_filter),
     )
@@ -10697,7 +10841,11 @@ def render_cmds_table() -> None:
     )
     if result is None:
         return
-    rows = parse_hhs_commands(result.stdout) if result.returncode == 0 else []
+    rows = (
+        parse_rows_cached("cmds", result.stdout, parse_hhs_commands)
+        if result.returncode == 0
+        else []
+    )
     render_cmd_rows(
         filter_rows_by_text(rows, cmds_filter, other_filter),
     )
@@ -10729,7 +10877,11 @@ def render_aliases_table() -> None:
         if not alias_list_running:
             render_command_loader("Loading custom aliases...")
         return
-    rows = parse_hhs_aliases(result.stdout) if result.returncode == 0 else []
+    rows = (
+        parse_rows_cached("aliases", result.stdout, parse_hhs_aliases)
+        if result.returncode == 0
+        else []
+    )
     render_alias_rows(
         filter_rows_by_text(rows, alias_filter, other_filter),
     )
@@ -10767,7 +10919,9 @@ def render_services_table() -> None:
         return
     render_service_rows(
         filter_service_rows(
-            parse_hhs_services(result.stdout), service_filter, other_filter
+            parse_rows_cached("services", result.stdout, parse_hhs_services),
+            service_filter,
+            other_filter,
         )
     )
 
@@ -10797,7 +10951,9 @@ def render_history_commands_table() -> None:
         return
     render_read_only_rows(
         filter_rows_by_text(
-            parse_hhs_history(result.stdout), history_commands_filter, other_filter
+            parse_rows_cached("history", result.stdout, parse_hhs_history),
+            history_commands_filter,
+            other_filter,
         ),
         history_command_table_key(),
         selected_value=lambda row, _index: row.get("Value", ""),
@@ -10828,7 +10984,7 @@ def render_history_directories_table() -> None:
         st.error(result.stderr or "Unable to list directory history.")
         return
     rows = filter_rows_by_text(
-        parse_hhs_history_dirs(result.stdout),
+        parse_rows_cached("history_dirs", result.stdout, parse_hhs_history_dirs),
         history_directories_filter,
         other_filter,
     )
@@ -10877,7 +11033,7 @@ def render_history_stats_chart() -> None:
         st.error(result.stderr or result.stdout or "Unable to list history stats.")
         return
     rows = sorted(
-        parse_hhs_history_stats(result.stdout),
+        parse_rows_cached("history_stats", result.stdout, parse_hhs_history_stats),
         key=lambda row: int(row["Count"]),
         reverse=True,
     )
@@ -10942,7 +11098,7 @@ def render_monitor_disk_chart() -> None:
             step=1,
             key="monitor_disk_top_n_input",
             label_visibility="collapsed",
-            on_change=save_ui_state,
+            on_change=handle_monitor_disk_top_n_change,
         )
     with action_col:
         st.button(
@@ -10974,7 +11130,7 @@ def render_monitor_disk_chart() -> None:
         )
         return
     rows = sorted(
-        parse_hhs_disk_usage(result.stdout),
+        parse_rows_cached("disk_usage", result.stdout, parse_hhs_disk_usage),
         key=lambda row: float(row["Bytes"]),
         reverse=True,
     )
@@ -11047,7 +11203,11 @@ def render_process_monitor_chart(metric: str) -> None:
         )
         return
     rows = sorted(
-        parse_process_monitor(result.stdout, metric),
+        parse_rows_cached(
+            f"process_monitor_{metric}",
+            result.stdout,
+            lambda output: parse_process_monitor(output, metric),
+        ),
         key=lambda row: float(row["Value"]),
         reverse=True,
     )[:10]
@@ -11141,7 +11301,9 @@ def render_monitor_processes_panel() -> None:
         )
         return
     rows = filter_process_rows(
-        parse_hhs_process_list(result.stdout), process_filter, other_filter
+        parse_rows_cached("process_list", result.stdout, parse_hhs_process_list),
+        process_filter,
+        other_filter,
     )
     if not rows:
         st.caption("No processes found.")
@@ -11310,10 +11472,7 @@ def render_monitor_logs_once(
         )
         return
     render_terminal_output(
-        colorize_log_output(
-            filter_log_output(result.stdout, log_filter, log_text_filter),
-            log_text_filter if log_filter == "Containing" else "",
-        ),
+        rendered_log_output_cached(result.stdout, log_filter, log_text_filter),
         css_classes="hhs-log-output",
         content_is_html=True,
     )
@@ -11856,7 +12015,11 @@ def render_ai_settings_panel() -> None:
         unsafe_allow_html=True,
     )
     st.markdown("##### Available Models")
-    rows = parse_ollama_model_rows(model_result.stdout, current_model)
+    rows = parse_rows_cached(
+        f"ollama_models_{current_model}",
+        model_result.stdout,
+        lambda output: parse_ollama_model_rows(output, current_model),
+    )
     if not rows:
         st.caption("No Ollama models found.")
         return
@@ -12048,6 +12211,12 @@ def main() -> None:
     ):
         st.session_state["active_view"] = "Home"
     st.session_state.setdefault("ai_chat_messages", [])
+    st.session_state.setdefault(hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY, False)
+    st.session_state.setdefault(
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY,
+        False,
+    )
+    initialize_ollama_service_availability()
     if not isinstance(st.session_state["ai_chat_messages"], list):
         st.session_state["ai_chat_messages"] = []
     st.session_state.setdefault("ai_clear_chat_pending", False)

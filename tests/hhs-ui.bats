@@ -1882,6 +1882,18 @@ PY
   run grep -q 'table_actions_' "${ui_file}"
   assert_success
 
+  run grep -q 'def scroll_to_table_selection_content' "${ui_file}"
+  assert_success
+
+  run grep -q 'table_selected_bottom_' "${ui_file}"
+  assert_success
+
+  run grep -q 'scroll_to_table_selection_content(anchor_key)' "${ui_file}"
+  assert_success
+
+  run grep -q 'target.scrollIntoView' "${ui_file}"
+  assert_success
+
   run grep -q 'selected_editable: bool | Callable' "${ui_file}"
   assert_success
 
@@ -5370,6 +5382,179 @@ assert snapshot_namespace["command_result_snapshot_get"]("command_tag:docker:one
 assert snapshot_namespace["command_result_snapshot_get"]("command_tag:docker:three")["stdout"] == "three"
 snapshot_namespace["command_result_snapshot_delete_tag"]("docker")
 assert snapshot_namespace["command_result_snapshot_get"]("command_tag:docker:three") is None
+PY
+  assert_success
+}
+
+@test "when rerendering command tables then parsed rows should be cached in session state" {
+  run python3 - "${ui_file}" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def command_result_snapshots()")
+end = source.index("def cache_set(")
+session_state = {}
+namespace = {
+    "hashlib": hashlib,
+    "st": SimpleNamespace(session_state=session_state),
+    "hhs_ui_constants": SimpleNamespace(
+        COMMAND_RESULT_SNAPSHOT_KEY="_hhs_command_result_snapshots",
+        COMMAND_RESULT_SNAPSHOT_LIMIT=2,
+        PARSED_ROWS_CACHE_KEY="_hhs_parsed_rows_cache",
+        PARSED_ROWS_CACHE_LIMIT=2,
+        LOG_RENDER_CACHE_KEY="_hhs_log_render_cache",
+        LOG_RENDER_CACHE_LIMIT=2,
+    ),
+    "filter_log_output": lambda output, _filter, text: output.replace(text, text.upper()),
+    "colorize_log_output": lambda output, highlight: f"{highlight}:{output}",
+    "safe_cache_tag": lambda value: value,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+calls = []
+
+def parser(output):
+    calls.append(output)
+    return [{"Name": output}]
+
+first = namespace["parse_rows_cached"]("sample", "one", parser)
+second = namespace["parse_rows_cached"]("sample", "one", parser)
+assert first == [{"Name": "one"}]
+assert second == [{"Name": "one"}]
+assert calls == ["one"]
+
+first[0]["Name"] = "mutated"
+third = namespace["parse_rows_cached"]("sample", "one", parser)
+assert third == [{"Name": "one"}]
+
+rendered = namespace["rendered_log_output_cached"]("hello needle", "Containing", "needle")
+cached = namespace["rendered_log_output_cached"]("hello needle", "Containing", "needle")
+assert rendered == "needle:hello NEEDLE"
+assert cached == rendered
+PY
+  assert_success
+}
+
+@test "when using table filters then shared filter controls should persist filter keys" {
+  run python3 - "${ui_file}" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+tree = ast.parse(Path(sys.argv[1]).read_text(encoding="utf-8"))
+functions = {
+    node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
+}
+filter_controls = functions["render_table_filter_controls"]
+
+radio_calls = [
+    call
+    for call in ast.walk(filter_controls)
+    if isinstance(call, ast.Call)
+    and isinstance(call.func, ast.Attribute)
+    and call.func.attr == "radio"
+]
+assert len(radio_calls) == 1
+keywords = {keyword.arg: keyword.value for keyword in radio_calls[0].keywords}
+on_change = keywords["on_change"]
+assert isinstance(on_change, ast.Name)
+assert on_change.id == "save_ui_state"
+assert "handle_monitor_disk_top_n_change" not in ast.unparse(filter_controls)
+PY
+  assert_success
+}
+
+@test "when filtering table rows then status and text filters should reduce rows" {
+  run python3 - "${ui_file}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def env_filter_pattern(")
+end = source.index("def parse_hhs_envs(")
+namespace = {
+    "re": re,
+    "service_is_up": lambda row: "up" in row.get("Value", "").lower(),
+    "service_is_down": lambda row: "down" in row.get("Value", "").lower(),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+rows = [
+    {"Name": "ollama", "Value": "Up"},
+    {"Name": "postgres", "Value": "Down"},
+    {"Name": "custom", "Value": "Other"},
+]
+assert namespace["filter_rows_by_text"](rows, "All", "post") == rows
+assert namespace["filter_rows_by_text"](rows, "Other", "post") == [rows[1]]
+assert namespace["filter_service_rows"](rows, "Up", "") == [rows[0]]
+assert namespace["filter_service_rows"](rows, "Down", "") == [rows[1]]
+assert namespace["filter_service_rows"](rows, "Other", "custom") == [rows[2]]
+PY
+  assert_success
+}
+
+@test "when reading UI cache then expired entries should not be written back during load" {
+  run python3 - "${ui_file}" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+tree = ast.parse(Path(sys.argv[1]).read_text(encoding="utf-8"))
+
+for node in tree.body:
+    if isinstance(node, ast.FunctionDef) and node.name == "load_ui_cache":
+        load_ui_cache = node
+        break
+else:
+    raise AssertionError("load_ui_cache not found")
+
+save_calls = [
+    call
+    for call in ast.walk(load_ui_cache)
+    if isinstance(call, ast.Call)
+    and isinstance(call.func, ast.Name)
+    and call.func.id == "save_ui_cache"
+]
+assert save_calls == []
+PY
+  assert_success
+}
+
+@test "when rendering main navigation then AI visibility should not start service jobs" {
+  run python3 - "${ui_file}" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+tree = ast.parse(Path(sys.argv[1]).read_text(encoding="utf-8"))
+functions = {
+    node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
+}
+
+main_views = functions["main_views"]
+ollama_available = functions["ollama_service_is_available"]
+initialize_available = functions["initialize_ollama_service_availability"]
+for function_node in (main_views, ollama_available, initialize_available):
+    called_names = {
+        call.func.id
+        for call in ast.walk(function_node)
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    }
+    assert "start_hhs_services_list_refresh" not in called_names
+    assert "complete_hhs_services_list_refresh" not in called_names
+    assert "poll_background_job_completion" not in called_names
+
+remember = functions["remember_ollama_service_availability"]
+remember_calls = {
+    call.func.id
+    for call in ast.walk(remember)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "ollama_service_is_available_from_output" in remember_calls
 PY
   assert_success
 }
