@@ -4776,10 +4776,28 @@ def log_tailor_highlight_ranges(value: str) -> list[tuple[int, int, str]]:
     return sorted(ranges, key=lambda item: item[0])
 
 
-def colorize_log_output(value: str) -> str:
+def log_filter_highlight_ranges(value: str, text_filter: str = "") -> list[tuple[int, int, str]]:
+    """Return highlight ranges for Monitor Logs containing-filter matches."""
+    needle = text_filter.strip()
+    if not needle:
+        return []
+    pattern = re.compile(re.escape(needle), flags=re.IGNORECASE)
+    return [
+        (match.start(), match.end(), "filter-match")
+        for match in pattern.finditer(value)
+        if match.start() != match.end()
+    ]
+
+
+def colorize_log_output(value: str, text_filter: str = "") -> str:
     """Return log output highlighted with __hhs_tailor-compatible CSS classes."""
     clean_value = strip_ansi(value)
-    ranges = log_tailor_highlight_ranges(clean_value)
+    ranges = log_filter_highlight_ranges(clean_value, text_filter)
+    for start, end, css_class in log_tailor_highlight_ranges(clean_value):
+        if overlaps_existing_range(start, end, ranges):
+            continue
+        ranges.append((start, end, css_class))
+    ranges = sorted(ranges, key=lambda item: item[0])
     html_parts: list[str] = []
     cursor = 0
     for start, end, css_class in ranges:
@@ -4791,6 +4809,16 @@ def colorize_log_output(value: str) -> str:
         cursor = end
     html_parts.append(html.escape(clean_value[cursor:]))
     return "".join(html_parts).replace("\n", "<br>")
+
+
+def filter_log_output(value: str, log_filter: str, text_filter: str = "") -> str:
+    """Return log output matching the selected monitor log text filter."""
+    needle = text_filter.strip().lower()
+    if log_filter != "Containing" or not needle:
+        return value
+    return "\n".join(
+        line for line in value.splitlines() if needle in strip_ansi(line).lower()
+    )
 
 
 def clean_hhs_ask_output(output: str) -> str:
@@ -10973,8 +11001,8 @@ def render_monitor_logs_panel() -> None:
     if selected_monitor_log_level() != st.session_state.get("monitor_log_level"):
         st.session_state["monitor_log_level"] = selected_monitor_log_level()
 
-    def render_log_controls() -> tuple[str, str, bool]:
-        """Render log controls and return the selected file, level, and tail state."""
+    def render_log_controls() -> tuple[str, str, bool, str, str]:
+        """Render log controls and return the selected log viewing options."""
         with st.container(key="monitor_log_controls"):
             (
                 label_col,
@@ -11036,32 +11064,53 @@ def render_monitor_logs_panel() -> None:
                     on_click=clear_monitor_log_file,
                     width="stretch",
                 )
+            selected_filter_value, text_filter_value = render_table_filter_controls(
+                hhs_ui.LOG_FILTERS,
+                "monitor_log_filter",
+                "monitor_log_other_filter",
+                hhs_ui.TWO_OPTION_FILTER_COLUMNS,
+                other_options=("Containing",),
+                placeholder="Type log filter text",
+            )
         return (
             str(selected_log_value),
             str(selected_level_value),
             bool(tail_enabled_value),
+            str(selected_filter_value),
+            str(text_filter_value),
         )
 
-    selected_log, selected_level, tail_enabled = render_table_controls_panel(
-        render_log_controls
+    selected_log, selected_level, tail_enabled, log_filter, log_text_filter = (
+        render_table_controls_panel(render_log_controls)
     )
     st.markdown(
         f'<div class="hhs-log-file-title"><code>{html.escape(selected_log)}</code></div>',
         unsafe_allow_html=True,
     )
     if tail_enabled:
-        render_monitor_logs_tail(selected_log, selected_level)
+        render_monitor_logs_tail(
+            selected_log, selected_level, log_filter, log_text_filter
+        )
     else:
-        render_monitor_logs_once(selected_log, selected_level)
+        render_monitor_logs_once(
+            selected_log, selected_level, log_filter, log_text_filter
+        )
 
 
 @st.fragment(run_every="5s")
-def render_monitor_logs_tail(selected_log: str, selected_level: str) -> None:
+def render_monitor_logs_tail(
+    selected_log: str, selected_level: str, log_filter: str, log_text_filter: str
+) -> None:
     """Render a tail-like log pane that refreshes only while LOGS is active."""
-    render_monitor_logs_once(selected_log, selected_level)
+    render_monitor_logs_once(selected_log, selected_level, log_filter, log_text_filter)
 
 
-def render_monitor_logs_once(selected_log: str, selected_level: str) -> None:
+def render_monitor_logs_once(
+    selected_log: str,
+    selected_level: str,
+    log_filter: str = "All",
+    log_text_filter: str = "",
+) -> None:
     """Render the selected log once without automatic refresh."""
     if False:
         run_hhs_logs(selected_log, 200, selected_level)
@@ -11083,7 +11132,10 @@ def render_monitor_logs_once(selected_log: str, selected_level: str) -> None:
         )
         return
     render_terminal_output(
-        colorize_log_output(result.stdout),
+        colorize_log_output(
+            filter_log_output(result.stdout, log_filter, log_text_filter),
+            log_text_filter if log_filter == "Containing" else "",
+        ),
         css_classes="hhs-log-output",
         content_is_html=True,
     )
@@ -11924,6 +11976,10 @@ def main() -> None:
         st.session_state.get("monitor_disk_top_n")
     )
     st.session_state.setdefault("monitor_log_file", "")
+    st.session_state.setdefault("monitor_log_filter", "All")
+    if st.session_state["monitor_log_filter"] not in hhs_ui.LOG_FILTERS:
+        st.session_state["monitor_log_filter"] = "All"
+    st.session_state.setdefault("monitor_log_other_filter", "")
     st.session_state.setdefault("monitor_log_level", "ALL_LEVELS")
     st.session_state["monitor_log_level"] = selected_monitor_log_level()
     st.session_state.setdefault("monitor_logs_tail", True)

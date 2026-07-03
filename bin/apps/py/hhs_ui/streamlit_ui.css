@@ -4,7 +4,9 @@
   --hhs-element-std-gap: 1rem;
   --hhs-footer-guard-height: 3.5rem;
   --hhs-log-chrome-height: 8.5rem;
-  --hhs-log-expander-height: 230px;
+  --hhs-log-expander-collapsed-height: 3.4rem;
+  --hhs-log-expander-open-height: 230px;
+  --hhs-log-expander-height: var(--hhs-log-expander-collapsed-height);
   --hhs-log-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height) - var(--hhs-log-expander-height));
   --hhs-log-max-height: calc(var(--hhs-ttyd-max-height, 760px) - var(--hhs-log-expander-height));
   --hhs-streamlit-toolbar-guard-width: 8rem;
@@ -225,6 +227,13 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   flex: 0 0 2rem !important;
   min-width: 2rem;
   width: 2rem !important;
+}
+
+.hhs-log-filter-match {
+  background-color: #2563eb;
+  border-radius: 2px;
+  color: #ffffff !important;
+  font-weight: 900;
 }
 
 .st-key-folder_picker_cancel_button button,
@@ -758,6 +767,10 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
   margin: 0;
   max-height: min(var(--hhs-log-height), var(--hhs-log-max-height));
   min-height: 280px;
+}
+
+[data-testid="stVerticalBlock"]:has(.hhs-log-output):has(details[open]) {
+  --hhs-log-expander-height: var(--hhs-log-expander-open-height);
 }
 
 .hhs-home-tool-action-output {

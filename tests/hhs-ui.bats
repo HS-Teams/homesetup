@@ -4272,13 +4272,31 @@ PY
   run grep -q 'LOG_LEVELS = (' "${constants_file}"
   assert_success
 
+  run grep -q 'LOG_FILTERS = ("All", "Containing")' "${constants_file}"
+  assert_success
+
   run grep -q 'LOG_LEVELS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q 'LOG_FILTERS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q '"monitor_log_filter"' "${constants_file}"
+  assert_success
+
+  run grep -q '"monitor_log_other_filter"' "${constants_file}"
   assert_success
 
   run grep -q '"monitor_log_level"' "${constants_file}"
   assert_success
 
   run grep -q 'def colorize_log_output' "${ui_file}"
+  assert_success
+
+  run grep -q 'def log_filter_highlight_ranges' "${ui_file}"
+  assert_success
+
+  run grep -q 'def filter_log_output' "${ui_file}"
   assert_success
 
   run grep -q 'def selected_monitor_log_level' "${ui_file}"
@@ -4299,10 +4317,25 @@ PY
   run grep -q 'def toggle_monitor_logs_tail' "${ui_file}"
   assert_success
 
-  run grep -q 'selected_log, selected_level, tail_enabled = render_table_controls_panel(' "${ui_file}"
+  run grep -q 'selected_log, selected_level, tail_enabled, log_filter, log_text_filter = (' "${ui_file}"
   assert_success
 
   run grep -q 'render_log_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_table_filter_controls(' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.LOG_FILTERS' "${ui_file}"
+  assert_success
+
+  run grep -q 'other_options=("Containing",)' "${ui_file}"
+  assert_success
+
+  run grep -q '"monitor_log_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q '"monitor_log_other_filter"' "${ui_file}"
   assert_success
 
   run grep -q 'st.container(key="monitor_log_controls")' "${ui_file}"
@@ -4344,6 +4377,48 @@ PY
   run grep -q 'run_hhs_logs(selected_log, 200, selected_level)' "${ui_file}"
   assert_success
 
+  run python3 - <<'PY'
+import ast
+import re
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+module = ast.parse(source)
+selected = [
+    node for node in module.body
+    if isinstance(node, ast.FunctionDef)
+    and node.name in {
+        "strip_ansi",
+        "overlaps_existing_range",
+        "log_tailor_highlight_ranges",
+        "log_filter_highlight_ranges",
+        "colorize_log_output",
+        "filter_log_output",
+    }
+]
+namespace = {
+    "html": __import__("html"),
+    "re": re,
+    "hhs_ui": type(
+        "HhsUi",
+        (),
+        {
+            "ANSI_ESCAPE_PATTERN": re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])"),
+            "ESCAPED_ANSI_ESCAPE_PATTERN": re.compile(r"\\033\[[0-9;]*m"),
+            "LOG_TAILOR_RULES": (),
+        },
+    ),
+}
+exec(compile(ast.Module(body=selected, type_ignores=[]), "<filter_log_output>", "exec"), namespace)
+output = "INFO boot\nWARN skipped\nERROR failed\n"
+assert namespace["filter_log_output"](output, "All", "warn") == output
+assert namespace["filter_log_output"](output, "Containing", "warn") == "WARN skipped"
+assert namespace["filter_log_output"](output, "Containing", "") == output
+highlighted = namespace["colorize_log_output"]("WARN skipped", "warn")
+assert '<span class="hhs-log-filter-match">WARN</span>' in highlighted
+PY
+  assert_success
+
   run grep -Fq 'awk -v level="${level}" '\''toupper($3) == level'\''' "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/functions/built-ins.bash"
   assert_success
 
@@ -4382,6 +4457,30 @@ LOGS
   run grep -q '.st-key-monitor_logs_tail_button button' "${css_file}"
   assert_success
 
+  run grep -q '.hhs-log-filter-match' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-expander-collapsed-height: 3.4rem' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-expander-open-height: 230px' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-expander-height: var(--hhs-log-expander-collapsed-height)' "${css_file}"
+  assert_success
+
+  run grep -Fq '[data-testid="stVerticalBlock"]:has(.hhs-log-output):has(details[open])' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-expander-height: var(--hhs-log-expander-open-height)' "${css_file}"
+  assert_success
+
+  run grep -q 'background-color: #2563eb' "${css_file}"
+  assert_success
+
+  run grep -q 'color: #ffffff !important' "${css_file}"
+  assert_success
+
   run grep -q '.st-key-monitor_log_controls \[data-testid="stHorizontalBlock"\]' "${css_file}"
   assert_success
 
@@ -4412,7 +4511,7 @@ LOGS
   run grep -q -- '--hhs-log-chrome-height: 8.5rem' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-log-expander-height: 230px' "${css_file}"
+  run grep -q -- '--hhs-log-expander-open-height: 230px' "${css_file}"
   assert_success
 
   run grep -q -- '--hhs-log-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height) - var(--hhs-log-expander-height))' "${css_file}"

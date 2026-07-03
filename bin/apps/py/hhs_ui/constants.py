@@ -140,6 +140,7 @@ MONITOR_VIEW_LABELS = {
 }
 ENV_FILTERS = ("All", "HHS", "Other")
 LIST_FILTERS = ("All", "Other")
+LOG_FILTERS = ("All", "Containing")
 HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
 PROCESS_FILTERS = ("All", "Active", "Inactive", "Ghost", "Other")
@@ -209,7 +210,9 @@ PERSISTED_UI_KEYS = (
     "monitor_disk_directory",
     "monitor_disk_top_n",
     "monitor_log_file",
+    "monitor_log_filter",
     "monitor_log_level",
+    "monitor_log_other_filter",
     "monitor_logs_tail",
     "monitor_process_filter",
     "monitor_process_other_filter",
