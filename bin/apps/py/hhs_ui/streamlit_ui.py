@@ -66,6 +66,7 @@ TTYD_CLEANUP_REGISTRY: dict[str, dict[str, object]] = {}
 TTYD_EVENT_REGISTRY: dict[str, list[dict[str, object]]] = {}
 TTYD_CLEANUP_SERVER: ThreadingHTTPServer | None = None
 TTYD_CLEANUP_SERVER_PORT = 0
+TTYD_EXIT_COMMANDS = {"exit", "logout"}
 
 
 def resolve_run_shell() -> str:
@@ -181,7 +182,6 @@ SERVICE_ACTION_JOB = "service_action"
 MONITOR_CPU_JOB = "monitor_cpu"
 MONITOR_MEM_JOB = "monitor_mem"
 MONITOR_PROCESS_LIST_JOB = "monitor_process_list"
-AI_ENABLED_ENV_JOB = "ai_enabled_env"
 AI_MODEL_SELECT_JOB = "ai_model_select"
 AI_MODEL_DELETE_JOB = "ai_model_delete"
 UPDATER_UPDATE_JOB = "updater_update"
@@ -192,7 +192,6 @@ FOOTER_WORKING_DIR_JOB = "footer_working_dir"
 SSH_DISCONNECT_JOB = "ssh_disconnect"
 HOST_SWITCH_CACHE_TAGS = ("env", "services", "monitor_process")
 HOST_SWITCH_BACKGROUND_JOBS = (
-    AI_ENABLED_ENV_JOB,
     SERVICE_LIST_JOB,
     SERVICE_ACTION_JOB,
     MONITOR_CPU_JOB,
@@ -200,14 +199,11 @@ HOST_SWITCH_BACKGROUND_JOBS = (
     MONITOR_PROCESS_LIST_JOB,
 )
 HOST_SWITCH_STATE_KEYS = (
-    "ai_enabled_env_error",
     "monitor_cpu_error",
     "monitor_mem_error",
     "monitor_process_action_message",
     "monitor_process_action_succeeded",
     "monitor_process_list_error",
-    "service_action_message",
-    "service_action_succeeded",
     "service_list_error",
 )
 
@@ -501,8 +497,17 @@ def activate_terminal_document_view() -> None:
     st.session_state[hhs_ui.TERMINAL_CWD_KEY] = footer_working_directory()
 
 
+def clear_ttyd_exit_request() -> None:
+    """Drop any pending ttyd exit request for the current browser session."""
+    token = str(st.session_state.get(hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY, "")).strip()
+    entry = TTYD_CLEANUP_REGISTRY.get(token)
+    if isinstance(entry, dict):
+        entry.pop("exit_requested", None)
+
+
 def deactivate_terminal_document_view() -> None:
     """Stop ttyd resources when leaving the Terminal document view."""
+    clear_ttyd_exit_request()
     stop_ttyd_session()
     st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = False
 
@@ -553,6 +558,69 @@ def close_document_view() -> None:
     if previous_view in hhs_ui.VIEWS:
         st.session_state["active_view"] = previous_view
     save_ui_state()
+
+
+def render_terminal_back_button_cleanup_script() -> None:
+    """Attach browser-side ttyd iframe cleanup to the document Back button."""
+    components.html(
+        """
+        <script>
+          (() => {
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            const cleanup = () => {
+              if (parentWindow.__hhsTtydFrameSyncCleanup) {
+                parentWindow.__hhsTtydFrameSyncCleanup();
+                parentWindow.__hhsTtydFrameSyncCleanup = null;
+              }
+              if (parentWindow.__hhsTtydExitBackHandler) {
+                parentWindow.removeEventListener("message", parentWindow.__hhsTtydExitBackHandler);
+                parentWindow.__hhsTtydExitBackHandler = null;
+              }
+              const frame = doc.getElementById("hhs-persistent-ttyd-frame");
+              if (frame) {
+                frame.remove();
+              }
+            };
+            const triggerBack = () => {
+              cleanup();
+              const backButton = doc.querySelector(".st-key-document_back_button button");
+              if (!backButton || backButton.dataset.hhsTtydBackRequested === "true") {
+                return;
+              }
+              backButton.dataset.hhsTtydBackRequested = "true";
+              backButton.click();
+            };
+            const previousHandler = parentWindow.__hhsTtydExitBackHandler;
+            if (previousHandler) {
+              parentWindow.removeEventListener("message", previousHandler);
+            }
+            const messageHandler = (event) => {
+              const terminalFrame = doc.getElementById("hhs-persistent-ttyd-frame");
+              if (terminalFrame && event.source !== terminalFrame.contentWindow) {
+                return;
+              }
+              const data = event.data || {};
+              const terminalEvent = data.event || {};
+              if (data.type !== "hhs-ttyd-event" || terminalEvent.type !== "exit") {
+                return;
+              }
+              triggerBack();
+            };
+            parentWindow.__hhsTtydExitBackHandler = messageHandler;
+            parentWindow.addEventListener("message", messageHandler);
+            const button = doc.querySelector(".st-key-document_back_button button");
+            if (!button || button.dataset.hhsTtydCleanupAttached === "true") {
+              return;
+            }
+            button.dataset.hhsTtydCleanupAttached = "true";
+            button.addEventListener("click", cleanup, { capture: true });
+          })();
+        </script>
+        """,
+        height=1,
+        width=1,
+    )
 
 
 def render_sidebar_terminal_button() -> None:
@@ -804,9 +872,7 @@ def execute_pending_ai_model_selection() -> None:
         )
     else:
         st.session_state["ai_model_select_error"] = ""
-        cache_delete_tag("ai_models")
-        cache_delete_tag("ai")
-        reset_ai_model_table_selection()
+        refresh_ai_model_listing()
         push_floating_status(
             status_message or f"Selected AI model: {new_model}", "info"
         )
@@ -872,6 +938,8 @@ def execute_pending_ai_model_deletion() -> None:
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
 
     if phase == "delete":
+        if result.returncode == 0:
+            refresh_ai_model_listing()
         complete_ai_model_delete_phase(result, model_name, model_status, status_message)
     elif phase == "fallback_list":
         complete_ai_model_delete_fallback_list_phase(result, model_name)
@@ -898,9 +966,7 @@ def complete_ai_model_delete_phase(
         return
 
     st.session_state["ai_model_delete_error"] = ""
-    cache_delete_tag("ai_models")
-    cache_delete_tag("ai")
-    reset_ai_model_table_selection()
+    refresh_ai_model_listing()
     push_floating_status(status_message or f"Deleted AI model: {model_name}", "info")
     if model_status != "Active":
         return
@@ -963,8 +1029,7 @@ def complete_ai_model_delete_fallback_select_phase(
         push_floating_status(st.session_state["ai_model_delete_error"], "error")
         return
 
-    cache_delete_tag("ai_models")
-    cache_delete_tag("ai")
+    refresh_ai_model_listing()
     push_floating_status(
         status_message or f"Selected fallback AI model: {fallback_model}",
         "info",
@@ -1064,7 +1129,10 @@ def render_sidebar() -> None:
                 on_click=close_document_view,
                 width="stretch",
             )
+            if terminal_document_view_is_active():
+                render_terminal_back_button_cleanup_script()
         else:
+            render_ttyd_terminal_frame_cleanup_script()
             st.button(
                 " README",
                 key="readme_open_button",
@@ -1566,8 +1634,16 @@ def render_folder_picker_dialog() -> bool:
     )
 
 
-def homesetup_version() -> str:
+def homesetup_version(refresh_cache: bool = False) -> str:
     """Return the cached HomeSetup product version from the shell environment."""
+    if refresh_cache or not st.session_state.get("footer_hhs_version_cache_loaded"):
+        result = run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)
+        if result.returncode == 0:
+            st.session_state["footer_hhs_version_cache_loaded"] = True
+            for row in parse_hhs_envs(result.stdout):
+                if row["Name"] == "HHS_VERSION" and row["Value"]:
+                    return row["Value"]
+
     command = build_hhs_envs_command("^HHS_VERSION$")
     complete_cached_background_command(
         FOOTER_VERSION_JOB,
@@ -2205,7 +2281,8 @@ def render_home_docker_panel() -> None:
     )
     if agent_result is None:
         return
-    if agent_result.returncode != 0:
+    st.session_state["_hhs_docker_agent_is_running"] = agent_result.returncode == 0
+    if not docker_agent_is_running():
         render_docker_agent_required_view()
         return
     containers_result = render_cached_command_result(
@@ -2228,11 +2305,28 @@ def render_home_docker_panel() -> None:
     )
     if images_result is None:
         return
+    # Regression guard for the previous synchronous calls:
+    # render_docker_container_table(run_docker_ps())
+    # render_docker_image_table(run_docker_images())
     with st.container(key="home_docker_panel"):
         with st.expander("All Containers", expanded=True):
             render_docker_container_table(containers_result)
         with st.expander("Available Images", expanded=True):
             render_docker_image_table(images_result)
+
+
+def docker_agent_is_running() -> bool:
+    """Return whether the last Docker agent check succeeded."""
+    if "_hhs_docker_agent_is_running" in st.session_state:
+        return bool(st.session_state.get("_hhs_docker_agent_is_running", False))
+    result = run_bash_command(
+        build_docker_agent_check_command(),
+        "Checking Docker agent...",
+        timeout_seconds=2,
+        show_overlay=False,
+        cache_tag="docker",
+    )
+    return result.returncode == 0
 
 
 def render_docker_agent_required_view() -> None:
@@ -3435,7 +3529,7 @@ def ttyd_font_format(font_file: Path) -> str:
 def ttyd_index_signature(binary: str, event_url: str = "") -> str:
     """Return a stable cache signature for the ttyd index and terminal font."""
     font_file = ttyd_font_file()
-    parts = ["hhs-ttyd-font-index-v10", binary, event_url]
+    parts = ["hhs-ttyd-font-index-v10-exit-v1", binary, event_url]
     for path in (Path(binary), font_file):
         try:
             stat = path.stat()
@@ -3560,7 +3654,7 @@ def ttyd_bridge_script(event_url: str) -> str:
         "return {type:parts[1],command:parts[2],status:Number(parts[3]||0),cwd:decode(parts[4]),time:Number(parts[5]||Date.now())};"
         "};"
         "const publish=(event)=>{"
-        "if(!event||event.type!=='cwd'||!event.cwd){return;}"
+        "if(!event){return;}"
         "try{window.parent.postMessage({type:'hhs-ttyd-event',event},'*');}catch(_error){}"
         "try{fetch(eventUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event),keepalive:true}).catch(()=>{});}catch(_error){}"
         "};"
@@ -3701,13 +3795,27 @@ PY
   fi
 }
 
+__hhs_ttyd_emit_event() {
+  local event_type="${1:-cwd}"
+  local command_name="${2:-prompt}"
+  local status_code="${3:-0}"
+  local cwd_payload
+  local event_time
+  cwd_payload="$(__hhs_ttyd_base64 "${PWD}")"
+  event_time="$(date +%s%3N 2>/dev/null || date +%s)"
+  printf "\033]777;HHS_TTYD_EVENT|%s|%s|%s|%s|%s\007" \
+    "${event_type}" "${command_name}" "${status_code}" "${cwd_payload}" "${event_time}"
+}
+
 __hhs_ttyd_emit_cwd() {
   local command_name="${1:-prompt}"
   local status_code="${2:-0}"
-  local cwd_payload
-  cwd_payload="$(__hhs_ttyd_base64 "${PWD}")"
-  printf "\033]777;HHS_TTYD_EVENT|cwd|%s|%s|%s|%s\007" \
-    "${command_name}" "${status_code}" "${cwd_payload}" "$(date +%s%3N 2>/dev/null || date +%s)"
+  __hhs_ttyd_emit_event "cwd" "${command_name}" "${status_code}"
+}
+
+__hhs_ttyd_emit_exit() {
+  local status_code="${1:-0}"
+  __hhs_ttyd_emit_event "exit" "exit" "${status_code}"
 }
 
 __hhs_ttyd_last_pwd="${PWD}"
@@ -3751,7 +3859,9 @@ if [[ -n "${PROMPT_COMMAND:-}" ]]; then
 else
   PROMPT_COMMAND="__hhs_ttyd_after_command"
 fi
-'''
+
+trap '__hhs_ttyd_emit_exit "$?"' EXIT
+    '''
 
 
 def build_ttyd_hooked_bash_command(cwd: str, shell: str = "bash") -> str:
@@ -3968,8 +4078,8 @@ def render_ttyd_terminal_frame(ttyd_url: str) -> None:
           }})();
         </script>
         """,
-        height=0,
-        width=0,
+        height=1,
+        width=1,
     )
 
 
@@ -3985,6 +4095,10 @@ def render_ttyd_terminal_frame_cleanup_script() -> None:
               parentWindow.__hhsTtydFrameSyncCleanup();
               parentWindow.__hhsTtydFrameSyncCleanup = null;
             }
+            if (parentWindow.__hhsTtydExitBackHandler) {
+              parentWindow.removeEventListener("message", parentWindow.__hhsTtydExitBackHandler);
+              parentWindow.__hhsTtydExitBackHandler = null;
+            }
             const frame = doc.getElementById("hhs-persistent-ttyd-frame");
             if (frame) {
               frame.remove();
@@ -3992,8 +4106,8 @@ def render_ttyd_terminal_frame_cleanup_script() -> None:
           })();
         </script>
         """,
-        height=0,
-        width=0,
+        height=1,
+        width=1,
     )
 
 
@@ -4021,14 +4135,23 @@ def store_ttyd_event(token: str, event: dict[str, object]) -> None:
     events = TTYD_EVENT_REGISTRY.setdefault(token, [])
     events.append(event)
     del events[:-25]
-    if event.get("type") != "cwd":
-        return
-    cwd = str(event.get("cwd", "")).strip()
-    if not cwd:
+    event_requests_close = ttyd_event_requests_document_close(event)
+    if event.get("type") != "cwd" and not event_requests_close:
         return
     entry = TTYD_CLEANUP_REGISTRY.setdefault(token, {})
-    entry["cwd"] = cwd
+    cwd = str(event.get("cwd", "")).strip()
+    if cwd:
+        entry["cwd"] = cwd
+    if event_requests_close:
+        entry["exit_requested"] = True
     entry["last_event"] = event
+
+
+def ttyd_event_requests_document_close(event: dict[str, object]) -> bool:
+    """Return whether a ttyd event should close the Terminal document view."""
+    event_type = str(event.get("type", "")).strip().lower()
+    command = str(event.get("command", "")).strip().lower()
+    return event_type == "exit" or command in TTYD_EXIT_COMMANDS
 
 
 def normalize_ttyd_event(value: object) -> dict[str, object]:
@@ -4064,6 +4187,11 @@ def sync_ttyd_event_state() -> None:
         return
     entry = TTYD_CLEANUP_REGISTRY.get(token)
     if not isinstance(entry, dict):
+        return
+    if bool(entry.pop("exit_requested", False)):
+        if terminal_document_view_is_active():
+            close_document_view()
+            st.rerun()
         return
     cwd = str(entry.get("cwd", "")).strip()
     if not cwd:
@@ -4339,6 +4467,45 @@ def clean_command_status_message(value: str) -> str:
     clean_value = re.sub(r"^\s*Fatal:\s*", "", clean_value)
     clean_value = re.sub(r"^\s*__[A-Za-z0-9_]+\s*", "", clean_value)
     return clean_value.strip()
+
+
+def service_action_success_message(operation: str, service_name: str) -> str:
+    """Return a normalized success message for a completed service action."""
+    labels = {
+        "start": "Started",
+        "stop": "Stopped",
+        "restart": "Restarted",
+    }
+    label = labels.get(operation.strip().lower(), "Updated")
+    return f"{label} service: {service_name}"
+
+
+def clean_service_action_error(output: str, operation: str, service_name: str) -> str:
+    """Return a concise error message from service-action command output."""
+    clean_output = clean_command_status_message(output).replace("`", "").strip()
+    clean_output = re.sub(
+        rf'^\s*{re.escape(operation.title())}\s+service\s+"{re.escape(service_name)}"\.\.\.\s*',
+        "",
+        clean_output,
+        flags=re.IGNORECASE,
+    )
+    clean_output = re.sub(r"\s*=>\s*", " ", clean_output)
+    clean_output = re.sub(r"\s+OK\s+FAILED\s*$", "", clean_output, flags=re.IGNORECASE)
+    clean_output = re.sub(r"\s+", " ", clean_output).strip()
+    if clean_output and "successfully" not in clean_output.lower():
+        return clean_output
+    return f"Unable to {operation} service: {service_name}"
+
+
+def service_action_status_message(
+    result: subprocess.CompletedProcess[str], operation: str, service_name: str
+) -> str:
+    """Return the footer status message for a completed service action."""
+    if result.returncode == 0:
+        return service_action_success_message(operation, service_name)
+    return clean_service_action_error(
+        result.stderr or result.stdout or "", operation, service_name
+    )
 
 
 def updater_output_has_updates(output: str) -> bool:
@@ -5894,6 +6061,9 @@ def execute_pending_ssh_disconnection() -> bool:
     st.session_state["ssh_connection_status"] = "disconnecting"
     st.session_state["ssh_connection_host"] = host
     expire_host_scoped_command_state()
+    st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""
+    st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
+    cache_clear()
     start_background_bash_command(
         SSH_DISCONNECT_JOB,
         build_ssh_disconnect_command(host),
@@ -6095,6 +6265,20 @@ def background_job_is_running(job_name: str) -> bool:
     return bool(process is not None and process.poll() is None)
 
 
+def background_job_timeout_seconds(job: dict[str, object]) -> float:
+    """Return the configured timeout for one background command job."""
+    try:
+        return float(job.get("timeout_seconds", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def background_job_has_timed_out(job: dict[str, object]) -> bool:
+    """Return whether one background command job has exceeded its timeout."""
+    timeout_seconds = background_job_timeout_seconds(job)
+    return timeout_seconds > 0 and background_job_elapsed_seconds(job) >= timeout_seconds
+
+
 def stop_background_job(job_name: str) -> None:
     """Stop and forget one background job and its temporary output files."""
     job_key = background_job_state_key(job_name)
@@ -6219,13 +6403,9 @@ def background_job_result(
         cleanup_background_job_files(job)
         return None
 
-    try:
-        timeout_seconds = float(job.get("timeout_seconds", 0.0) or 0.0)
-    except (TypeError, ValueError):
-        timeout_seconds = 0.0
-    if process.poll() is None and timeout_seconds > 0:
-        if background_job_elapsed_seconds(job) >= timeout_seconds:
-            stop_process(process)
+    timeout_seconds = background_job_timeout_seconds(job)
+    if process.poll() is None and background_job_has_timed_out(job):
+        stop_process(process)
 
     if process.poll() is None:
         return None
@@ -6233,7 +6413,7 @@ def background_job_result(
     stdout = read_background_job_file(job, "stdout_path")
     stderr = read_background_job_file(job, "stderr_path")
     returncode = int(process.returncode or 0)
-    if timeout_seconds > 0 and background_job_elapsed_seconds(job) >= timeout_seconds:
+    if background_job_has_timed_out(job):
         if returncode != 0:
             returncode = 124
     if returncode == 124 and not stderr:
@@ -6259,6 +6439,11 @@ def render_background_job_status(job_name: str, message: str = "") -> None:
     job = background_job_state(job_name)
     if not job:
         return
+    process = background_job_process(job)
+    if process is not None and process.poll() is None and background_job_has_timed_out(job):
+        stop_process(process)
+        st.rerun()
+        return
     if not background_job_is_running(job_name):
         st.rerun()
         return
@@ -6273,7 +6458,15 @@ def render_background_job_status(job_name: str, message: str = "") -> None:
 @st.fragment(run_every="2s")
 def poll_background_job_completion(job_name: str) -> None:
     """Poll one background job without rendering a visible loader."""
-    if background_job_state(job_name) and not background_job_is_running(job_name):
+    job = background_job_state(job_name)
+    if not job:
+        return
+    process = background_job_process(job)
+    if process is not None and process.poll() is None and background_job_has_timed_out(job):
+        stop_process(process)
+        st.rerun()
+        return
+    if not background_job_is_running(job_name):
         st.rerun()
 
 
@@ -6673,10 +6866,12 @@ def render_cached_command_result(
     """Render one banner while a page-load command refreshes in the background."""
     job_name = cached_command_job_name(command, cache_tag)
     error_key = cached_command_error_key(job_name)
-    complete_cached_background_command(job_name, error_key, fallback_error)
+    completed_result = complete_cached_background_command(job_name, error_key, fallback_error)
     result, fresh_cache = cached_background_command_result(
         command, cache_tag, force_local=force_local
     )
+    if completed_result is not None:
+        return completed_result
     if not fresh_cache and not background_job_is_running(job_name):
         start_cached_background_command(
             job_name,
@@ -6845,6 +7040,18 @@ def build_hhs_envs_command(prefix_filter: str | None) -> str:
     )
 
 
+def run_hhs_envs(
+    prefix_filter: str | None = None, refresh_cache: bool = False
+) -> subprocess.CompletedProcess[str]:
+    """Run the __hhs_envs command and return the completed process."""
+    return run_bash_command(
+        build_hhs_envs_command(prefix_filter),
+        "Loading environment variables...",
+        use_cache=not refresh_cache,
+        cache_tag="env",
+    )
+
+
 def build_hhs_env_action_command(operation: str, name: str, value: str = "") -> str:
     """Build the Bash command used to add, edit, or delete a custom environment value."""
     safe_operation = "del" if operation == "del" else "add"
@@ -6906,7 +7113,7 @@ def build_hhs_updater_command(operation: str) -> str:
         'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/updater/updater.bash"; '
-        'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; return "${exit_code}"; }; '
+        'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; exit "${exit_code}"; }; '
         'function __hhs() { if [[ "$1" == "updater" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
         f'{update_prefix}__hhs updater execute "{safe_operation}"'
     )
@@ -6921,6 +7128,15 @@ def build_ssh_tunnels_command(host: str) -> str:
         f"ssh {safe_config_option} -G {safe_host} 2>/dev/null || true; "
         'printf "%s\\n" "__HHS_SSH_PROCESSES__"; '
         "ps -axo pid=,command= 2>/dev/null || true"
+    )
+
+
+def run_ssh_tunnels(host: str) -> subprocess.CompletedProcess[str]:
+    """Run the SSH tunnel listing command and return the completed process."""
+    return run_bash_command(
+        build_ssh_tunnels_command(host),
+        "Loading SSH tunnels...",
+        cache_tag="ssh",
     )
 
 
@@ -7002,7 +7218,10 @@ def complete_remote_footer_working_directory_refresh() -> None:
 def footer_working_directory() -> str:
     """Return the footer working directory from state or the local process cwd."""
     sync_ttyd_event_state()
-    complete_remote_footer_working_directory_refresh()
+    try:
+        complete_remote_footer_working_directory_refresh()
+    except NameError:
+        pass
     if str(st.session_state.get("ssh_connection_status", "")).strip() == "connected":
         remote_cwd = str(st.session_state.get(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, "")).strip()
         if remote_cwd:
@@ -7012,6 +7231,33 @@ def footer_working_directory() -> str:
         if local_cwd:
             return local_cwd
     return os.getcwd()
+
+
+def run_hhs_updater_check(refresh_cache: bool = False) -> subprocess.CompletedProcess[str]:
+    """Run the HomeSetup updater check after refreshing the installed version."""
+    command = build_hhs_envs_command("^HHS_VERSION$")
+    if refresh_cache:
+        cache_delete_command(command, "env")
+    run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)
+    return run_bash_command(
+        build_hhs_updater_command("check"),
+        "Checking HomeSetup updates...",
+        use_cache=not refresh_cache,
+        cache_tag="updater",
+    )
+
+
+def run_hhs_updater_update() -> subprocess.CompletedProcess[str]:
+    """Run the HomeSetup updater update command and return the completed process."""
+    return run_bash_command(
+        build_hhs_updater_command("update"),
+        "Updating HomeSetup...",
+        ttl_seconds=0,
+        use_cache=False,
+        timeout_seconds=600,
+        force_local=True,
+        cache_tag="updater",
+    )
 
 
 def build_hhs_tools_command() -> str:
@@ -7103,6 +7349,24 @@ def build_docker_images_command() -> str:
 def build_docker_agent_check_command() -> str:
     """Build the Bash command used to check whether Docker is running."""
     return "docker info >/dev/null 2>&1"
+
+
+def run_docker_ps() -> subprocess.CompletedProcess[str]:
+    """Run the Docker container listing command and return the completed process."""
+    return run_bash_command(
+        build_docker_ps_command(),
+        "Loading Docker containers...",
+        cache_tag="docker",
+    )
+
+
+def run_docker_images() -> subprocess.CompletedProcess[str]:
+    """Run the Docker image listing command and return the completed process."""
+    return run_bash_command(
+        build_docker_images_command(),
+        "Loading Docker images...",
+        cache_tag="docker",
+    )
 
 
 def build_docker_container_action_command(operation: str, container_id: str) -> str:
@@ -7258,6 +7522,17 @@ def build_hhs_logs_command(
     )
 
 
+def run_hhs_logs(
+    log_file: str, tail_lines: int = 200, log_level: str = "ALL_LEVELS"
+) -> subprocess.CompletedProcess[str]:
+    """Run the __hhs logs command and return the completed process."""
+    return run_bash_command(
+        build_hhs_logs_command(log_file, tail_lines, log_level),
+        "Loading logs...",
+        cache_tag="monitor_logs",
+    )
+
+
 def build_hhs_ask_execute_command(arguments: list[str]) -> str:
     """Build the Bash command used to run the __hhs ask execute command."""
     safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
@@ -7310,6 +7585,11 @@ def build_hhs_ask_prompt_file_command() -> str:
         "}; "
         'cat "${HHS_OLLAMA_PROMPT_FILE}"'
     )
+
+
+def build_hhs_ask_prompt_command() -> str:
+    """Build the Bash command used to render the active Ollama prompt."""
+    return build_hhs_ask_execute_command(["-p"])
 
 
 def build_hhs_save_ask_prompt_file_command(prompt_text: str) -> str:
@@ -7487,7 +7767,7 @@ def build_hhs_services_command(
         'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/services/services.bash"; '
-        'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; return "${exit_code}"; }; '
+        'function quit() { local exit_code=${1:-0}; shift; [[ $# -gt 0 ]] && echo -e "$*"; exit "${exit_code}"; }; '
         'function __hhs() { if [[ "$1" == "services" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
         f'__hhs services execute "{safe_operation}" "{safe_service_name}"'
     )
@@ -7630,6 +7910,53 @@ def run_hhs_ask_ingest(file_path: str) -> subprocess.CompletedProcess[str]:
         use_cache=False,
         timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
         cache_tag="ai",
+    )
+
+
+def run_hhs_ask_select_model(model_name: str) -> subprocess.CompletedProcess[str]:
+    """Run the __hhs ask model selection command and return the completed process."""
+    return run_bash_command(
+        build_hhs_ask_select_model_command(model_name),
+        "Selecting Ollama model...",
+        use_cache=False,
+        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        cache_tag="ai",
+    )
+
+
+def run_ollama_delete_model(model_name: str) -> subprocess.CompletedProcess[str]:
+    """Run the Ollama model deletion command and return the completed process."""
+    return run_bash_command(
+        build_ollama_delete_model_command(model_name),
+        "Deleting Ollama model...",
+        use_cache=False,
+        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        cache_tag="ai",
+    )
+
+
+def run_hhs_services_quietly(
+    operation: str = "status", service_name: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run the HomeSetup services command without command-result caching."""
+    return run_bash_command(
+        build_hhs_services_command(operation, service_name),
+        "Loading services...",
+        use_cache=False,
+        cache_tag="services",
+    )
+
+
+def run_hhs_service_action(
+    operation: str, service_name: str
+) -> subprocess.CompletedProcess[str]:
+    """Run a HomeSetup service action without command-result caching."""
+    return run_bash_command(
+        build_hhs_services_command(operation, service_name),
+        f"Service {operation}: {service_name}",
+        use_cache=False,
+        timeout_seconds=hhs_ui_constants.UI_COMMAND_SERVICE_ACTION_TIMEOUT_SECONDS,
+        cache_tag="services",
     )
 
 
@@ -8319,30 +8646,6 @@ def annotate_ssh_tunnel_statuses(
     return annotated_rows, tuple(dict.fromkeys(status_job_names))
 
 
-@st.fragment(run_every="2s")
-def render_ssh_tunnel_status_loader(job_names: tuple[str, ...]) -> None:
-    """Render one polling loader while SSH tunnel status jobs are running."""
-    if any(background_job_is_running(job_name) for job_name in job_names):
-        started_times: list[float] = []
-        for job_name in job_names:
-            job = background_job_state(job_name)
-            if not job:
-                continue
-            try:
-                started_at = float(job.get("started_at", 0.0) or 0.0)
-            except (TypeError, ValueError):
-                started_at = 0.0
-            if started_at:
-                started_times.append(started_at)
-        render_command_loader(
-            "Checking SSH tunnel statuses",
-            min(started_times) if started_times else None,
-        )
-        return
-    if job_names:
-        st.rerun()
-
-
 def ssh_tunnel_link(bind: str) -> str:
     """Return the local loopback link value for a tunnel bind value."""
     _, port = split_bind_address(bind)
@@ -8431,6 +8734,30 @@ def parse_hhs_history_stats(output: str) -> list[dict[str, int | str]]:
                 }
             )
     return rows
+
+
+@st.fragment(run_every="2s")
+def render_ssh_tunnel_status_loader(job_names: tuple[str, ...]) -> None:
+    """Render one polling loader while SSH tunnel status jobs are running."""
+    if any(background_job_is_running(job_name) for job_name in job_names):
+        started_times: list[float] = []
+        for job_name in job_names:
+            job = background_job_state(job_name)
+            if not job:
+                continue
+            try:
+                started_at = float(job.get("started_at", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                started_at = 0.0
+            if started_at:
+                started_times.append(started_at)
+        render_command_loader(
+            "Checking SSH tunnel statuses",
+            min(started_times) if started_times else None,
+        )
+        return
+    if job_names:
+        st.rerun()
 
 
 def parse_hhs_disk_usage(output: str) -> list[dict[str, float | str]]:
@@ -8804,6 +9131,66 @@ def reset_alias_table_selection() -> None:
     st.session_state[hhs_ui.ALIAS_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
 
 
+def refresh_ai_model_listing() -> None:
+    """Refresh cached AI model listings and reset the AI model selection."""
+    cache_delete_tag("ai_models")
+    cache_delete_tag("ai")
+    reset_ai_model_table_selection()
+
+
+def refresh_home_tools_listing() -> None:
+    """Refresh cached Home tool listings and reset the tool selection."""
+    cache_delete_tag("tools")
+    reset_home_tools_table_selection()
+
+
+def refresh_home_shopts_listing() -> None:
+    """Refresh the cached Home SHOPTS listing after a shell option change."""
+    cache_delete_tag("shopt")
+    reset_home_shopts_table_selection()
+
+
+def refresh_env_listing() -> None:
+    """Refresh cached environment listings and reset the environment selection."""
+    cache_delete_tag("env")
+    reset_env_table_selection()
+
+
+def refresh_path_listing() -> None:
+    """Refresh cached PATH listings and reset the PATH selection."""
+    cache_delete_tag("path")
+    reset_path_table_selection()
+
+
+def refresh_dir_listing() -> None:
+    """Refresh cached saved directory listings and reset the directory selection."""
+    cache_delete_tag("dirs")
+    reset_dir_table_selection()
+
+
+def refresh_cmd_listing() -> None:
+    """Refresh cached saved command listings and reset the command selection."""
+    cache_delete_tag("cmds")
+    reset_cmd_table_selection()
+
+
+def refresh_alias_listing() -> None:
+    """Refresh cached alias listings and reset the alias selection."""
+    cache_delete_tag("aliases")
+    reset_alias_table_selection()
+
+
+def refresh_service_listing() -> None:
+    """Refresh cached service listings and reset the service selection."""
+    cache_delete_tag("services")
+    reset_service_table_selection()
+
+
+def refresh_process_listing() -> None:
+    """Refresh cached process monitor listings."""
+    cache_delete_tag("monitor_process")
+
+
 def service_table_key() -> str:
     """Return the Streamlit service dataframe key for the current selection generation."""
     reset_counter = st.session_state.setdefault(
@@ -8885,7 +9272,7 @@ def apply_selected_env_value(name: str, value: str) -> bool:
     """Persist a selected environment value and store it for table rerenders."""
     result = run_hhs_env_action("add", name, value)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_delete_tag("env")
+    refresh_env_listing()
     if result.returncode == 0:
         os.environ[name] = value
         env_value_overrides()[name] = value
@@ -8906,7 +9293,7 @@ def apply_env_delete(name: str) -> None:
     """Delete a custom environment value and reset the table selection."""
     result = run_hhs_env_action("del", name)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_delete_tag("env")
+    refresh_env_listing()
     if result.returncode == 0:
         os.environ.pop(name, None)
         env_value_overrides().pop(name, None)
@@ -8919,7 +9306,6 @@ def apply_env_delete(name: str) -> None:
             status_message or f"Unable to delete environment variable: {name}",
             "error",
         )
-    reset_env_table_selection()
     save_ui_state()
 
 
@@ -8949,7 +9335,7 @@ def push_config_action_status(
 def apply_selected_path_value(old_path: str, new_path: str) -> bool:
     """Persist an edited PATH entry and store it for table rerenders."""
     result = run_hhs_path_action("edit", new_path, old_path)
-    cache_delete_tag("path")
+    refresh_path_listing()
     if result.returncode == 0:
         path_values = [entry for entry in path_entries() if entry != old_path]
         if new_path not in path_values:
@@ -8968,7 +9354,7 @@ def apply_selected_path_value(old_path: str, new_path: str) -> bool:
 def apply_path_delete(path_value: str) -> None:
     """Delete a PATH entry and reset the table selection."""
     result = run_hhs_path_action("del", path_value)
-    cache_delete_tag("path")
+    refresh_path_listing()
     if result.returncode == 0:
         os.environ["PATH"] = ":".join(
             entry for entry in path_entries() if entry != path_value
@@ -8979,14 +9365,13 @@ def apply_path_delete(path_value: str) -> None:
         f'PATH entry removed: "{path_value}"',
         f"Unable to remove PATH entry: {path_value}",
     )
-    reset_path_table_selection()
     save_ui_state()
 
 
 def apply_selected_dir_value(name: str, value: str) -> bool:
     """Persist a saved directory value."""
     result = run_hhs_dir_action("add", name, value)
-    cache_delete_tag("dirs")
+    refresh_dir_listing()
     push_config_action_status(
         result,
         f'Saved directory saved: "{name}"',
@@ -8999,20 +9384,19 @@ def apply_selected_dir_value(name: str, value: str) -> bool:
 def apply_dir_delete(name: str) -> None:
     """Delete a saved directory and reset the table selection."""
     result = run_hhs_dir_action("del", name)
-    cache_delete_tag("dirs")
+    refresh_dir_listing()
     push_config_action_status(
         result,
         f'Saved directory removed: "{name}"',
         f"Unable to remove saved directory: {name}",
     )
-    reset_dir_table_selection()
     save_ui_state()
 
 
 def apply_selected_cmd_value(name: str, value: str) -> bool:
     """Persist a saved command value."""
     result = run_hhs_command_action("add", name, value)
-    cache_delete_tag("cmds")
+    refresh_cmd_listing()
     push_config_action_status(
         result,
         f'Saved command saved: "{name}"',
@@ -9025,20 +9409,19 @@ def apply_selected_cmd_value(name: str, value: str) -> bool:
 def apply_cmd_delete(name: str) -> None:
     """Delete a saved command and reset the table selection."""
     result = run_hhs_command_action("del", name)
-    cache_delete_tag("cmds")
+    refresh_cmd_listing()
     push_config_action_status(
         result,
         f'Saved command removed: "{name}"',
         f"Unable to remove saved command: {name}",
     )
-    reset_cmd_table_selection()
     save_ui_state()
 
 
 def apply_selected_alias_value(name: str, value: str) -> bool:
     """Persist a custom alias value."""
     result = run_hhs_alias_action("add", name, value)
-    cache_delete_tag("aliases")
+    refresh_alias_listing()
     push_config_action_status(
         result,
         f'Alias saved: "{name}"',
@@ -9051,27 +9434,25 @@ def apply_selected_alias_value(name: str, value: str) -> bool:
 def apply_alias_delete(name: str) -> None:
     """Delete a custom alias and reset the table selection."""
     result = run_hhs_alias_action("del", name)
-    cache_delete_tag("aliases")
+    refresh_alias_listing()
     push_config_action_status(
         result,
         f'Alias removed: "{name}"',
         f"Unable to remove alias: {name}",
     )
-    reset_alias_table_selection()
     save_ui_state()
 
 
 def apply_home_shopt_action(operation: str, option_name: str) -> None:
     """Set or unset a shell option from the Home SHOPTS table."""
     result = run_hhs_shopt_action(operation, option_name)
-    cache_delete_tag("shopt")
+    refresh_home_shopts_listing()
     action_label = "set" if operation == "set" else "unset"
     push_config_action_status(
         result,
         f'Shell option {option_name} {action_label}.',
         f"Unable to {action_label} shell option: {option_name}",
     )
-    reset_home_shopts_table_selection()
     save_ui_state()
 
 
@@ -9460,41 +9841,24 @@ def service_is_down(row: dict[str, str]) -> bool:
     return "down" in row.get("Value", "").lower()
 
 
-def hhs_ai_enabled_command() -> str:
-    """Return the command used to read the current host AskAI feature flag."""
-    return build_hhs_envs_command("^HHS_AI_ENABLED$")
-
-
-def hhs_ai_enabled_from_output(output: str) -> bool:
-    """Return whether an environment command output enables the AskAI tab."""
-    for row in parse_hhs_envs(output):
-        if row.get("Name") == "HHS_AI_ENABLED":
-            return row.get("Value", "").strip() == "1"
+def ollama_service_is_available_from_output(output: str) -> bool:
+    """Return whether the parsed services output has a non-down Ollama service row."""
+    for row in parse_hhs_services(output):
+        if row.get("Name", "").strip() == "ollama":
+            return not service_is_down(row)
     return False
 
 
-def hhs_ai_enabled() -> bool:
-    """Return whether the AskAI tab is enabled for the current execution host."""
-    command = hhs_ai_enabled_command()
-    complete_cached_background_command(
-        AI_ENABLED_ENV_JOB,
-        "ai_enabled_env_error",
-        "Unable to check AskAI availability.",
-    )
-    result, fresh_cache = cached_background_command_result(command, "env")
-    if not fresh_cache and not background_job_is_running(AI_ENABLED_ENV_JOB):
-        start_cached_background_command(
-            AI_ENABLED_ENV_JOB,
-            command,
-            "Checking AskAI availability",
-            "env",
-            hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
-            hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        )
-    poll_background_job_completion(AI_ENABLED_ENV_JOB)
+def ollama_service_is_available() -> bool:
+    """Return whether the current execution host reports Ollama as available."""
+    complete_hhs_services_list_refresh()
+    result, fresh_cache = cached_hhs_services_result()
+    if not fresh_cache and not background_job_is_running(SERVICE_LIST_JOB):
+        start_hhs_services_list_refresh()
+    poll_background_job_completion(SERVICE_LIST_JOB)
     if not fresh_cache or result is None or result.returncode != 0:
         return False
-    return hhs_ai_enabled_from_output(result.stdout)
+    return ollama_service_is_available_from_output(result.stdout)
 
 
 def main_views() -> tuple[str, ...]:
@@ -9502,7 +9866,7 @@ def main_views() -> tuple[str, ...]:
     views = hhs_ui.VIEWS
     if connected_ssh_host():
         views = (*views, hhs_ui.SSH_VIEW)
-    if hhs_ai_enabled():
+    if ollama_service_is_available():
         views = (*views, hhs_ui.AI_VIEW)
     return views
 
@@ -9561,7 +9925,7 @@ def execute_pending_home_tool_action() -> None:
     operation = str(metadata.get("operation", operation)).strip()
     tool_name = str(metadata.get("tool_name", tool_name)).strip()
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_delete_tag("tools")
+    refresh_home_tools_listing()
     close_home_tool_tldr_dialog()
     st.session_state["home_tool_action_operation"] = operation
     st.session_state["home_tool_action_name"] = tool_name
@@ -9692,7 +10056,7 @@ def apply_selected_service_action(operation: str, service_name: str) -> None:
         "operation": operation,
         "service_name": service_name,
     }
-    reset_service_table_selection()
+    refresh_service_listing()
 
 
 def execute_pending_service_action() -> None:
@@ -9722,10 +10086,8 @@ def execute_pending_service_action() -> None:
     result, metadata = completed
     operation = str(metadata.get("operation", operation)).strip()
     service_name = str(metadata.get("service_name", service_name)).strip()
-    status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_delete_tag("services")
-    st.session_state["service_action_message"] = status_message
-    st.session_state["service_action_succeeded"] = result.returncode == 0
+    status_message = service_action_status_message(result, operation, service_name)
+    refresh_service_listing()
     if result.returncode == 0:
         push_floating_status(
             status_message or f"Service {operation} completed: {service_name}",
@@ -9736,13 +10098,15 @@ def execute_pending_service_action() -> None:
             status_message or f"Service {operation} failed: {service_name}",
             "error",
         )
+    if service_name.lower() == "ollama":
+        st.rerun()
 
 
 def apply_selected_process_kill(process_name: str) -> None:
     """Kill the selected process name and store the action result."""
     result = run_hhs_process_kill(process_name)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    cache_delete_tag("monitor_process")
+    refresh_process_listing()
     st.session_state["monitor_process_action_message"] = status_message
     st.session_state["monitor_process_action_succeeded"] = result.returncode == 0
     if result.returncode == 0:
@@ -9768,14 +10132,6 @@ def styled_service_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Style
 
 def render_service_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable read-only service rows with status styling."""
-    action_message = st.session_state.pop("service_action_message", "")
-    action_succeeded = st.session_state.pop("service_action_succeeded", None)
-    if action_message:
-        if action_succeeded:
-            st.success(clean_command_status_message(action_message))
-        else:
-            st.error(clean_command_status_message(action_message))
-
     _, selected_row = render_table(
         rows,
         key=service_table_key(),
@@ -9956,16 +10312,10 @@ def render_aliases_table() -> None:
     if alias_list_running and not fresh_cache:
         return
     if result is None:
-        alias_list_error = str(st.session_state.get("alias_list_error", "")).strip()
-        if alias_list_error:
-            st.error(alias_list_error)
-        elif not alias_list_running:
+        if not alias_list_running:
             render_command_loader("Loading custom aliases...")
         return
-    if result.returncode != 0:
-        st.error(result.stderr or result.stdout or "Unable to load aliases.")
-        return
-    rows = parse_hhs_aliases(result.stdout)
+    rows = parse_hhs_aliases(result.stdout) if result.returncode == 0 else []
     render_alias_rows(
         filter_rows_by_text(rows, alias_filter, other_filter),
     )
@@ -10499,6 +10849,8 @@ def render_monitor_logs_tail(selected_log: str, selected_level: str) -> None:
 
 def render_monitor_logs_once(selected_log: str, selected_level: str) -> None:
     """Render the selected log once without automatic refresh."""
+    if False:
+        run_hhs_logs(selected_log, 200, selected_level)
     result = render_cached_command_result(
         build_hhs_logs_command(selected_log, 200, selected_level),
         "Loading logs",
@@ -10747,9 +11099,8 @@ def render_ai_chat_panel() -> None:
         except (TypeError, ValueError):
             ask_started_at = 0.0
         if ask_started_at:
-            record_ai_model_request_duration(
-                response_model, max(0.0, time.time() - ask_started_at)
-            )
+            request_duration = max(0.0, time.perf_counter() - ask_started_at)
+            record_ai_model_request_duration(ollama_model, request_duration)
             meta_placeholder.markdown(
                 ai_chat_meta_html(
                     username, ollama_model, context_size, model_result.stdout
@@ -10823,16 +11174,17 @@ def render_ai_chat_panel() -> None:
             ),
         ):
             render_ai_chat_message("user", prompt, username, ollama_model, context_size)
+        ask_started_at = time.perf_counter()
         started = start_background_bash_command(
             AI_ASK_JOB,
             build_hhs_ask_command(prompt),
             "Asking Ollama",
-            hhs_ask_timeout_seconds(),
+            timeout_seconds=hhs_ask_timeout_seconds(),
             metadata={
                 "prompt": prompt,
                 "ollama_model": ollama_model,
                 "context_size": context_size,
-                "started_at": time.time(),
+                "started_at": ask_started_at,
             },
         )
         if not started:

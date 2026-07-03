@@ -697,9 +697,9 @@ div[role="dialog"] button[aria-label="Close"] {
 div[role="dialog"]:has(.hhs-shell-version-output) {
   box-sizing: border-box;
   max-height: 88dvh;
-  max-width: min(92vw, 72rem);
+  max-width: 92vw;
   overflow: auto;
-  width: fit-content;
+  width: max-content;
 }
 
 div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stVerticalBlock"]:has(.hhs-shell-version-output) {
@@ -720,7 +720,7 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
 
 .hhs-shell-version-output {
   max-height: calc(88dvh - 8rem);
-  max-width: min(86vw, 68rem);
+  max-width: calc(92vw - 4rem);
   min-width: 0;
   width: fit-content;
 }
@@ -730,10 +730,8 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
   border: 1px solid var(--hhs-theme-heading-border-color);
   border-radius: 0.4rem;
   box-sizing: border-box;
-  height: calc(
-    100dvh - var(--hhs-footer-guard-height) - 4.75rem -
-      (var(--hhs-ttyd-shell-gap) * 2)
-  );
+  height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem);
+  height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - (var(--hhs-ttyd-shell-gap) * 2));
   margin: var(--hhs-ttyd-shell-gap) 0;
   max-height: var(--hhs-ttyd-max-height, 760px);
   min-height: 360px;
@@ -980,10 +978,10 @@ div[class*="st-key-service_selected_value_"] input {
 
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:empty,
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stMarkdownContainer"] style),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stAppIframeResizerAnchor"]):has(iframe[height="0"]),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(iframe[height="0"]),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(iframe[style*="height: 0px"]),
-[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stIFrame"][height="0"]),
-[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stAppIframeResizerAnchor"]) {
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stIFrame"][height="0"]) {
   display: none !important;
   height: 0 !important;
   margin: 0 !important;
