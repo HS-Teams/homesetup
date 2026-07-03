@@ -62,55 +62,10 @@ import hhs_ui.constants as hhs_ui_constants
 hhs_ui_constants = importlib.reload(hhs_ui_constants)
 hhs_ui = importlib.reload(hhs_ui)
 
-UPDATER_CHECK_INTERVAL_SECONDS = 7 * 24 * 60 * 60
-FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
-FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
-FLOATING_STATUS_QUEUE_LIMIT = 20
-FOOTER_REMOTE_WORKING_DIR_KEY = "_hhs_footer_remote_working_dir"
-FOOTER_LOCAL_WORKING_DIR_KEY = "_hhs_footer_local_working_dir"
-TABLE_SELECTION_SNAPSHOT_KEY = "_hhs_table_selection_snapshots"
-COMMAND_RESULT_SNAPSHOT_KEY = "_hhs_command_result_snapshots"
-COMMAND_RESULT_SNAPSHOT_LIMIT = 100
-TTYD_PROCESS_KEY = "_hhs_ttyd_process"
-TTYD_PORT_KEY = "_hhs_ttyd_port"
-TTYD_SIGNATURE_KEY = "_hhs_ttyd_signature"
-TTYD_CLEANUP_TOKEN_KEY = "_hhs_ttyd_cleanup_token"
 TTYD_CLEANUP_REGISTRY: dict[str, dict[str, object]] = {}
+TTYD_EVENT_REGISTRY: dict[str, list[dict[str, object]]] = {}
 TTYD_CLEANUP_SERVER: ThreadingHTTPServer | None = None
 TTYD_CLEANUP_SERVER_PORT = 0
-AI_CONTEXT_UPLOAD_TYPES = (
-    "txt",
-    "md",
-    "markdown",
-    "csv",
-    "tsv",
-    "json",
-    "jsonl",
-    "yaml",
-    "yml",
-    "toml",
-    "ini",
-    "conf",
-    "cfg",
-    "log",
-    "xml",
-    "html",
-    "css",
-    "js",
-    "ts",
-    "py",
-    "sh",
-    "bash",
-    "zsh",
-    "java",
-    "kt",
-    "go",
-    "rs",
-    "rb",
-    "php",
-    "sql",
-)
-RUN_SHELL_ENV_KEY = "RUN_SHELL"
 
 
 def resolve_run_shell() -> str:
@@ -153,12 +108,12 @@ def resolve_run_shell() -> str:
 
 
 def shell_version_command() -> str:
-    """Return the command that prints the resolved command shell version."""
-    return f"{shlex.quote(RUN_SHELL)} --version"
+    """Return the command that prints the active target Bash version."""
+    return r'${BASH:-bash} --version'
 
 
 RUN_SHELL = resolve_run_shell()
-os.environ[RUN_SHELL_ENV_KEY] = RUN_SHELL
+os.environ[hhs_ui_constants.RUN_SHELL_ENV_KEY] = RUN_SHELL
 SHOPT_DESCRIPTIONS = {
     "assoc_expand_once": "Suppresses repeated evaluation of associative array subscripts.",
     "autocd": "Runs a directory name as if it were the argument to cd.",
@@ -526,6 +481,33 @@ def restore_terminal_document_view(was_terminal_active: bool) -> None:
     activate_terminal_document_view()
 
 
+def reconnect_view_state_snapshot() -> dict[str, object]:
+    """Return persisted view state that should survive automatic SSH reconnect."""
+    keys = (
+        "active_view",
+        "ai_view",
+        "config_view",
+        hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY,
+        hhs_ui.DOCUMENT_SELECTED_KEY,
+        hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY,
+        "history_view",
+        "home_view",
+        "monitor_view",
+    )
+    return {
+        key: st.session_state[key]
+        for key in keys
+        if key in st.session_state
+        and is_persistable_ui_value(st.session_state.get(key))
+    }
+
+
+def restore_reconnect_view_state(snapshot: dict[str, object]) -> None:
+    """Restore persisted view state after an automatic SSH reconnect reset."""
+    for key, value in snapshot.items():
+        st.session_state[key] = value
+
+
 def close_document_view() -> None:
     """Close the document view and restore the previous main view."""
     previous_view = st.session_state.get(hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY, "Home")
@@ -695,7 +677,7 @@ def revert_ai_prompt_file() -> None:
 def uploaded_context_suffix(file_name: str) -> str:
     """Return a safe suffix for an uploaded AI context file."""
     suffix = Path(file_name).suffix.lower()
-    if suffix.lstrip(".") in AI_CONTEXT_UPLOAD_TYPES:
+    if suffix.lstrip(".") in hhs_ui_constants.AI_CONTEXT_UPLOAD_TYPES:
         return suffix
     return ".txt"
 
@@ -991,7 +973,6 @@ def render_sidebar() -> None:
 
 def render_preloader(message: str = "Loading...", transient: bool = True) -> None:
     """Render a full-page overlay preloader."""
-    render_footer_visibility_script(hidden=True)
     loader_class = (
         "hhs-tab-loader hhs-tab-loader-transient" if transient else "hhs-tab-loader"
     )
@@ -1056,56 +1037,6 @@ def clear_preloader() -> None:
         """,
         height=0,
         width=0,
-    )
-
-
-def render_footer_visibility_script(hidden: bool) -> None:
-    """Hide or restore the already-mounted footer in the browser document."""
-    class_action = "add" if hidden else "remove"
-    sequence_key = "_hhs_footer_visibility_sequence"
-    sequence = st.session_state.setdefault(sequence_key, 0)
-    if not isinstance(sequence, int):
-        sequence = 0
-    sequence += 1
-    st.session_state[sequence_key] = sequence
-    retry_script = (
-        """
-            if (!hidden) {
-              [0, 50, 150, 300, 600].forEach((delay) => {
-                window.setTimeout(apply_visibility, delay);
-              });
-              window.requestAnimationFrame(apply_visibility);
-            }
-        """
-        if not hidden
-        else ""
-    )
-    components.html(
-        f"""
-        <script>
-          (() => {{
-            const doc = window.parent.document;
-            const sequence = {sequence};
-            const hidden = {str(hidden).lower()};
-            const apply_visibility = () => {{
-              const current_sequence = Number(doc.documentElement.dataset.hhsFooterVisibilitySequence || "0");
-              if (sequence < current_sequence) {{
-                return;
-              }}
-              doc.documentElement.dataset.hhsFooterVisibilitySequence = String(sequence);
-              doc.documentElement.classList.{class_action}("hhs-footer-hidden");
-              doc.querySelectorAll(".hhs-app-footer").forEach((footer) => {{
-                footer.style.visibility = "";
-                footer.style.opacity = "";
-                footer.style.pointerEvents = "";
-              }});
-            }};
-            apply_visibility();
-            {retry_script}
-          }})();
-        </script>
-        """,
-        height=0,
     )
 
 
@@ -1180,7 +1111,6 @@ def set_overlay(
         return
 
     clear_preloader()
-    render_footer_visibility_script(hidden=False)
 
 
 def queue_dialog_callback(callback: Callable[[], None] | None) -> None:
@@ -1775,8 +1705,8 @@ def push_floating_status(
             "timeout_seconds": max(1.0, min(float(timeout_seconds), 30.0)),
         }
     )
-    del status_queue[:-FLOATING_STATUS_QUEUE_LIMIT]
-    st.session_state[FLOATING_STATUS_QUEUE_KEY] = status_queue
+    del status_queue[:-hhs_ui_constants.FLOATING_STATUS_QUEUE_LIMIT]
+    st.session_state[hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY] = status_queue
 
 
 def normalize_floating_status_kind(kind: str) -> str:
@@ -1790,14 +1720,14 @@ def normalize_floating_status_kind(kind: str) -> str:
 
 def floating_status_queue() -> list[dict[str, object]]:
     """Return the floating status queue, migrating legacy single-message state."""
-    queue = st.session_state.get(FLOATING_STATUS_QUEUE_KEY)
+    queue = st.session_state.get(hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY)
     if not isinstance(queue, list):
         queue = []
-    legacy_status = st.session_state.pop(FLOATING_STATUS_LEGACY_KEY, None)
+    legacy_status = st.session_state.pop(hhs_ui_constants.FLOATING_STATUS_LEGACY_KEY, None)
     if isinstance(legacy_status, dict):
         queue.append(legacy_status)
     normalized_queue = [item for item in queue if isinstance(item, dict)]
-    st.session_state[FLOATING_STATUS_QUEUE_KEY] = normalized_queue
+    st.session_state[hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY] = normalized_queue
     return normalized_queue
 
 
@@ -1807,7 +1737,7 @@ def pop_floating_status() -> dict[str, object] | None:
     if not queue:
         return None
     status = queue.pop(0)
-    st.session_state[FLOATING_STATUS_QUEUE_KEY] = queue
+    st.session_state[hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY] = queue
     return status
 
 
@@ -1825,7 +1755,7 @@ def current_floating_status() -> dict[str, object] | None:
         displayed_at = status.get("displayed_at")
         if not isinstance(displayed_at, (int, float)):
             status["displayed_at"] = time.time()
-            st.session_state[FLOATING_STATUS_QUEUE_KEY] = queue
+            st.session_state[hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY] = queue
             return status
         if time.time() - float(displayed_at) > timeout + 1.0:
             pop_floating_status()
@@ -1985,12 +1915,13 @@ def handle_footer_actions() -> None:
     """Run footer actions requested through Streamlit query parameters."""
     if query_param_requested(hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM)
+        clear_footer_shell_version_dialog()
         result = run_shell_version()
         output = strip_ansi(result.stdout or result.stderr or "").strip()
-        st.session_state["footer_shell_version_dialog_title"] = "Shell version"
         st.session_state["footer_shell_version_output"] = (
             output or "bash --version returned no output."
         )
+        st.session_state["footer_shell_version_dialog_title"] = "Shell version"
 
     if query_param_requested(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM)
@@ -2042,8 +1973,6 @@ def render_home_view() -> None:
         on_change=save_ui_state,
         width="stretch",
     )
-    if home_view != "Docker":
-        st.write("")
     if home_view == "System":
         render_home_system_panel()
     elif home_view == "Docker":
@@ -2073,10 +2002,11 @@ def render_home_docker_panel() -> None:
     if not docker_agent_is_running():
         render_docker_agent_required_view()
         return
-    with st.expander("All Containers", expanded=True):
-        render_docker_container_table(run_docker_ps())
-    with st.expander("Available Images", expanded=True):
-        render_docker_image_table(run_docker_images())
+    with st.container(key="home_docker_panel"):
+        with st.expander("All Containers", expanded=True):
+            render_docker_container_table(run_docker_ps())
+        with st.expander("Available Images", expanded=True):
+            render_docker_image_table(run_docker_images())
 
 
 def render_docker_agent_required_view() -> None:
@@ -2574,10 +2504,10 @@ def table_selection_rows(selection_state: object) -> tuple[int, ...]:
 
 def table_selection_snapshots() -> dict[str, tuple[int, ...]]:
     """Return remembered dataframe selections keyed by Streamlit widget key."""
-    snapshots = st.session_state.setdefault(TABLE_SELECTION_SNAPSHOT_KEY, {})
+    snapshots = st.session_state.setdefault(hhs_ui_constants.TABLE_SELECTION_SNAPSHOT_KEY, {})
     if not isinstance(snapshots, dict):
         snapshots = {}
-        st.session_state[TABLE_SELECTION_SNAPSHOT_KEY] = snapshots
+        st.session_state[hhs_ui_constants.TABLE_SELECTION_SNAPSHOT_KEY] = snapshots
     return snapshots
 
 
@@ -3238,10 +3168,10 @@ def ttyd_font_format(font_file: Path) -> str:
     return "woff2"
 
 
-def ttyd_index_signature(binary: str) -> str:
+def ttyd_index_signature(binary: str, event_url: str = "") -> str:
     """Return a stable cache signature for the ttyd index and terminal font."""
     font_file = ttyd_font_file()
-    parts = ["hhs-ttyd-font-index-v1", binary]
+    parts = ["hhs-ttyd-font-index-v8", binary, event_url]
     for path in (Path(binary), font_file):
         try:
             stat = path.stat()
@@ -3251,7 +3181,7 @@ def ttyd_index_signature(binary: str) -> str:
     return "|".join(parts)
 
 
-def ttyd_index_is_current(binary: str) -> bool:
+def ttyd_index_is_current(binary: str, event_url: str) -> bool:
     """Return whether the generated ttyd index matches the current font and binary."""
     try:
         first_line = hhs_ui.TTYD_INDEX_FILE.read_text(
@@ -3259,7 +3189,7 @@ def ttyd_index_is_current(binary: str) -> bool:
         ).splitlines()[0]
     except (IndexError, OSError):
         return False
-    return first_line == f"<!-- {ttyd_index_signature(binary)} -->"
+    return first_line == f"<!-- {ttyd_index_signature(binary, event_url)} -->"
 
 
 def fetch_ttyd_default_index(binary: str) -> str:
@@ -3315,32 +3245,91 @@ def ttyd_font_face_style() -> str:
         "font-style:normal;"
         "font-display:block;"
         "}"
-        "html,body,#terminal,.xterm,.xterm-viewport,.xterm-screen{"
+        "html,body,#terminal,.terminal,.xterm,.xterm-viewport,.xterm-screen,.xterm-rows{"
         f'font-family:"{family}",monospace!important;'
+        "}"
+        "html,body,#terminal,.terminal,.xterm,.xterm-viewport{"
+        "background:#000000!important;"
+        "}"
+        ".xterm .xterm-screen,.xterm .xterm-rows{"
+        "background:transparent!important;"
+        "}"
+        "#terminal,.terminal,.xterm{"
+        "box-sizing:border-box!important;"
+        "padding:5px!important;"
+        "}"
+        ".xterm .xterm-viewport{"
+        "left:5px!important;"
+        "top:5px!important;"
+        "right:5px!important;"
+        "bottom:5px!important;"
+        "}"
+        ".xterm .xterm-screen,.xterm .xterm-helpers{"
+        "transform:translate(5px,5px)!important;"
         "}"
         "</style>"
     )
 
 
-def inject_ttyd_font(index_html: str, binary: str) -> str:
-    """Return ttyd index HTML with the HomeSetup terminal font injected."""
-    signature = f"<!-- {ttyd_index_signature(binary)} -->\n"
+def ttyd_bridge_script(event_url: str) -> str:
+    """Return JavaScript that bridges ttyd terminal events back to the UI."""
+    return (
+        "<script>"
+        "(()=>{"
+        f"const eventUrl={json.dumps(event_url)};"
+        "const prefix='HHS_TTYD_EVENT|';"
+        "const decode=(value)=>{try{return decodeURIComponent(escape(atob(value)));}catch(_error){return '';}};"
+        "const parse=(data)=>{"
+        "if(!data||!data.startsWith(prefix)){return null;}"
+        "const parts=data.split('|');"
+        "if(parts.length<6){return null;}"
+        "return {type:parts[1],command:parts[2],status:Number(parts[3]||0),cwd:decode(parts[4]),time:Number(parts[5]||Date.now())};"
+        "};"
+        "const publish=(event)=>{"
+        "if(!event||event.type!=='cwd'||!event.cwd){return;}"
+        "try{window.parent.postMessage({type:'hhs-ttyd-event',event},'*');}catch(_error){}"
+        "try{fetch(eventUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event),keepalive:true}).catch(()=>{});}catch(_error){}"
+        "};"
+        "const install=()=>{"
+        "const term=window.term;"
+        "if(!term||!term.parser||window.__hhsTtydBridgeInstalled){return !!window.__hhsTtydBridgeInstalled;}"
+        "window.__hhsTtydBridgeInstalled=true;"
+        "term.parser.registerOscHandler(777,(data)=>{const event=parse(String(data||''));if(event){publish(event);return true;}return false;});"
+        "window.addEventListener('keydown',(event)=>{"
+        "if((event.metaKey||event.ctrlKey)&&String(event.key||'').toLowerCase()==='k'){"
+        "event.preventDefault();event.stopPropagation();"
+        "if(window.term&&typeof window.term.clear==='function'){window.term.clear();}"
+        "}"
+        "},true);"
+        "return true;"
+        "};"
+        "if(!install()){const timer=window.setInterval(()=>{if(install()){window.clearInterval(timer);}},100);}"
+        "})();"
+        "</script>"
+    )
+
+
+def inject_ttyd_font(index_html: str, binary: str, event_url: str) -> str:
+    """Return ttyd index HTML with HomeSetup terminal customizations injected."""
+    signature = f"<!-- {ttyd_index_signature(binary, event_url)} -->\n"
     style = ttyd_font_face_style()
-    if not style:
+    script = ttyd_bridge_script(event_url)
+    injection = style + script
+    if not injection:
         return f"{signature}{index_html}"
     if "</head>" in index_html:
-        return f"{signature}{index_html.replace('</head>', style + '</head>', 1)}"
-    return f"{signature}{style}{index_html}"
+        return f"{signature}{index_html.replace('</head>', injection + '</head>', 1)}"
+    return f"{signature}{injection}{index_html}"
 
 
-def ensure_ttyd_index_file(binary: str) -> str:
+def ensure_ttyd_index_file(binary: str, event_url: str) -> str:
     """Create or reuse the generated ttyd index that embeds the terminal font."""
-    if ttyd_index_is_current(binary):
+    if ttyd_index_is_current(binary, event_url):
         return str(hhs_ui.TTYD_INDEX_FILE)
     index_html = fetch_ttyd_default_index(binary)
     if not index_html:
         return ""
-    patched_index = inject_ttyd_font(index_html, binary)
+    patched_index = inject_ttyd_font(index_html, binary, event_url)
     try:
         hhs_ui.TTYD_INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
         temporary_file = hhs_ui.TTYD_INDEX_FILE.with_suffix(".tmp")
@@ -3395,11 +3384,11 @@ def allocate_ttyd_port() -> int:
         return int(server_socket.getsockname()[1])
 
 
-def ttyd_session_signature(cwd: str, binary: str) -> str:
+def ttyd_session_signature(cwd: str, binary: str, event_url: str) -> str:
     """Return the session signature used to decide whether ttyd must restart."""
     host = connected_ssh_host()
     mode = f"ssh:{host}" if host else "local"
-    return f"{mode}:{cwd}:{ttyd_index_signature(binary)}"
+    return f"{mode}:{cwd}:{ttyd_index_signature(binary, event_url)}"
 
 
 def ttyd_process_working_directory(cwd: str) -> str:
@@ -3411,6 +3400,98 @@ def ttyd_process_working_directory(cwd: str) -> str:
     return os.getcwd()
 
 
+def ttyd_shell_hook_script() -> str:
+    """Return the Bash startup script that emits ttyd command hook events."""
+    return r'''
+if [[ -r "${HOME}/.bash_profile" ]]; then
+  . "${HOME}/.bash_profile"
+elif [[ -r "${HOME}/.bash_login" ]]; then
+  . "${HOME}/.bash_login"
+elif [[ -r "${HOME}/.profile" ]]; then
+  . "${HOME}/.profile"
+elif [[ -r "${HOME}/.bashrc" ]]; then
+  . "${HOME}/.bashrc"
+fi
+
+__hhs_ttyd_base64() {
+  if command -v base64 >/dev/null 2>&1; then
+    printf "%s" "$1" | base64 | tr -d "\n"
+  elif command -v python3 >/dev/null 2>&1; then
+    HHS_TTYD_VALUE="$1" python3 - <<'PY'
+import base64
+import os
+print(base64.b64encode(os.environ.get("HHS_TTYD_VALUE", "").encode()).decode(), end="")
+PY
+  else
+    printf "%s" "$1"
+  fi
+}
+
+__hhs_ttyd_emit_cwd() {
+  local command_name="${1:-prompt}"
+  local status_code="${2:-0}"
+  local cwd_payload
+  cwd_payload="$(__hhs_ttyd_base64 "${PWD}")"
+  printf "\033]777;HHS_TTYD_EVENT|cwd|%s|%s|%s|%s\007" \
+    "${command_name}" "${status_code}" "${cwd_payload}" "$(date +%s%3N 2>/dev/null || date +%s)"
+}
+
+__hhs_ttyd_last_pwd="${PWD}"
+__hhs_ttyd_emit_cwd "init" 0
+
+cd() {
+  builtin cd "$@"
+  local status_code="$?"
+  __hhs_ttyd_last_pwd="${PWD}"
+  __hhs_ttyd_emit_cwd "cd" "${status_code}"
+  return "${status_code}"
+}
+
+pushd() {
+  builtin pushd "$@"
+  local status_code="$?"
+  __hhs_ttyd_last_pwd="${PWD}"
+  __hhs_ttyd_emit_cwd "pushd" "${status_code}"
+  return "${status_code}"
+}
+
+popd() {
+  builtin popd "$@"
+  local status_code="$?"
+  __hhs_ttyd_last_pwd="${PWD}"
+  __hhs_ttyd_emit_cwd "popd" "${status_code}"
+  return "${status_code}"
+}
+
+__hhs_ttyd_after_command() {
+  local status_code="$?"
+  if [[ "${PWD}" != "${__hhs_ttyd_last_pwd}" ]]; then
+    __hhs_ttyd_last_pwd="${PWD}"
+    __hhs_ttyd_emit_cwd "prompt" "${status_code}"
+  fi
+  return "${status_code}"
+}
+
+if [[ -n "${PROMPT_COMMAND:-}" ]]; then
+  PROMPT_COMMAND="__hhs_ttyd_after_command; ${PROMPT_COMMAND}"
+else
+  PROMPT_COMMAND="__hhs_ttyd_after_command"
+fi
+'''
+
+
+def build_ttyd_hooked_bash_command(cwd: str, shell: str = "bash") -> str:
+    """Build a Bash command that starts an interactive shell with ttyd hooks."""
+    startup_script = ttyd_shell_hook_script()
+    safe_cwd = shlex.quote(cwd)
+    safe_shell = shlex.quote(shell)
+    safe_script = shlex.quote(startup_script)
+    return (
+        f"cd {safe_cwd} 2>/dev/null || cd; "
+        f"exec {safe_shell} --rcfile <(printf %s {safe_script}) -i"
+    )
+
+
 def ssh_config_option_args() -> list[str]:
     """Return OpenSSH config arguments for subprocess list commands."""
     return ["-F", str(Path.home() / ".ssh/config")]
@@ -3418,10 +3499,7 @@ def ssh_config_option_args() -> list[str]:
 
 def build_ttyd_remote_command(host: str, cwd: str) -> list[str]:
     """Build the SSH command run by ttyd for remote terminal sessions."""
-    remote_command = (
-        f"cd {shlex.quote(cwd)} 2>/dev/null || cd; "
-        'exec "${SHELL:-bash}" -l'
-    )
+    remote_command = build_ttyd_hooked_bash_command(cwd)
     ssh_options = [
         "-o",
         "BatchMode=yes",
@@ -3451,7 +3529,7 @@ def build_ttyd_shell_command(cwd: str) -> list[str]:
     host = connected_ssh_host()
     if host:
         return build_ttyd_remote_command(host, cwd)
-    return [RUN_SHELL, "-l"]
+    return [RUN_SHELL, "-lc", build_ttyd_hooked_bash_command(cwd, RUN_SHELL)]
 
 
 def build_ttyd_command(
@@ -3471,9 +3549,13 @@ def build_ttyd_command(
         "-t",
         f"fontFamily={ttyd_font_family()}, monospace",
         "-t",
+        'theme={"background":"#000000"}',
+        "-t",
         "fontSize=14",
         "-t",
         "cursorStyle=underline",
+        "-t",
+        "cursorBlink=true",
         "-t",
         "disableLeaveAlert=true",
         "-t",
@@ -3489,9 +3571,9 @@ def build_ttyd_command(
 
 def stop_ttyd_session() -> None:
     """Stop any ttyd process owned by the current Streamlit session."""
-    process = st.session_state.pop(TTYD_PROCESS_KEY, None)
-    st.session_state.pop(TTYD_PORT_KEY, None)
-    st.session_state.pop(TTYD_SIGNATURE_KEY, None)
+    process = st.session_state.pop(hhs_ui_constants.TTYD_PROCESS_KEY, None)
+    st.session_state.pop(hhs_ui_constants.TTYD_PORT_KEY, None)
+    st.session_state.pop(hhs_ui_constants.TTYD_SIGNATURE_KEY, None)
     stop_process(process)
 
 
@@ -3502,19 +3584,21 @@ def ensure_ttyd_session() -> str:
         stop_ttyd_session()
         return ""
     cwd = footer_working_directory()
-    signature = ttyd_session_signature(cwd, binary)
-    process = st.session_state.get(TTYD_PROCESS_KEY)
-    port = st.session_state.get(TTYD_PORT_KEY)
+    event_url = ttyd_event_url()
+    update_browser_cleanup_registration()
+    signature = ttyd_session_signature(cwd, binary, event_url)
+    process = st.session_state.get(hhs_ui_constants.TTYD_PROCESS_KEY)
+    port = st.session_state.get(hhs_ui_constants.TTYD_PORT_KEY)
     if (
         ttyd_process_is_running(process)
         and isinstance(port, int)
-        and st.session_state.get(TTYD_SIGNATURE_KEY) == signature
+        and st.session_state.get(hhs_ui_constants.TTYD_SIGNATURE_KEY) == signature
     ):
         return f"http://{hhs_ui.TTYD_HOST}:{port}/"
 
     stop_ttyd_session()
     port = allocate_ttyd_port()
-    index_file = ensure_ttyd_index_file(binary)
+    index_file = ensure_ttyd_index_file(binary, event_url)
     command = build_ttyd_command(binary, port, cwd, index_file)
     process = subprocess.Popen(
         command,
@@ -3527,32 +3611,114 @@ def ensure_ttyd_session() -> str:
     time.sleep(0.15)
     if not ttyd_process_is_running(process):
         return ""
-    st.session_state[TTYD_PROCESS_KEY] = process
-    st.session_state[TTYD_PORT_KEY] = port
-    st.session_state[TTYD_SIGNATURE_KEY] = signature
+    st.session_state[hhs_ui_constants.TTYD_PROCESS_KEY] = process
+    st.session_state[hhs_ui_constants.TTYD_PORT_KEY] = port
+    st.session_state[hhs_ui_constants.TTYD_SIGNATURE_KEY] = signature
     update_browser_cleanup_registration()
     return f"http://{hhs_ui.TTYD_HOST}:{port}/"
 
 
 def render_ttyd_terminal_frame(ttyd_url: str) -> None:
     """Render the active ttyd terminal in an iframe."""
-    safe_url = html.escape(ttyd_url, quote=True)
     iframe_height = int(hhs_ui.TTYD_IFRAME_HEIGHT)
     st.markdown(
         f"""
         <div
+          id="hhs-ttyd-terminal-anchor"
           class="hhs-ttyd-terminal-shell"
           style="--hhs-ttyd-max-height: {iframe_height}px;"
         >
-          <iframe
-            class="hhs-ttyd-terminal-frame"
-            src="{safe_url}"
-            title="HomeSetup Terminal"
-            loading="eager"
-          ></iframe>
+          <div class="hhs-ttyd-terminal-placeholder"></div>
         </div>
         """,
         unsafe_allow_html=True,
+    )
+    components.html(
+        f"""
+        <script>
+          (() => {{
+            const doc = window.parent.document;
+            const src = {json.dumps(ttyd_url)};
+            const frameId = "hhs-persistent-ttyd-frame";
+            const anchor = doc.getElementById("hhs-ttyd-terminal-anchor");
+            if (!anchor) {{
+              return;
+            }}
+            let frame = doc.getElementById(frameId);
+            if (!frame || frame.dataset.src !== src) {{
+              if (frame) {{
+                frame.remove();
+              }}
+              frame = doc.createElement("iframe");
+              frame.id = frameId;
+              frame.dataset.src = src;
+              frame.src = src;
+              frame.title = "HomeSetup Terminal";
+              frame.loading = "eager";
+              frame.className = "hhs-ttyd-terminal-frame hhs-ttyd-terminal-frame-persistent";
+              frame.style.position = "fixed";
+              frame.style.border = "0";
+              frame.style.zIndex = "20";
+              frame.style.display = "none";
+              doc.body.appendChild(frame);
+            }}
+            const syncFrame = () => {{
+              const rect = anchor.getBoundingClientRect();
+              const visible = rect.width > 0 && rect.height > 0;
+              frame.style.display = visible ? "block" : "none";
+              frame.style.left = `${{rect.left}}px`;
+              frame.style.top = `${{rect.top}}px`;
+              frame.style.width = `${{rect.width}}px`;
+              frame.style.height = `${{rect.height}}px`;
+            }};
+            if (window.parent.__hhsTtydFrameSyncCleanup) {{
+              window.parent.__hhsTtydFrameSyncCleanup();
+            }}
+            const observer = "ResizeObserver" in window.parent
+              ? new window.parent.ResizeObserver(syncFrame)
+              : null;
+            if (observer) {{
+              observer.observe(anchor);
+            }}
+            window.parent.addEventListener("resize", syncFrame);
+            window.parent.addEventListener("scroll", syncFrame, true);
+            window.parent.__hhsTtydFrameSyncCleanup = () => {{
+              if (observer) {{
+                observer.disconnect();
+              }}
+              window.parent.removeEventListener("resize", syncFrame);
+              window.parent.removeEventListener("scroll", syncFrame, true);
+            }};
+            syncFrame();
+          }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def render_ttyd_terminal_frame_cleanup_script() -> None:
+    """Remove the browser-persistent ttyd iframe when Terminal is inactive."""
+    components.html(
+        """
+        <script>
+          (() => {
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            if (parentWindow.__hhsTtydFrameSyncCleanup) {
+              parentWindow.__hhsTtydFrameSyncCleanup();
+              parentWindow.__hhsTtydFrameSyncCleanup = null;
+            }
+            const frame = doc.getElementById("hhs-persistent-ttyd-frame");
+            if (frame) {
+              frame.remove();
+            }
+          })();
+        </script>
+        """,
+        height=0,
+        width=0,
     )
 
 
@@ -3571,6 +3737,67 @@ def cleanup_session_resources(token: str) -> None:
     if ssh_host and not selected_host_is_local(ssh_host):
         run_cleanup_bash_command(build_ssh_disconnect_command(ssh_host), 10)
         clear_registered_ssh_connection()
+
+
+def store_ttyd_event(token: str, event: dict[str, object]) -> None:
+    """Store a ttyd browser event for later UI synchronization."""
+    if not token:
+        return
+    events = TTYD_EVENT_REGISTRY.setdefault(token, [])
+    events.append(event)
+    del events[:-25]
+    if event.get("type") != "cwd":
+        return
+    cwd = str(event.get("cwd", "")).strip()
+    if not cwd:
+        return
+    entry = TTYD_CLEANUP_REGISTRY.setdefault(token, {})
+    entry["cwd"] = cwd
+    entry["last_event"] = event
+
+
+def normalize_ttyd_event(value: object) -> dict[str, object]:
+    """Return a sanitized ttyd event dictionary."""
+    if not isinstance(value, dict):
+        return {}
+    event_type = re.sub(r"[^A-Za-z0-9_-]+", "", str(value.get("type", "")))
+    command = re.sub(r"[^A-Za-z0-9_-]+", "", str(value.get("command", "")))
+    cwd = str(value.get("cwd", "")).strip()
+    try:
+        status = int(value.get("status", 0) or 0)
+    except (TypeError, ValueError):
+        status = 0
+    try:
+        event_time = int(value.get("time", 0) or 0)
+    except (TypeError, ValueError):
+        event_time = int(time.time() * 1000)
+    if not event_type:
+        return {}
+    return {
+        "type": event_type,
+        "command": command or "unknown",
+        "status": status,
+        "cwd": cwd,
+        "time": event_time,
+    }
+
+
+def sync_ttyd_event_state() -> None:
+    """Synchronize latest ttyd hook events into Streamlit session state."""
+    token = str(st.session_state.get(hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY, "")).strip()
+    if not token:
+        return
+    entry = TTYD_CLEANUP_REGISTRY.get(token)
+    if not isinstance(entry, dict):
+        return
+    cwd = str(entry.get("cwd", "")).strip()
+    if not cwd:
+        return
+    st.session_state[hhs_ui.TERMINAL_CWD_KEY] = cwd
+    if connected_ssh_host():
+        st.session_state[hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY] = cwd
+    else:
+        st.session_state[hhs_ui_constants.FOOTER_LOCAL_WORKING_DIR_KEY] = cwd
 
 
 def run_cleanup_bash_command(
@@ -3626,6 +3853,9 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         """Handle navigator.sendBeacon cleanup requests."""
+        if urllib.parse.urlparse(self.path).path == "/ttyd-event":
+            self.handle_ttyd_event_request()
+            return
         self.handle_cleanup_request()
 
     def handle_cleanup_request(self) -> None:
@@ -3634,6 +3864,24 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
         token = urllib.parse.parse_qs(parsed_url.query).get("token", [""])[0]
         if token:
             cleanup_session_resources(token)
+        self.send_response(204)
+        self.end_headers()
+
+    def handle_ttyd_event_request(self) -> None:
+        """Store a ttyd event sent by the browser bridge."""
+        parsed_url = urllib.parse.urlparse(self.path)
+        token = urllib.parse.parse_qs(parsed_url.query).get("token", [""])[0]
+        try:
+            content_length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            content_length = 0
+        try:
+            payload = self.rfile.read(content_length).decode("utf-8")
+            event = normalize_ttyd_event(json.loads(payload or "{}"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            event = {}
+        if token and event:
+            store_ttyd_event(token, event)
         self.send_response(204)
         self.end_headers()
 
@@ -3665,21 +3913,31 @@ def ensure_ttyd_cleanup_server() -> int:
 
 def browser_cleanup_token() -> str:
     """Return the per-browser-session cleanup token."""
-    token = str(st.session_state.get(TTYD_CLEANUP_TOKEN_KEY, "")).strip()
+    token = str(st.session_state.get(hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY, "")).strip()
     if not token:
         token = secrets.token_urlsafe(24)
-        st.session_state[TTYD_CLEANUP_TOKEN_KEY] = token
+        st.session_state[hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY] = token
     return token
 
 
 def update_browser_cleanup_registration() -> str:
     """Register the current ttyd and SSH resources for browser unload cleanup."""
     token = browser_cleanup_token()
-    TTYD_CLEANUP_REGISTRY[token] = {
-        "ttyd_process": st.session_state.get(TTYD_PROCESS_KEY),
-        "ssh_host": connected_ssh_host(),
-    }
+    entry = TTYD_CLEANUP_REGISTRY.setdefault(token, {})
+    entry.update(
+        {
+            "ttyd_process": st.session_state.get(hhs_ui_constants.TTYD_PROCESS_KEY),
+            "ssh_host": connected_ssh_host(),
+        }
+    )
     return token
+
+
+def ttyd_event_url() -> str:
+    """Return the local browser-to-UI ttyd event endpoint URL."""
+    token = browser_cleanup_token()
+    port = ensure_ttyd_cleanup_server()
+    return f"http://{hhs_ui.TTYD_HOST}:{port}/ttyd-event?token={token}"
 
 
 def render_browser_cleanup_script() -> None:
@@ -3719,6 +3977,23 @@ def render_browser_cleanup_script() -> None:
             }};
             parentWindow.addEventListener("pagehide", cleanup, {{ once: true }});
             parentWindow.addEventListener("beforeunload", cleanup, {{ once: true }});
+            if (!parentWindow.__hhsTtydEventListenerInstalled) {{
+              parentWindow.__hhsTtydEventListenerInstalled = true;
+              parentWindow.addEventListener("message", (event) => {{
+                const data = event.data || {{}};
+                if (data.type !== "hhs-ttyd-event" || !data.event || data.event.type !== "cwd") {{
+                  return;
+                }}
+                const cwd = String(data.event.cwd || "").trim();
+                if (!cwd) {{
+                  return;
+                }}
+                const node = parentWindow.document.querySelector(".hhs-footer-working-dir-value");
+                if (node) {{
+                  node.textContent = cwd;
+                }}
+              }});
+            }}
           }})();
         </script>
         """,
@@ -3814,7 +4089,7 @@ def updater_output_has_updates(output: str) -> bool:
 
 
 def updater_check_due(now: float | None = None) -> bool:
-    """Return whether the persisted updater check is missing or older than seven days."""
+    """Return whether the persisted updater check is missing or older than one day."""
     last_output = str(st.session_state.get("updater_last_check_output", "")).strip()
     if not last_output:
         return True
@@ -3827,7 +4102,7 @@ def updater_check_due(now: float | None = None) -> bool:
     if last_check_epoch <= 0:
         return True
     current_time = time.time() if now is None else now
-    return current_time - last_check_epoch >= UPDATER_CHECK_INTERVAL_SECONDS
+    return current_time - last_check_epoch >= hhs_ui_constants.UPDATER_CHECK_INTERVAL_SECONDS
 
 
 def store_updater_check_result(result: subprocess.CompletedProcess[str]) -> None:
@@ -3835,13 +4110,13 @@ def store_updater_check_result(result: subprocess.CompletedProcess[str]) -> None
     output = strip_ansi(f"{result.stdout or ''}\n{result.stderr or ''}").strip()
     if not output:
         output = "No HomeSetup updater output."
+    st.session_state["updater_last_check_epoch"] = time.time()
+    st.session_state["updater_last_check_output"] = output
+    st.session_state["updater_update_available"] = (
+        result.returncode == 0 and updater_output_has_updates(output)
+    )
+    save_ui_state()
     if result.returncode == 0:
-        st.session_state["updater_last_check_epoch"] = time.time()
-        st.session_state["updater_last_check_output"] = output
-        st.session_state["updater_update_available"] = updater_output_has_updates(
-            output
-        )
-        save_ui_state()
         return
     push_floating_status(output or "Unable to check HomeSetup updates.", "warn")
 
@@ -4598,7 +4873,7 @@ def command_env() -> dict[str, str]:
     return {
         **os.environ,
         "COLUMNS": hhs_ui.COMMAND_COLUMNS,
-        RUN_SHELL_ENV_KEY: RUN_SHELL,
+        hhs_ui_constants.RUN_SHELL_ENV_KEY: RUN_SHELL,
         "TERM": os.environ.get("TERM", "xterm-256color"),
     }
 
@@ -4849,26 +5124,61 @@ def build_ssh_wrapped_command(command: str, host: str) -> str:
 
 def registered_ssh_connection_host() -> str:
     """Return the SSH host registered by a previous UI-managed connection."""
-    try:
-        return hhs_ui.UI_SSH_CONNECTION_FILE.read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
+    cached_value = cache_get(hhs_ui.UI_CACHE_SSH_CONNECTION_KEY)
+    cached_host = str(cached_value.get("host", "")).strip() if cached_value else ""
+    if cached_host:
+        return cached_host
+    for legacy_file in legacy_ssh_connection_files():
+        try:
+            legacy_host = legacy_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if legacy_host:
+            register_ssh_connection(legacy_host)
+            unlink_legacy_ssh_connection_files()
+            return legacy_host
+    unlink_legacy_ssh_connection_files()
+    return ""
 
 
 def register_ssh_connection(host: str) -> None:
     """Persist the UI-managed SSH connection host for later cleanup."""
-    hhs_ui.UI_SSH_CONNECTION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    hhs_ui.UI_SSH_CONNECTION_FILE.write_text(f"{host.strip()}\n", encoding="utf-8")
+    clean_host = host.strip()
+    if not clean_host:
+        clear_registered_ssh_connection()
+        return
+    cache = load_ui_cache()
+    cache[hhs_ui.UI_CACHE_SSH_CONNECTION_KEY] = {"value": {"host": clean_host}}
+    save_ui_cache(cache)
+    unlink_legacy_ssh_connection_files()
 
 
 def clear_registered_ssh_connection() -> None:
     """Remove the UI-managed SSH connection cleanup marker."""
-    try:
-        hhs_ui.UI_SSH_CONNECTION_FILE.unlink()
-    except FileNotFoundError:
-        return
-    except OSError:
-        return
+    cache = load_ui_cache()
+    if hhs_ui.UI_CACHE_SSH_CONNECTION_KEY in cache:
+        del cache[hhs_ui.UI_CACHE_SSH_CONNECTION_KEY]
+        save_ui_cache(cache)
+    unlink_legacy_ssh_connection_files()
+
+
+def legacy_ssh_connection_files() -> tuple[Path, ...]:
+    """Return older standalone SSH marker paths to migrate or remove."""
+    return (
+        hhs_ui.HHS_CACHE_DIR / ".streamlit-ui-ssh-connection",
+        hhs_ui.HHS_DIR / ".streamlit-ui-ssh-connection",
+    )
+
+
+def unlink_legacy_ssh_connection_files() -> None:
+    """Remove legacy standalone SSH marker files after cache migration."""
+    for legacy_file in legacy_ssh_connection_files():
+        try:
+            legacy_file.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            continue
 
 
 def ssh_connection_is_alive(host: str) -> bool:
@@ -4905,6 +5215,7 @@ def restore_registered_ssh_connection_on_session_start() -> None:
             st.session_state["ssh_host_selector"] = reconnect_host
             st.session_state["ssh_connect_pending"] = reconnect_host
             st.session_state["ssh_disconnect_pending"] = ""
+            st.session_state["ssh_reconnect_restore_view_state"] = True
             st.session_state["ssh_connect_pending_message"] = (
                 f"Reconnecting to {ssh_connection_display(reconnect_host)}"
             )
@@ -4983,7 +5294,7 @@ def clear_disconnected_ssh_host(host: str) -> None:
     st.session_state["ssh_host_selected"] = local_hostname()
     st.session_state["ssh_host_selector"] = local_hostname()
     st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""
-    st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)
+    st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
     clear_registered_ssh_connection()
     cache_clear()
     save_ui_state()
@@ -5072,6 +5383,45 @@ def strip_ssh_shared_connection_notice(value: str) -> str:
     return "".join(output_lines)
 
 
+def remote_command_startup_line_is_noise(line: str) -> bool:
+    """Return whether a remote command line is HomeSetup shell startup chatter."""
+    clean_line = strip_ansi(line).strip()
+    if not clean_line:
+        return False
+    if clean_line.startswith("[bash] HomeSetup is starting"):
+        return True
+    if "Welcome " in clean_line and " to HomeSetup v" in clean_line:
+        return True
+    return bool(re.fullmatch(r"Shell option \S+ set to (?:on|off)", clean_line))
+
+
+def strip_remote_command_startup_chatter(value: str) -> str:
+    """Return remote command output without HomeSetup shell startup chatter."""
+    output_lines: list[str] = []
+    removed_chatter = False
+    for line in value.splitlines(keepends=True):
+        if remote_command_startup_line_is_noise(line):
+            removed_chatter = True
+            continue
+        if removed_chatter and not output_lines and not strip_ansi(line).strip():
+            continue
+        output_lines.append(line)
+    return "".join(output_lines)
+
+
+def sanitize_remote_command_result(
+    host: str, result: subprocess.CompletedProcess[str]
+) -> subprocess.CompletedProcess[str]:
+    """Return a remote command result with HomeSetup startup chatter stripped."""
+    if not host:
+        return result
+    stdout = strip_remote_command_startup_chatter(result.stdout or "")
+    stderr = strip_remote_command_startup_chatter(result.stderr or "")
+    if stdout == (result.stdout or "") and stderr == (result.stderr or ""):
+        return result
+    return subprocess.CompletedProcess(result.args, result.returncode, stdout, stderr)
+
+
 def ssh_output_is_only_shared_close(result: subprocess.CompletedProcess[str]) -> bool:
     """Return whether failed SSH output only contains the shared-close notice."""
     if not ssh_shared_connection_closed(result):
@@ -5148,6 +5498,12 @@ def execute_pending_ssh_connection() -> None:
     loader_message = str(
         st.session_state.get("ssh_connect_pending_message", "")
     ).strip() or f"Connecting to SSH host {host}..."
+    restore_reconnect_state = bool(
+        st.session_state.pop("ssh_reconnect_restore_view_state", False)
+    )
+    reconnect_state = (
+        reconnect_view_state_snapshot() if restore_reconnect_state else {}
+    )
     was_terminal_active = terminal_document_view_is_active()
     st.session_state["ssh_connect_pending"] = ""
     st.session_state["ssh_connect_pending_message"] = ""
@@ -5162,6 +5518,7 @@ def execute_pending_ssh_connection() -> None:
     )
     if result.returncode == 0:
         clear_host_scoped_session_state()
+        restore_reconnect_view_state(reconnect_state)
         st.session_state["ssh_connection_status"] = "connected"
         st.session_state["ssh_connection_host"] = host
         st.session_state["ssh_host_selected"] = host
@@ -5212,7 +5569,7 @@ def execute_pending_ssh_disconnection() -> None:
     st.session_state["ssh_host_selected"] = local_hostname()
     st.session_state["ssh_host_selector"] = local_hostname()
     st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""
-    st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)
+    st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
     clear_registered_ssh_connection()
     cache_clear()
     save_ui_state()
@@ -5293,12 +5650,16 @@ def run_bash_command(
     cache_key = command_cache_key(command_to_run, cache_tag)
     snapshot_value = command_result_snapshot_get(cache_key) if selection_only_rerun else None
     if snapshot_value is not None:
-        return completed_process_from_cache(command_to_run, snapshot_value)
+        return sanitize_remote_command_result(
+            remote_host, completed_process_from_cache(command_to_run, snapshot_value)
+        )
 
     cached_value = cache_get(cache_key) if use_cache else None
     if use_cache and cached_value is not None:
         command_result_snapshot_set(cache_key, cached_value)
-        result = completed_process_from_cache(command_to_run, cached_value)
+        result = sanitize_remote_command_result(
+            remote_host, completed_process_from_cache(command_to_run, cached_value)
+        )
         if handle_remote_command_result(remote_host, result):
             st.rerun()
         return result
@@ -5312,14 +5673,8 @@ def run_bash_command(
     if show_command_overlay:
         set_overlay(True, loader_message, close_dialogs=close_dialogs)
     try:
-        result = subprocess.run(
-            [RUN_SHELL, "-lc", command_to_run],
-            capture_output=True,
-            check=False,
-            env=command_env(),
-            text=True,
-            timeout=effective_timeout,
-        )
+        result = run_bash_subprocess(command_to_run, effective_timeout)
+        result = sanitize_remote_command_result(remote_host, result)
         disconnected = handle_remote_command_result(remote_host, result)
         if not ssh_shared_connection_closed(result):
             command_result_snapshot_set(
@@ -5339,12 +5694,49 @@ def run_bash_command(
             error.stdout or "",
             error.stderr or f"Command timed out after {effective_timeout} seconds.",
         )
+        result = sanitize_remote_command_result(remote_host, result)
         if handle_remote_command_result(remote_host, result):
             st.rerun()
         return result
     finally:
         if show_command_overlay:
             set_overlay(False)
+
+
+def run_bash_subprocess(
+    command: str, timeout_seconds: int | None
+) -> subprocess.CompletedProcess[str]:
+    """Run a Bash command and kill the whole process group on timeout."""
+    process = subprocess.Popen(
+        [RUN_SHELL, "-lc", command],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=command_env(),
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+        return subprocess.CompletedProcess(
+            [RUN_SHELL, "-lc", command],
+            int(process.returncode or 0),
+            stdout,
+            stderr,
+        )
+    except subprocess.TimeoutExpired as error:
+        stop_process(process)
+        try:
+            stdout, stderr = process.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            stdout = error.stdout or ""
+            stderr = error.stderr or ""
+        timeout_message = f"Command timed out after {timeout_seconds} seconds."
+        return subprocess.CompletedProcess(
+            [RUN_SHELL, "-lc", command],
+            124,
+            stdout or "",
+            stderr or timeout_message,
+        )
 
 
 def load_ui_cache() -> dict[str, dict[str, object]]:
@@ -5373,9 +5765,7 @@ def load_ui_cache() -> dict[str, dict[str, object]]:
     cache = {
         key: value
         for key, value in data.items()
-        if isinstance(key, str)
-        and (key.startswith("command_hash:") or key.startswith("command_tag:"))
-        and isinstance(value, dict)
+        if ui_cache_key_is_supported(key) and isinstance(value, dict)
     }
     pruned_cache = prune_ui_cache_entries(cache)
     if pruned_cache != cache or len(cache) != len(data):
@@ -5408,6 +5798,22 @@ def save_ui_cache(cache: dict[str, dict[str, object]]) -> None:
         return
 
 
+def ui_cache_key_is_supported(key: object) -> bool:
+    """Return whether a persisted UI cache key belongs to the supported schema."""
+    if not isinstance(key, str):
+        return False
+    return (
+        key.startswith("command_hash:")
+        or key.startswith("command_tag:")
+        or key == hhs_ui.UI_CACHE_SSH_CONNECTION_KEY
+    )
+
+
+def ui_cache_metadata_key(key: str) -> bool:
+    """Return whether a UI cache key stores non-expiring UI metadata."""
+    return key.startswith("ui:")
+
+
 def prune_ui_cache_entries(
     cache: dict[str, dict[str, object]],
 ) -> dict[str, dict[str, object]]:
@@ -5416,8 +5822,13 @@ def prune_ui_cache_entries(
     return {
         key: entry
         for key, entry in cache.items()
-        if isinstance(entry.get("expires_at"), int | float)
-        and float(entry["expires_at"]) > now
+        if (
+            ui_cache_metadata_key(key)
+            or (
+                isinstance(entry.get("expires_at"), int | float)
+                and float(entry["expires_at"]) > now
+            )
+        )
     }
 
 
@@ -5451,10 +5862,10 @@ def cache_get(key: str) -> dict[str, object] | None:
 
 def command_result_snapshots() -> dict[str, dict[str, object]]:
     """Return in-session command results used for table selection-only reruns."""
-    snapshots = st.session_state.setdefault(COMMAND_RESULT_SNAPSHOT_KEY, {})
+    snapshots = st.session_state.setdefault(hhs_ui_constants.COMMAND_RESULT_SNAPSHOT_KEY, {})
     if not isinstance(snapshots, dict):
         snapshots = {}
-        st.session_state[COMMAND_RESULT_SNAPSHOT_KEY] = snapshots
+        st.session_state[hhs_ui_constants.COMMAND_RESULT_SNAPSHOT_KEY] = snapshots
     return snapshots
 
 
@@ -5468,7 +5879,7 @@ def command_result_snapshot_set(key: str, value: dict[str, object]) -> None:
     """Store an in-session command result for fast selection-only reruns."""
     snapshots = command_result_snapshots()
     snapshots[key] = value
-    while len(snapshots) > COMMAND_RESULT_SNAPSHOT_LIMIT:
+    while len(snapshots) > hhs_ui_constants.COMMAND_RESULT_SNAPSHOT_LIMIT:
         snapshots.pop(next(iter(snapshots)))
 
 
@@ -5488,7 +5899,7 @@ def command_result_snapshot_delete_tag(cache_tag: str) -> None:
 
 def command_result_snapshot_clear() -> None:
     """Delete all in-session command results."""
-    st.session_state[COMMAND_RESULT_SNAPSHOT_KEY] = {}
+    st.session_state[hhs_ui_constants.COMMAND_RESULT_SNAPSHOT_KEY] = {}
 
 
 def cache_set(
@@ -5544,7 +5955,10 @@ def cache_delete_command(command: str, cache_tag: str = "default") -> None:
 
 def cache_clear() -> None:
     """Delete all UI cache entries."""
-    save_ui_cache({})
+    metadata_cache = {
+        key: value for key, value in load_ui_cache().items() if ui_cache_metadata_key(key)
+    }
+    save_ui_cache(metadata_cache)
     command_result_snapshot_clear()
 
 
@@ -5686,13 +6100,12 @@ def run_open_working_directory() -> subprocess.CompletedProcess[str]:
 
 
 def run_shell_version() -> subprocess.CompletedProcess[str]:
-    """Run the local Bash version command used by the footer shell status."""
+    """Run the active host Bash version command used by the footer shell status."""
     return run_bash_command(
         shell_version_command(),
         "Checking shell version...",
         ttl_seconds=0,
         use_cache=False,
-        force_local=True,
         timeout_seconds=10,
         cache_tag="system",
     )
@@ -5702,7 +6115,7 @@ def run_footer_working_directory() -> subprocess.CompletedProcess[str]:
     """Run the active host shell command used by the footer working-directory status."""
     return run_bash_command(
         build_footer_working_directory_command(),
-        "Loading current working dir",
+        "Loading remote working dir",
         ttl_seconds=0,
         use_cache=False,
         timeout_seconds=10,
@@ -5726,19 +6139,20 @@ def update_remote_footer_working_directory() -> None:
     result = run_footer_working_directory()
     output = parse_footer_working_directory_output(result.stdout or "")
     if output:
-        st.session_state[FOOTER_REMOTE_WORKING_DIR_KEY] = output
+        st.session_state[hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY] = output
     else:
-        st.session_state.pop(FOOTER_REMOTE_WORKING_DIR_KEY, None)
+        st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
 
 
 def footer_working_directory() -> str:
     """Return the footer working directory from state or the local process cwd."""
+    sync_ttyd_event_state()
     if str(st.session_state.get("ssh_connection_status", "")).strip() == "connected":
-        remote_cwd = str(st.session_state.get(FOOTER_REMOTE_WORKING_DIR_KEY, "")).strip()
+        remote_cwd = str(st.session_state.get(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, "")).strip()
         if remote_cwd:
             return remote_cwd
     else:
-        local_cwd = str(st.session_state.get(FOOTER_LOCAL_WORKING_DIR_KEY, "")).strip()
+        local_cwd = str(st.session_state.get(hhs_ui_constants.FOOTER_LOCAL_WORKING_DIR_KEY, "")).strip()
         if local_cwd:
             return local_cwd
     return os.getcwd()
@@ -6352,8 +6766,9 @@ def docker_agent_is_running() -> bool:
         build_docker_agent_check_command(),
         "Checking Docker agent...",
         ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        timeout_seconds=5,
+        timeout_seconds=2,
         cache_tag="docker",
+        show_overlay=False,
     )
     return result.returncode == 0
 
@@ -9355,7 +9770,6 @@ def render_configs_view() -> None:
         on_change=save_ui_state,
         width="stretch",
     )
-    st.write("")
     if config_view == "ENV":
         render_envs_table()
     elif config_view == "PATH":
@@ -9378,7 +9792,6 @@ def render_service_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    st.write("")
     render_services_table()
 
 
@@ -9450,7 +9863,6 @@ def render_history_view() -> None:
         on_change=save_ui_state,
         width="stretch",
     )
-    st.write("")
     if history_view == "COMMANDS":
         render_history_commands_table()
     elif history_view == "DIRECTORIES":
@@ -9479,7 +9891,6 @@ def render_monitor_view() -> None:
         on_change=save_ui_state,
         width="stretch",
     )
-    st.write("")
     if monitor_view == "DISK":
         render_monitor_disk_chart()
     elif monitor_view == "MEM":
@@ -9669,7 +10080,7 @@ def render_ai_context_output_panel() -> None:
     with upload_col:
         uploaded_context = st.file_uploader(
             "Ingest context",
-            type=AI_CONTEXT_UPLOAD_TYPES,
+            type=hhs_ui_constants.AI_CONTEXT_UPLOAD_TYPES,
             key="ai_context_upload",
             label_visibility="collapsed",
         )
@@ -9867,7 +10278,6 @@ def render_ai_view() -> None:
         on_change=save_ui_state,
         width="stretch",
     )
-    st.write("")
     if ai_view == "CHAT":
         render_ai_chat_panel()
     elif ai_view == "CONTEXT":
@@ -9903,6 +10313,7 @@ def render_remote_connection_required_view() -> None:
 def render_main_view() -> None:
     """Render the active HomeSetup UI view."""
     if not terminal_document_view_is_active():
+        render_ttyd_terminal_frame_cleanup_script()
         stop_ttyd_session()
     if selected_remote_host_requires_connection():
         render_remote_connection_required_view()
@@ -9956,8 +10367,6 @@ def main() -> None:
     st.session_state.setdefault("footer_shell_version_dialog_title", "")
     st.session_state.setdefault("footer_shell_version_output", "")
     render_styles()
-    handle_footer_actions()
-    render_footer_shell_version_dialog()
     execute_due_updater_check()
     if st.session_state.get("theme_reload_pending"):
         render_theme_reload_overlay()
@@ -10026,6 +10435,8 @@ def main() -> None:
     execute_pending_ssh_connection()
     if render_ssh_connection_dialog():
         return
+    handle_footer_actions()
+    render_footer_shell_version_dialog()
     st.session_state.setdefault("home_view", "System")
     if st.session_state["home_view"] not in hhs_ui.HOME_VIEWS:
         st.session_state["home_view"] = "System"

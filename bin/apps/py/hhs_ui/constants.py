@@ -18,7 +18,7 @@ APP_FONT_FILE = (
     APP_DIR / "assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
 )
 TTYD_HOST = "127.0.0.1"
-TTYD_IFRAME_HEIGHT = 720
+TTYD_IFRAME_HEIGHT = 760
 APP_AI_USER_AVATAR_FILE = APP_DIR / "assets/images/user.png"
 APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"
 APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"
@@ -27,19 +27,63 @@ PORTS_DEFAULT_FILE = (
     Path(os.environ.get("HHS_HOME", APP_DIR.parents[4]))
     / "assets/devel/ports-default.csv"
 )
-UI_STATE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-state"
-UI_CACHE_FILE = Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-cache"
-UI_SSH_CONNECTION_FILE = (
-    Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ui-ssh-connection"
-)
+HHS_DIR = Path(os.environ.get("HHS_DIR", str(APP_DIR)))
+HHS_CACHE_DIR = Path(os.environ.get("HHS_CACHE_DIR", str(HHS_DIR / "cache")))
+UI_STATE_FILE = HHS_CACHE_DIR / ".streamlit-ui-state"
+UI_CACHE_FILE = HHS_CACHE_DIR / ".streamlit-ui-cache"
+UI_CACHE_SSH_CONNECTION_KEY = "ui:ssh_connection"
 SSH_RECONNECT_HOST_KEY = "ssh_reconnect_host"
-TTYD_INDEX_FILE = (
-    Path(os.environ.get("HHS_DIR", APP_DIR)) / ".streamlit-ttyd-index.html"
-)
+TTYD_INDEX_FILE = HHS_CACHE_DIR / ".streamlit-ttyd-index.html"
 UI_CACHE_REALTIME_TTL_SECONDS = 15
 UI_CACHE_NORMAL_TTL_SECONDS = 300
 UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900
 UI_CACHE_DEFAULT_TTL_SECONDS = UI_CACHE_NORMAL_TTL_SECONDS
+UPDATER_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
+FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
+FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
+FLOATING_STATUS_QUEUE_LIMIT = 20
+FOOTER_REMOTE_WORKING_DIR_KEY = "_hhs_footer_remote_working_dir"
+FOOTER_LOCAL_WORKING_DIR_KEY = "_hhs_footer_local_working_dir"
+TABLE_SELECTION_SNAPSHOT_KEY = "_hhs_table_selection_snapshots"
+COMMAND_RESULT_SNAPSHOT_KEY = "_hhs_command_result_snapshots"
+COMMAND_RESULT_SNAPSHOT_LIMIT = 100
+TTYD_PROCESS_KEY = "_hhs_ttyd_process"
+TTYD_PORT_KEY = "_hhs_ttyd_port"
+TTYD_SIGNATURE_KEY = "_hhs_ttyd_signature"
+TTYD_CLEANUP_TOKEN_KEY = "_hhs_ttyd_cleanup_token"
+AI_CONTEXT_UPLOAD_TYPES = (
+    "txt",
+    "md",
+    "markdown",
+    "csv",
+    "tsv",
+    "json",
+    "jsonl",
+    "yaml",
+    "yml",
+    "toml",
+    "ini",
+    "conf",
+    "cfg",
+    "log",
+    "xml",
+    "html",
+    "css",
+    "js",
+    "ts",
+    "py",
+    "sh",
+    "bash",
+    "zsh",
+    "java",
+    "kt",
+    "go",
+    "rs",
+    "rb",
+    "php",
+    "sql",
+)
+RUN_SHELL_ENV_KEY = "RUN_SHELL"
 APP_CSS = ""
 VIEWS = ("Home", "Configs", "Services", "Monitor", "History")
 AI_VIEW = "AI"
