@@ -2791,7 +2791,7 @@ def render_table_filter_controls(
 ) -> tuple[str, str]:
     """Render normalized table filter controls and return the selected filter text."""
     filter_col, other_filter_col, clear_filter_col = st.columns(
-        [*columns, 0.18], vertical_alignment="bottom", gap="small"
+        [*columns, 0.18], vertical_alignment="center", gap="small"
     )
     with filter_col:
         selected_filter = st.radio(

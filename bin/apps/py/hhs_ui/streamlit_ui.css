@@ -1,6 +1,7 @@
 :root {
   --hhs-bar-chart-chrome-height: calc(14rem + 172px);
   --hhs-bar-chart-height: max(12rem, min(380px, calc(100dvh - var(--hhs-bar-chart-chrome-height) - var(--hhs-footer-guard-height))));
+  --hhs-filter-control-gap: 1rem;
   --hhs-footer-guard-height: 3.5rem;
   --hhs-inline-control-gap: 0.45rem;
   --hhs-log-chrome-height: calc(14rem + 160px);
@@ -781,7 +782,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) {
-  gap: var(--hhs-inline-control-gap) !important;
+  gap: var(--hhs-filter-control-gap) !important;
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-testid="stColumn"]:first-child,

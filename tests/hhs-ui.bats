@@ -1694,7 +1694,13 @@ PY
   run grep -q -- '--hhs-inline-control-gap: 0.45rem' "${css_file}"
   assert_success
 
+  run grep -q -- '--hhs-filter-control-gap: 1rem' "${css_file}"
+  assert_success
+
   run grep -q 'gap: var(--hhs-inline-control-gap)' "${css_file}"
+  assert_success
+
+  run grep -q 'gap: var(--hhs-filter-control-gap) !important' "${css_file}"
   assert_success
 
   run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-env_other_filter)' "${css_file}"
