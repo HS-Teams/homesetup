@@ -1052,6 +1052,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   border-radius: 0.5rem;
   display: flex;
   gap: 0.75rem;
+  justify-content: center;
   min-width: 10rem;
   padding: 1rem 1.2rem;
 }
@@ -1079,6 +1080,14 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   font-weight: 650;
 }
 
+.hhs-tab-loader-elapsed.hhs-loader-elapsed-warning {
+  color: #facc15 !important;
+}
+
+.hhs-tab-loader-elapsed.hhs-loader-elapsed-danger {
+  color: #ff5555 !important;
+}
+
 .hhs-command-loader {
   align-items: center;
   background: var(--hhs-panel, rgba(17, 24, 39, 0.96));
@@ -1087,7 +1096,8 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   color: var(--hhs-foreground, #f8fafc);
   display: flex;
   gap: 0.75rem;
-  margin: 0.5rem 0;
+  justify-content: center;
+  margin: 0.5rem auto;
   max-width: min(34rem, 100%);
   padding: 0.85rem 1rem;
 }
@@ -1106,8 +1116,8 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   display: flex;
   flex-direction: column;
   gap: 0.22rem;
+  justify-content: center;
   min-width: 0;
-  width: 100%;
 }
 
 .hhs-command-loader-label {

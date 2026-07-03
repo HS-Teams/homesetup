@@ -786,7 +786,13 @@ PY
   run grep -q 'UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900' "${constants_file}"
   assert_success
 
-  run grep -q 'UI_COMMAND_DEFAULT_TIMEOUT_SECONDS = 60' "${constants_file}"
+  run grep -q 'UI_COMMAND_LOCAL_TIMEOUT_SECONDS = 30' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_COMMAND_REMOTE_TIMEOUT_SECONDS = 60' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_COMMAND_DEFAULT_TIMEOUT_SECONDS = UI_COMMAND_LOCAL_TIMEOUT_SECONDS' "${constants_file}"
   assert_success
 
   run python3 - <<'PY'
@@ -1475,6 +1481,9 @@ PY
   run grep -q 'def render_docker_agent_required_view' "${ui_file}"
   assert_success
 
+  run grep -q 'def docker_agent_failure_message' "${ui_file}"
+  assert_success
+
   run grep -q 'def docker_agent_is_running' "${ui_file}"
   assert_success
 
@@ -1482,6 +1491,9 @@ PY
   assert_success
 
   run grep -q 'Docker agent is not running' "${ui_file}"
+  assert_success
+
+  run grep -q 'Docker command timedout' "${ui_file}"
   assert_success
 
   run grep -q 'if not docker_agent_is_running()' "${ui_file}"
@@ -1562,7 +1574,7 @@ PY
   run grep -F -q '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}' "${ui_file}"
   assert_success
 
-  run grep -q 'return "docker info >/dev/null 2>&1"' "${ui_file}"
+  run grep -q 'return "docker ps -q >/dev/null 2>&1"' "${ui_file}"
   assert_success
 
   run python3 - <<'PY'
@@ -1574,10 +1586,11 @@ for function_name in ("run_docker_ps", "run_docker_images"):
     assert "use_cache=False" not in body, function_name
 agent_body = source.split("def docker_agent_is_running", 1)[1].split("\ndef ", 1)[0]
 assert "use_cache=False" not in agent_body
-assert "timeout_seconds=2" in agent_body
-assert "show_overlay=False" in agent_body
+assert "show_overlay=False" not in agent_body
 docker_body = source.split("def render_home_docker_panel", 1)[1].split("\ndef ", 1)[0]
-required_index = docker_body.index("render_docker_agent_required_view()")
+assert "command_timeout_seconds()" in docker_body
+assert "docker_agent_failure_message(agent_result)" in docker_body
+required_index = docker_body.index("render_docker_agent_required_view(")
 containers_index = docker_body.index('st.expander("All Containers"')
 assert required_index < containers_index
 PY
@@ -2470,9 +2483,6 @@ PY
   run grep -q 'ConnectionAttempts=1' "${ui_file}"
   assert_success
 
-  run grep -q 'timeout_seconds=15' "${ui_file}"
-  assert_success
-
   run grep -q 'def build_ssh_wrapped_command' "${ui_file}"
   assert_success
 
@@ -2753,7 +2763,16 @@ PY
   run grep -q 'timeout_seconds: int | None = None' "${ui_file}"
   assert_success
 
-  run grep -q 'effective_timeout = hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS' "${ui_file}"
+  run grep -q 'def command_timeout_seconds' "${ui_file}"
+  assert_success
+
+  run grep -q 'return hhs_ui.UI_COMMAND_REMOTE_TIMEOUT_SECONDS' "${ui_file}"
+  assert_success
+
+  run grep -q 'return hhs_ui.UI_COMMAND_LOCAL_TIMEOUT_SECONDS' "${ui_file}"
+  assert_success
+
+  run grep -q 'effective_timeout = command_timeout_seconds(force_local=force_local)' "${ui_file}"
   assert_success
 
   run grep -q 'except subprocess.TimeoutExpired' "${ui_file}"
@@ -2899,7 +2918,7 @@ PY
   run grep -q 'close_all_dialogs()' "${ui_file}"
   assert_success
 
-  run grep -q 'set_overlay(True, loader_message, close_dialogs=close_dialogs)' "${ui_file}"
+  run grep -q 'timeout_seconds=effective_timeout' "${ui_file}"
   assert_success
 
   run grep -q 'overlay.id = "hhs-command-overlay"' "${ui_file}"
@@ -2941,6 +2960,21 @@ PY
   run grep -q 'window.setInterval(render_elapsed, 1000)' "${ui_file}"
   assert_success
 
+  run grep -q 'data-timeout-seconds' "${ui_file}"
+  assert_success
+
+  run grep -q 'elapsed_ratio >= 0.3 && elapsed_ratio < 0.6' "${ui_file}"
+  assert_success
+
+  run grep -q 'elapsed_ratio >= 0.6' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-loader-elapsed-warning' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-loader-elapsed-danger' "${ui_file}"
+  assert_success
+
   run grep -q 'set_overlay(False)' "${ui_file}"
   assert_success
 
@@ -2963,6 +2997,27 @@ PY
   assert_success
 
   run grep -q 'hhs-tab-loader' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-command-loader {' "${css_file}"
+  assert_success
+
+  run grep -q 'margin: 0.5rem auto' "${css_file}"
+  assert_success
+
+  run grep -q 'justify-content: center' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-tab-loader-elapsed.hhs-loader-elapsed-warning' "${css_file}"
+  assert_success
+
+  run grep -q 'color: #facc15 !important' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-tab-loader-elapsed.hhs-loader-elapsed-danger' "${css_file}"
+  assert_success
+
+  run grep -q 'color: #ff5555 !important' "${css_file}"
   assert_success
 
   run grep -F -q 'div[class*="st-key-command_overlay_slot_"]' "${css_file}"

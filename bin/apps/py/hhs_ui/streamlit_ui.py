@@ -110,7 +110,7 @@ def resolve_run_shell() -> str:
 
 def shell_version_command() -> str:
     """Return the command that prints the active target Bash version."""
-    return r"${BASH:-bash} --version"
+    return r'${BASH:-bash} --version'
 
 
 RUN_SHELL = resolve_run_shell()
@@ -1154,17 +1154,21 @@ def render_sidebar() -> None:
             render_sidebar_terminal_button()
 
 
-def command_loader_html(message: str, loader_id: str, started_at_millis: int) -> str:
+def command_loader_html(
+    message: str, loader_id: str, started_at_millis: int, timeout_seconds: int
+) -> str:
     """Return reusable banner loader markup for command-data waits."""
     safe_message = html.escape(message.strip() or "Loading...")
     safe_loader_id = html.escape(loader_id, quote=True)
+    safe_timeout = max(1, int(timeout_seconds))
     return f"""
     <div class="hhs-command-loader" data-loader-id="{safe_loader_id}" role="status" aria-live="polite">
       <span class="hhs-command-loader-spinner" aria-hidden="true"></span>
       <span class="hhs-command-loader-copy">
         <span class="hhs-command-loader-label">{safe_message}</span>
         <span class="hhs-command-loader-elapsed hhs-tab-loader-elapsed"
-              data-started-at="{started_at_millis}">time elapsed: 0m:00s</span>
+              data-started-at="{started_at_millis}"
+              data-timeout-seconds="{safe_timeout}">time elapsed: 0m:00s</span>
       </span>
     </div>
     """
@@ -1187,9 +1191,13 @@ def render_command_loader_timer(loader_id: str) -> None:
             const started_at = Number(node.dataset.startedAt || Date.now());
             const render_elapsed = () => {{
               const elapsed_seconds = Math.max(0, Math.floor((Date.now() - started_at) / 1000));
+              const timeout_seconds = Math.max(1, Number(node.dataset.timeoutSeconds || 1));
+              const elapsed_ratio = elapsed_seconds / timeout_seconds;
               const minutes = Math.floor(elapsed_seconds / 60);
               const seconds = String(elapsed_seconds % 60).padStart(2, "0");
               node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
+              node.classList.toggle("hhs-loader-elapsed-warning", elapsed_ratio >= 0.3 && elapsed_ratio < 0.6);
+              node.classList.toggle("hhs-loader-elapsed-danger", elapsed_ratio >= 0.6);
             }};
             render_elapsed();
             window.setInterval(render_elapsed, 1000);
@@ -1201,22 +1209,28 @@ def render_command_loader_timer(loader_id: str) -> None:
     )
 
 
-def render_command_loader(message: str, started_at: float | None = None) -> None:
+def render_command_loader(
+    message: str, started_at: float | None = None, timeout_seconds: int | None = None
+) -> None:
     """Render the reusable banner loader for command-data waits."""
     loader_id = f"hhs-command-loader-{secrets.token_hex(8)}"
     started_at_millis = int((started_at or time.time()) * 1000)
+    safe_timeout = int(timeout_seconds or command_timeout_seconds())
     st.markdown(
-        command_loader_html(message, loader_id, started_at_millis),
+        command_loader_html(message, loader_id, started_at_millis, safe_timeout),
         unsafe_allow_html=True,
     )
     render_command_loader_timer(loader_id)
 
 
-def render_preloader(message: str = "Loading...", transient: bool = True) -> None:
+def render_preloader(
+    message: str = "Loading...", transient: bool = True, timeout_seconds: int | None = None
+) -> None:
     """Render a full-page overlay preloader."""
     loader_class = (
         "hhs-tab-loader hhs-tab-loader-transient" if transient else "hhs-tab-loader"
     )
+    safe_timeout = int(timeout_seconds or command_timeout_seconds())
     components.html(
         f"""
         <script>
@@ -1234,7 +1248,8 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
                 <span class="hhs-tab-loader-spinner"></span>
                 <span class="hhs-tab-loader-copy">
                   <span class="hhs-tab-loader-label"></span>
-                  <span class="hhs-tab-loader-elapsed" data-start-time="0">time elapsed: 0m:00s</span>
+                  <span class="hhs-tab-loader-elapsed" data-start-time="0"
+                        data-timeout-seconds="{safe_timeout}">time elapsed: 0m:00s</span>
                 </span>
               </div>
             `;
@@ -1248,9 +1263,13 @@ def render_preloader(message: str = "Loading...", transient: bool = True) -> Non
             const started_at = Date.now();
             const render_elapsed = () => {{
               const elapsed_seconds = Math.max(0, Math.floor((Date.now() - started_at) / 1000));
+              const timeout_seconds = Math.max(1, Number(node.dataset.timeoutSeconds || 1));
+              const elapsed_ratio = elapsed_seconds / timeout_seconds;
               const minutes = Math.floor(elapsed_seconds / 60);
               const seconds = String(elapsed_seconds % 60).padStart(2, "0");
               node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
+              node.classList.toggle("hhs-loader-elapsed-warning", elapsed_ratio >= 0.3 && elapsed_ratio < 0.6);
+              node.classList.toggle("hhs-loader-elapsed-danger", elapsed_ratio >= 0.6);
             }};
             render_elapsed();
             window.setInterval(render_elapsed, 1000);
@@ -1341,13 +1360,14 @@ def set_overlay(
     message: str = "Loading...",
     transient: bool = False,
     close_dialogs: bool = False,
+    timeout_seconds: int | None = None,
 ) -> None:
     """Show or hide the reusable full-page command overlay."""
     if active:
         if close_dialogs:
             close_all_dialogs()
         save_ui_state()
-        render_preloader(message, transient=transient)
+        render_preloader(message, transient=transient, timeout_seconds=timeout_seconds)
         time.sleep(0.1)
         return
 
@@ -2433,14 +2453,14 @@ def render_home_docker_panel() -> None:
         "Checking Docker agent",
         "docker",
         hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        2,
+        command_timeout_seconds(),
         "Unable to check Docker agent.",
     )
     if agent_result is None:
         return
     st.session_state["_hhs_docker_agent_is_running"] = agent_result.returncode == 0
     if not docker_agent_is_running():
-        render_docker_agent_required_view()
+        render_docker_agent_required_view(docker_agent_failure_message(agent_result))
         return
     containers_result = render_cached_command_result(
         build_docker_ps_command(),
@@ -2474,24 +2494,24 @@ def render_home_docker_panel() -> None:
 
 def docker_agent_is_running() -> bool:
     """Return whether the last Docker agent check succeeded."""
-    if "_hhs_docker_agent_is_running" in st.session_state:
-        return bool(st.session_state.get("_hhs_docker_agent_is_running", False))
-    result = run_bash_command(
-        build_docker_agent_check_command(),
-        "Checking Docker agent...",
-        timeout_seconds=2,
-        show_overlay=False,
-        cache_tag="docker",
-    )
-    return result.returncode == 0
+    return bool(st.session_state.get("_hhs_docker_agent_is_running", False))
 
 
-def render_docker_agent_required_view() -> None:
+def docker_agent_failure_message(result: subprocess.CompletedProcess[str]) -> str:
+    """Return the user-facing message for a failed Docker agent check."""
+    output = strip_ansi(result.stderr or result.stdout or "").strip()
+    if result.returncode == 124 or "timed out" in output.lower():
+        return "Docker command timedout"
+    return "Docker agent is not running"
+
+
+def render_docker_agent_required_view(message: str = "Docker agent is not running") -> None:
     """Render an empty Docker panel when the Docker daemon is unavailable."""
+    safe_message = html.escape(message.strip() or "Docker agent is not running")
     st.markdown(
-        """
+        f"""
         <section class="hhs-remote-connect-required">
-          <h2>Docker agent is not running</h2>
+          <h2>{safe_message}</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -5913,6 +5933,13 @@ def command_remote_host(force_local: bool = False) -> str:
     return host
 
 
+def command_timeout_seconds(force_local: bool = False) -> int:
+    """Return the normalized command timeout for the selected execution host."""
+    if command_remote_host(force_local=force_local):
+        return hhs_ui.UI_COMMAND_REMOTE_TIMEOUT_SECONDS
+    return hhs_ui.UI_COMMAND_LOCAL_TIMEOUT_SECONDS
+
+
 def selected_ssh_host_is_connected(host: str | None = None) -> bool:
     """Return whether the selected host has an active UI-managed SSH connection."""
     host_name = (host if host is not None else selected_ssh_host()).strip()
@@ -6156,10 +6183,8 @@ def execute_pending_ssh_connection() -> None:
     host = str(st.session_state.get("ssh_connect_pending", "")).strip()
     if not host:
         return
-    loader_message = (
-        str(st.session_state.get("ssh_connect_pending_message", "")).strip()
-        or f"Connecting to SSH host {host}..."
-    )
+    loader_message = str(st.session_state.get("ssh_connect_pending_message", "")).strip()
+    loader_message = loader_message or f"Connecting to SSH host {host}..."
     restore_reconnect_state = bool(
         st.session_state.pop("ssh_reconnect_restore_view_state", False)
     )
@@ -6173,7 +6198,6 @@ def execute_pending_ssh_connection() -> None:
         ttl_seconds=0,
         use_cache=False,
         force_local=True,
-        timeout_seconds=15,
         cache_tag="ssh",
     )
     if result.returncode == 0:
@@ -6350,9 +6374,7 @@ def run_bash_command(
     command_to_run = effective_bash_command(command, force_local=force_local)
     selection_only_rerun = table_selection_rerun_in_progress()
     show_command_overlay = not selection_only_rerun
-    effective_timeout = timeout_seconds
-    if effective_timeout is None:
-        effective_timeout = hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS
+    effective_timeout = command_timeout_seconds(force_local=force_local)
     cache_key = command_cache_key(command_to_run, cache_tag)
     snapshot_value = (
         command_result_snapshot_get(cache_key) if selection_only_rerun else None
@@ -6379,7 +6401,12 @@ def run_bash_command(
         return result
 
     if show_command_overlay:
-        set_overlay(True, loader_message, close_dialogs=close_dialogs)
+        set_overlay(
+            True,
+            loader_message,
+            close_dialogs=close_dialogs,
+            timeout_seconds=effective_timeout,
+        )
     try:
         result = run_bash_subprocess(command_to_run, effective_timeout)
         result = sanitize_remote_command_result(remote_host, result)
@@ -6542,6 +6569,7 @@ def start_background_bash_command(
     stderr_file.close()
 
     remote_host = command_remote_host(force_local=force_local)
+    effective_timeout = command_timeout_seconds(force_local=force_local)
     command_to_run = effective_bash_command(command, force_local=force_local)
     stdout_handle = Path(stdout_path).open("w", encoding="utf-8")
     stderr_handle = Path(stderr_path).open("w", encoding="utf-8")
@@ -6567,7 +6595,7 @@ def start_background_bash_command(
         "stdout_path": stdout_path,
         "stderr_path": stderr_path,
         "started_at": time.time(),
-        "timeout_seconds": timeout_seconds,
+        "timeout_seconds": effective_timeout,
         "metadata": metadata or {},
     }
     return True
@@ -6666,7 +6694,11 @@ def render_background_job_status(job_name: str, message: str = "") -> None:
         started_at = float(job.get("started_at", 0.0) or 0.0)
     except (TypeError, ValueError):
         started_at = 0.0
-    render_command_loader(description or "Command running...", started_at or None)
+    render_command_loader(
+        description or "Command running...",
+        started_at or None,
+        int(background_job_timeout_seconds(job) or command_timeout_seconds()),
+    )
 
 
 @st.fragment(run_every="2s")
@@ -7584,7 +7616,7 @@ def build_docker_images_command() -> str:
 
 def build_docker_agent_check_command() -> str:
     """Build the Bash command used to check whether Docker is running."""
-    return "docker info >/dev/null 2>&1"
+    return "docker ps -q >/dev/null 2>&1"
 
 
 def run_docker_ps() -> subprocess.CompletedProcess[str]:
