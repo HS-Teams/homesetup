@@ -680,36 +680,49 @@ div[class*="st-key-monitor_process_kill_button_"] button {
   word-break: normal;
 }
 
+div[role="dialog"] {
+  background: var(--hhs-panel) !important;
+  border: 1px solid var(--hhs-theme-border-color) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34) !important;
+  color: var(--hhs-theme-text-color);
+}
+
+div[role="dialog"] button[aria-label="Close"] {
+  border: 1px solid var(--hhs-theme-border-color) !important;
+  border-radius: 4px !important;
+  color: var(--hhs-theme-text-color) !important;
+}
+
 div[role="dialog"]:has(.hhs-shell-version-output) {
+  box-sizing: border-box;
   max-height: 88dvh;
-  max-width: 92vw;
-  width: max-content;
+  max-width: min(92vw, 72rem);
+  overflow: auto;
+  width: fit-content;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output),
-  [data-testid="stVerticalBlock"]:has(.hhs-shell-version-output) {
-  max-width: calc(92vw - 4rem);
-  width: max-content;
+div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stVerticalBlock"]:has(.hhs-shell-version-output) {
+  max-width: 100%;
+  width: 100%;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output),
-  [data-testid="stHorizontalBlock"]:has(.st-key-footer_shell_version_dialog_close_button) {
+div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stHorizontalBlock"]:has(.st-key-footer_shell_version_dialog_close_button) {
   display: flex;
   justify-content: center;
   margin-top: 1rem;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output),
-  [data-testid="stColumn"]:has(.st-key-footer_shell_version_dialog_close_button) {
+div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.st-key-footer_shell_version_dialog_close_button) {
   flex: 0 0 120px !important;
   width: 120px !important;
 }
 
 .hhs-shell-version-output {
   max-height: calc(88dvh - 8rem);
-  max-width: calc(92vw - 4rem);
-  min-width: min(34rem, calc(92vw - 4rem));
-  width: max-content;
+  max-width: min(86vw, 68rem);
+  min-width: 0;
+  width: fit-content;
 }
 
 .hhs-ttyd-terminal-shell {
@@ -1081,7 +1094,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 .hhs-command-loader-copy {
   display: flex;
   flex-direction: column;
-  gap: 0.36rem;
+  gap: 0.22rem;
   min-width: 0;
   width: 100%;
 }
@@ -1094,44 +1107,9 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   white-space: nowrap;
 }
 
-.hhs-command-loader-track {
-  background: var(--hhs-current-line, rgba(148, 163, 184, 0.28));
-  border-radius: 999px;
-  height: 0.42rem;
-  max-width: 100%;
-  overflow: hidden;
-  position: relative;
-  width: 13rem;
-}
-
-.hhs-command-loader-bar {
-  animation: hhs-loader-horizontal 1.05s ease-in-out infinite;
-  background: linear-gradient(90deg, transparent, var(--hhs-primary, #2563eb), transparent);
-  border-radius: 999px;
-  bottom: 0;
-  left: -45%;
-  position: absolute;
-  top: 0;
-  width: 45%;
-}
-
 @keyframes hhs-loader-spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@keyframes hhs-loader-horizontal {
-  0% {
-    left: -45%;
-  }
-
-  55% {
-    left: 55%;
-  }
-
-  100% {
-    left: 105%;
   }
 }
 

@@ -181,6 +181,7 @@ SERVICE_ACTION_JOB = "service_action"
 MONITOR_CPU_JOB = "monitor_cpu"
 MONITOR_MEM_JOB = "monitor_mem"
 MONITOR_PROCESS_LIST_JOB = "monitor_process_list"
+AI_ENABLED_ENV_JOB = "ai_enabled_env"
 AI_MODEL_SELECT_JOB = "ai_model_select"
 AI_MODEL_DELETE_JOB = "ai_model_delete"
 UPDATER_UPDATE_JOB = "updater_update"
@@ -188,6 +189,27 @@ UPDATER_CHECK_JOB = "updater_check"
 AI_ASK_JOB = "ai_ask"
 FOOTER_VERSION_JOB = "footer_hhs_version"
 FOOTER_WORKING_DIR_JOB = "footer_working_dir"
+SSH_DISCONNECT_JOB = "ssh_disconnect"
+HOST_SWITCH_CACHE_TAGS = ("env", "services", "monitor_process")
+HOST_SWITCH_BACKGROUND_JOBS = (
+    AI_ENABLED_ENV_JOB,
+    SERVICE_LIST_JOB,
+    SERVICE_ACTION_JOB,
+    MONITOR_CPU_JOB,
+    MONITOR_MEM_JOB,
+    MONITOR_PROCESS_LIST_JOB,
+)
+HOST_SWITCH_STATE_KEYS = (
+    "ai_enabled_env_error",
+    "monitor_cpu_error",
+    "monitor_mem_error",
+    "monitor_process_action_message",
+    "monitor_process_action_succeeded",
+    "monitor_process_list_error",
+    "service_action_message",
+    "service_action_succeeded",
+    "service_list_error",
+)
 
 
 def file_mtime_token(file_path: Path) -> float:
@@ -1060,25 +1082,62 @@ def render_sidebar() -> None:
             render_sidebar_terminal_button()
 
 
-def command_loader_html(message: str) -> str:
+def command_loader_html(message: str, loader_id: str, started_at_millis: int) -> str:
     """Return reusable banner loader markup for command-data waits."""
     safe_message = html.escape(message.strip() or "Loading...")
+    safe_loader_id = html.escape(loader_id, quote=True)
     return f"""
-    <div class="hhs-command-loader" role="status" aria-live="polite">
+    <div class="hhs-command-loader" data-loader-id="{safe_loader_id}" role="status" aria-live="polite">
       <span class="hhs-command-loader-spinner" aria-hidden="true"></span>
       <span class="hhs-command-loader-copy">
         <span class="hhs-command-loader-label">{safe_message}</span>
-        <span class="hhs-command-loader-track" aria-hidden="true">
-          <span class="hhs-command-loader-bar"></span>
-        </span>
+        <span class="hhs-command-loader-elapsed hhs-tab-loader-elapsed"
+              data-started-at="{started_at_millis}">time elapsed: 0m:00s</span>
       </span>
     </div>
     """
 
 
-def render_command_loader(message: str) -> None:
+def render_command_loader_timer(loader_id: str) -> None:
+    """Start the elapsed-time updater for one in-flow command loader."""
+    components.html(
+        f"""
+        <script>
+          (() => {{
+            const doc = window.parent.document;
+            const loader_id = {json.dumps(loader_id)};
+            const selector = `[data-loader-id="${{loader_id}}"] .hhs-command-loader-elapsed`;
+            const node = doc.querySelector(selector);
+            if (!node || node.dataset.timerStarted === "true") {{
+              return;
+            }}
+            node.dataset.timerStarted = "true";
+            const started_at = Number(node.dataset.startedAt || Date.now());
+            const render_elapsed = () => {{
+              const elapsed_seconds = Math.max(0, Math.floor((Date.now() - started_at) / 1000));
+              const minutes = Math.floor(elapsed_seconds / 60);
+              const seconds = String(elapsed_seconds % 60).padStart(2, "0");
+              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
+            }};
+            render_elapsed();
+            window.setInterval(render_elapsed, 1000);
+          }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def render_command_loader(message: str, started_at: float | None = None) -> None:
     """Render the reusable banner loader for command-data waits."""
-    st.markdown(command_loader_html(message), unsafe_allow_html=True)
+    loader_id = f"hhs-command-loader-{secrets.token_hex(8)}"
+    started_at_millis = int((started_at or time.time()) * 1000)
+    st.markdown(
+        command_loader_html(message, loader_id, started_at_millis),
+        unsafe_allow_html=True,
+    )
+    render_command_loader_timer(loader_id)
 
 
 def render_preloader(message: str = "Loading...", transient: bool = True) -> None:
@@ -5447,6 +5506,7 @@ def restore_registered_ssh_connection_on_session_start() -> None:
                 f"Reconnecting to {ssh_connection_display(reconnect_host)}"
             )
         return
+    clear_host_scoped_session_state()
     st.session_state["ssh_connection_status"] = "connected"
     st.session_state["ssh_connection_host"] = host
     st.session_state["ssh_host_selected"] = host
@@ -5513,6 +5573,7 @@ def synchronize_selected_ssh_host_with_connection() -> None:
 def clear_disconnected_ssh_host(host: str) -> None:
     """Clear stale UI SSH connection state and select the local host."""
     stop_ttyd_session()
+    expire_host_scoped_command_state()
     st.session_state["ssh_connection_status"] = ""
     st.session_state["ssh_connection_host"] = ""
     st.session_state["ssh_connection_error"] = ""
@@ -5530,6 +5591,7 @@ def clear_disconnected_ssh_host(host: str) -> None:
 def clear_host_scoped_session_state() -> None:
     """Clear UI state that belongs to the previously selected execution host."""
     stop_ttyd_session()
+    expire_host_scoped_command_state()
     preserved_keys = {
         hhs_ui.THEME_SELECTED_KEY,
         "theme_last_seen",
@@ -5772,23 +5834,11 @@ def execute_pending_ssh_connection() -> None:
         push_floating_status(f"Failed to connect to remote: {host}", "error")
 
 
-def execute_pending_ssh_disconnection() -> None:
-    """Close a pending SSH ControlMaster connection from the normal render flow."""
-    host = str(st.session_state.get("ssh_disconnect_pending", "")).strip()
-    if not host:
-        return
-    stop_ttyd_session()
-    st.session_state["ssh_disconnect_pending"] = ""
-    st.session_state["ssh_connect_pending_message"] = ""
-    run_bash_command(
-        build_ssh_disconnect_command(host),
-        f"Disconnecting from SSH host {host}...",
-        ttl_seconds=0,
-        use_cache=False,
-        force_local=True,
-        timeout_seconds=10,
-        cache_tag="ssh",
-    )
+def clear_completed_ssh_disconnection(
+    host: str, result: subprocess.CompletedProcess[str]
+) -> None:
+    """Clear UI connection state after an SSH disconnect command finishes."""
+    clear_host_scoped_session_state()
     st.session_state["ssh_connection_status"] = ""
     st.session_state["ssh_connection_host"] = ""
     st.session_state["ssh_connection_error"] = ""
@@ -5799,7 +5849,61 @@ def execute_pending_ssh_disconnection() -> None:
     st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
     clear_registered_ssh_connection()
     cache_clear()
+    if result.returncode == 124:
+        push_floating_status(
+            f"SSH disconnect cleanup timed out for {ssh_connection_display(host)}.",
+            "warn",
+        )
+    elif result.returncode != 0:
+        push_floating_status(
+            clean_command_status_message(
+                result.stderr or result.stdout or f"Unable to disconnect SSH host {host}."
+            ),
+            "warn",
+        )
     save_ui_state()
+
+
+def complete_ssh_disconnection() -> bool:
+    """Complete or render the active SSH disconnect background job."""
+    job = background_job_state(SSH_DISCONNECT_JOB)
+    if not job:
+        return False
+    completed = background_job_result(SSH_DISCONNECT_JOB)
+    if completed is None:
+        render_background_job_status(SSH_DISCONNECT_JOB)
+        return True
+    result, metadata = completed
+    host = str(metadata.get("ssh_host", "")).strip()
+    if not host:
+        host = str(st.session_state.get("ssh_connection_host", "")).strip()
+    clear_completed_ssh_disconnection(host, result)
+    return False
+
+
+def execute_pending_ssh_disconnection() -> bool:
+    """Close a pending SSH ControlMaster connection from the normal render flow."""
+    if complete_ssh_disconnection():
+        return True
+    host = str(st.session_state.get("ssh_disconnect_pending", "")).strip()
+    if not host:
+        return False
+    stop_ttyd_session()
+    st.session_state["ssh_disconnect_pending"] = ""
+    st.session_state["ssh_connect_pending_message"] = ""
+    st.session_state["ssh_connection_status"] = "disconnecting"
+    st.session_state["ssh_connection_host"] = host
+    expire_host_scoped_command_state()
+    start_background_bash_command(
+        SSH_DISCONNECT_JOB,
+        build_ssh_disconnect_command(host),
+        f"Disconnecting from SSH host {host}...",
+        10,
+        force_local=True,
+        metadata={"ssh_host": host},
+    )
+    render_background_job_status(SSH_DISCONNECT_JOB)
+    return True
 
 
 def clear_ssh_connection_dialog() -> None:
@@ -5991,6 +6095,26 @@ def background_job_is_running(job_name: str) -> bool:
     return bool(process is not None and process.poll() is None)
 
 
+def stop_background_job(job_name: str) -> None:
+    """Stop and forget one background job and its temporary output files."""
+    job_key = background_job_state_key(job_name)
+    job = background_job_state(job_name)
+    if job is None:
+        st.session_state.pop(job_key, None)
+        return
+    process = background_job_process(job)
+    if process is not None:
+        stop_process(process)
+    st.session_state.pop(job_key, None)
+    cleanup_background_job_files(job)
+
+
+def stop_background_jobs(job_names: tuple[str, ...]) -> None:
+    """Stop and forget each named background job."""
+    for job_name in job_names:
+        stop_background_job(job_name)
+
+
 def background_job_elapsed_seconds(job: dict[str, object]) -> float:
     """Return the elapsed runtime for a background command job."""
     try:
@@ -6139,7 +6263,18 @@ def render_background_job_status(job_name: str, message: str = "") -> None:
         st.rerun()
         return
     description = message.strip() or str(job.get("description", "Command")).strip()
-    render_command_loader(description or "Command running...")
+    try:
+        started_at = float(job.get("started_at", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        started_at = 0.0
+    render_command_loader(description or "Command running...", started_at or None)
+
+
+@st.fragment(run_every="2s")
+def poll_background_job_completion(job_name: str) -> None:
+    """Poll one background job without rendering a visible loader."""
+    if background_job_state(job_name) and not background_job_is_running(job_name):
+        st.rerun()
 
 
 def load_ui_cache() -> dict[str, dict[str, object]]:
@@ -6363,6 +6498,29 @@ def cache_clear() -> None:
     }
     save_ui_cache(metadata_cache)
     command_result_snapshot_clear()
+
+
+def expire_host_scoped_command_state() -> None:
+    """Expire command data and jobs that belong to the previous execution host."""
+    stop_background_jobs(HOST_SWITCH_BACKGROUND_JOBS)
+    for cache_tag in HOST_SWITCH_CACHE_TAGS:
+        cache_delete_tag(cache_tag)
+    for state_key in HOST_SWITCH_STATE_KEYS:
+        st.session_state.pop(state_key, None)
+    for table_key in (
+        hhs_ui.ENV_TABLE_KEY,
+        hhs_ui.PROCESS_TABLE_KEY,
+        hhs_ui.SERVICE_TABLE_KEY,
+    ):
+        st.session_state.pop(table_key, None)
+    for counter_key in (
+        hhs_ui.ENV_TABLE_RESET_COUNTER_KEY,
+        hhs_ui.SERVICE_TABLE_RESET_COUNTER_KEY,
+    ):
+        reset_counter = st.session_state.setdefault(counter_key, 0)
+        st.session_state[counter_key] = (
+            reset_counter + 1 if isinstance(reset_counter, int) else 1
+        )
 
 
 def completed_process_from_cache(
@@ -8165,7 +8323,21 @@ def annotate_ssh_tunnel_statuses(
 def render_ssh_tunnel_status_loader(job_names: tuple[str, ...]) -> None:
     """Render one polling loader while SSH tunnel status jobs are running."""
     if any(background_job_is_running(job_name) for job_name in job_names):
-        render_command_loader("Checking SSH tunnel statuses")
+        started_times: list[float] = []
+        for job_name in job_names:
+            job = background_job_state(job_name)
+            if not job:
+                continue
+            try:
+                started_at = float(job.get("started_at", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                started_at = 0.0
+            if started_at:
+                started_times.append(started_at)
+        render_command_loader(
+            "Checking SSH tunnel statuses",
+            min(started_times) if started_times else None,
+        )
         return
     if job_names:
         st.rerun()
@@ -9288,12 +9460,50 @@ def service_is_down(row: dict[str, str]) -> bool:
     return "down" in row.get("Value", "").lower()
 
 
+def hhs_ai_enabled_command() -> str:
+    """Return the command used to read the current host AskAI feature flag."""
+    return build_hhs_envs_command("^HHS_AI_ENABLED$")
+
+
+def hhs_ai_enabled_from_output(output: str) -> bool:
+    """Return whether an environment command output enables the AskAI tab."""
+    for row in parse_hhs_envs(output):
+        if row.get("Name") == "HHS_AI_ENABLED":
+            return row.get("Value", "").strip() == "1"
+    return False
+
+
+def hhs_ai_enabled() -> bool:
+    """Return whether the AskAI tab is enabled for the current execution host."""
+    command = hhs_ai_enabled_command()
+    complete_cached_background_command(
+        AI_ENABLED_ENV_JOB,
+        "ai_enabled_env_error",
+        "Unable to check AskAI availability.",
+    )
+    result, fresh_cache = cached_background_command_result(command, "env")
+    if not fresh_cache and not background_job_is_running(AI_ENABLED_ENV_JOB):
+        start_cached_background_command(
+            AI_ENABLED_ENV_JOB,
+            command,
+            "Checking AskAI availability",
+            "env",
+            hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+            hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        )
+    poll_background_job_completion(AI_ENABLED_ENV_JOB)
+    if not fresh_cache or result is None or result.returncode != 0:
+        return False
+    return hhs_ai_enabled_from_output(result.stdout)
+
+
 def main_views() -> tuple[str, ...]:
-    """Return the visible main view names for the current service state."""
+    """Return the visible main view names for the current environment and connection."""
     views = hhs_ui.VIEWS
     if connected_ssh_host():
         views = (*views, hhs_ui.SSH_VIEW)
-    views = (*views, hhs_ui.AI_VIEW)
+    if hhs_ai_enabled():
+        views = (*views, hhs_ui.AI_VIEW)
     return views
 
 
@@ -11091,7 +11301,8 @@ def main() -> None:
         st.session_state["ssh_connection_error"] = ""
         st.session_state["ssh_connect_pending"] = ""
         st.session_state["ssh_disconnect_pending"] = ""
-    execute_pending_ssh_disconnection()
+    if execute_pending_ssh_disconnection():
+        return
     execute_pending_ssh_connection()
     if render_ssh_connection_dialog():
         return
