@@ -63,6 +63,7 @@ export HHS_LOG_FILE="${HHS_LOG_DIR}"/hhsrc.log
 export HHS_MOTD_DIR="${HHS_DIR}"/motd
 export HHS_PROMPTS_DIR="${HHS_DIR}"/askai/prompts
 export HHS_SETUP_FILE="${HHS_DIR}"/.homesetup.toml
+export HHS_OLLAMA_PROMPT_SOURCE="${HHS_HOME}"/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md
 export HHS_OLLAMA_PROMPT_FILE="${HHS_DIR}"/hhs-ask-ollama.md
 export HHS_BLESH_DIR="${HHS_DIR}"/ble-sh
 export HHS_VENV_PATH="${HHS_DIR}"/venv
@@ -174,7 +175,7 @@ fi
 # Ask AI prompt
 if ! [[ -s "${HHS_OLLAMA_PROMPT_FILE}" ]]; then
   __hhs_log "WARN" "'${HHS_OLLAMA_PROMPT_FILE}' file was copied because it was not found at: ${HHS_DIR}"
-  \cp -f "${HHS_HOME}"/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md "${HHS_OLLAMA_PROMPT_FILE}"
+  \cp -f "${HHS_OLLAMA_PROMPT_SOURCE}" "${HHS_OLLAMA_PROMPT_FILE}"
 fi
 
 # -----------------------------------------------------------------------------------

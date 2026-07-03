@@ -148,6 +148,7 @@ MONITOR_VIEW_LABELS = {
 }
 ENV_FILTERS = ("All", "HHS", "Other")
 LIST_FILTERS = ("All", "Other")
+HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Other")
 LOG_FILTERS = ("All", "Containing")
 HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")

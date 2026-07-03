@@ -110,7 +110,7 @@ def resolve_run_shell() -> str:
 
 def shell_version_command() -> str:
     """Return the command that prints the active target Bash version."""
-    return r'${BASH:-bash} --version'
+    return r"${BASH:-bash} --version"
 
 
 RUN_SHELL = resolve_run_shell()
@@ -1237,7 +1237,9 @@ def render_command_loader(
 
 
 def render_preloader(
-    message: str = "Loading...", transient: bool = True, timeout_seconds: int | None = None
+    message: str = "Loading...",
+    transient: bool = True,
+    timeout_seconds: int | None = None,
 ) -> None:
     """Render a full-page overlay preloader."""
     loader_class = (
@@ -2277,8 +2279,8 @@ def render_footer() -> None:
         cache_clear_markup = (
             f'<span class="hhs-footer-glyph"></span>'
             f'<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}" '
-            f'target="_self" title="Clear cache" aria-label="Clear cache">'
-            f'<span>🗑</span></a>'
+            f'target="_self" title="Clear application cache" aria-label="Clear application cache">'
+            f'<span class="hhs-footer-cache-refresh-glyph">♻</span></a>'
         )
     connected_host = str(st.session_state.get("ssh_connection_host", "")).strip()
     remote_status_markup = ""
@@ -2547,7 +2549,9 @@ def docker_agent_failure_message(result: subprocess.CompletedProcess[str]) -> st
     return "Docker agent is not running"
 
 
-def render_docker_agent_required_view(message: str = "Docker agent is not running") -> None:
+def render_docker_agent_required_view(
+    message: str = "Docker agent is not running",
+) -> None:
     """Render an empty Docker panel when the Docker daemon is unavailable."""
     safe_message = html.escape(message.strip() or "Docker agent is not running")
     st.markdown(
@@ -3579,10 +3583,10 @@ def render_home_tools_panel() -> None:
         return
     tools_filter, other_filter = render_table_controls_panel(
         lambda: render_table_filter_controls(
-            hhs_ui.LIST_FILTERS,
+            hhs_ui.HOME_TOOLS_FILTERS,
             "home_tools_filter",
             "home_tools_other_filter",
-            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
+            hhs_ui.FOUR_OPTION_FILTER_COLUMNS,
         )
     )
     filtered_rows = filter_tool_rows(rows, tools_filter, other_filter)
@@ -4872,7 +4876,9 @@ def log_tailor_highlight_ranges(value: str) -> list[tuple[int, int, str]]:
     return sorted(ranges, key=lambda item: item[0])
 
 
-def log_filter_highlight_ranges(value: str, text_filter: str = "") -> list[tuple[int, int, str]]:
+def log_filter_highlight_ranges(
+    value: str, text_filter: str = ""
+) -> list[tuple[int, int, str]]:
     """Return highlight ranges for Monitor Logs containing-filter matches."""
     needle = text_filter.strip()
     if not needle:
@@ -6309,7 +6315,9 @@ def execute_pending_ssh_connection() -> bool:
     host = str(st.session_state.get("ssh_connect_pending", "")).strip()
     if not host:
         return False
-    loader_message = str(st.session_state.get("ssh_connect_pending_message", "")).strip()
+    loader_message = str(
+        st.session_state.get("ssh_connect_pending_message", "")
+    ).strip()
     loader_message = loader_message or f"Connecting to SSH host {host}..."
     st.session_state.pop("ssh_reconnect_restore_view_state", False)
     reconnect_state = reconnect_view_state_snapshot()
@@ -8575,6 +8583,10 @@ def filter_tool_rows(
     rows: list[dict[str, str]], tools_filter: str = "All", other_filter: str = ""
 ) -> list[dict[str, str]]:
     """Return Home tools rows matching the selected UI filter."""
+    if tools_filter == "Installed":
+        return [row for row in rows if home_tool_is_installed(row)]
+    if tools_filter in ("Not Installed", "Not Found"):
+        return [row for row in rows if home_tool_is_not_found(row)]
     if tools_filter == "Other":
         return [row for row in rows if row_matches_text_filter(row, other_filter)]
     return rows
@@ -12283,7 +12295,9 @@ def main() -> None:
     if st.session_state["home_view"] not in hhs_ui.HOME_VIEWS:
         st.session_state["home_view"] = "System"
     st.session_state.setdefault("home_tools_filter", "All")
-    if st.session_state["home_tools_filter"] not in hhs_ui.LIST_FILTERS:
+    if st.session_state["home_tools_filter"] == "Not Found":
+        st.session_state["home_tools_filter"] = "Not Installed"
+    if st.session_state["home_tools_filter"] not in hhs_ui.HOME_TOOLS_FILTERS:
         st.session_state["home_tools_filter"] = "All"
     st.session_state.setdefault("home_tools_other_filter", "")
     st.session_state.setdefault("home_tools_table_reset_counter", 0)

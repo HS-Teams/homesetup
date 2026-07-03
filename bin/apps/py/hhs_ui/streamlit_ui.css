@@ -1361,7 +1361,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 .hhs-footer-cache-clear-button:focus {
   align-items: center;
   border-radius: 4px;
-  color: var(--hhs-danger);
+  color: var(--hhs-success);
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 0.68rem;
@@ -1372,9 +1372,15 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   text-decoration: none !important;
 }
 
+.hhs-footer-cache-refresh-glyph {
+  color: var(--hhs-success);
+  font-size: 3em;
+  margin-top: -3px;
+}
+
 .hhs-footer-cache-clear-button:hover,
 .hhs-footer-cache-clear-button:focus {
-  background: color-mix(in srgb, var(--hhs-danger) 14%, transparent);
+  background: color-mix(in srgb, var(--hhs-success) 14%, transparent);
   filter: brightness(1.15);
 }
 

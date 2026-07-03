@@ -942,10 +942,11 @@ assert 'class="hhs-footer-glyph"></span>' in ui_source
 assert 'Connected to remote  {connected_host_display}' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
 homesetup_version_body = ui_source.split("def homesetup_version", 1)[1].split("\ndef ", 1)[0]
-assert 'st.session_state.get("footer_hhs_version_cache_loaded")' in homesetup_version_body
 assert 'run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)' in homesetup_version_body
 assert 'st.session_state["footer_hhs_version_cache_loaded"] = True' in homesetup_version_body
-assert 'parse_hhs_envs(result.stdout)' in homesetup_version_body
+assert 'parse_rows_cached("env", result.stdout, parse_hhs_envs)' in homesetup_version_body
+assert 'complete_cached_background_command(' in homesetup_version_body
+assert 'cached_background_command_result(command, "env")' in homesetup_version_body
 assert 'hhs_ui.VERSION' not in homesetup_version_body
 constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
 init_source = Path("bin/apps/py/hhs_ui/__init__.py").read_text()
@@ -973,11 +974,11 @@ assert '' in ui_source
 assert 'class="hhs-footer-shell-group"' in ui_source
 assert 'class="hhs-footer-cache-clear-button"' in ui_source
 assert 'href="{cache_clear_url}"' in ui_source
-assert 'title="Clear cache" aria-label="Clear cache">' in ui_source
+assert 'title="Clear application cache" aria-label="Clear application cache">' in ui_source
 assert 'f\'<span class="hhs-footer-glyph"></span>\'' in ui_source
-assert 'f\'<span>🗑</span></a>\'' in ui_source
+assert 'f\'<span class="hhs-footer-cache-refresh-glyph">♻</span></a>\'' in ui_source
 assert '<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}"' in ui_source
-assert '<span class="hhs-footer-glyph"></span><span>🗑</span></a>' not in ui_source
+assert '<span class="hhs-footer-glyph"></span><span class="hhs-footer-cache-refresh-glyph">♻</span></a>' not in ui_source
 assert 'def build_open_directory_command' in ui_source
 assert 'def run_open_working_directory' in ui_source
 assert 'def build_footer_working_directory_command' in ui_source
@@ -999,7 +1000,7 @@ assert 'hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY' in footer_working_direct
 assert 'return os.getcwd()' in footer_working_directory_body
 assert 'def run_shell_version' in ui_source
 assert 'def shell_version_command' in ui_source
-assert r"return r'${BASH:-bash} --version'" in ui_source
+assert 'return r"${BASH:-bash} --version"' in ui_source
 assert 'shell_version_command()' in ui_source
 assert '"Checking shell version..."' in ui_source
 run_shell_version_body = ui_source.split("def run_shell_version", 1)[1].split("\ndef ", 1)[0]
@@ -1113,7 +1114,9 @@ assert "border:" not in cache_clear_block
 assert "gap:" not in cache_clear_block
 assert "padding: 0 0.12rem" in cache_clear_block
 assert "height: 1.18rem" in cache_clear_block
-assert "var(--hhs-danger)" in cache_clear_block
+assert "var(--hhs-success)" in cache_clear_block
+assert ".hhs-footer-cache-refresh-glyph" in base_css
+assert "font-size: 3em" in base_css
 assert ".hhs-footer-cache-clear-button .hhs-footer-glyph" not in base_css
 assert 'div[role="dialog"]:has(.hhs-shell-version-output)' in base_css
 assert ".hhs-shell-version-output" in base_css
@@ -1648,7 +1651,22 @@ PY
   run grep -q '"home_tools_filter"' "${ui_file}"
   assert_success
 
-  run grep -q 'hhs_ui.LIST_FILTERS' "${ui_file}"
+  run grep -q 'HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Other")' "${constants_file}"
+  assert_success
+
+  run grep -q 'HOME_TOOLS_FILTERS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q 'hhs_ui.HOME_TOOLS_FILTERS' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.FOUR_OPTION_FILTER_COLUMNS' "${ui_file}"
+  assert_success
+
+  run grep -q 'home_tool_is_installed(row)' "${ui_file}"
+  assert_success
+
+  run grep -q 'home_tool_is_not_found(row)' "${ui_file}"
   assert_success
 
   run grep -q '"home_tools_other_filter"' "${ui_file}"
@@ -4023,8 +4041,10 @@ PY
     show_prompt
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}"
   assert_success
-  assert_output --partial '### INSTRUCTIONS ###'
-  assert_output --partial 'You execute inside a bash shell on test'
+  assert_output --partial '### ROLE'
+  assert_output --partial 'Shell: bash'
+  assert_output --partial 'Operating system: test'
+  assert_output --partial 'OS family: Darwin'
   refute_output --partial '${HHS_MY_SHELL}'
   refute_output --partial '${HHS_HOME}'
 
@@ -4182,7 +4202,10 @@ PY
   run grep -q 'Context: ' "${ui_file}"
   assert_success
 
-  run grep -q 'parse_ollama_model_rows(model_output, ollama_model)' "${ui_file}"
+  run grep -q 'parse_rows_cached(' "${ui_file}"
+  assert_success
+
+  run grep -q 'parse_ollama_model_rows(output, ollama_model)' "${ui_file}"
   assert_success
 
   run grep -q 'timing_durations_for_model(model_name)\[-5:\]' "${ui_file}"
@@ -5069,7 +5092,9 @@ for function_name in table_functions:
     body = source.split(f"def {function_name}", 1)[1].split("\ndef ", 1)[0]
     assert "st.error(" not in body, function_name
     assert "if result.returncode != 0:" not in body, function_name
-    assert "if result.returncode == 0 else []" in body, function_name
+    assert "parse_rows_cached(" in body, function_name
+    assert "if result.returncode == 0" in body, function_name
+    assert "else []" in body, function_name
 PY
   assert_success
 
@@ -5478,6 +5503,14 @@ start = source.index("def env_filter_pattern(")
 end = source.index("def parse_hhs_envs(")
 namespace = {
     "re": re,
+    "home_tool_is_installed": lambda row: (
+        "installed" in row.get("Status", "").lower()
+        and "not installed" not in row.get("Status", "").lower()
+    ),
+    "home_tool_is_not_found": lambda row: (
+        "not found" in row.get("Status", "").lower()
+        or "not installed" in row.get("Status", "").lower()
+    ),
     "service_is_up": lambda row: "up" in row.get("Value", "").lower(),
     "service_is_down": lambda row: "down" in row.get("Value", "").lower(),
 }
@@ -5493,6 +5526,16 @@ assert namespace["filter_rows_by_text"](rows, "Other", "post") == [rows[1]]
 assert namespace["filter_service_rows"](rows, "Up", "") == [rows[0]]
 assert namespace["filter_service_rows"](rows, "Down", "") == [rows[1]]
 assert namespace["filter_service_rows"](rows, "Other", "custom") == [rows[2]]
+
+tool_rows = [
+    {"Tool": "git", "Status": "Installed"},
+    {"Tool": "ollama", "Status": "Not Found"},
+    {"Tool": "node", "Status": "Not Installed"},
+]
+assert namespace["filter_tool_rows"](tool_rows, "All", "") == tool_rows
+assert namespace["filter_tool_rows"](tool_rows, "Installed", "") == [tool_rows[0]]
+assert namespace["filter_tool_rows"](tool_rows, "Not Installed", "") == tool_rows[1:]
+assert namespace["filter_tool_rows"](tool_rows, "Other", "node") == [tool_rows[2]]
 PY
   assert_success
 }
