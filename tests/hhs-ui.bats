@@ -786,6 +786,9 @@ PY
   run grep -q 'UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900' "${constants_file}"
   assert_success
 
+  run grep -q 'UI_COMMAND_DEFAULT_TIMEOUT_SECONDS = 60' "${constants_file}"
+  assert_success
+
   run python3 - <<'PY'
 import ast
 from pathlib import Path
@@ -2750,7 +2753,7 @@ PY
   run grep -q 'timeout_seconds: int | None = None' "${ui_file}"
   assert_success
 
-  run grep -q 'effective_timeout = 60' "${ui_file}"
+  run grep -q 'effective_timeout = hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS' "${ui_file}"
   assert_success
 
   run grep -q 'except subprocess.TimeoutExpired' "${ui_file}"

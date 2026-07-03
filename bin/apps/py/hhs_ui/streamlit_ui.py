@@ -174,6 +174,20 @@ SHOPT_DESCRIPTIONS = {
 TableControlsResult = TypeVar("TableControlsResult")
 UI_CACHE_MEMORY: dict[str, dict[str, object]] = {}
 UI_CACHE_MEMORY_MTIME: float | None = None
+HOME_TOOL_ACTION_JOB = "home_tool_action"
+ALIAS_LIST_JOB = "alias_list"
+SERVICE_LIST_JOB = "service_list"
+SERVICE_ACTION_JOB = "service_action"
+MONITOR_CPU_JOB = "monitor_cpu"
+MONITOR_MEM_JOB = "monitor_mem"
+MONITOR_PROCESS_LIST_JOB = "monitor_process_list"
+AI_MODEL_SELECT_JOB = "ai_model_select"
+AI_MODEL_DELETE_JOB = "ai_model_delete"
+UPDATER_UPDATE_JOB = "updater_update"
+UPDATER_CHECK_JOB = "updater_check"
+AI_ASK_JOB = "ai_ask"
+FOOTER_VERSION_JOB = "footer_hhs_version"
+FOOTER_WORKING_DIR_JOB = "footer_working_dir"
 
 
 def file_mtime_token(file_path: Path) -> float:
@@ -608,22 +622,6 @@ def refresh_ai_context() -> None:
     save_ui_state()
 
 
-def refresh_ai_prompt() -> None:
-    """Fetch and store the backend ask prompt for the Context tab."""
-    result = run_hhs_ask_prompt()
-    output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
-    clean_output = strip_ansi(output or "").strip()
-    st.session_state["ai_context_output"] = (
-        clean_output or "No Ollama prompt available."
-    )
-    st.session_state["ai_context_error"] = (
-        ""
-        if result.returncode == 0
-        else clean_output or "Unable to load Ollama prompt."
-    )
-    save_ui_state()
-
-
 def refresh_ai_prompt_file() -> None:
     """Fetch and store the editable backend ask prompt file for the Prompt panel."""
     result = run_hhs_ask_prompt_file()
@@ -744,36 +742,52 @@ def confirm_ai_model_selection() -> None:
 
 
 def execute_pending_ai_model_selection() -> None:
-    """Execute the pending Ollama model selection after dialogs are closed."""
-    pending = st.session_state.get("ai_model_select_execute_pending") or {}
+    """Start or complete the pending Ollama model selection."""
+    pending = st.session_state.pop("ai_model_select_execute_pending", None) or {}
     new_model = str(pending.get("new", "")).strip()
     model_status = str(pending.get("status", "")).strip()
     if new_model:
         loader_message = (
             "Downloading model..." if not model_status else "Selecting Ollama model..."
         )
-        result = run_hhs_ask_select_model(new_model, loader_message, close_dialogs=True)
-        status_message = clean_command_status_message(
-            result.stdout or result.stderr or ""
+        started = start_background_bash_command(
+            AI_MODEL_SELECT_JOB,
+            build_hhs_ask_select_model_command(new_model),
+            loader_message.rstrip("."),
+            hhs_ui_constants.UI_COMMAND_MODEL_DOWNLOAD_TIMEOUT_SECONDS,
+            metadata={"new_model": new_model, "model_status": model_status},
         )
-        if result.returncode != 0:
-            st.session_state["ai_model_select_error"] = strip_ansi(
-                status_message or "Unable to select model."
-            )
+        if started:
             push_floating_status(
-                st.session_state["ai_model_select_error"],
-                "error",
+                f"{loader_message.rstrip('.')} started: {new_model}", "info"
             )
         else:
-            st.session_state["ai_model_select_error"] = ""
-            cache_delete_tag("ai_models")
-            cache_delete_tag("ai")
-            refresh_ai_model_listing()
-            reset_ai_model_table_selection()
-            push_floating_status(
-                status_message or f"Selected AI model: {new_model}", "info"
-            )
-    st.session_state["ai_model_select_execute_pending"] = None
+            push_floating_status("Another AI model change is already running.", "warn")
+
+    completed = background_job_result(AI_MODEL_SELECT_JOB)
+    if completed is None:
+        save_ui_state()
+        return
+
+    result, metadata = completed
+    new_model = str(metadata.get("new_model", new_model)).strip()
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+    if result.returncode != 0:
+        st.session_state["ai_model_select_error"] = strip_ansi(
+            status_message or "Unable to select model."
+        )
+        push_floating_status(
+            st.session_state["ai_model_select_error"],
+            "error",
+        )
+    else:
+        st.session_state["ai_model_select_error"] = ""
+        cache_delete_tag("ai_models")
+        cache_delete_tag("ai")
+        reset_ai_model_table_selection()
+        push_floating_status(
+            status_message or f"Selected AI model: {new_model}", "info"
+        )
     save_ui_state()
 
 
@@ -800,64 +814,139 @@ def confirm_ai_model_deletion() -> None:
 
 
 def execute_pending_ai_model_deletion() -> None:
-    """Execute the pending Ollama model deletion after dialogs are closed."""
-    pending = st.session_state.get("ai_model_delete_execute_pending") or {}
+    """Start or complete the pending Ollama model deletion flow."""
+    pending = st.session_state.pop("ai_model_delete_execute_pending", None) or {}
     if isinstance(pending, str):
         pending = {"name": pending, "status": ""}
     model_name = str(pending.get("name", "")).strip()
     model_status = str(pending.get("status", "")).strip()
     if model_name:
-        result = run_ollama_delete_model(model_name, close_dialogs=True)
-        status_message = clean_command_status_message(
-            result.stdout or result.stderr or ""
+        started = start_background_bash_command(
+            AI_MODEL_DELETE_JOB,
+            build_ollama_delete_model_command(model_name),
+            "Deleting Ollama model",
+            hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+            metadata={
+                "phase": "delete",
+                "model_name": model_name,
+                "model_status": model_status,
+            },
         )
-        if result.returncode != 0:
-            st.session_state["ai_model_delete_error"] = strip_ansi(
-                status_message or "Unable to delete model."
-            )
-            push_floating_status(
-                st.session_state["ai_model_delete_error"],
-                "error",
-            )
+        if started:
+            push_floating_status(f"Deleting AI model: {model_name}", "info")
         else:
-            st.session_state["ai_model_delete_error"] = ""
-            cache_delete_tag("ai_models")
-            cache_delete_tag("ai")
-            model_result = refresh_ai_model_listing()
-            push_floating_status(
-                status_message or f"Deleted AI model: {model_name}", "info"
-            )
-            if model_status == "Active":
-                fallback_model = first_downloaded_ollama_model(
-                    model_result.stdout, excluded_model=model_name
-                )
-                if fallback_model:
-                    fallback_result = run_hhs_ask_select_model(
-                        fallback_model, close_dialogs=True
-                    )
-                    fallback_status = strip_ansi(
-                        fallback_result.stdout or fallback_result.stderr or ""
-                    ).strip()
-                    if fallback_result.returncode != 0:
-                        st.session_state["ai_model_delete_error"] = strip_ansi(
-                            fallback_status or "Unable to select fallback model."
-                        )
-                        push_floating_status(
-                            st.session_state["ai_model_delete_error"],
-                            "error",
-                        )
-                    else:
-                        cache_delete_tag("ai_models")
-                        cache_delete_tag("ai")
-                        refresh_ai_model_listing()
-                        push_floating_status(
-                            fallback_status
-                            or f"Selected fallback AI model: {fallback_model}",
-                            "info",
-                        )
-            reset_ai_model_table_selection()
-    st.session_state["ai_model_delete_execute_pending"] = None
+            st.session_state["ai_model_delete_execute_pending"] = pending
+            push_floating_status("Another AI model deletion is already running.", "warn")
+
+    completed = background_job_result(AI_MODEL_DELETE_JOB)
+    if completed is None:
+        save_ui_state()
+        return
+
+    result, metadata = completed
+    phase = str(metadata.get("phase", "delete"))
+    model_name = str(metadata.get("model_name", model_name)).strip()
+    model_status = str(metadata.get("model_status", model_status)).strip()
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+
+    if phase == "delete":
+        complete_ai_model_delete_phase(result, model_name, model_status, status_message)
+    elif phase == "fallback_list":
+        complete_ai_model_delete_fallback_list_phase(result, model_name)
+    elif phase == "fallback_select":
+        fallback_model = str(metadata.get("fallback_model", "")).strip()
+        complete_ai_model_delete_fallback_select_phase(
+            result, fallback_model, status_message
+        )
     save_ui_state()
+
+
+def complete_ai_model_delete_phase(
+    result: subprocess.CompletedProcess[str],
+    model_name: str,
+    model_status: str,
+    status_message: str,
+) -> None:
+    """Complete the Ollama model deletion phase and start fallback discovery."""
+    if result.returncode != 0:
+        st.session_state["ai_model_delete_error"] = strip_ansi(
+            status_message or "Unable to delete model."
+        )
+        push_floating_status(st.session_state["ai_model_delete_error"], "error")
+        return
+
+    st.session_state["ai_model_delete_error"] = ""
+    cache_delete_tag("ai_models")
+    cache_delete_tag("ai")
+    reset_ai_model_table_selection()
+    push_floating_status(status_message or f"Deleted AI model: {model_name}", "info")
+    if model_status != "Active":
+        return
+
+    start_background_bash_command(
+        AI_MODEL_DELETE_JOB,
+        build_hhs_ask_models_command(),
+        "Loading fallback Ollama model",
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        metadata={"phase": "fallback_list", "model_name": model_name},
+    )
+
+
+def complete_ai_model_delete_fallback_list_phase(
+    result: subprocess.CompletedProcess[str], model_name: str
+) -> None:
+    """Complete fallback model discovery after deleting an active model."""
+    if result.returncode != 0:
+        st.session_state["ai_model_delete_error"] = strip_ansi(
+            result.stderr or result.stdout or "Unable to list fallback Ollama models."
+        )
+        push_floating_status(st.session_state["ai_model_delete_error"], "error")
+        return
+
+    cache_background_command_result(
+        {
+            **background_command_metadata(build_hhs_ask_models_command(), "ai_models"),
+            "ttl_seconds": hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        },
+        result,
+    )
+    fallback_model = first_downloaded_ollama_model(
+        result.stdout, excluded_model=model_name
+    )
+    if not fallback_model:
+        return
+    start_background_bash_command(
+        AI_MODEL_DELETE_JOB,
+        build_hhs_ask_select_model_command(fallback_model),
+        "Selecting fallback Ollama model",
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        metadata={
+            "phase": "fallback_select",
+            "model_name": model_name,
+            "fallback_model": fallback_model,
+        },
+    )
+
+
+def complete_ai_model_delete_fallback_select_phase(
+    result: subprocess.CompletedProcess[str],
+    fallback_model: str,
+    status_message: str,
+) -> None:
+    """Complete fallback model selection after deleting the active model."""
+    if result.returncode != 0:
+        st.session_state["ai_model_delete_error"] = strip_ansi(
+            status_message or "Unable to select fallback model."
+        )
+        push_floating_status(st.session_state["ai_model_delete_error"], "error")
+        return
+
+    cache_delete_tag("ai_models")
+    cache_delete_tag("ai")
+    push_floating_status(
+        status_message or f"Selected fallback AI model: {fallback_model}",
+        "info",
+    )
 
 
 def render_sidebar() -> None:
@@ -969,6 +1058,27 @@ def render_sidebar() -> None:
                 width="stretch",
             )
             render_sidebar_terminal_button()
+
+
+def command_loader_html(message: str) -> str:
+    """Return reusable banner loader markup for command-data waits."""
+    safe_message = html.escape(message.strip() or "Loading...")
+    return f"""
+    <div class="hhs-command-loader" role="status" aria-live="polite">
+      <span class="hhs-command-loader-spinner" aria-hidden="true"></span>
+      <span class="hhs-command-loader-copy">
+        <span class="hhs-command-loader-label">{safe_message}</span>
+        <span class="hhs-command-loader-track" aria-hidden="true">
+          <span class="hhs-command-loader-bar"></span>
+        </span>
+      </span>
+    </div>
+    """
+
+
+def render_command_loader(message: str) -> None:
+    """Render the reusable banner loader for command-data waits."""
+    st.markdown(command_loader_html(message), unsafe_allow_html=True)
 
 
 def render_preloader(message: str = "Loading...", transient: bool = True) -> None:
@@ -1399,13 +1509,28 @@ def render_folder_picker_dialog() -> bool:
 
 def homesetup_version() -> str:
     """Return the cached HomeSetup product version from the shell environment."""
-    refresh_cache = not bool(st.session_state.get("footer_hhs_version_cache_loaded"))
-    result = run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)
-    st.session_state["footer_hhs_version_cache_loaded"] = True
-    if result.returncode == 0:
+    command = build_hhs_envs_command("^HHS_VERSION$")
+    complete_cached_background_command(
+        FOOTER_VERSION_JOB,
+        "footer_hhs_version_error",
+        "Unable to load HomeSetup version.",
+    )
+    result, fresh_cache = cached_background_command_result(command, "env")
+    if result is not None and result.returncode == 0:
+        st.session_state["footer_hhs_version_cache_loaded"] = True
         for row in parse_hhs_envs(result.stdout):
             if row["Name"] == "HHS_VERSION" and row["Value"]:
                 return row["Value"]
+
+    if not fresh_cache and not background_job_is_running(FOOTER_VERSION_JOB):
+        start_cached_background_command(
+            FOOTER_VERSION_JOB,
+            command,
+            "Loading HomeSetup version",
+            "env",
+            hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+            hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        )
     return os.environ.get("HHS_VERSION", "unknown")
 
 
@@ -1902,19 +2027,9 @@ def render_footer_shell_version_dialog() -> bool:
 
 def handle_footer_actions() -> None:
     """Run footer actions requested through Streamlit query parameters."""
-    if query_param_requested(hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM):
-        remove_query_param(hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM)
-        clear_footer_shell_version_dialog()
-        result = run_shell_version()
-        output = strip_ansi(result.stdout or result.stderr or "").strip()
-        st.session_state["footer_shell_version_output"] = (
-            output or "bash --version returned no output."
-        )
-        st.session_state["footer_shell_version_dialog_title"] = "Shell version"
-
-    if query_param_requested(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM):
-        remove_query_param(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM)
-        result = run_hhs_updater_update()
+    updater_completed = background_job_result(UPDATER_UPDATE_JOB)
+    if updater_completed is not None:
+        result, _metadata = updater_completed
         output = strip_ansi(result.stdout or result.stderr or "").strip()
         if result.returncode != 0:
             message = output or "Unable to update HomeSetup."
@@ -1930,6 +2045,30 @@ def handle_footer_actions() -> None:
             st.session_state["footer_hhs_version_cache_loaded"] = False
             save_ui_state()
             push_floating_status("HomeSetup update command completed.", "info")
+
+    if query_param_requested(hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM):
+        remove_query_param(hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM)
+        clear_footer_shell_version_dialog()
+        result = run_shell_version()
+        output = strip_ansi(result.stdout or result.stderr or "").strip()
+        st.session_state["footer_shell_version_output"] = (
+            output or "bash --version returned no output."
+        )
+        st.session_state["footer_shell_version_dialog_title"] = "Shell version"
+
+    if query_param_requested(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM):
+        remove_query_param(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM)
+        if background_job_is_running(UPDATER_UPDATE_JOB):
+            push_floating_status("HomeSetup update is already running.", "warn")
+        else:
+            start_background_bash_command(
+                UPDATER_UPDATE_JOB,
+                build_hhs_updater_command("update"),
+                "Updating HomeSetup",
+                600,
+                force_local=True,
+            )
+            push_floating_status("HomeSetup update started.", "info")
 
     if query_param_requested(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM)
@@ -1979,7 +2118,16 @@ def home_view_label(home_view: str) -> str:
 
 def render_home_system_panel() -> None:
     """Render system information on the Home view."""
-    result = run_hhs_sysinfo()
+    result = render_cached_command_result(
+        build_hhs_sysinfo_command(),
+        "Loading system information",
+        "system",
+        hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        "Unable to load system information.",
+    )
+    if result is None:
+        return
     if result.returncode != 0:
         st.error(result.stderr or "Unable to load system information.")
         return
@@ -1988,14 +2136,44 @@ def render_home_system_panel() -> None:
 
 def render_home_docker_panel() -> None:
     """Render Docker container and image listings on the Home view."""
-    if not docker_agent_is_running():
+    agent_result = render_cached_command_result(
+        build_docker_agent_check_command(),
+        "Checking Docker agent",
+        "docker",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        2,
+        "Unable to check Docker agent.",
+    )
+    if agent_result is None:
+        return
+    if agent_result.returncode != 0:
         render_docker_agent_required_view()
+        return
+    containers_result = render_cached_command_result(
+        build_docker_ps_command(),
+        "Loading Docker containers",
+        "docker",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        10,
+        "Unable to load Docker containers.",
+    )
+    if containers_result is None:
+        return
+    images_result = render_cached_command_result(
+        build_docker_images_command(),
+        "Loading Docker images",
+        "docker",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        10,
+        "Unable to load Docker images.",
+    )
+    if images_result is None:
         return
     with st.container(key="home_docker_panel"):
         with st.expander("All Containers", expanded=True):
-            render_docker_container_table(run_docker_ps())
+            render_docker_container_table(containers_result)
         with st.expander("Available Images", expanded=True):
-            render_docker_image_table(run_docker_images())
+            render_docker_image_table(images_result)
 
 
 def render_docker_agent_required_view() -> None:
@@ -2784,11 +2962,12 @@ def render_table_filter_controls(
     )
     with filter_col:
         selected_filter = st.radio(
-            "Filters",
+            "Table filter",
             options,
             horizontal=True,
             index=index,
             key=key,
+            label_visibility="collapsed",
             on_change=handle_monitor_disk_top_n_change,
         )
 
@@ -2965,8 +3144,18 @@ def render_home_tools_panel() -> None:
     home_tool_action_dialog_opened = render_home_tool_action_dialog()
     if not home_tool_action_dialog_opened:
         render_home_tool_tldr_dialog()
+    render_background_job_status(HOME_TOOL_ACTION_JOB)
 
-    result = run_hhs_tools()
+    result = render_cached_command_result(
+        build_hhs_tools_command(),
+        "Loading tool checks",
+        "tools",
+        hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        "Unable to load tool checks.",
+    )
+    if result is None:
+        return
     if result.returncode != 0:
         st.error(result.stderr or result.stdout or "Unable to load tool checks.")
         return
@@ -3028,7 +3217,16 @@ def render_home_tools_panel() -> None:
 
 def render_home_shopts_panel() -> None:
     """Render shell options on the Home view."""
-    result = run_hhs_shopt()
+    result = render_cached_command_result(
+        build_hhs_shopt_command(),
+        "Loading shell options",
+        "shopt",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load shell options.",
+    )
+    if result is None:
+        return
     if result.returncode != 0:
         st.error(result.stderr or result.stdout or "Unable to load shell options.")
         return
@@ -4140,13 +4338,24 @@ def store_updater_check_result(result: subprocess.CompletedProcess[str]) -> None
 
 
 def execute_due_updater_check() -> None:
-    """Run the updater check once when the persisted check state is stale."""
+    """Start or complete the updater check when persisted check state is stale."""
+    completed = background_job_result(UPDATER_CHECK_JOB)
+    if completed is not None:
+        result, _metadata = completed
+        store_updater_check_result(result)
+
     if bool(st.session_state.get("updater_check_attempted", False)):
         return
     if not updater_check_due():
         return
     st.session_state["updater_check_attempted"] = True
-    store_updater_check_result(run_hhs_updater_check())
+    start_background_bash_command(
+        UPDATER_CHECK_JOB,
+        build_hhs_updater_command("check"),
+        "Checking HomeSetup updates",
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        force_local=True,
+    )
 
 
 def overlaps_existing_range(
@@ -5655,16 +5864,15 @@ def run_bash_command(
     force_local: bool = False,
     timeout_seconds: int | None = None,
     cache_tag: str = "default",
-    show_overlay: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run a Bash command with tagged command-result caching and a preloader."""
     remote_host = command_remote_host(force_local=force_local)
     command_to_run = effective_bash_command(command, force_local=force_local)
     selection_only_rerun = table_selection_rerun_in_progress()
-    show_command_overlay = show_overlay and not selection_only_rerun
+    show_command_overlay = not selection_only_rerun
     effective_timeout = timeout_seconds
-    if effective_timeout is None and command_to_run != command:
-        effective_timeout = 60
+    if effective_timeout is None:
+        effective_timeout = hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS
     cache_key = command_cache_key(command_to_run, cache_tag)
     snapshot_value = command_result_snapshot_get(cache_key) if selection_only_rerun else None
     if snapshot_value is not None:
@@ -5727,6 +5935,7 @@ def run_bash_subprocess(
     """Run a Bash command and kill the whole process group on timeout."""
     process = subprocess.Popen(
         [RUN_SHELL, "-lc", command],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=command_env(),
@@ -5755,6 +5964,182 @@ def run_bash_subprocess(
             stdout or "",
             stderr or timeout_message,
         )
+
+
+def background_job_state_key(job_name: str) -> str:
+    """Return the Streamlit session key used for a background command job."""
+    safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", job_name.strip())
+    return f"_hhs_background_job_{safe_name or 'job'}"
+
+
+def background_job_state(job_name: str) -> dict[str, object] | None:
+    """Return the stored background job state for a named job."""
+    value = st.session_state.get(background_job_state_key(job_name))
+    return value if isinstance(value, dict) else None
+
+
+def background_job_process(job: dict[str, object]) -> subprocess.Popen[str] | None:
+    """Return the Popen object stored on a background job state."""
+    process = job.get("process")
+    return process if isinstance(process, subprocess.Popen) else None
+
+
+def background_job_is_running(job_name: str) -> bool:
+    """Return whether the named background job still has a live subprocess."""
+    job = background_job_state(job_name)
+    process = background_job_process(job) if job else None
+    return bool(process is not None and process.poll() is None)
+
+
+def background_job_elapsed_seconds(job: dict[str, object]) -> float:
+    """Return the elapsed runtime for a background command job."""
+    try:
+        started_at = float(job.get("started_at", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        started_at = 0.0
+    return max(0.0, time.time() - started_at) if started_at else 0.0
+
+
+def start_background_bash_command(
+    job_name: str,
+    command: str,
+    description: str,
+    timeout_seconds: int,
+    force_local: bool = False,
+    metadata: dict[str, object] | None = None,
+) -> bool:
+    """Start a Bash command in the background and store its process state."""
+    if background_job_is_running(job_name):
+        return False
+
+    stdout_file = tempfile.NamedTemporaryFile(
+        "w", delete=False, prefix=f"{job_name}-stdout-", encoding="utf-8"
+    )
+    stderr_file = tempfile.NamedTemporaryFile(
+        "w", delete=False, prefix=f"{job_name}-stderr-", encoding="utf-8"
+    )
+    stdout_path = stdout_file.name
+    stderr_path = stderr_file.name
+    stdout_file.close()
+    stderr_file.close()
+
+    remote_host = command_remote_host(force_local=force_local)
+    command_to_run = effective_bash_command(command, force_local=force_local)
+    stdout_handle = Path(stdout_path).open("w", encoding="utf-8")
+    stderr_handle = Path(stderr_path).open("w", encoding="utf-8")
+    try:
+        process = subprocess.Popen(
+            [RUN_SHELL, "-lc", command_to_run],
+            stdin=subprocess.DEVNULL,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+            env=command_env(),
+            text=True,
+            start_new_session=True,
+        )
+    finally:
+        stdout_handle.close()
+        stderr_handle.close()
+
+    st.session_state[background_job_state_key(job_name)] = {
+        "process": process,
+        "command": command_to_run,
+        "description": description,
+        "remote_host": remote_host,
+        "stdout_path": stdout_path,
+        "stderr_path": stderr_path,
+        "started_at": time.time(),
+        "timeout_seconds": timeout_seconds,
+        "metadata": metadata or {},
+    }
+    return True
+
+
+def read_background_job_file(job: dict[str, object], key: str) -> str:
+    """Return the captured output text for one background job output file."""
+    raw_path = str(job.get(key, ""))
+    if not raw_path:
+        return ""
+    file_path = Path(raw_path)
+    try:
+        return file_path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def cleanup_background_job_files(job: dict[str, object]) -> None:
+    """Remove temporary output files owned by a background command job."""
+    for key in ("stdout_path", "stderr_path"):
+        raw_path = str(job.get(key, ""))
+        if not raw_path:
+            continue
+        file_path = Path(raw_path)
+        try:
+            file_path.unlink(missing_ok=True)
+        except OSError:
+            continue
+
+
+def background_job_result(
+    job_name: str,
+) -> tuple[subprocess.CompletedProcess[str], dict[str, object]] | None:
+    """Return a completed background job result, or None while it is running."""
+    job_key = background_job_state_key(job_name)
+    job = background_job_state(job_name)
+    if job is None:
+        return None
+
+    process = background_job_process(job)
+    if process is None:
+        st.session_state.pop(job_key, None)
+        cleanup_background_job_files(job)
+        return None
+
+    try:
+        timeout_seconds = float(job.get("timeout_seconds", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        timeout_seconds = 0.0
+    if process.poll() is None and timeout_seconds > 0:
+        if background_job_elapsed_seconds(job) >= timeout_seconds:
+            stop_process(process)
+
+    if process.poll() is None:
+        return None
+
+    stdout = read_background_job_file(job, "stdout_path")
+    stderr = read_background_job_file(job, "stderr_path")
+    returncode = int(process.returncode or 0)
+    if timeout_seconds > 0 and background_job_elapsed_seconds(job) >= timeout_seconds:
+        if returncode != 0:
+            returncode = 124
+    if returncode == 124 and not stderr:
+        stderr = f"Command timed out after {int(timeout_seconds)} seconds."
+    command = str(job.get("command", ""))
+    result = subprocess.CompletedProcess(
+        [RUN_SHELL, "-lc", command],
+        returncode,
+        stdout,
+        stderr,
+    )
+    remote_host = str(job.get("remote_host", ""))
+    result = sanitize_remote_command_result(remote_host, result)
+    st.session_state.pop(job_key, None)
+    cleanup_background_job_files(job)
+    metadata = job.get("metadata")
+    return result, metadata if isinstance(metadata, dict) else {}
+
+
+@st.fragment(run_every="2s")
+def render_background_job_status(job_name: str, message: str = "") -> None:
+    """Render and poll a compact status line for a background command."""
+    job = background_job_state(job_name)
+    if not job:
+        return
+    if not background_job_is_running(job_name):
+        st.rerun()
+        return
+    description = message.strip() or str(job.get("description", "Command")).strip()
+    render_command_loader(description or "Command running...")
 
 
 def load_ui_cache() -> dict[str, dict[str, object]]:
@@ -6015,6 +6400,281 @@ def command_cache_key(command: str, cache_tag: str = "default") -> str:
     return f"command_tag:{safe_cache_tag(cache_tag)}:{command_hash}"
 
 
+def cached_background_command_result(
+    command: str, cache_tag: str, force_local: bool = False
+) -> tuple[subprocess.CompletedProcess[str] | None, bool]:
+    """Return a cached command result and whether it came from fresh cache."""
+    command_to_run = effective_bash_command(command, force_local=force_local)
+    remote_host = command_remote_host(force_local=force_local)
+    cache_key = command_cache_key(command_to_run, cache_tag)
+    cached_value = cache_get(cache_key)
+    fresh_cache = cached_value is not None
+    if cached_value is None:
+        cached_value = command_result_snapshot_get(cache_key)
+    if cached_value is None:
+        return None, False
+    command_result_snapshot_set(cache_key, cached_value)
+    result = sanitize_remote_command_result(
+        remote_host, completed_process_from_cache(command_to_run, cached_value)
+    )
+    return result, fresh_cache
+
+
+def background_command_metadata(
+    command: str, cache_tag: str, force_local: bool = False
+) -> dict[str, object]:
+    """Return metadata needed to cache a background command result."""
+    command_to_run = effective_bash_command(command, force_local=force_local)
+    return {
+        "command_to_run": command_to_run,
+        "remote_host": command_remote_host(force_local=force_local),
+        "cache_key": command_cache_key(command_to_run, cache_tag),
+        "cache_tag": cache_tag,
+    }
+
+
+def cache_background_command_result(
+    metadata: dict[str, object],
+    result: subprocess.CompletedProcess[str],
+) -> None:
+    """Store a completed background command result in snapshot and UI caches."""
+    cache_key = str(metadata.get("cache_key", "")).strip()
+    if not cache_key or ssh_shared_connection_closed(result):
+        return
+    cached_value = cache_value_from_completed_process(result)
+    command_result_snapshot_set(cache_key, cached_value)
+    ttl_seconds = int(
+        metadata.get("ttl_seconds", hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS)
+        or hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS
+    )
+    cache_set(cache_key, cached_value, ttl_seconds)
+
+
+def start_cached_background_command(
+    job_name: str,
+    command: str,
+    description: str,
+    cache_tag: str,
+    ttl_seconds: int,
+    timeout_seconds: int,
+    force_local: bool = False,
+) -> bool:
+    """Start a background command that will be written to command-result cache."""
+    metadata = {
+        **background_command_metadata(command, cache_tag, force_local=force_local),
+        "ttl_seconds": ttl_seconds,
+    }
+    return start_background_bash_command(
+        job_name,
+        command,
+        description,
+        timeout_seconds,
+        force_local=force_local,
+        metadata=metadata,
+    )
+
+
+def complete_cached_background_command(
+    job_name: str, error_state_key: str, fallback_error: str
+) -> subprocess.CompletedProcess[str] | None:
+    """Complete a cached background command and store its latest output."""
+    completed = background_job_result(job_name)
+    if completed is None:
+        return None
+    result, metadata = completed
+    if result.returncode == 0:
+        cache_background_command_result(metadata, result)
+        st.session_state[error_state_key] = ""
+    else:
+        st.session_state[error_state_key] = strip_ansi(
+            result.stderr or result.stdout or fallback_error
+        )
+    return result
+
+
+def cached_command_job_name(command: str, cache_tag: str) -> str:
+    """Return a stable background job name for a cached page-load command."""
+    command_hash = hashlib.sha256(command.encode("utf-8")).hexdigest()[:16]
+    return f"cached_{safe_cache_tag(cache_tag)}_{command_hash}"
+
+
+def cached_command_error_key(job_name: str) -> str:
+    """Return the session key used for cached command load errors."""
+    return f"_hhs_cached_command_error_{job_name}"
+
+
+def render_cached_command_result(
+    command: str,
+    description: str,
+    cache_tag: str,
+    ttl_seconds: int,
+    timeout_seconds: int,
+    fallback_error: str,
+    force_local: bool = False,
+) -> subprocess.CompletedProcess[str] | None:
+    """Render one banner while a page-load command refreshes in the background."""
+    job_name = cached_command_job_name(command, cache_tag)
+    error_key = cached_command_error_key(job_name)
+    complete_cached_background_command(job_name, error_key, fallback_error)
+    result, fresh_cache = cached_background_command_result(
+        command, cache_tag, force_local=force_local
+    )
+    if not fresh_cache and not background_job_is_running(job_name):
+        start_cached_background_command(
+            job_name,
+            command,
+            description,
+            cache_tag,
+            ttl_seconds,
+            timeout_seconds,
+            force_local=force_local,
+        )
+    command_running = background_job_is_running(job_name)
+    render_background_job_status(job_name)
+    if command_running and not fresh_cache:
+        return None
+    if result is not None:
+        return result
+    command_error = str(st.session_state.get(error_key, "")).strip()
+    if command_error:
+        st.error(command_error)
+    elif not command_running:
+        render_command_loader(description)
+    return None
+
+
+def cached_aliases_result() -> tuple[subprocess.CompletedProcess[str] | None, bool]:
+    """Return a cached aliases list result."""
+    return cached_background_command_result(build_hhs_aliases_command(), "aliases")
+
+
+def start_aliases_list_refresh() -> bool:
+    """Start a background refresh for the aliases list."""
+    return start_cached_background_command(
+        ALIAS_LIST_JOB,
+        build_hhs_aliases_command(),
+        "Loading custom aliases",
+        "aliases",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+    )
+
+
+def complete_aliases_list_refresh() -> subprocess.CompletedProcess[str] | None:
+    """Complete a background refresh for the aliases list."""
+    return complete_cached_background_command(
+        ALIAS_LIST_JOB,
+        "alias_list_error",
+        "Unable to load aliases.",
+    )
+
+
+def hhs_services_command_context() -> tuple[str, str, str, str]:
+    """Return the service-list command, effective command, host, and cache key."""
+    command = build_hhs_services_command()
+    command_to_run = effective_bash_command(command)
+    remote_host = command_remote_host()
+    cache_key = command_cache_key(command_to_run, "services")
+    return command, command_to_run, remote_host, cache_key
+
+
+def cached_hhs_services_result() -> tuple[subprocess.CompletedProcess[str] | None, bool]:
+    """Return a cached service-list result and whether it came from fresh cache."""
+    command, _command_to_run, _remote_host, _cache_key = hhs_services_command_context()
+    return cached_background_command_result(command, "services")
+
+
+def start_hhs_services_list_refresh() -> bool:
+    """Start a background refresh for the services list."""
+    command, _command_to_run, _remote_host, _cache_key = hhs_services_command_context()
+    return start_cached_background_command(
+        SERVICE_LIST_JOB,
+        command,
+        "Loading services",
+        "services",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+    )
+
+
+def complete_hhs_services_list_refresh() -> subprocess.CompletedProcess[str] | None:
+    """Complete a background services-list refresh and cache successful output."""
+    return complete_cached_background_command(
+        SERVICE_LIST_JOB,
+        "service_list_error",
+        "Unable to list services.",
+    )
+
+
+def monitor_metric_job_name(metric: str) -> str:
+    """Return the background job name for a process metric chart."""
+    return MONITOR_MEM_JOB if metric == "MEM" else MONITOR_CPU_JOB
+
+
+def monitor_metric_command(metric: str) -> str:
+    """Return the command used to load one process monitor metric."""
+    return build_process_monitor_command(metric)
+
+
+def cached_monitor_metric_result(
+    metric: str,
+) -> tuple[subprocess.CompletedProcess[str] | None, bool]:
+    """Return a cached process monitor metric result."""
+    return cached_background_command_result(
+        monitor_metric_command(metric), "monitor_process"
+    )
+
+
+def start_monitor_metric_refresh(metric: str) -> bool:
+    """Start a background refresh for a process monitor metric."""
+    title = "memory" if metric == "MEM" else "CPU"
+    return start_cached_background_command(
+        monitor_metric_job_name(metric),
+        monitor_metric_command(metric),
+        f"Loading {title} usage",
+        "monitor_process",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+    )
+
+
+def complete_monitor_metric_refresh(metric: str) -> subprocess.CompletedProcess[str] | None:
+    """Complete a background refresh for a process monitor metric."""
+    return complete_cached_background_command(
+        monitor_metric_job_name(metric),
+        f"monitor_{metric.lower()}_error",
+        f"Unable to load {metric.lower()} usage.",
+    )
+
+
+def cached_monitor_process_list_result() -> tuple[subprocess.CompletedProcess[str] | None, bool]:
+    """Return a cached process list result."""
+    return cached_background_command_result(
+        build_hhs_process_list_command("."), "monitor_process"
+    )
+
+
+def start_monitor_process_list_refresh() -> bool:
+    """Start a background refresh for the monitor process list."""
+    return start_cached_background_command(
+        MONITOR_PROCESS_LIST_JOB,
+        build_hhs_process_list_command("."),
+        "Loading processes",
+        "monitor_process",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+    )
+
+
+def complete_monitor_process_list_refresh() -> subprocess.CompletedProcess[str] | None:
+    """Complete a background refresh for the monitor process list."""
+    return complete_cached_background_command(
+        MONITOR_PROCESS_LIST_JOB,
+        "monitor_process_list_error",
+        "Unable to load processes.",
+    )
+
+
 def build_hhs_envs_command(prefix_filter: str | None) -> str:
     """Build the Bash command used to run the __hhs_envs HomeSetup function."""
     filter_arg = f' "{prefix_filter}"' if prefix_filter else ""
@@ -6153,18 +6813,38 @@ def parse_footer_working_directory_output(output: str) -> str:
 
 
 def update_remote_footer_working_directory() -> None:
-    """Capture the connected SSH host working directory for footer rendering."""
-    result = run_footer_working_directory()
-    output = parse_footer_working_directory_output(result.stdout or "")
-    if output:
-        st.session_state[hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY] = output
-    else:
+    """Start a background refresh of the connected SSH host working directory."""
+    complete_remote_footer_working_directory_refresh()
+    if not connected_ssh_host():
         st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
+        return
+    if background_job_is_running(FOOTER_WORKING_DIR_JOB):
+        return
+    start_background_bash_command(
+        FOOTER_WORKING_DIR_JOB,
+        build_footer_working_directory_command(),
+        "Loading remote working dir",
+        10,
+    )
+
+
+def complete_remote_footer_working_directory_refresh() -> None:
+    """Store a completed remote footer working-directory refresh."""
+    completed = background_job_result(FOOTER_WORKING_DIR_JOB)
+    if completed is None:
+        return
+    result, _metadata = completed
+    output = parse_footer_working_directory_output(result.stdout or "")
+    if result.returncode == 0 and output:
+        st.session_state[hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY] = output
+        return
+    st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
 
 
 def footer_working_directory() -> str:
     """Return the footer working directory from state or the local process cwd."""
     sync_ttyd_event_state()
+    complete_remote_footer_working_directory_refresh()
     if str(st.session_state.get("ssh_connection_status", "")).strip() == "connected":
         remote_cwd = str(st.session_state.get(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, "")).strip()
         if remote_cwd:
@@ -6174,32 +6854,6 @@ def footer_working_directory() -> str:
         if local_cwd:
             return local_cwd
     return os.getcwd()
-
-
-def run_hhs_updater_check() -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup updater check command locally."""
-    return run_bash_command(
-        build_hhs_updater_command("check"),
-        "Checking HomeSetup updates...",
-        ttl_seconds=0,
-        use_cache=False,
-        force_local=True,
-        timeout_seconds=45,
-        cache_tag="updater",
-    )
-
-
-def run_hhs_updater_update() -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup updater update command locally."""
-    return run_bash_command(
-        build_hhs_updater_command("update"),
-        "Updating HomeSetup...",
-        ttl_seconds=0,
-        use_cache=False,
-        force_local=True,
-        timeout_seconds=600,
-        cache_tag="updater",
-    )
 
 
 def build_hhs_tools_command() -> str:
@@ -6489,11 +7143,6 @@ def build_hhs_ask_context_command() -> str:
     return build_hhs_ask_execute_command(["-c"])
 
 
-def build_hhs_ask_prompt_command() -> str:
-    """Build the Bash command used to show the main Ollama ask prompt."""
-    return build_hhs_ask_execute_command(["-p"])
-
-
 def build_hhs_ask_prompt_file_command() -> str:
     """Build the Bash command used to read the editable Ollama ask prompt file."""
     return build_hhs_ask_plugin_command(
@@ -6686,20 +7335,6 @@ def build_hhs_services_command(
     )
 
 
-def run_hhs_envs(
-    prefix_filter: str | None, refresh_cache: bool = False
-) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_envs HomeSetup function and return the completed process."""
-    command = build_hhs_envs_command(prefix_filter)
-    if refresh_cache:
-        cache_delete_command(command, "env")
-    return run_bash_command(
-        command,
-        "Loading environment variables...",
-        cache_tag="env",
-    )
-
-
 def run_hhs_env_action(
     operation: str, name: str, value: str = ""
 ) -> subprocess.CompletedProcess[str]:
@@ -6710,36 +7345,6 @@ def run_hhs_env_action(
         ttl_seconds=0,
         use_cache=False,
         cache_tag="env",
-    )
-
-
-def run_hhs_sysinfo() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_sysinfo HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_sysinfo_command(),
-        "Loading system information...",
-        ttl_seconds=hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
-        cache_tag="system",
-    )
-
-
-def run_hhs_tools() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_tools HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_tools_command(),
-        "Loading tool checks...",
-        ttl_seconds=hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
-        cache_tag="tools",
-    )
-
-
-def run_hhs_shopt() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_shopt HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_shopt_command(),
-        "Loading shell options...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        cache_tag="shopt",
     )
 
 
@@ -6754,41 +7359,6 @@ def run_hhs_shopt_action(
         use_cache=False,
         cache_tag="shopt",
     )
-
-
-def run_docker_ps() -> subprocess.CompletedProcess[str]:
-    """Run docker ps and return the completed process."""
-    return run_bash_command(
-        build_docker_ps_command(),
-        "Loading Docker containers...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        timeout_seconds=10,
-        cache_tag="docker",
-    )
-
-
-def run_docker_images() -> subprocess.CompletedProcess[str]:
-    """Run docker images and return the completed process."""
-    return run_bash_command(
-        build_docker_images_command(),
-        "Loading Docker images...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        timeout_seconds=10,
-        cache_tag="docker",
-    )
-
-
-def docker_agent_is_running() -> bool:
-    """Return whether the Docker daemon responds on the selected host."""
-    result = run_bash_command(
-        build_docker_agent_check_command(),
-        "Checking Docker agent...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        timeout_seconds=2,
-        cache_tag="docker",
-        show_overlay=False,
-    )
-    return result.returncode == 0
 
 
 def run_docker_container_action(
@@ -6817,86 +7387,14 @@ def run_docker_image_delete(image_id: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_hhs_tool_action(
-    operation: str, tool_name: str
-) -> subprocess.CompletedProcess[str]:
-    """Run an hspm install or uninstall action for a Home tool."""
-    return run_bash_command(
-        build_hhs_hspm_command(operation, tool_name),
-        f"Running hspm {operation} for {tool_name}...",
-        use_cache=False,
-        cache_tag="tools",
-    )
-
-
 def run_tool_tldr(tool_name: str) -> subprocess.CompletedProcess[str]:
     """Run tldr for the selected Home tool."""
     return run_bash_command(
         build_tool_tldr_command(tool_name),
         f"Loading TLDR for {tool_name}...",
         use_cache=False,
+        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         cache_tag="tools",
-    )
-
-
-def run_hhs_history() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_history HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_history_command(),
-        "Loading command history...",
-        cache_tag="history",
-    )
-
-
-def run_hhs_history_dirs() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_dirs HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_history_dirs_command(),
-        "Loading directory history...",
-        cache_tag="history",
-    )
-
-
-def run_hhs_history_stats(top_n: int = 10) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_hist_stats HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_history_stats_command(top_n),
-        "Loading history stats...",
-        cache_tag="history",
-    )
-
-
-def run_hhs_disk_usage(
-    directory: str, top_n: int = 10
-) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_du HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_disk_usage_command(directory, top_n),
-        "Loading disk usage...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        cache_tag="monitor_disk",
-    )
-
-
-def run_process_monitor(
-    metric: str, top_n: int = 10
-) -> subprocess.CompletedProcess[str]:
-    """Run the process monitor command and return the completed process."""
-    return run_bash_command(
-        build_process_monitor_command(metric, top_n),
-        f"Loading {metric.lower()} usage...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        cache_tag="monitor_process",
-    )
-
-
-def run_hhs_process_list(process_filter: str) -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup process list command and return the completed process."""
-    return run_bash_command(
-        build_hhs_process_list_command(process_filter),
-        "Loading processes...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        cache_tag="monitor_process",
     )
 
 
@@ -6906,41 +7404,8 @@ def run_hhs_process_kill(process_name: str) -> subprocess.CompletedProcess[str]:
         build_hhs_process_kill_command(process_name),
         "Killing process...",
         use_cache=False,
+        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         cache_tag="monitor_process",
-    )
-
-
-def run_ssh_tunnels(host: str) -> subprocess.CompletedProcess[str]:
-    """Run the local SSH tunnel listing command and return the completed process."""
-    return run_bash_command(
-        build_ssh_tunnels_command(host),
-        "Loading SSH tunnels...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        force_local=True,
-        cache_tag="ssh",
-    )
-
-
-def run_hhs_logs(
-    log_file: str, tail_lines: int = 200, log_level: str = "ALL_LEVELS"
-) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs logs command and return the completed process."""
-    return run_bash_command(
-        build_hhs_logs_command(log_file, tail_lines, log_level),
-        "Loading logs...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        cache_tag="monitor_logs",
-    )
-
-
-def run_hhs_ask(message: str) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs ask command and return the completed process."""
-    return run_bash_command(
-        build_hhs_ask_command(message),
-        "Asking Ollama...",
-        timeout_seconds=hhs_ask_timeout_seconds(),
-        use_cache=False,
-        cache_tag="ai",
     )
 
 
@@ -6949,15 +7414,7 @@ def run_hhs_ask_context() -> subprocess.CompletedProcess[str]:
     return run_bash_command(
         build_hhs_ask_context_command(),
         "Loading Ollama context...",
-        cache_tag="ai",
-    )
-
-
-def run_hhs_ask_prompt() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs ask prompt command and return the completed process."""
-    return run_bash_command(
-        build_hhs_ask_prompt_command(),
-        "Loading Ollama prompt...",
+        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         cache_tag="ai",
     )
 
@@ -6968,6 +7425,7 @@ def run_hhs_ask_prompt_file() -> subprocess.CompletedProcess[str]:
         build_hhs_ask_prompt_file_command(),
         "Loading Ollama prompt file...",
         use_cache=False,
+        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         cache_tag="ai",
     )
 
@@ -6978,6 +7436,7 @@ def run_hhs_save_ask_prompt_file(prompt_text: str) -> subprocess.CompletedProces
         build_hhs_save_ask_prompt_file_command(prompt_text),
         "Saving Ollama prompt file...",
         use_cache=False,
+        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         cache_tag="ai",
     )
 
@@ -6988,6 +7447,7 @@ def run_hhs_revert_ask_prompt_file() -> subprocess.CompletedProcess[str]:
         build_hhs_revert_ask_prompt_file_command(),
         "Reverting Ollama prompt file...",
         use_cache=False,
+        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         cache_tag="ai",
     )
 
@@ -6999,6 +7459,7 @@ def run_hhs_ask_reset(close_dialogs: bool = False) -> subprocess.CompletedProces
         "Resetting Ollama context...",
         close_dialogs=close_dialogs,
         use_cache=False,
+        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         cache_tag="ai",
     )
 
@@ -7009,54 +7470,8 @@ def run_hhs_ask_ingest(file_path: str) -> subprocess.CompletedProcess[str]:
         build_hhs_ask_ingest_command(file_path),
         "Ingesting Ollama context...",
         use_cache=False,
+        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
         cache_tag="ai",
-    )
-
-
-def run_hhs_ask_models() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs ask model listing command and return the completed process."""
-    return run_bash_command(
-        build_hhs_ask_models_command(),
-        "Loading Ollama model...",
-        ttl_seconds=hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
-        cache_tag="ai_models",
-    )
-
-
-def run_hhs_ask_select_model(
-    model_name: str,
-    loader_message: str = "Selecting Ollama model...",
-    close_dialogs: bool = False,
-) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs ask model selection command and return the completed process."""
-    return run_bash_command(
-        build_hhs_ask_select_model_command(model_name),
-        loader_message,
-        close_dialogs=close_dialogs,
-        use_cache=False,
-        cache_tag="ai_models",
-    )
-
-
-def run_ollama_delete_model(
-    model_name: str, close_dialogs: bool = False
-) -> subprocess.CompletedProcess[str]:
-    """Run the Ollama model deletion command and return the completed process."""
-    return run_bash_command(
-        build_ollama_delete_model_command(model_name),
-        "Deleting model...",
-        close_dialogs=close_dialogs,
-        use_cache=False,
-        cache_tag="ai_models",
-    )
-
-
-def run_hhs_paths() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_paths HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_paths_command(),
-        "Loading PATH entries...",
-        cache_tag="path",
     )
 
 
@@ -7073,15 +7488,6 @@ def run_hhs_path_action(
     )
 
 
-def run_hhs_dirs() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_load_dir HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_dirs_command(),
-        "Loading saved directories...",
-        cache_tag="dirs",
-    )
-
-
 def run_hhs_dir_action(
     operation: str, name: str, value: str = ""
 ) -> subprocess.CompletedProcess[str]:
@@ -7092,15 +7498,6 @@ def run_hhs_dir_action(
         ttl_seconds=0,
         use_cache=False,
         cache_tag="dirs",
-    )
-
-
-def run_hhs_commands() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_command HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_commands_command(),
-        "Loading saved commands...",
-        cache_tag="cmds",
     )
 
 
@@ -7117,15 +7514,6 @@ def run_hhs_command_action(
     )
 
 
-def run_hhs_aliases() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_aliases HomeSetup function and return the completed process."""
-    return run_bash_command(
-        build_hhs_aliases_command(),
-        "Loading custom aliases...",
-        cache_tag="aliases",
-    )
-
-
 def run_hhs_alias_action(
     operation: str, name: str, value: str = ""
 ) -> subprocess.CompletedProcess[str]:
@@ -7139,38 +7527,6 @@ def run_hhs_alias_action(
     )
 
 
-def run_hhs_services() -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup services list command and return the completed process."""
-    return run_bash_command(
-        build_hhs_services_command(),
-        "Loading services...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        cache_tag="services",
-    )
-
-
-def run_hhs_services_quietly() -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup services list command through the shared command runner."""
-    return run_bash_command(
-        build_hhs_services_command(),
-        "Loading services...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        cache_tag="services",
-    )
-
-
-def run_hhs_service_action(
-    operation: str, service_name: str
-) -> subprocess.CompletedProcess[str]:
-    """Run a HomeSetup service action command and return the completed process."""
-    return run_bash_command(
-        build_hhs_services_command(operation, service_name),
-        f"{operation.capitalize()}ing service...",
-        use_cache=False,
-        cache_tag="services",
-    )
-
-
 def env_filter_pattern(env_filter: str, other_filter: str = "") -> str | None:
     """Return the __hhs_envs filter pattern for the selected UI filter."""
     if env_filter == "HHS":
@@ -7179,58 +7535,6 @@ def env_filter_pattern(env_filter: str, other_filter: str = "") -> str | None:
         clean_filter = other_filter.strip()
         return clean_filter or None
     return None
-
-
-def refresh_env_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the current environment listing command after a mutation."""
-    env_filter = str(st.session_state.get("env_filter", "All"))
-    other_filter = str(st.session_state.get("env_other_filter", ""))
-    return run_hhs_envs(env_filter_pattern(env_filter, other_filter))
-
-
-def refresh_path_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the PATH listing command after a mutation."""
-    return run_hhs_paths()
-
-
-def refresh_dir_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the saved directory listing command after a mutation."""
-    return run_hhs_dirs()
-
-
-def refresh_cmd_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the saved command listing command after a mutation."""
-    return run_hhs_commands()
-
-
-def refresh_alias_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the custom alias listing command after a mutation."""
-    return run_hhs_aliases()
-
-
-def refresh_home_tools_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the Home tools listing command after a mutation."""
-    return run_hhs_tools()
-
-
-def refresh_home_shopts_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the Home shell options listing command after a mutation."""
-    return run_hhs_shopt()
-
-
-def refresh_service_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the services listing command after a mutation."""
-    return run_hhs_services()
-
-
-def refresh_process_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the current process listing command after a mutation."""
-    return run_hhs_process_list(".")
-
-
-def refresh_ai_model_listing() -> subprocess.CompletedProcess[str]:
-    """Reissue the AI model listing command after a mutation."""
-    return run_hhs_ask_models()
 
 
 def row_matches_text_filter(row: dict[str, str], text_filter: str = "") -> bool:
@@ -7789,38 +8093,82 @@ def build_port_reachability_command(host: str, port: int) -> str:
     )
 
 
-def remote_port_is_reachable(host: str, port: int | None) -> bool:
-    """Return whether a remote TCP host and port accepts connections."""
+def complete_cached_status_background_command(
+    job_name: str,
+) -> subprocess.CompletedProcess[str] | None:
+    """Complete a cached status command and store success or failure output."""
+    completed = background_job_result(job_name)
+    if completed is None:
+        return None
+    result, metadata = completed
+    cache_background_command_result(metadata, result)
+    return result
+
+
+def cached_remote_port_reachability(
+    host: str, port: int | None
+) -> tuple[bool | None, bool, str]:
+    """Return cached remote port reachability and start a background refresh."""
     if port is None:
-        return False
-    result = run_bash_command(
-        build_port_reachability_command(host, port),
-        "Checking SSH tunnel status...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        timeout_seconds=3,
-        cache_tag="ssh",
-    )
-    return result.returncode == 0
+        return False, False, ""
+    command = build_port_reachability_command(host, port)
+    job_name = cached_command_job_name(command, "ssh_status")
+    complete_cached_status_background_command(job_name)
+    result, fresh_cache = cached_background_command_result(command, "ssh_status")
+    if not fresh_cache and not background_job_is_running(job_name):
+        start_cached_background_command(
+            job_name,
+            command,
+            "Checking SSH tunnel statuses",
+            "ssh_status",
+            hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+            3,
+        )
+    checking = background_job_is_running(job_name) and not fresh_cache
+    if result is None:
+        return None, True, job_name
+    return result.returncode == 0, checking, job_name
 
 
-def ssh_tunnel_is_reachable(row: dict[str, str]) -> bool:
-    """Return whether an SSH tunnel row currently accepts connections."""
+def ssh_tunnel_status_label(row: dict[str, str]) -> tuple[str, bool, str]:
+    """Return the visible reachability label, refresh state, and job name."""
     host, port = split_bind_address(row.get("Bind", ""))
     if row.get("Type", "").lower() == "remote":
-        return remote_port_is_reachable(host, port)
-    return local_port_is_reachable(host, port)
+        reachable, checking, job_name = cached_remote_port_reachability(host, port)
+        if reachable is None:
+            return "Checking", checking, job_name
+        return "Reachable" if reachable else "Not reachable", checking, job_name
+    return (
+        "Reachable" if local_port_is_reachable(host, port) else "Not reachable",
+        False,
+        "",
+    )
 
 
-def annotate_ssh_tunnel_statuses(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Return SSH tunnel rows with a reachable/not reachable status value."""
+def annotate_ssh_tunnel_statuses(
+    rows: list[dict[str, str]]
+) -> tuple[list[dict[str, str]], tuple[str, ...]]:
+    """Return SSH tunnel rows with status values and running status job names."""
     annotated_rows: list[dict[str, str]] = []
+    status_job_names: list[str] = []
     for row in rows:
         annotated_row = dict(row)
-        annotated_row["Status"] = (
-            "Reachable" if ssh_tunnel_is_reachable(row) else "Not reachable"
-        )
+        status_label, checking, job_name = ssh_tunnel_status_label(row)
+        annotated_row["Status"] = status_label
+        if checking and job_name:
+            status_job_names.append(job_name)
         annotated_rows.append(annotated_row)
-    return annotated_rows
+    return annotated_rows, tuple(dict.fromkeys(status_job_names))
+
+
+@st.fragment(run_every="2s")
+def render_ssh_tunnel_status_loader(job_names: tuple[str, ...]) -> None:
+    """Render one polling loader while SSH tunnel status jobs are running."""
+    if any(background_job_is_running(job_name) for job_name in job_names):
+        render_command_loader("Checking SSH tunnel statuses")
+        return
+    if job_names:
+        st.rerun()
 
 
 def ssh_tunnel_link(bind: str) -> str:
@@ -7851,6 +8199,8 @@ def ssh_tunnel_status_cell_style(value: object) -> str:
         return f"{base_style} color: #50fa7b;"
     if value_text == "not reachable":
         return f"{base_style} color: #ff5555;"
+    if value_text == "checking":
+        return f"{base_style} color: var(--hhs-comment);"
     return base_style
 
 
@@ -8364,7 +8714,6 @@ def apply_selected_env_value(name: str, value: str) -> bool:
     result = run_hhs_env_action("add", name, value)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_delete_tag("env")
-    refresh_env_listing()
     if result.returncode == 0:
         os.environ[name] = value
         env_value_overrides()[name] = value
@@ -8386,7 +8735,6 @@ def apply_env_delete(name: str) -> None:
     result = run_hhs_env_action("del", name)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_delete_tag("env")
-    refresh_env_listing()
     if result.returncode == 0:
         os.environ.pop(name, None)
         env_value_overrides().pop(name, None)
@@ -8430,7 +8778,6 @@ def apply_selected_path_value(old_path: str, new_path: str) -> bool:
     """Persist an edited PATH entry and store it for table rerenders."""
     result = run_hhs_path_action("edit", new_path, old_path)
     cache_delete_tag("path")
-    refresh_path_listing()
     if result.returncode == 0:
         path_values = [entry for entry in path_entries() if entry != old_path]
         if new_path not in path_values:
@@ -8450,7 +8797,6 @@ def apply_path_delete(path_value: str) -> None:
     """Delete a PATH entry and reset the table selection."""
     result = run_hhs_path_action("del", path_value)
     cache_delete_tag("path")
-    refresh_path_listing()
     if result.returncode == 0:
         os.environ["PATH"] = ":".join(
             entry for entry in path_entries() if entry != path_value
@@ -8469,7 +8815,6 @@ def apply_selected_dir_value(name: str, value: str) -> bool:
     """Persist a saved directory value."""
     result = run_hhs_dir_action("add", name, value)
     cache_delete_tag("dirs")
-    refresh_dir_listing()
     push_config_action_status(
         result,
         f'Saved directory saved: "{name}"',
@@ -8483,7 +8828,6 @@ def apply_dir_delete(name: str) -> None:
     """Delete a saved directory and reset the table selection."""
     result = run_hhs_dir_action("del", name)
     cache_delete_tag("dirs")
-    refresh_dir_listing()
     push_config_action_status(
         result,
         f'Saved directory removed: "{name}"',
@@ -8497,7 +8841,6 @@ def apply_selected_cmd_value(name: str, value: str) -> bool:
     """Persist a saved command value."""
     result = run_hhs_command_action("add", name, value)
     cache_delete_tag("cmds")
-    refresh_cmd_listing()
     push_config_action_status(
         result,
         f'Saved command saved: "{name}"',
@@ -8511,7 +8854,6 @@ def apply_cmd_delete(name: str) -> None:
     """Delete a saved command and reset the table selection."""
     result = run_hhs_command_action("del", name)
     cache_delete_tag("cmds")
-    refresh_cmd_listing()
     push_config_action_status(
         result,
         f'Saved command removed: "{name}"',
@@ -8525,7 +8867,6 @@ def apply_selected_alias_value(name: str, value: str) -> bool:
     """Persist a custom alias value."""
     result = run_hhs_alias_action("add", name, value)
     cache_delete_tag("aliases")
-    refresh_alias_listing()
     push_config_action_status(
         result,
         f'Alias saved: "{name}"',
@@ -8539,7 +8880,6 @@ def apply_alias_delete(name: str) -> None:
     """Delete a custom alias and reset the table selection."""
     result = run_hhs_alias_action("del", name)
     cache_delete_tag("aliases")
-    refresh_alias_listing()
     push_config_action_status(
         result,
         f'Alias removed: "{name}"',
@@ -8553,7 +8893,6 @@ def apply_home_shopt_action(operation: str, option_name: str) -> None:
     """Set or unset a shell option from the Home SHOPTS table."""
     result = run_hhs_shopt_action(operation, option_name)
     cache_delete_tag("shopt")
-    refresh_home_shopts_listing()
     action_label = "set" if operation == "set" else "unset"
     push_config_action_status(
         result,
@@ -8949,24 +9288,12 @@ def service_is_down(row: dict[str, str]) -> bool:
     return "down" in row.get("Value", "").lower()
 
 
-def ollama_service_is_up() -> bool:
-    """Return whether the Ollama service is currently reported as up."""
-    result = run_hhs_services_quietly()
-    if result.returncode != 0:
-        return False
-    return any(
-        row.get("Name", "").strip().lower() == "ollama" and service_is_up(row)
-        for row in parse_hhs_services(result.stdout)
-    )
-
-
 def main_views() -> tuple[str, ...]:
     """Return the visible main view names for the current service state."""
     views = hhs_ui.VIEWS
     if connected_ssh_host():
         views = (*views, hhs_ui.SSH_VIEW)
-    if ollama_service_is_up():
-        views = (*views, hhs_ui.AI_VIEW)
+    views = (*views, hhs_ui.AI_VIEW)
     return views
 
 
@@ -9000,13 +9327,31 @@ def execute_pending_home_tool_action() -> None:
     pending = st.session_state.pop("home_tool_action_execute_pending", None) or {}
     operation = str(pending.get("operation", "")).strip()
     tool_name = str(pending.get("tool_name", "")).strip()
-    if not operation or not tool_name:
+    if operation and tool_name:
+        started = start_background_bash_command(
+            HOME_TOOL_ACTION_JOB,
+            build_hhs_hspm_command(operation, tool_name),
+            f"{home_tool_action_noun(operation)} of {tool_name}",
+            hhs_ui_constants.UI_COMMAND_LONG_ACTION_TIMEOUT_SECONDS,
+            metadata={"operation": operation, "tool_name": tool_name},
+        )
+        if started:
+            push_floating_status(
+                f"{home_tool_action_noun(operation)} started: {tool_name}",
+                "info",
+            )
+        else:
+            push_floating_status("Another tool action is already running.", "warn")
+
+    completed = background_job_result(HOME_TOOL_ACTION_JOB)
+    if completed is None:
         return
 
-    result = run_hhs_tool_action(operation, tool_name)
+    result, metadata = completed
+    operation = str(metadata.get("operation", operation)).strip()
+    tool_name = str(metadata.get("tool_name", tool_name)).strip()
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_delete_tag("tools")
-    refresh_home_tools_listing()
     close_home_tool_tldr_dialog()
     st.session_state["home_tool_action_operation"] = operation
     st.session_state["home_tool_action_name"] = tool_name
@@ -9132,11 +9477,43 @@ def render_home_tool_tldr_dialog() -> bool:
 
 
 def apply_selected_service_action(operation: str, service_name: str) -> None:
-    """Run a service action and reset the service selection."""
-    result = run_hhs_service_action(operation, service_name)
+    """Schedule a service action and reset the service selection."""
+    st.session_state["service_action_execute_pending"] = {
+        "operation": operation,
+        "service_name": service_name,
+    }
+    reset_service_table_selection()
+
+
+def execute_pending_service_action() -> None:
+    """Start or complete a background service action."""
+    pending = st.session_state.pop("service_action_execute_pending", None) or {}
+    operation = str(pending.get("operation", "")).strip()
+    service_name = str(pending.get("service_name", "")).strip()
+    if operation and service_name:
+        started = start_background_bash_command(
+            SERVICE_ACTION_JOB,
+            build_hhs_services_command(operation, service_name),
+            f"Service {operation}: {service_name}",
+            hhs_ui_constants.UI_COMMAND_SERVICE_ACTION_TIMEOUT_SECONDS,
+            metadata={"operation": operation, "service_name": service_name},
+        )
+        if started:
+            push_floating_status(
+                f"Service {operation} started: {service_name}", "info"
+            )
+        else:
+            push_floating_status("Another service action is already running.", "warn")
+
+    completed = background_job_result(SERVICE_ACTION_JOB)
+    if completed is None:
+        return
+
+    result, metadata = completed
+    operation = str(metadata.get("operation", operation)).strip()
+    service_name = str(metadata.get("service_name", service_name)).strip()
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_delete_tag("services")
-    refresh_service_listing()
     st.session_state["service_action_message"] = status_message
     st.session_state["service_action_succeeded"] = result.returncode == 0
     if result.returncode == 0:
@@ -9149,7 +9526,6 @@ def apply_selected_service_action(operation: str, service_name: str) -> None:
             status_message or f"Service {operation} failed: {service_name}",
             "error",
         )
-    reset_service_table_selection()
 
 
 def apply_selected_process_kill(process_name: str) -> None:
@@ -9157,7 +9533,6 @@ def apply_selected_process_kill(process_name: str) -> None:
     result = run_hhs_process_kill(process_name)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
     cache_delete_tag("monitor_process")
-    refresh_process_listing()
     st.session_state["monitor_process_action_message"] = status_message
     st.session_state["monitor_process_action_succeeded"] = result.returncode == 0
     if result.returncode == 0:
@@ -9244,7 +9619,16 @@ def render_envs_table() -> None:
 
     env_filter, other_filter = render_table_controls_panel(render_env_controls)
 
-    result = run_hhs_envs(env_filter_pattern(env_filter, other_filter))
+    result = render_cached_command_result(
+        build_hhs_envs_command(env_filter_pattern(env_filter, other_filter)),
+        "Loading environment variables",
+        "env",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load environment variables.",
+    )
+    if result is None:
+        return
     rows = parse_hhs_envs(result.stdout) if result.returncode == 0 else []
     render_env_rows(rows)
 
@@ -9263,7 +9647,16 @@ def render_paths_table() -> None:
         )
 
     path_filter, other_filter = render_table_controls_panel(render_path_controls)
-    result = run_hhs_paths()
+    result = render_cached_command_result(
+        build_hhs_paths_command(),
+        "Loading PATH entries",
+        "path",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load PATH entries.",
+    )
+    if result is None:
+        return
     rows = parse_hhs_paths(result.stdout) if result.returncode == 0 else []
     render_path_rows(
         filter_path_rows(rows, path_filter, other_filter)
@@ -9284,7 +9677,16 @@ def render_dirs_table() -> None:
         )
 
     dirs_filter, other_filter = render_table_controls_panel(render_dir_controls)
-    result = run_hhs_dirs()
+    result = render_cached_command_result(
+        build_hhs_dirs_command(),
+        "Loading saved directories",
+        "dirs",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load saved directories.",
+    )
+    if result is None:
+        return
     rows = parse_hhs_dirs(result.stdout) if result.returncode == 0 else []
     render_dir_rows(
         filter_rows_by_text(rows, dirs_filter, other_filter),
@@ -9305,7 +9707,16 @@ def render_cmds_table() -> None:
         )
 
     cmds_filter, other_filter = render_table_controls_panel(render_cmd_controls)
-    result = run_hhs_commands()
+    result = render_cached_command_result(
+        build_hhs_commands_command(),
+        "Loading saved commands",
+        "cmds",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load saved commands.",
+    )
+    if result is None:
+        return
     rows = parse_hhs_commands(result.stdout) if result.returncode == 0 else []
     render_cmd_rows(
         filter_rows_by_text(rows, cmds_filter, other_filter),
@@ -9314,6 +9725,7 @@ def render_cmds_table() -> None:
 
 def render_aliases_table() -> None:
     """Render custom aliases using __hhs_aliases."""
+    complete_aliases_list_refresh()
 
     def render_alias_controls() -> tuple[str, str]:
         """Render alias table controls and return the selected filter."""
@@ -9326,8 +9738,24 @@ def render_aliases_table() -> None:
         )
 
     alias_filter, other_filter = render_table_controls_panel(render_alias_controls)
-    result = run_hhs_aliases()
-    rows = parse_hhs_aliases(result.stdout) if result.returncode == 0 else []
+    result, fresh_cache = cached_aliases_result()
+    if not fresh_cache and not background_job_is_running(ALIAS_LIST_JOB):
+        start_aliases_list_refresh()
+    alias_list_running = background_job_is_running(ALIAS_LIST_JOB)
+    render_background_job_status(ALIAS_LIST_JOB)
+    if alias_list_running and not fresh_cache:
+        return
+    if result is None:
+        alias_list_error = str(st.session_state.get("alias_list_error", "")).strip()
+        if alias_list_error:
+            st.error(alias_list_error)
+        elif not alias_list_running:
+            render_command_loader("Loading custom aliases...")
+        return
+    if result.returncode != 0:
+        st.error(result.stderr or result.stdout or "Unable to load aliases.")
+        return
+    rows = parse_hhs_aliases(result.stdout)
     render_alias_rows(
         filter_rows_by_text(rows, alias_filter, other_filter),
     )
@@ -9335,6 +9763,9 @@ def render_aliases_table() -> None:
 
 def render_services_table() -> None:
     """Render HomeSetup services using __hhs_services status output."""
+    execute_pending_service_action()
+    complete_hhs_services_list_refresh()
+    render_background_job_status(SERVICE_ACTION_JOB)
     service_filter, other_filter = render_table_controls_panel(
         lambda: render_table_filter_controls(
             hhs_ui.SERVICE_FILTERS,
@@ -9343,7 +9774,20 @@ def render_services_table() -> None:
             hhs_ui.FOUR_OPTION_FILTER_COLUMNS,
         )
     )
-    result = run_hhs_services()
+    result, fresh_cache = cached_hhs_services_result()
+    if not fresh_cache and not background_job_is_running(SERVICE_LIST_JOB):
+        start_hhs_services_list_refresh()
+    service_list_running = background_job_is_running(SERVICE_LIST_JOB)
+    render_background_job_status(SERVICE_LIST_JOB)
+    if service_list_running and not fresh_cache:
+        return
+    if result is None:
+        service_list_error = str(st.session_state.get("service_list_error", "")).strip()
+        if service_list_error:
+            st.error(service_list_error)
+        elif not service_list_running:
+            render_command_loader("Loading services...")
+        return
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list services.")
         return
@@ -9364,7 +9808,16 @@ def render_history_commands_table() -> None:
             hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
     )
-    result = run_hhs_history()
+    result = render_cached_command_result(
+        build_hhs_history_command(),
+        "Loading command history",
+        "history",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        "Unable to list command history.",
+    )
+    if result is None:
+        return
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list command history.")
         return
@@ -9387,7 +9840,16 @@ def render_history_directories_table() -> None:
             hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
     )
-    result = run_hhs_history_dirs()
+    result = render_cached_command_result(
+        build_hhs_history_dirs_command(),
+        "Loading directory history",
+        "history",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        "Unable to list directory history.",
+    )
+    if result is None:
+        return
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list directory history.")
         return
@@ -9425,9 +9887,18 @@ def render_history_stats_chart() -> None:
             key="history_stats_top_n",
             label_visibility="collapsed",
             on_change=save_ui_state,
-        )
+    )
     st.markdown(f"##### Top {int(top_n)} most used commands")
-    result = run_hhs_history_stats(int(top_n))
+    result = render_cached_command_result(
+        build_hhs_history_stats_command(int(top_n)),
+        "Loading history stats",
+        "history",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        "Unable to list history stats.",
+    )
+    if result is None:
+        return
     if result.returncode != 0:
         st.error(result.stderr or result.stdout or "Unable to list history stats.")
         return
@@ -9511,7 +9982,16 @@ def render_monitor_disk_chart() -> None:
     applied_top_n = normalized_monitor_disk_top_n(
         st.session_state.get("monitor_disk_top_n")
     )
-    result = run_hhs_disk_usage(selected_directory, applied_top_n)
+    result = render_cached_command_result(
+        build_hhs_disk_usage_command(selected_directory, applied_top_n),
+        "Loading disk usage",
+        "monitor_disk",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_DISK_TIMEOUT_SECONDS,
+        "Unable to load disk usage.",
+    )
+    if result is None:
+        return
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
@@ -9559,8 +10039,28 @@ def render_monitor_disk_chart() -> None:
 
 def render_process_monitor_chart(metric: str) -> None:
     """Render a process monitor chart for CPU or MEM usage."""
-    st.button("Refresh", key=f"monitor_{metric.lower()}_refresh_button")
-    result = run_process_monitor(metric)
+    job_name = monitor_metric_job_name(metric)
+    complete_monitor_metric_refresh(metric)
+    refresh_clicked = st.button("Refresh", key=f"monitor_{metric.lower()}_refresh_button")
+    if refresh_clicked:
+        cache_delete_command(monitor_metric_command(metric), "monitor_process")
+        st.session_state[f"monitor_{metric.lower()}_error"] = ""
+    result, fresh_cache = cached_monitor_metric_result(metric)
+    if (refresh_clicked or not fresh_cache) and not background_job_is_running(job_name):
+        start_monitor_metric_refresh(metric)
+    metric_running = background_job_is_running(job_name)
+    render_background_job_status(job_name)
+    if metric_running and (refresh_clicked or not fresh_cache):
+        return
+    if result is None:
+        metric_error = str(
+            st.session_state.get(f"monitor_{metric.lower()}_error", "")
+        ).strip()
+        if metric_error:
+            st.error(metric_error)
+        elif not metric_running:
+            render_command_loader(f"Loading {metric.lower()} usage...")
+        return
     if result.returncode != 0:
         st.error(
             strip_ansi(
@@ -9621,6 +10121,7 @@ def render_process_monitor_chart(metric: str) -> None:
 
 def render_monitor_processes_panel() -> None:
     """Render the HomeSetup process list monitor panel."""
+    complete_monitor_process_list_refresh()
     action_message = st.session_state.pop("monitor_process_action_message", "")
     action_succeeded = st.session_state.pop("monitor_process_action_succeeded", None)
     if action_message:
@@ -9640,7 +10141,22 @@ def render_monitor_processes_panel() -> None:
         )
 
     process_filter, other_filter = render_table_controls_panel(render_process_controls)
-    result = run_hhs_process_list(".")
+    result, fresh_cache = cached_monitor_process_list_result()
+    if not fresh_cache and not background_job_is_running(MONITOR_PROCESS_LIST_JOB):
+        start_monitor_process_list_refresh()
+    process_list_running = background_job_is_running(MONITOR_PROCESS_LIST_JOB)
+    render_background_job_status(MONITOR_PROCESS_LIST_JOB)
+    if process_list_running and not fresh_cache:
+        return
+    if result is None:
+        process_list_error = str(
+            st.session_state.get("monitor_process_list_error", "")
+        ).strip()
+        if process_list_error:
+            st.error(process_list_error)
+        elif not process_list_running:
+            render_command_loader("Loading processes...")
+        return
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
@@ -9773,7 +10289,16 @@ def render_monitor_logs_tail(selected_log: str, selected_level: str) -> None:
 
 def render_monitor_logs_once(selected_log: str, selected_level: str) -> None:
     """Render the selected log once without automatic refresh."""
-    result = run_hhs_logs(selected_log, 200, selected_level)
+    result = render_cached_command_result(
+        build_hhs_logs_command(selected_log, 200, selected_level),
+        "Loading logs",
+        "monitor_logs",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load logs.",
+    )
+    if result is None:
+        return
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
@@ -9855,11 +10380,25 @@ def render_ssh_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    result = run_ssh_tunnels(host)
+    result = render_cached_command_result(
+        build_ssh_tunnels_command(host),
+        "Loading SSH tunnels",
+        "ssh",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load SSH tunnels.",
+        force_local=True,
+    )
+    if result is None:
+        return
     if result.returncode != 0:
         st.error(result.stderr or "Unable to load SSH tunnels.")
         return
-    rows = annotate_ssh_tunnel_statuses(parse_ssh_tunnels(result.stdout, host))
+    rows, status_job_names = annotate_ssh_tunnel_statuses(
+        parse_ssh_tunnels(result.stdout, host)
+    )
+    if status_job_names:
+        render_ssh_tunnel_status_loader(status_job_names)
     headers = ["Local Port", "Remote Host:Port", "Kind", "Status", "Link"]
     render_table(
         rows,
@@ -9946,6 +10485,18 @@ def render_monitor_view() -> None:
         render_monitor_logs_panel()
 
 
+def render_ai_models_result() -> subprocess.CompletedProcess[str] | None:
+    """Render the cached/background AI model listing command result."""
+    return render_cached_command_result(
+        build_hhs_ask_models_command(),
+        "Loading Ollama model",
+        "ai_models",
+        hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        "Unable to load Ollama models.",
+    )
+
+
 def render_ai_chat_panel() -> None:
     """Render the HomeSetup Ollama chat panel."""
     if st.session_state.get("ai_clear_chat_pending", False):
@@ -9960,7 +10511,9 @@ def render_ai_chat_panel() -> None:
         return
 
     username = current_username()
-    model_result = run_hhs_ask_models()
+    model_result = render_ai_models_result()
+    if model_result is None:
+        return
     ollama_model = (
         parse_current_ollama_model(model_result.stdout)
         if model_result.returncode == 0
@@ -9974,12 +10527,43 @@ def render_ai_chat_panel() -> None:
             ai_chat_meta_html(username, ollama_model, context_size, model_result.stdout),
             unsafe_allow_html=True,
         )
+    completed = background_job_result(AI_ASK_JOB)
+    if completed is not None:
+        result, metadata = completed
+        response_model = str(metadata.get("ollama_model", ollama_model)).strip()
+        response_model = response_model or ollama_model
+        try:
+            ask_started_at = float(metadata.get("started_at", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            ask_started_at = 0.0
+        if ask_started_at:
+            record_ai_model_request_duration(
+                response_model, max(0.0, time.time() - ask_started_at)
+            )
+            meta_placeholder.markdown(
+                ai_chat_meta_html(
+                    username, ollama_model, context_size, model_result.stdout
+                ),
+                unsafe_allow_html=True,
+            )
+        if result.returncode != 0:
+            answer = strip_ansi(
+                result.stderr or result.stdout or "Unable to ask Ollama."
+            )
+            push_floating_status("Ollama request failed.", "error")
+        else:
+            answer = clean_hhs_ask_output(result.stdout) or strip_ansi(result.stdout)
+        st.session_state["ai_chat_messages"].append(
+            {"role": "assistant", "content": answer}
+        )
+        save_ui_state()
     with clear_col:
         st.button(
             " Clear",
             key="ai_clear_chat_button",
             help="Clear chat and context",
             on_click=request_ai_chat_clear_confirmation,
+            disabled=background_job_is_running(AI_ASK_JOB),
             width="stretch",
         )
     if not st.session_state["ai_chat_messages"]:
@@ -10003,7 +10587,21 @@ def render_ai_chat_panel() -> None:
                 ollama_model,
                 context_size,
             )
+    if background_job_is_running(AI_ASK_JOB):
+        with st.chat_message(
+            "Ollama",
+            avatar=(
+                str(hhs_ui.APP_AI_OLLAMA_AVATAR_FILE)
+                if hhs_ui.APP_AI_OLLAMA_AVATAR_FILE.is_file()
+                else None
+            ),
+        ):
+            render_background_job_status(AI_ASK_JOB, "Generating response...")
+
     if prompt := st.chat_input("Ask Ollama through HomeSetup"):
+        if background_job_is_running(AI_ASK_JOB):
+            push_floating_status("Ollama is still generating a response.", "warn")
+            return
         st.session_state["ai_chat_messages"].append({"role": "user", "content": prompt})
         save_ui_state()
         with st.chat_message(
@@ -10015,6 +10613,21 @@ def render_ai_chat_panel() -> None:
             ),
         ):
             render_ai_chat_message("user", prompt, username, ollama_model, context_size)
+        started = start_background_bash_command(
+            AI_ASK_JOB,
+            build_hhs_ask_command(prompt),
+            "Asking Ollama",
+            hhs_ask_timeout_seconds(),
+            metadata={
+                "prompt": prompt,
+                "ollama_model": ollama_model,
+                "context_size": context_size,
+                "started_at": time.time(),
+            },
+        )
+        if not started:
+            push_floating_status("Ollama is still generating a response.", "warn")
+            return
         with st.chat_message(
             "Ollama",
             avatar=(
@@ -10023,34 +10636,7 @@ def render_ai_chat_panel() -> None:
                 else None
             ),
         ):
-            ask_started_at = time.perf_counter()
-            result = run_hhs_ask(prompt)
-            request_duration = time.perf_counter() - ask_started_at
-            record_ai_model_request_duration(ollama_model, request_duration)
-            meta_placeholder.markdown(
-                ai_chat_meta_html(
-                    username, ollama_model, context_size, model_result.stdout
-                ),
-                unsafe_allow_html=True,
-            )
-            if result.returncode != 0:
-                answer = strip_ansi(
-                    result.stderr or result.stdout or "Unable to ask Ollama."
-                )
-                render_ai_chat_message(
-                    "assistant", answer, username, ollama_model, context_size
-                )
-            else:
-                answer = clean_hhs_ask_output(result.stdout) or strip_ansi(
-                    result.stdout
-                )
-                render_ai_chat_message(
-                    "assistant", answer, username, ollama_model, context_size
-                )
-            st.session_state["ai_chat_messages"].append(
-                {"role": "assistant", "content": answer}
-            )
-            save_ui_state()
+            render_background_job_status(AI_ASK_JOB, "Generating response...")
 
 
 def style_ai_model_row(row: pd.Series) -> list[str]:
@@ -10071,7 +10657,26 @@ def style_ai_model_row(row: pd.Series) -> list[str]:
 def render_ai_prompt_file_panel() -> None:
     """Render the editable runtime Ollama prompt file panel."""
     if not st.session_state.get("ai_prompt_loaded"):
-        refresh_ai_prompt_file()
+        result = render_cached_command_result(
+            build_hhs_ask_prompt_file_command(),
+            "Loading Ollama prompt file",
+            "ai",
+            hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+            hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+            "Unable to load Ollama prompt file.",
+        )
+        if result is None:
+            return
+        output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
+        clean_output = strip_ansi(output or "")
+        if result.returncode == 0:
+            st.session_state["ai_prompt_editor"] = clean_output
+            st.session_state["ai_prompt_error"] = ""
+            st.session_state["ai_prompt_loaded"] = True
+        else:
+            st.session_state["ai_prompt_error"] = (
+                clean_output.strip() or "Unable to load Ollama prompt file."
+            )
 
     load_col, save_col, revert_col = st.columns(
         [0.8, 0.75, 0.8], vertical_alignment="center"
@@ -10212,8 +10817,14 @@ def render_ai_settings_panel() -> None:
             pending_delete_name = str(pending_delete)
         render_ai_model_delete_dialog(pending_delete_name)
         return
+    if background_job_is_running(AI_MODEL_SELECT_JOB) or background_job_is_running(
+        AI_MODEL_DELETE_JOB
+    ):
+        return
 
-    model_result = run_hhs_ask_models()
+    model_result = render_ai_models_result()
+    if model_result is None:
+        return
     if model_result.returncode != 0:
         st.error(
             strip_ansi(
@@ -10298,9 +10909,13 @@ def render_ai_view() -> None:
     """Render the HomeSetup Ollama AI view."""
     if st.session_state.get("ai_clear_chat_execute_pending"):
         execute_pending_ai_chat_clear()
-    if st.session_state.get("ai_model_select_execute_pending"):
+    if st.session_state.get("ai_model_select_execute_pending") or background_job_state(
+        AI_MODEL_SELECT_JOB
+    ):
         execute_pending_ai_model_selection()
-    if st.session_state.get("ai_model_delete_execute_pending"):
+    if st.session_state.get("ai_model_delete_execute_pending") or background_job_state(
+        AI_MODEL_DELETE_JOB
+    ):
         execute_pending_ai_model_deletion()
 
     st.markdown(
@@ -10326,6 +10941,8 @@ def render_ai_view() -> None:
     elif ai_view == "CONTEXT":
         render_ai_context_panel()
     elif ai_view == "SETTINGS":
+        render_background_job_status(AI_MODEL_SELECT_JOB)
+        render_background_job_status(AI_MODEL_DELETE_JOB)
         render_ai_settings_panel()
 
 
@@ -10479,6 +11096,7 @@ def main() -> None:
     if render_ssh_connection_dialog():
         return
     handle_footer_actions()
+    render_background_job_status(UPDATER_UPDATE_JOB)
     render_footer_shell_version_dialog()
     st.session_state.setdefault("home_view", "System")
     if st.session_state["home_view"] not in hhs_ui.HOME_VIEWS:
