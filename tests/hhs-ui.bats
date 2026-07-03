@@ -3408,7 +3408,7 @@ PY
   run grep -q 'st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, footer_working_directory())' "${ui_file}"
   assert_success
 
-  run grep -q '"HomeSetup terminal ready."' "${ui_file}"
+  run grep -q '"HomeSetup terminal is ready."' "${ui_file}"
   assert_success
 
   run grep -q 'ttyd_url = ensure_ttyd_session()' "${ui_file}"

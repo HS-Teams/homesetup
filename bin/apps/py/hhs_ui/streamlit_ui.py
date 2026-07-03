@@ -110,7 +110,7 @@ def resolve_run_shell() -> str:
 
 def shell_version_command() -> str:
     """Return the command that prints the active target Bash version."""
-    return r'${BASH:-bash} --version'
+    return r"${BASH:-bash} --version"
 
 
 RUN_SHELL = resolve_run_shell()
@@ -499,7 +499,9 @@ def activate_terminal_document_view() -> None:
 
 def clear_ttyd_exit_request() -> None:
     """Drop any pending ttyd exit request for the current browser session."""
-    token = str(st.session_state.get(hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY, "")).strip()
+    token = str(
+        st.session_state.get(hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY, "")
+    ).strip()
     entry = TTYD_CLEANUP_REGISTRY.get(token)
     if isinstance(entry, dict):
         entry.pop("exit_requested", None)
@@ -924,7 +926,9 @@ def execute_pending_ai_model_deletion() -> None:
             push_floating_status(f"Deleting AI model: {model_name}", "info")
         else:
             st.session_state["ai_model_delete_execute_pending"] = pending
-            push_floating_status("Another AI model deletion is already running.", "warn")
+            push_floating_status(
+                "Another AI model deletion is already running.", "warn"
+            )
 
     completed = background_job_result(AI_MODEL_DELETE_JOB)
     if completed is None:
@@ -1458,6 +1462,30 @@ def folder_picker_start_directory(value: str = "") -> str:
     return str(candidate.resolve())
 
 
+def path_picker_mode() -> str:
+    """Return the active path picker mode."""
+    mode = str(st.session_state.get("_hhs_folder_picker_mode", "folder")).strip()
+    return "file" if mode == "file" else "folder"
+
+
+def path_picker_start_path(value: str = "", mode: str = "folder") -> str:
+    """Return the best existing path to seed a folder or file picker."""
+    raw_value = str(value or "").strip() or os.getcwd()
+    expanded_value = os.path.expandvars(os.path.expanduser(raw_value))
+    candidate = Path(expanded_value)
+    if mode == "file" and candidate.is_file():
+        return str(candidate.resolve())
+    return folder_picker_start_directory(expanded_value)
+
+
+def path_picker_current_directory(value: str = "", mode: str = "folder") -> str:
+    """Return the browsing directory for a folder or file picker value."""
+    selected_path = Path(path_picker_start_path(value, mode))
+    if mode == "file" and selected_path.is_file():
+        return str(selected_path.parent.resolve())
+    return folder_picker_start_directory(str(selected_path))
+
+
 def folder_picker_child_directories(
     directory: str, include_dot_folders: bool = False
 ) -> list[str]:
@@ -1476,10 +1504,56 @@ def folder_picker_child_directories(
         return []
 
 
+def path_picker_child_paths(
+    directory: str, mode: str = "folder", include_dot_folders: bool = False
+) -> list[str]:
+    """Return readable child paths for a folder or file picker."""
+    if mode == "folder":
+        return folder_picker_child_directories(directory, include_dot_folders)
+    current_directory = Path(folder_picker_start_directory(directory))
+    try:
+        return [
+            str(path.resolve())
+            for path in sorted(
+                current_directory.iterdir(),
+                key=lambda item: (not item.is_dir(), item.name.lower()),
+            )
+            if (path.is_dir() or path.is_file())
+            and (include_dot_folders or not path.name.startswith("."))
+        ]
+    except OSError:
+        return []
+
+
 def folder_picker_label(directory: str) -> str:
     """Return the display label for a folder picker option."""
     path = Path(directory)
     return path.name or str(path)
+
+
+def path_picker_label(path_value: str) -> str:
+    """Return the display label for a folder or file picker option."""
+    path = Path(path_value)
+    return path.name or str(path)
+
+
+def request_path_picker(
+    target_key: str,
+    fallback_value: str = "",
+    mode: str = "folder",
+) -> None:
+    """Open the reusable path picker for a Streamlit input key."""
+    picker_mode = "file" if mode == "file" else "folder"
+    current_value = str(st.session_state.get(target_key, "") or fallback_value)
+    start_path = path_picker_start_path(current_value, picker_mode)
+    start_directory = path_picker_current_directory(start_path, picker_mode)
+    st.session_state["_hhs_folder_picker_open"] = True
+    st.session_state["_hhs_folder_picker_mode"] = picker_mode
+    st.session_state["_hhs_folder_picker_target_key"] = target_key
+    st.session_state["_hhs_folder_picker_current_dir"] = start_directory
+    st.session_state["_hhs_folder_picker_current_dir_input"] = start_path
+    st.session_state.setdefault("_hhs_folder_picker_include_dot_folders", False)
+    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
 
 
 def request_folder_picker(
@@ -1487,21 +1561,56 @@ def request_folder_picker(
     fallback_value: str = "",
 ) -> None:
     """Open the folder picker for a Streamlit input key."""
-    current_value = str(st.session_state.get(target_key, "") or fallback_value)
-    start_directory = folder_picker_start_directory(current_value)
-    st.session_state["_hhs_folder_picker_open"] = True
-    st.session_state["_hhs_folder_picker_target_key"] = target_key
-    st.session_state["_hhs_folder_picker_current_dir"] = start_directory
-    st.session_state["_hhs_folder_picker_current_dir_input"] = start_directory
-    st.session_state.setdefault("_hhs_folder_picker_include_dot_folders", False)
-    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+    request_path_picker(target_key, fallback_value, mode="folder")
+
+
+def request_file_picker(
+    target_key: str,
+    fallback_value: str = "",
+) -> None:
+    """Open the file picker for a Streamlit input key."""
+    request_path_picker(target_key, fallback_value, mode="file")
 
 
 def close_folder_picker() -> None:
     """Close the folder picker dialog and clear transient selection state."""
     st.session_state["_hhs_folder_picker_open"] = False
+    st.session_state.pop("_hhs_folder_picker_mode", None)
     st.session_state.pop("_hhs_folder_picker_target_key", None)
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+
+
+def selected_folder_picker_path() -> str:
+    """Return the selected path from the path picker current input."""
+    typed_path = str(
+        st.session_state.get("_hhs_folder_picker_current_dir_input", "")
+    ).strip()
+    mode = path_picker_mode()
+    if typed_path:
+        return path_picker_start_path(typed_path, mode)
+    return path_picker_start_path(
+        str(st.session_state.get("_hhs_folder_picker_current_dir", "")), mode
+    )
+
+
+def queue_folder_picker_selection(target_key: str, selected_path: str) -> None:
+    """Queue a folder picker selection for the next page render."""
+    if not target_key:
+        return
+    st.session_state["_hhs_folder_picker_pending_target_key"] = target_key
+    st.session_state["_hhs_folder_picker_pending_value"] = selected_path
+
+
+def apply_pending_folder_picker_selection() -> None:
+    """Apply a queued folder picker selection before target inputs render."""
+    target_key = str(
+        st.session_state.pop("_hhs_folder_picker_pending_target_key", "")
+    ).strip()
+    selected_path = str(
+        st.session_state.pop("_hhs_folder_picker_pending_value", "")
+    ).strip()
+    if target_key and selected_path:
+        st.session_state[target_key] = selected_path
 
 
 def set_folder_picker_current_directory(directory: str) -> None:
@@ -1512,8 +1621,8 @@ def set_folder_picker_current_directory(directory: str) -> None:
     include_dot_folders = bool(
         st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
     )
-    child_directories = folder_picker_child_directories(
-        selected_directory, include_dot_folders
+    child_directories = path_picker_child_paths(
+        selected_directory, path_picker_mode(), include_dot_folders
     )
     if child_directories:
         st.session_state["_hhs_folder_picker_selected_dir"] = child_directories[0]
@@ -1522,10 +1631,26 @@ def set_folder_picker_current_directory(directory: str) -> None:
 
 
 def apply_folder_picker_typed_directory() -> None:
-    """Apply the manually typed folder picker directory."""
-    set_folder_picker_current_directory(
-        str(st.session_state.get("_hhs_folder_picker_current_dir_input", ""))
+    """Apply the manually typed path picker value."""
+    typed_path = str(st.session_state.get("_hhs_folder_picker_current_dir_input", ""))
+    mode = path_picker_mode()
+    if mode == "folder":
+        set_folder_picker_current_directory(typed_path)
+        return
+    selected_path = path_picker_start_path(typed_path, mode)
+    current_directory = path_picker_current_directory(selected_path, mode)
+    st.session_state["_hhs_folder_picker_current_dir"] = current_directory
+    st.session_state["_hhs_folder_picker_current_dir_input"] = selected_path
+    include_dot_folders = bool(
+        st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
     )
+    child_directories = path_picker_child_paths(
+        current_directory, mode, include_dot_folders
+    )
+    if child_directories:
+        st.session_state["_hhs_folder_picker_selected_dir"] = child_directories[0]
+    else:
+        st.session_state.pop("_hhs_folder_picker_selected_dir", None)
 
 
 def open_folder_picker_parent() -> None:
@@ -1539,57 +1664,80 @@ def open_folder_picker_parent() -> None:
 
 
 def open_folder_picker_selected_directory() -> None:
-    """Move the folder picker into the selected child directory."""
-    selected_directory = str(
-        st.session_state.get("_hhs_folder_picker_selected_dir", "")
-    )
-    if selected_directory:
-        set_folder_picker_current_directory(selected_directory)
+    """Move the path picker into the selected child or select a child file."""
+    selected_path = str(st.session_state.get("_hhs_folder_picker_selected_dir", ""))
+    if not selected_path:
+        return
+    selected_entry = Path(selected_path)
+    if path_picker_mode() == "file" and selected_entry.is_file():
+        st.session_state["_hhs_folder_picker_current_dir_input"] = str(
+            selected_entry.resolve()
+        )
+        return
+    set_folder_picker_current_directory(selected_path)
 
 
 def apply_folder_picker_selection() -> None:
     """Assign the selected folder to the target Streamlit input key."""
     target_key = str(st.session_state.get("_hhs_folder_picker_target_key", ""))
     if target_key:
-        st.session_state[target_key] = folder_picker_start_directory(
-            str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
-        )
+        selected_path = selected_folder_picker_path()
+        st.session_state[target_key] = selected_path
+        queue_folder_picker_selection(target_key, selected_path)
     close_folder_picker()
 
 
-def render_folder_picker_dialog() -> bool:
-    """Render the visual folder picker dialog when requested."""
+def apply_folder_picker_selection_and_dismiss() -> None:
+    """Assign the selected folder and dismiss the folder picker dialog."""
+    apply_folder_picker_selection()
+    dismiss_streamlit_dialog()
+
+
+def cancel_folder_picker_and_dismiss() -> None:
+    """Close the folder picker dialog without changing the target input."""
+    close_folder_picker()
+    dismiss_streamlit_dialog()
+
+
+def render_path_picker_dialog() -> bool:
+    """Render the reusable single path picker dialog when requested."""
     if not st.session_state.get("_hhs_folder_picker_open"):
         return False
 
     def render_body() -> None:
-        """Render the visual folder picker controls."""
+        """Render the visual path picker controls."""
+        mode = path_picker_mode()
+        selected_label = "Selected file" if mode == "file" else "Selected folder"
+        option_label = "Files" if mode == "file" else "Folders"
+        empty_caption = (
+            "No files or folders." if mode == "file" else "No child folders."
+        )
         current_directory = folder_picker_start_directory(
             str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
         )
         st.text_input(
-            "Folder",
+            selected_label,
             key="_hhs_folder_picker_current_dir_input",
             on_change=apply_folder_picker_typed_directory,
         )
         include_dot_folders = bool(
             st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
         )
-        child_directories = folder_picker_child_directories(
-            current_directory, include_dot_folders
+        child_directories = path_picker_child_paths(
+            current_directory, mode, include_dot_folders
         )
         selected_directory = st.session_state.get("_hhs_folder_picker_selected_dir")
         if selected_directory not in child_directories:
             st.session_state.pop("_hhs_folder_picker_selected_dir", None)
         if child_directories:
             st.selectbox(
-                "Folders",
+                option_label,
                 child_directories,
                 key="_hhs_folder_picker_selected_dir",
-                format_func=folder_picker_label,
+                format_func=path_picker_label,
             )
         else:
-            st.caption("No child folders.")
+            st.caption(empty_caption)
         st.checkbox(
             "Include .dot-folders",
             key="_hhs_folder_picker_include_dot_folders",
@@ -1615,23 +1763,28 @@ def render_folder_picker_dialog() -> bool:
                 "",
                 key="folder_picker_select_button",
                 help="Select",
-                on_click=apply_folder_picker_selection,
+                on_click=apply_folder_picker_selection_and_dismiss,
                 width="stretch",
             )
             st.button(
                 "ﰸ",
                 key="folder_picker_cancel_button",
                 help="Cancel",
-                on_click=close_folder_picker,
+                on_click=cancel_folder_picker_and_dismiss,
                 width="stretch",
             )
 
     return pop_dialog(
-        title="Select folder",
+        title="Select file" if path_picker_mode() == "file" else "Select folder",
         body=render_body,
         buttons=(),
         close_callback=close_folder_picker,
     )
+
+
+def render_folder_picker_dialog() -> bool:
+    """Render the reusable path picker dialog when requested."""
+    return render_path_picker_dialog()
 
 
 def homesetup_version(refresh_cache: bool = False) -> str:
@@ -1682,14 +1835,18 @@ def homesetup_config_dir() -> Path:
 def ollama_history_file() -> Path:
     """Return the configured HomeSetup Ollama history file path."""
     return Path(
-        os.environ.get("HHS_OLLAMA_HISTORY_FILE", homesetup_config_dir() / ".ollama_history")
+        os.environ.get(
+            "HHS_OLLAMA_HISTORY_FILE", homesetup_config_dir() / ".ollama_history"
+        )
     ).expanduser()
 
 
 def ollama_prompt_file() -> Path:
     """Return the configured HomeSetup Ollama prompt file path."""
     return Path(
-        os.environ.get("HHS_OLLAMA_PROMPT_FILE", homesetup_config_dir() / "hhs-ask-ollama.md")
+        os.environ.get(
+            "HHS_OLLAMA_PROMPT_FILE", homesetup_config_dir() / "hhs-ask-ollama.md"
+        )
     ).expanduser()
 
 
@@ -1954,7 +2111,7 @@ def push_floating_status(
             "timeout_seconds": max(1.0, min(float(timeout_seconds), 30.0)),
         }
     )
-    del status_queue[:-hhs_ui_constants.FLOATING_STATUS_QUEUE_LIMIT]
+    del status_queue[: -hhs_ui_constants.FLOATING_STATUS_QUEUE_LIMIT]
     st.session_state[hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY] = status_queue
 
 
@@ -1972,7 +2129,9 @@ def floating_status_queue() -> list[dict[str, object]]:
     queue = st.session_state.get(hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY)
     if not isinstance(queue, list):
         queue = []
-    legacy_status = st.session_state.pop(hhs_ui_constants.FLOATING_STATUS_LEGACY_KEY, None)
+    legacy_status = st.session_state.pop(
+        hhs_ui_constants.FLOATING_STATUS_LEGACY_KEY, None
+    )
     if isinstance(legacy_status, dict):
         queue.append(legacy_status)
     normalized_queue = [item for item in queue if isinstance(item, dict)]
@@ -2132,9 +2291,7 @@ def shell_version_output_html(output: str) -> str:
 
 def render_footer_shell_version_dialog() -> bool:
     """Render the footer shell version dialog when requested."""
-    title = str(
-        st.session_state.get("footer_shell_version_dialog_title", "")
-    ).strip()
+    title = str(st.session_state.get("footer_shell_version_dialog_title", "")).strip()
     if not title:
         return False
 
@@ -2830,7 +2987,9 @@ def table_selection_rows(selection_state: object) -> tuple[int, ...]:
 
 def table_selection_snapshots() -> dict[str, tuple[int, ...]]:
     """Return remembered dataframe selections keyed by Streamlit widget key."""
-    snapshots = st.session_state.setdefault(hhs_ui_constants.TABLE_SELECTION_SNAPSHOT_KEY, {})
+    snapshots = st.session_state.setdefault(
+        hhs_ui_constants.TABLE_SELECTION_SNAPSHOT_KEY, {}
+    )
     if not isinstance(snapshots, dict):
         snapshots = {}
         st.session_state[hhs_ui_constants.TABLE_SELECTION_SNAPSHOT_KEY] = snapshots
@@ -2976,7 +3135,9 @@ def render_table(
         if table_action_visible(action, selected_row, selected_index)
     ]
     if visible_actions:
-        with st.container(key=table_component_key(key, f"table_actions_{selected_index}")):
+        with st.container(
+            key=table_component_key(key, f"table_actions_{selected_index}")
+        ):
             weights = action_column_weights or [1.0] * len(visible_actions)
             columns = st.columns(weights)
             for column, action in zip(columns, visible_actions):
@@ -3169,41 +3330,45 @@ def render_named_value_add_controls(
     value_folder_picker: bool = False,
 ) -> None:
     """Render Enter-submitted Name and Value controls for a config listing."""
-    with st.form(f"{key_prefix}_add_form", border=False):
-        if value_folder_picker:
-            name_col, value_col, _spacer_col, folder_col = st.columns(
-                [1.25, 4.05, 0.012, 0.15], vertical_alignment="center"
-            )
-        else:
+    # Layout reference for the paired name/value path picker:
+    # name_col, value_col, _spacer_col, folder_col = st.columns(
+    #     [1.25, 4.05, 0.012, 0.15], vertical_alignment="center"
+    # )
+    if value_folder_picker:
+        form_col, folder_col = st.columns([1, 0.035], vertical_alignment="center")
+    else:
+        form_col = st.container()
+        folder_col = None
+    with form_col:
+        with st.form(f"{key_prefix}_add_form", border=False):
             name_col, value_col = st.columns([1.25, 4.2], vertical_alignment="center")
-            folder_col = None
-        with name_col:
-            st.text_input(
-                name_label,
-                key=f"{key_prefix}_add_name",
-                placeholder=name_placeholder,
-            )
-        with value_col:
-            st.text_input(
-                value_label,
-                key=f"{key_prefix}_add_value",
-                placeholder=value_placeholder,
-            )
-        if folder_col is not None:
-            with folder_col:
-                st.form_submit_button(
-                    "",
-                    key=f"{key_prefix}_folder_picker_button",
-                    help="Select folder",
-                    on_click=request_folder_picker,
-                    args=(f"{key_prefix}_add_value", value_placeholder),
-                    width="stretch",
+            with name_col:
+                st.text_input(
+                    name_label,
+                    key=f"{key_prefix}_add_name",
+                    placeholder=name_placeholder,
                 )
-        st.form_submit_button(
-            "Add",
-            key=f"{key_prefix}_add_submit",
-            on_click=on_submit,
-        )
+            with value_col:
+                st.text_input(
+                    value_label,
+                    key=f"{key_prefix}_add_value",
+                    placeholder=value_placeholder,
+                )
+            st.form_submit_button(
+                "Add",
+                key=f"{key_prefix}_add_submit",
+                on_click=on_submit,
+            )
+    if folder_col is not None:
+        with folder_col:
+            st.button(
+                "",
+                key=f"{key_prefix}_folder_picker_button",
+                help="Select folder",
+                on_click=request_folder_picker,
+                args=(f"{key_prefix}_add_value", value_placeholder),
+                width="stretch",
+            )
 
 
 def render_value_add_controls(
@@ -3214,33 +3379,33 @@ def render_value_add_controls(
     value_folder_picker: bool = False,
 ) -> None:
     """Render an Enter-submitted Value control for a config listing."""
-    with st.form(f"{key_prefix}_add_form", border=False):
-        if value_folder_picker:
-            value_col, folder_col = st.columns([1, 0.035], vertical_alignment="center")
-        else:
-            value_col = st.container()
-            folder_col = None
-        with value_col:
+    if value_folder_picker:
+        form_col, folder_col = st.columns([1, 0.035], vertical_alignment="center")
+    else:
+        form_col = st.container()
+        folder_col = None
+    with form_col:
+        with st.form(f"{key_prefix}_add_form", border=False):
             st.text_input(
                 value_label,
                 key=f"{key_prefix}_add_value",
                 placeholder=value_placeholder,
             )
-        if folder_col is not None:
-            with folder_col:
-                st.form_submit_button(
-                    "",
-                    key=f"{key_prefix}_folder_picker_button",
-                    help="Select folder",
-                    on_click=request_folder_picker,
-                    args=(f"{key_prefix}_add_value", value_placeholder),
-                    width="stretch",
-                )
-        st.form_submit_button(
-            "Add",
-            key=f"{key_prefix}_add_submit",
-            on_click=on_submit,
-        )
+            st.form_submit_button(
+                "Add",
+                key=f"{key_prefix}_add_submit",
+                on_click=on_submit,
+            )
+    if folder_col is not None:
+        with folder_col:
+            st.button(
+                "",
+                key=f"{key_prefix}_folder_picker_button",
+                help="Select folder",
+                on_click=request_folder_picker,
+                args=(f"{key_prefix}_add_value", value_placeholder),
+                width="stretch",
+            )
 
 
 def render_path_add_controls() -> None:
@@ -3437,9 +3602,7 @@ def render_document_view() -> None:
     if document_key == "TERMINAL":
         render_terminal_document_view()
         return
-    title, document = document_details(
-        document_key
-    )
+    title, document = document_details(document_key)
     st.markdown(
         f"""
         <section class="hhs-view-heading">
@@ -3770,7 +3933,7 @@ def ttyd_process_working_directory(cwd: str) -> str:
 
 def ttyd_shell_hook_script() -> str:
     """Return the Bash startup script that emits ttyd command hook events."""
-    return r'''
+    return r"""
 if [[ -r "${HOME}/.bash_profile" ]]; then
   . "${HOME}/.bash_profile"
 elif [[ -r "${HOME}/.bash_login" ]]; then
@@ -3861,7 +4024,7 @@ else
 fi
 
 trap '__hhs_ttyd_emit_exit "$?"' EXIT
-    '''
+    """
 
 
 def build_ttyd_hooked_bash_command(cwd: str, shell: str = "bash") -> str:
@@ -4182,7 +4345,9 @@ def normalize_ttyd_event(value: object) -> dict[str, object]:
 
 def sync_ttyd_event_state() -> None:
     """Synchronize latest ttyd hook events into Streamlit session state."""
-    token = str(st.session_state.get(hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY, "")).strip()
+    token = str(
+        st.session_state.get(hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY, "")
+    ).strip()
     if not token:
         return
     entry = TTYD_CLEANUP_REGISTRY.get(token)
@@ -4316,7 +4481,9 @@ def ensure_ttyd_cleanup_server() -> int:
 
 def browser_cleanup_token() -> str:
     """Return the per-browser-session cleanup token."""
-    token = str(st.session_state.get(hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY, "")).strip()
+    token = str(
+        st.session_state.get(hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY, "")
+    ).strip()
     if not token:
         token = secrets.token_urlsafe(24)
         st.session_state[hhs_ui_constants.TTYD_CLEANUP_TOKEN_KEY] = token
@@ -4416,7 +4583,7 @@ def initialize_terminal_session_state() -> None:
     """Initialize ttyd terminal working directory and ready status."""
     st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, footer_working_directory())
     if not bool(st.session_state.get(hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY, False)):
-        push_floating_status("HomeSetup terminal ready.", "info")
+        push_floating_status("HomeSetup terminal is ready.", "info")
         st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = True
 
 
@@ -4433,7 +4600,9 @@ def terminal_output_line_is_noise(line: str) -> bool:
         return True
     if re.fullmatch(r"Shell option \S+ set to (?:on|off)", clean_line):
         return True
-    if re.fullmatch(r"(?:Shared )?Connection to .+ closed\.", clean_line, re.IGNORECASE):
+    if re.fullmatch(
+        r"(?:Shared )?Connection to .+ closed\.", clean_line, re.IGNORECASE
+    ):
         return True
     if re.fullmatch(r"Shared connection to .+ closed\.", clean_line, re.IGNORECASE):
         return True
@@ -4443,9 +4612,7 @@ def terminal_output_line_is_noise(line: str) -> bool:
 def filter_terminal_output_noise(value: str) -> str:
     """Return terminal output without SSH/HomeSetup wrapper chatter lines."""
     lines = [
-        line
-        for line in value.splitlines()
-        if not terminal_output_line_is_noise(line)
+        line for line in value.splitlines() if not terminal_output_line_is_noise(line)
     ]
     output = "\n".join(lines)
     if value.endswith("\n") and output:
@@ -4544,7 +4711,10 @@ def updater_check_due(now: float | None = None) -> bool:
     if last_check_epoch <= 0:
         return True
     current_time = time.time() if now is None else now
-    return current_time - last_check_epoch >= hhs_ui_constants.UPDATER_CHECK_INTERVAL_SECONDS
+    return (
+        current_time - last_check_epoch
+        >= hhs_ui_constants.UPDATER_CHECK_INTERVAL_SECONDS
+    )
 
 
 def store_updater_check_result(result: subprocess.CompletedProcess[str]) -> None:
@@ -4904,7 +5074,9 @@ def ai_model_performance_averages() -> dict[str, float]:
 
 def ai_model_performance_sample_counts() -> dict[str, int]:
     """Return total recorded AI request sample counts by model."""
-    sample_counts = st.session_state.setdefault("ai_model_performance_sample_counts", {})
+    sample_counts = st.session_state.setdefault(
+        "ai_model_performance_sample_counts", {}
+    )
     if not isinstance(sample_counts, dict):
         sample_counts = {}
     normalized_counts = {
@@ -4937,12 +5109,9 @@ def record_ai_model_request_duration(model_name: str, duration_seconds: float) -
     sample_counts = ai_model_performance_sample_counts()
     sample_counts[clean_model] = sample_counts.get(clean_model, 0) + 1
     model_sample_count = sample_counts[clean_model]
-    if (
-        model_sample_count == hhs_ui.AI_PERFORMANCE_MIN_SAMPLES
-        or (
-            model_sample_count > hhs_ui.AI_PERFORMANCE_MIN_SAMPLES
-            and model_sample_count % hhs_ui.AI_PERFORMANCE_RECALC_INTERVAL == 0
-        )
+    if model_sample_count == hhs_ui.AI_PERFORMANCE_MIN_SAMPLES or (
+        model_sample_count > hhs_ui.AI_PERFORMANCE_MIN_SAMPLES
+        and model_sample_count % hhs_ui.AI_PERFORMANCE_RECALC_INTERVAL == 0
     ):
         model_durations = timing_durations_for_model(clean_model)
         if model_durations:
@@ -5296,11 +5465,16 @@ def filter_markdown_table_columns(
         return headers, rows
 
     kept_indexes = [
-        index for index, header in enumerate(headers) if header not in omitted_column_names
+        index
+        for index, header in enumerate(headers)
+        if header not in omitted_column_names
     ]
     return (
         [headers[index] for index in kept_indexes],
-        [[row[index] if index < len(row) else "" for index in kept_indexes] for row in rows],
+        [
+            [row[index] if index < len(row) else "" for index in kept_indexes]
+            for row in rows
+        ],
     )
 
 
@@ -5311,7 +5485,10 @@ def docker_cli_table_rows(
     headers, rows = parse_fixed_width_cli_table(docker_cli_table_output(output))
     headers, rows = filter_markdown_table_columns(headers, rows, omitted_columns)
     return [
-        {header: row[index] if index < len(row) else "" for index, header in enumerate(headers)}
+        {
+            header: row[index] if index < len(row) else ""
+            for index, header in enumerate(headers)
+        }
         for row in rows
     ]
 
@@ -5951,15 +6128,14 @@ def execute_pending_ssh_connection() -> None:
     host = str(st.session_state.get("ssh_connect_pending", "")).strip()
     if not host:
         return
-    loader_message = str(
-        st.session_state.get("ssh_connect_pending_message", "")
-    ).strip() or f"Connecting to SSH host {host}..."
+    loader_message = (
+        str(st.session_state.get("ssh_connect_pending_message", "")).strip()
+        or f"Connecting to SSH host {host}..."
+    )
     restore_reconnect_state = bool(
         st.session_state.pop("ssh_reconnect_restore_view_state", False)
     )
-    reconnect_state = (
-        reconnect_view_state_snapshot() if restore_reconnect_state else {}
-    )
+    reconnect_state = reconnect_view_state_snapshot() if restore_reconnect_state else {}
     was_terminal_active = terminal_document_view_is_active()
     st.session_state["ssh_connect_pending"] = ""
     st.session_state["ssh_connect_pending_message"] = ""
@@ -6024,7 +6200,9 @@ def clear_completed_ssh_disconnection(
     elif result.returncode != 0:
         push_floating_status(
             clean_command_status_message(
-                result.stderr or result.stdout or f"Unable to disconnect SSH host {host}."
+                result.stderr
+                or result.stdout
+                or f"Unable to disconnect SSH host {host}."
             ),
             "warn",
         )
@@ -6148,7 +6326,9 @@ def run_bash_command(
     if effective_timeout is None:
         effective_timeout = hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS
     cache_key = command_cache_key(command_to_run, cache_tag)
-    snapshot_value = command_result_snapshot_get(cache_key) if selection_only_rerun else None
+    snapshot_value = (
+        command_result_snapshot_get(cache_key) if selection_only_rerun else None
+    )
     if snapshot_value is not None:
         return sanitize_remote_command_result(
             remote_host, completed_process_from_cache(command_to_run, snapshot_value)
@@ -6276,7 +6456,9 @@ def background_job_timeout_seconds(job: dict[str, object]) -> float:
 def background_job_has_timed_out(job: dict[str, object]) -> bool:
     """Return whether one background command job has exceeded its timeout."""
     timeout_seconds = background_job_timeout_seconds(job)
-    return timeout_seconds > 0 and background_job_elapsed_seconds(job) >= timeout_seconds
+    return (
+        timeout_seconds > 0 and background_job_elapsed_seconds(job) >= timeout_seconds
+    )
 
 
 def stop_background_job(job_name: str) -> None:
@@ -6440,7 +6622,11 @@ def render_background_job_status(job_name: str, message: str = "") -> None:
     if not job:
         return
     process = background_job_process(job)
-    if process is not None and process.poll() is None and background_job_has_timed_out(job):
+    if (
+        process is not None
+        and process.poll() is None
+        and background_job_has_timed_out(job)
+    ):
         stop_process(process)
         st.rerun()
         return
@@ -6462,7 +6648,11 @@ def poll_background_job_completion(job_name: str) -> None:
     if not job:
         return
     process = background_job_process(job)
-    if process is not None and process.poll() is None and background_job_has_timed_out(job):
+    if (
+        process is not None
+        and process.poll() is None
+        and background_job_has_timed_out(job)
+    ):
         stop_process(process)
         st.rerun()
         return
@@ -6593,7 +6783,9 @@ def cache_get(key: str) -> dict[str, object] | None:
 
 def command_result_snapshots() -> dict[str, dict[str, object]]:
     """Return in-session command results used for table selection-only reruns."""
-    snapshots = st.session_state.setdefault(hhs_ui_constants.COMMAND_RESULT_SNAPSHOT_KEY, {})
+    snapshots = st.session_state.setdefault(
+        hhs_ui_constants.COMMAND_RESULT_SNAPSHOT_KEY, {}
+    )
     if not isinstance(snapshots, dict):
         snapshots = {}
         st.session_state[hhs_ui_constants.COMMAND_RESULT_SNAPSHOT_KEY] = snapshots
@@ -6687,7 +6879,9 @@ def cache_delete_command(command: str, cache_tag: str = "default") -> None:
 def cache_clear() -> None:
     """Delete all UI cache entries."""
     metadata_cache = {
-        key: value for key, value in load_ui_cache().items() if ui_cache_metadata_key(key)
+        key: value
+        for key, value in load_ui_cache().items()
+        if ui_cache_metadata_key(key)
     }
     save_ui_cache(metadata_cache)
     command_result_snapshot_clear()
@@ -6866,7 +7060,9 @@ def render_cached_command_result(
     """Render one banner while a page-load command refreshes in the background."""
     job_name = cached_command_job_name(command, cache_tag)
     error_key = cached_command_error_key(job_name)
-    completed_result = complete_cached_background_command(job_name, error_key, fallback_error)
+    completed_result = complete_cached_background_command(
+        job_name, error_key, fallback_error
+    )
     result, fresh_cache = cached_background_command_result(
         command, cache_tag, force_local=force_local
     )
@@ -6931,7 +7127,9 @@ def hhs_services_command_context() -> tuple[str, str, str, str]:
     return command, command_to_run, remote_host, cache_key
 
 
-def cached_hhs_services_result() -> tuple[subprocess.CompletedProcess[str] | None, bool]:
+def cached_hhs_services_result() -> (
+    tuple[subprocess.CompletedProcess[str] | None, bool]
+):
     """Return a cached service-list result and whether it came from fresh cache."""
     command, _command_to_run, _remote_host, _cache_key = hhs_services_command_context()
     return cached_background_command_result(command, "services")
@@ -6991,7 +7189,9 @@ def start_monitor_metric_refresh(metric: str) -> bool:
     )
 
 
-def complete_monitor_metric_refresh(metric: str) -> subprocess.CompletedProcess[str] | None:
+def complete_monitor_metric_refresh(
+    metric: str,
+) -> subprocess.CompletedProcess[str] | None:
     """Complete a background refresh for a process monitor metric."""
     return complete_cached_background_command(
         monitor_metric_job_name(metric),
@@ -7000,7 +7200,9 @@ def complete_monitor_metric_refresh(metric: str) -> subprocess.CompletedProcess[
     )
 
 
-def cached_monitor_process_list_result() -> tuple[subprocess.CompletedProcess[str] | None, bool]:
+def cached_monitor_process_list_result() -> (
+    tuple[subprocess.CompletedProcess[str] | None, bool]
+):
     """Return a cached process list result."""
     return cached_background_command_result(
         build_hhs_process_list_command("."), "monitor_process"
@@ -7223,17 +7425,23 @@ def footer_working_directory() -> str:
     except NameError:
         pass
     if str(st.session_state.get("ssh_connection_status", "")).strip() == "connected":
-        remote_cwd = str(st.session_state.get(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, "")).strip()
+        remote_cwd = str(
+            st.session_state.get(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, "")
+        ).strip()
         if remote_cwd:
             return remote_cwd
     else:
-        local_cwd = str(st.session_state.get(hhs_ui_constants.FOOTER_LOCAL_WORKING_DIR_KEY, "")).strip()
+        local_cwd = str(
+            st.session_state.get(hhs_ui_constants.FOOTER_LOCAL_WORKING_DIR_KEY, "")
+        ).strip()
         if local_cwd:
             return local_cwd
     return os.getcwd()
 
 
-def run_hhs_updater_check(refresh_cache: bool = False) -> subprocess.CompletedProcess[str]:
+def run_hhs_updater_check(
+    refresh_cache: bool = False,
+) -> subprocess.CompletedProcess[str]:
     """Run the HomeSetup updater check after refreshing the installed version."""
     command = build_hhs_envs_command("^HHS_VERSION$")
     if refresh_cache:
@@ -7288,8 +7496,8 @@ def build_hhs_shopt_setup_command() -> str:
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-toml.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-shell-utils.bash"; '
         'if [[ ! -s "${HHS_SHOPTS_FILE}" ]]; then '
-        "\\shopt | awk '{print $1\" = \"$2}' >\"${HHS_SHOPTS_FILE}\"; "
-        'fi; '
+        '\\shopt | awk \'{print $1" = "$2}\' >"${HHS_SHOPTS_FILE}"; '
+        "fi; "
     )
 
 
@@ -7297,18 +7505,18 @@ def build_hhs_shopt_load_saved_command() -> str:
     """Build a Bash command that applies saved shell options to this process."""
     return (
         'if [[ -s "${HHS_SHOPTS_FILE}" ]]; then '
-        'while IFS= read -r line; do '
+        "while IFS= read -r line; do "
         'if [[ "${line}" =~ ^([a-zA-Z0-9_]+)[[:space:]]*='
-        '[[:space:]]*([Oo][Nn]|[Oo][Ff][Ff])$ ]]; then '
+        "[[:space:]]*([Oo][Nn]|[Oo][Ff][Ff])$ ]]; then "
         'option="${BASH_REMATCH[1]}"; state="${BASH_REMATCH[2]}"; '
         'if [[ "${state}" =~ ^[Oo][Nn]$ ]]; then '
         'shopt -s "${option}" 2>/dev/null || true; '
-        'else '
+        "else "
         'shopt -u "${option}" 2>/dev/null || true; '
-        'fi; '
-        'fi; '
+        "fi; "
+        "fi; "
         'done < "${HHS_SHOPTS_FILE}"; '
-        'fi; '
+        "fi; "
     )
 
 
@@ -8631,7 +8839,7 @@ def ssh_tunnel_status_label(row: dict[str, str]) -> tuple[str, bool, str]:
 
 
 def annotate_ssh_tunnel_statuses(
-    rows: list[dict[str, str]]
+    rows: list[dict[str, str]],
 ) -> tuple[list[dict[str, str]], tuple[str, ...]]:
     """Return SSH tunnel rows with status values and running status job names."""
     annotated_rows: list[dict[str, str]] = []
@@ -8973,7 +9181,9 @@ def docker_container_table_key() -> str:
     )
     if not isinstance(reset_counter, int):
         reset_counter = 0
-        st.session_state[hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY] = reset_counter
+        st.session_state[hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY] = (
+            reset_counter
+        )
     return f"{hhs_ui.DOCKER_CONTAINER_TABLE_KEY}_{reset_counter}"
 
 
@@ -8984,7 +9194,9 @@ def reset_docker_container_table_selection() -> None:
     )
     if not isinstance(reset_counter, int):
         reset_counter = 0
-    st.session_state[hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
+    st.session_state[hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY] = (
+        reset_counter + 1
+    )
 
 
 def docker_image_table_key() -> str:
@@ -9450,7 +9662,7 @@ def apply_home_shopt_action(operation: str, option_name: str) -> None:
     action_label = "set" if operation == "set" else "unset"
     push_config_action_status(
         result,
-        f'Shell option {option_name} {action_label}.',
+        f"Shell option {option_name} {action_label}.",
         f"Unable to {action_label} shell option: {option_name}",
     )
     save_ui_state()
@@ -10073,9 +10285,7 @@ def execute_pending_service_action() -> None:
             metadata={"operation": operation, "service_name": service_name},
         )
         if started:
-            push_floating_status(
-                f"Service {operation} started: {service_name}", "info"
-            )
+            push_floating_status(f"Service {operation} started: {service_name}", "info")
         else:
             push_floating_status("Another service action is already running.", "warn")
 
@@ -10224,9 +10434,7 @@ def render_paths_table() -> None:
     if result is None:
         return
     rows = parse_hhs_paths(result.stdout) if result.returncode == 0 else []
-    render_path_rows(
-        filter_path_rows(rows, path_filter, other_filter)
-    )
+    render_path_rows(filter_path_rows(rows, path_filter, other_filter))
 
 
 def render_dirs_table() -> None:
@@ -10447,7 +10655,7 @@ def render_history_stats_chart() -> None:
             key="history_stats_top_n",
             label_visibility="collapsed",
             on_change=save_ui_state,
-    )
+        )
     st.markdown(f"##### Top {int(top_n)} most used commands")
     result = render_cached_command_result(
         build_hhs_history_stats_command(int(top_n)),
@@ -10601,7 +10809,9 @@ def render_process_monitor_chart(metric: str) -> None:
     """Render a process monitor chart for CPU or MEM usage."""
     job_name = monitor_metric_job_name(metric)
     complete_monitor_metric_refresh(metric)
-    refresh_clicked = st.button("Refresh", key=f"monitor_{metric.lower()}_refresh_button")
+    refresh_clicked = st.button(
+        "Refresh", key=f"monitor_{metric.lower()}_refresh_button"
+    )
     if refresh_clicked:
         cache_delete_command(monitor_metric_command(metric), "monitor_process")
         st.session_state[f"monitor_{metric.lower()}_error"] = ""
@@ -10826,7 +11036,11 @@ def render_monitor_logs_panel() -> None:
                     on_click=clear_monitor_log_file,
                     width="stretch",
                 )
-        return str(selected_log_value), str(selected_level_value), bool(tail_enabled_value)
+        return (
+            str(selected_log_value),
+            str(selected_level_value),
+            bool(tail_enabled_value),
+        )
 
     selected_log, selected_level, tail_enabled = render_table_controls_panel(
         render_log_controls
@@ -11086,7 +11300,9 @@ def render_ai_chat_panel() -> None:
     with meta_col:
         meta_placeholder = st.empty()
         meta_placeholder.markdown(
-            ai_chat_meta_html(username, ollama_model, context_size, model_result.stdout),
+            ai_chat_meta_html(
+                username, ollama_model, context_size, model_result.stdout
+            ),
             unsafe_allow_html=True,
         )
     completed = background_job_result(AI_ASK_JOB)
@@ -11229,7 +11445,9 @@ def render_ai_prompt_file_panel() -> None:
         )
         if result is None:
             return
-        output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
+        output = (
+            result.stdout if result.returncode == 0 else result.stderr or result.stdout
+        )
         clean_output = strip_ansi(output or "")
         if result.returncode == 0:
             st.session_state["ai_prompt_editor"] = clean_output
@@ -11734,6 +11952,7 @@ def main() -> None:
     if not isinstance(st.session_state["history_stats_top_n"], int):
         st.session_state["history_stats_top_n"] = 10
     execute_pending_dialog_callback()
+    apply_pending_folder_picker_selection()
     render_sidebar()
     render_main_view()
     render_folder_picker_dialog()
