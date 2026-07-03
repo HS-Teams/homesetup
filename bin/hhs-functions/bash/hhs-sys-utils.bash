@@ -168,7 +168,7 @@ function __hhs_process_list() {
             if kill -9 "${pid}" &>/dev/null; then
               echo -en "${GREEN}=> Killed \"${pid}\" with SIGKILL(-9)\033[K"
             else
-              echo -en "${ORANGE}=> Skipped \"${pid}\" (INACTIVE)\033[K"
+              echo -en "${ORANGE}=> Skipped \"${pid}\" inactive process\033[K"
             fi
           fi
           if [[ -n "$ANS" || -n "${force}" ]]; then echo -e "${NC}"; fi

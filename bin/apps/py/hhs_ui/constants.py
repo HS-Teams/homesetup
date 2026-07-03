@@ -34,7 +34,7 @@ UI_CACHE_FILE = HHS_CACHE_DIR / ".streamlit-ui-cache"
 UI_CACHE_SSH_CONNECTION_KEY = "ui:ssh_connection"
 SSH_RECONNECT_HOST_KEY = "ssh_reconnect_host"
 TTYD_INDEX_FILE = HHS_CACHE_DIR / ".streamlit-ttyd-index.html"
-UI_CACHE_REALTIME_TTL_SECONDS = 15
+UI_CACHE_REALTIME_TTL_SECONDS = 30
 UI_CACHE_NORMAL_TTL_SECONDS = 300
 UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900
 UI_CACHE_DEFAULT_TTL_SECONDS = UI_CACHE_NORMAL_TTL_SECONDS
@@ -136,6 +136,7 @@ ENV_FILTERS = ("All", "HHS", "Other")
 LIST_FILTERS = ("All", "Other")
 HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
+PROCESS_FILTERS = ("All", "Active", "Inactive", "Ghost", "Other")
 SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")
 SHOPTS_FILTERS = ("All", "ON", "OFF", "Other")
 LOG_LEVELS = (
@@ -205,6 +206,7 @@ PERSISTED_UI_KEYS = (
     "monitor_log_level",
     "monitor_logs_tail",
     "monitor_process_filter",
+    "monitor_process_other_filter",
     "monitor_view",
     "path_filter",
     "path_other_filter",
@@ -249,7 +251,8 @@ DISK_USAGE_LINE_PATTERN = re.compile(
     r"^\s*\d+:\s+(.+?)\.{2,}\s+([0-9.]+[A-Za-z]*)\s+\|"
 )
 PROCESS_LIST_LINE_PATTERN = re.compile(
-    r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s+(?:[✓✔]\s+)?active process$", re.IGNORECASE
+    r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s+(?:\S+\s+)?(active|inactive|ghost) process$",
+    re.IGNORECASE,
 )
 TOP_PROCESS_SORT_KEYS = {
     "CPU": {"darwin": "cpu", "linux": "%CPU", "field": "CPU"},
@@ -334,6 +337,7 @@ TWO_OPTION_FILTER_COLUMNS = [0.75, 3.25]
 THREE_OPTION_FILTER_COLUMNS = [1.1, 2.9]
 FOUR_OPTION_FILTER_COLUMNS = [1.75, 2.25]
 PATH_FILTER_COLUMNS = [2.25, 1.75]
+PROCESS_FILTER_COLUMNS = [2.65, 1.35]
 DOCUMENT_VIEW_ACTIVE_KEY = "document_view_active"
 DOCUMENT_PREVIOUS_VIEW_KEY = "document_previous_view"
 DOCUMENT_SELECTED_KEY = "document_selected"
