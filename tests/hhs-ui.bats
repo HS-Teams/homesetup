@@ -2402,7 +2402,9 @@ PY
 from pathlib import Path
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-body = source.split("def execute_pending_ssh_connection", 1)[1].split("\ndef ", 1)[0]
+start_body = source.split("def execute_pending_ssh_connection", 1)[1].split("\ndef ", 1)[0]
+complete_body = source.split("def complete_ssh_connection", 1)[1].split("\ndef ", 1)[0]
+body = f"{start_body}\n{complete_body}"
 snapshot_index = body.index("was_terminal_active = terminal_document_view_is_active()")
 reset_index = body.index("clear_host_scoped_session_state()")
 status_index = body.index('st.session_state["ssh_connection_status"] = "connected"')

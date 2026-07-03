@@ -189,9 +189,12 @@ UPDATER_CHECK_JOB = "updater_check"
 AI_ASK_JOB = "ai_ask"
 FOOTER_VERSION_JOB = "footer_hhs_version"
 FOOTER_WORKING_DIR_JOB = "footer_working_dir"
+SSH_CONNECT_JOB = "ssh_connect"
 SSH_DISCONNECT_JOB = "ssh_disconnect"
 HOST_SWITCH_CACHE_TAGS = ("env", "services", "monitor_process")
 HOST_SWITCH_BACKGROUND_JOBS = (
+    SSH_CONNECT_JOB,
+    SSH_DISCONNECT_JOB,
     SERVICE_LIST_JOB,
     SERVICE_ACTION_JOB,
     MONITOR_CPU_JOB,
@@ -199,6 +202,8 @@ HOST_SWITCH_BACKGROUND_JOBS = (
     MONITOR_PROCESS_LIST_JOB,
 )
 CACHE_CLEAR_BACKGROUND_JOBS = (
+    SSH_CONNECT_JOB,
+    SSH_DISCONNECT_JOB,
     FOOTER_VERSION_JOB,
     ALIAS_LIST_JOB,
     SERVICE_LIST_JOB,
@@ -6256,11 +6261,13 @@ def request_ssh_host_disconnection() -> None:
     st.session_state["ssh_connect_pending_message"] = ""
 
 
-def execute_pending_ssh_connection() -> None:
+def execute_pending_ssh_connection() -> bool:
     """Open a pending SSH ControlMaster connection from the normal render flow."""
+    if complete_ssh_connection():
+        return True
     host = str(st.session_state.get("ssh_connect_pending", "")).strip()
     if not host:
-        return
+        return False
     loader_message = str(st.session_state.get("ssh_connect_pending_message", "")).strip()
     loader_message = loader_message or f"Connecting to SSH host {host}..."
     st.session_state.pop("ssh_reconnect_restore_view_state", False)
@@ -6268,14 +6275,46 @@ def execute_pending_ssh_connection() -> None:
     was_terminal_active = terminal_document_view_is_active()
     st.session_state["ssh_connect_pending"] = ""
     st.session_state["ssh_connect_pending_message"] = ""
-    result = run_bash_command(
+    st.session_state["ssh_connection_status"] = "connecting"
+    st.session_state["ssh_connection_host"] = host
+    started = start_background_bash_command(
+        SSH_CONNECT_JOB,
         build_ssh_connect_command(host),
         loader_message,
-        ttl_seconds=0,
-        use_cache=False,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         force_local=True,
-        cache_tag="ssh",
+        metadata={
+            "ssh_host": host,
+            "reconnect_state": reconnect_state,
+            "was_terminal_active": was_terminal_active,
+        },
     )
+    if started:
+        render_background_job_status(SSH_CONNECT_JOB)
+        return True
+    else:
+        push_floating_status(
+            "Another SSH connection command is already running.",
+            "warn",
+        )
+    return False
+
+
+def complete_ssh_connection() -> bool:
+    """Complete or render the active SSH connect background job."""
+    job = background_job_state(SSH_CONNECT_JOB)
+    if not job:
+        return False
+    completed = background_job_result(SSH_CONNECT_JOB)
+    if completed is None:
+        render_background_job_status(SSH_CONNECT_JOB)
+        return True
+    result, metadata = completed
+    host = str(metadata.get("ssh_host", "")).strip()
+    reconnect_state = metadata.get("reconnect_state")
+    if not isinstance(reconnect_state, dict):
+        reconnect_state = {}
+    was_terminal_active = bool(metadata.get("was_terminal_active", False))
     if result.returncode == 0:
         clear_host_scoped_session_state()
         restore_reconnect_view_state(reconnect_state)
@@ -6303,6 +6342,7 @@ def execute_pending_ssh_connection() -> None:
         )
         st.session_state["ssh_connection_dialog_title"] = f"Failed to connect to {host}"
         push_floating_status(f"Failed to connect to remote: {host}", "error")
+    return False
 
 
 def clear_completed_ssh_disconnection(
@@ -12063,7 +12103,8 @@ def main() -> None:
         st.session_state["ssh_disconnect_pending"] = ""
     if execute_pending_ssh_disconnection():
         return
-    execute_pending_ssh_connection()
+    if execute_pending_ssh_connection():
+        return
     if render_ssh_connection_dialog():
         return
     handle_footer_actions()
