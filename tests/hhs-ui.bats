@@ -979,6 +979,12 @@ assert 'f\'<span class="hhs-footer-glyph"></span>\'' in ui_source
 assert 'f\'<span class="hhs-footer-cache-refresh-glyph">♻</span></a>\'' in ui_source
 assert '<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}"' in ui_source
 assert '<span class="hhs-footer-glyph"></span><span class="hhs-footer-cache-refresh-glyph">♻</span></a>' not in ui_source
+assert 'def render_footer_cache_clear_menu' in ui_source
+assert 'st.container(key="footer_cache_clear_menu")' in ui_source
+assert '"Clear application cache"' in ui_source
+assert '"Clear application states"' in ui_source
+assert '"Clear AI history"' in ui_source
+assert '"OK"' in ui_source
 assert 'def build_open_directory_command' in ui_source
 assert 'def run_open_working_directory' in ui_source
 assert 'def build_footer_working_directory_command' in ui_source
@@ -1029,7 +1035,8 @@ assert shell_result_index < shell_output_index < shell_title_index
 assert 'cache_delete_tag("env")' in footer_actions_body
 assert 'st.session_state["footer_hhs_version_cache_loaded"] = False' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM' in footer_actions_body
-assert 'clear_cached_ui_data_preserving_state()' in footer_actions_body
+assert 'open_footer_cache_clear_menu()' in footer_actions_body
+assert 'clear_cached_ui_data_preserving_state()' not in footer_actions_body
 assert 'def cache_delete_command' in ui_source
 assert 'cache_delete_command(command, "env")' in ui_source
 clear_cache_body = ui_source.split("def clear_cached_ui_data_preserving_state", 1)[1].split("\ndef ", 1)[0]
@@ -1037,6 +1044,14 @@ assert "cache_clear()" in clear_cache_body
 assert "st.session_state.clear()" not in clear_cache_body
 assert "UI_STATE_FILE" not in clear_cache_body
 assert "push_floating_status" in clear_cache_body
+apply_cache_menu_body = ui_source.split("def apply_footer_cache_clear_menu", 1)[1].split("\ndef ", 1)[0]
+assert "clear_cached_ui_data_preserving_state(show_status=False)" in apply_cache_menu_body
+assert "clear_application_state_data()" in apply_cache_menu_body
+assert "clear_ai_chat_history_data()" in apply_cache_menu_body
+assert "st.rerun()" not in apply_cache_menu_body
+state_clear_body = ui_source.split("def clear_application_state_data", 1)[1].split("\ndef ", 1)[0]
+assert "hhs_ui.UI_STATE_FILE.unlink" in state_clear_body
+assert "is_persisted_ui_key" in state_clear_body
 assert 'def updater_output_has_updates' in ui_source
 assert 'def updater_check_due' in ui_source
 assert 'def store_updater_check_result' in ui_source
@@ -1079,6 +1094,12 @@ remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", bas
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
 shell_group_block = re.search(r"\.hhs-footer-shell-group\s*\{([^}]*)\}", base_css).group(1)
 cache_clear_block = re.search(r"\.hhs-footer-cache-clear-button,[^{]+\{([^}]*)\}", base_css).group(1)
+footer_cache_menu_gap_block = re.search(r"\.st-key-footer_cache_clear_menu \[data-testid=\"stVerticalBlock\"\]\s*\{([^}]*)\}", base_css).group(1)
+footer_cache_menu_checkbox_container_block = re.search(r"\.st-key-footer_cache_clear_menu \[data-testid=\"stElementContainer\"\]:has\(\[data-testid=\"stCheckbox\"\]\)\s*\{([^}]*)\}", base_css).group(1)
+footer_cache_menu_checkbox_block = re.search(r"\.st-key-footer_cache_clear_menu \[data-testid=\"stCheckbox\"\]\s*\{([^}]*)\}", base_css).group(1)
+footer_cache_menu_ok_block = re.search(r"\.st-key-footer_cache_clear_menu_ok\s*\{([^}]*)\}", base_css).group(1)
+footer_cache_menu_ok_stbutton_block = re.search(r"\.st-key-footer_cache_clear_menu_ok \[data-testid=\"stButton\"\]\s*\{([^}]*)\}", base_css).group(1)
+footer_cache_menu_ok_button_block = re.search(r"\.st-key-footer_cache_clear_menu_ok button\s*\{([^}]*)\}", base_css).group(1)
 block_container_block = re.search(r"\.block-container\s*\{([^}]*)\}", base_css).group(1)
 main_block_gap_block = re.search(r"\[data-testid=\"stMainBlockContainer\"\] > \[data-testid=\"stVerticalBlock\"\],[^{]+\{([^}]*)\}", base_css).group(1)
 active_view_block = re.search(r"\.st-key-active_view\s*\{([^}]*)\}", base_css).group(1)
@@ -1118,6 +1139,22 @@ assert "var(--hhs-success)" in cache_clear_block
 assert ".hhs-footer-cache-refresh-glyph" in base_css
 assert "font-size: 3em" in base_css
 assert ".hhs-footer-cache-clear-button .hhs-footer-glyph" not in base_css
+assert ".st-key-footer_cache_clear_menu" in base_css
+assert "bottom: calc(var(--hhs-footer-guard-height) + 0.7rem)" in base_css
+assert "right: 1rem" in base_css
+assert "background: var(--hhs-theme-secondary-background-color)" in base_css
+assert "box-shadow: 0 1rem 2rem" in base_css
+assert '.st-key-footer_cache_clear_menu [data-testid="stCheckbox"]:hover' in base_css
+assert ".st-key-footer_cache_clear_menu_ok button" in base_css
+assert "gap: var(--hhs-element-std-gap) !important" in footer_cache_menu_gap_block
+assert "width: 100%" in footer_cache_menu_checkbox_container_block
+assert "width: 100%" in footer_cache_menu_checkbox_block
+assert "justify-content: center" in footer_cache_menu_ok_block
+assert "width: 100%" in footer_cache_menu_ok_block
+assert "justify-content: center" in footer_cache_menu_ok_stbutton_block
+assert "width: 100%" in footer_cache_menu_ok_stbutton_block
+assert "margin-left: auto" in footer_cache_menu_ok_button_block
+assert "margin-right: auto" in footer_cache_menu_ok_button_block
 assert 'div[role="dialog"]:has(.hhs-shell-version-output)' in base_css
 assert ".hhs-shell-version-output" in base_css
 assert "max-height: 88dvh" in base_css
@@ -1651,7 +1688,7 @@ PY
   run grep -q '"home_tools_filter"' "${ui_file}"
   assert_success
 
-  run grep -q 'HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Other")' "${constants_file}"
+  run grep -q 'HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Aliased", "Other")' "${constants_file}"
   assert_success
 
   run grep -q 'HOME_TOOLS_FILTERS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
@@ -1660,7 +1697,7 @@ PY
   run grep -q 'hhs_ui.HOME_TOOLS_FILTERS' "${ui_file}"
   assert_success
 
-  run grep -q 'hhs_ui.FOUR_OPTION_FILTER_COLUMNS' "${ui_file}"
+  run grep -q 'hhs_ui.FIVE_OPTION_FILTER_COLUMNS' "${ui_file}"
   assert_success
 
   run grep -q 'home_tool_is_installed(row)' "${ui_file}"
@@ -1750,6 +1787,12 @@ PY
   run grep -q 'FOUR_OPTION_FILTER_COLUMNS = \[1.75, 2.25\]' "${constants_file}"
   assert_success
 
+  run grep -q 'FIVE_OPTION_FILTER_COLUMNS = \[2.75, 1.25\]' "${constants_file}"
+  assert_success
+
+  run grep -q 'FIVE_OPTION_FILTER_COLUMNS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
   run grep -q 'PATH_FILTER_COLUMNS = \[2.25, 1.75\]' "${constants_file}"
   assert_success
 
@@ -1772,6 +1815,9 @@ PY
   assert_success
 
   run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-home_shopts_other_filter)' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-home_tools_filter)' "${css_file}"
   assert_success
 
   run grep -q '.st-key-home_shopts_other_filter input' "${css_file}"
@@ -2440,9 +2486,14 @@ reset_index = body.index("clear_host_scoped_session_state()")
 status_index = body.index('st.session_state["ssh_connection_status"] = "connected"')
 remote_cwd_index = body.index("update_remote_footer_working_directory()")
 restore_index = body.index("restore_terminal_document_view(was_terminal_active)")
+availability_refresh_index = complete_body.index(
+    "schedule_ollama_service_availability_refresh()"
+)
 assert snapshot_index < reset_index
 assert reset_index < status_index
 assert status_index < remote_cwd_index < restore_index
+assert complete_body.index("register_ssh_connection(host)") < availability_refresh_index
+assert availability_refresh_index < complete_body.index("save_ui_state()")
 assert "set_overlay(True" not in body
 assert "set_overlay(False" not in body
 assert "show_overlay=False" not in body
@@ -2460,7 +2511,12 @@ clear_disconnect_body = source.split("def clear_completed_ssh_disconnection", 1)
 disconnect_snapshot_index = clear_disconnect_body.index("disconnect_view_state = reconnect_view_state_snapshot()")
 disconnect_reset_index = clear_disconnect_body.index("clear_host_scoped_session_state()")
 disconnect_restore_index = clear_disconnect_body.index("restore_reconnect_view_state(disconnect_view_state)")
+disconnect_availability_refresh_index = clear_disconnect_body.index(
+    "schedule_ollama_service_availability_refresh()"
+)
 assert disconnect_snapshot_index < disconnect_reset_index < disconnect_restore_index
+assert clear_disconnect_body.index("cache_clear()") < disconnect_availability_refresh_index
+assert disconnect_availability_refresh_index < clear_disconnect_body.index("save_ui_state()")
 restore_body = source.split("def restore_registered_ssh_connection_on_session_start", 1)[1].split("\ndef ", 1)[0]
 assert "registered_ssh_connection_host() or reconnect_host" in restore_body
 assert "clear_disconnected_ssh_host(host)" not in restore_body
@@ -3503,6 +3559,10 @@ ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
 disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
 connect_index = main_body.index("execute_pending_ssh_connection()")
+ssh_dialog_index = main_body.index("render_ssh_connection_dialog()")
+ai_initialize_index = main_body.index("initialize_ollama_service_availability()")
+ai_refresh_index = main_body.index("update_ollama_service_availability_refresh()")
+active_view_validation_index = main_body.index('if st.session_state["active_view"] not in main_views():')
 footer_actions_index = main_body.index("handle_footer_actions()")
 shell_dialog_index = main_body.index("render_footer_shell_version_dialog()")
 cleanup_index = main_body.index("render_browser_cleanup_script()")
@@ -3510,7 +3570,9 @@ sidebar_index = main_body.index("render_sidebar()")
 main_view_index = main_body.index("render_main_view()")
 footer_index = main_body.index("render_footer()")
 floating_status_index = main_body.index("render_floating_status()")
-assert disconnect_index < connect_index < footer_actions_index < shell_dialog_index
+assert disconnect_index < connect_index < ssh_dialog_index
+assert ssh_dialog_index < ai_initialize_index < ai_refresh_index < active_view_validation_index
+assert active_view_validation_index < footer_actions_index < shell_dialog_index
 assert shell_dialog_index < sidebar_index < main_view_index
 assert footer_index < floating_status_index < cleanup_index
 PY
@@ -5511,6 +5573,9 @@ namespace = {
         "not found" in row.get("Status", "").lower()
         or "not installed" in row.get("Status", "").lower()
     ),
+    "home_tool_is_aliased": lambda row: (
+        "aliased" in row.get("Status", "").lower()
+    ),
     "service_is_up": lambda row: "up" in row.get("Value", "").lower(),
     "service_is_down": lambda row: "down" in row.get("Value", "").lower(),
 }
@@ -5531,10 +5596,12 @@ tool_rows = [
     {"Tool": "git", "Status": "Installed"},
     {"Tool": "ollama", "Status": "Not Found"},
     {"Tool": "node", "Status": "Not Installed"},
+    {"Tool": "gw", "Status": "Aliased"},
 ]
 assert namespace["filter_tool_rows"](tool_rows, "All", "") == tool_rows
 assert namespace["filter_tool_rows"](tool_rows, "Installed", "") == [tool_rows[0]]
-assert namespace["filter_tool_rows"](tool_rows, "Not Installed", "") == tool_rows[1:]
+assert namespace["filter_tool_rows"](tool_rows, "Not Installed", "") == tool_rows[1:3]
+assert namespace["filter_tool_rows"](tool_rows, "Aliased", "") == [tool_rows[3]]
 assert namespace["filter_tool_rows"](tool_rows, "Other", "node") == [tool_rows[2]]
 PY
   assert_success
@@ -5598,6 +5665,36 @@ remember_calls = {
     if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
 }
 assert "ollama_service_is_available_from_output" in remember_calls
+
+schedule = functions["schedule_ollama_service_availability_refresh"]
+schedule_calls = {
+    call.func.id
+    for call in ast.walk(schedule)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "stop_background_job" in schedule_calls
+assert "cache_delete_tag" in schedule_calls
+assert "start_hhs_services_list_refresh" in schedule_calls
+
+update = functions["update_ollama_service_availability_refresh"]
+update_calls = {
+    call.func.id
+    for call in ast.walk(update)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "complete_hhs_services_list_refresh" in update_calls
+assert "background_job_is_running" in update_calls
+assert "poll_background_job_completion" in update_calls
+
+main = functions["main"]
+main_calls = {
+    call.func.id
+    for call in ast.walk(main)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "initialize_ollama_service_availability" in main_calls
+assert "main_views" in main_calls
+assert "update_ollama_service_availability_refresh" in main_calls
 PY
   assert_success
 }

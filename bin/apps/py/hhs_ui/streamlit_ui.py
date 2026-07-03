@@ -660,17 +660,24 @@ def terminal_document_view_is_active() -> bool:
 
 def clear_ai_chat_history() -> None:
     """Reset the backend ask history and clear the current AI chat history."""
+    result = clear_ai_chat_history_data()
+    if result.returncode == 0:
+        push_floating_status("AI chat history cleared.", "info")
+    else:
+        push_floating_status("Unable to clear AI chat history.", "error")
+    save_ui_state()
+
+
+def clear_ai_chat_history_data() -> subprocess.CompletedProcess[str]:
+    """Reset backend AI history and clear in-memory AI chat data."""
     result = run_hhs_ask_reset(close_dialogs=True)
     cache_delete_tag("ai")
     st.session_state["ai_chat_messages"] = []
     st.session_state["ai_context_output"] = ""
     st.session_state["ai_context_error"] = ""
     st.session_state["ai_clear_chat_pending"] = False
-    if result.returncode == 0:
-        push_floating_status("AI chat history cleared.", "info")
-    else:
-        push_floating_status("Unable to clear AI chat history.", "error")
-    save_ui_state()
+    st.session_state["ai_clear_chat_execute_pending"] = False
+    return result
 
 
 def clear_ai_context_history() -> None:
@@ -2377,6 +2384,92 @@ def render_footer_shell_version_dialog() -> bool:
     )
 
 
+def open_footer_cache_clear_menu() -> None:
+    """Open the footer cleanup menu and reset its pending choices."""
+    st.session_state["footer_cache_clear_menu_open"] = True
+    st.session_state["footer_cache_clear_application_cache"] = False
+    st.session_state["footer_cache_clear_application_states"] = False
+    st.session_state["footer_cache_clear_ai_history"] = False
+
+
+def close_footer_cache_clear_menu() -> None:
+    """Close the footer cleanup menu."""
+    st.session_state["footer_cache_clear_menu_open"] = False
+
+
+def clear_application_state_data() -> None:
+    """Delete persisted UI state and remove persistable selections from this session."""
+    try:
+        hhs_ui.UI_STATE_FILE.unlink(missing_ok=True)
+    except OSError as error:
+        push_floating_status(f"Unable to clear application states: {error}", "error")
+    for state_key in list(st.session_state):
+        if is_persisted_ui_key(str(state_key)):
+            st.session_state.pop(state_key, None)
+
+
+def selected_footer_cleanup_labels() -> list[str]:
+    """Return the footer cleanup labels selected in the popup menu."""
+    labels = []
+    if st.session_state.get("footer_cache_clear_application_cache"):
+        labels.append("application cache")
+    if st.session_state.get("footer_cache_clear_application_states"):
+        labels.append("application states")
+    if st.session_state.get("footer_cache_clear_ai_history"):
+        labels.append("AI history")
+    return labels
+
+
+def apply_footer_cache_clear_menu() -> None:
+    """Apply selected footer cleanup menu actions."""
+    labels = selected_footer_cleanup_labels()
+    if not labels:
+        close_footer_cache_clear_menu()
+        push_floating_status("No cleanup option selected.", "warn")
+        return
+
+    failed_labels = []
+    if st.session_state.get("footer_cache_clear_application_cache"):
+        clear_cached_ui_data_preserving_state(show_status=False)
+    if st.session_state.get("footer_cache_clear_ai_history"):
+        result = clear_ai_chat_history_data()
+        if result.returncode != 0:
+            failed_labels.append("AI history")
+    if st.session_state.get("footer_cache_clear_application_states"):
+        clear_application_state_data()
+
+    close_footer_cache_clear_menu()
+    if failed_labels:
+        push_floating_status(f"Unable to clear {', '.join(failed_labels)}.", "error")
+    else:
+        push_floating_status(f"Cleared {', '.join(labels)}.", "info")
+
+
+def render_footer_cache_clear_menu() -> None:
+    """Render the footer cleanup menu opened by the cache glyph button."""
+    if not st.session_state.get("footer_cache_clear_menu_open"):
+        return
+    with st.container(key="footer_cache_clear_menu"):
+        st.checkbox(
+            "Clear application cache",
+            key="footer_cache_clear_application_cache",
+        )
+        st.checkbox(
+            "Clear application states",
+            key="footer_cache_clear_application_states",
+        )
+        st.checkbox(
+            "Clear AI history",
+            key="footer_cache_clear_ai_history",
+        )
+        st.button(
+            "OK",
+            key="footer_cache_clear_menu_ok",
+            on_click=apply_footer_cache_clear_menu,
+            width="content",
+        )
+
+
 def handle_footer_actions() -> None:
     """Run footer actions requested through Streamlit query parameters."""
     updater_completed = background_job_result(UPDATER_UPDATE_JOB)
@@ -2410,7 +2503,7 @@ def handle_footer_actions() -> None:
 
     if query_param_requested(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM)
-        clear_cached_ui_data_preserving_state()
+        open_footer_cache_clear_menu()
 
     if query_param_requested(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM)
@@ -2721,6 +2814,11 @@ def home_tool_is_not_found(row: dict[str, str]) -> bool:
     """Return whether a Home tool row is currently missing."""
     status = home_tool_status_text(row)
     return "not found" in status or "not installed" in status
+
+
+def home_tool_is_aliased(row: dict[str, str]) -> bool:
+    """Return whether a Home tool row resolves through a shell alias."""
+    return "aliased" in home_tool_status_text(row)
 
 
 def selected_item_editing_key(table_key: str | None, selected_index: int) -> str:
@@ -3586,7 +3684,7 @@ def render_home_tools_panel() -> None:
             hhs_ui.HOME_TOOLS_FILTERS,
             "home_tools_filter",
             "home_tools_other_filter",
-            hhs_ui.FOUR_OPTION_FILTER_COLUMNS,
+            hhs_ui.FIVE_OPTION_FILTER_COLUMNS,
         )
     )
     filtered_rows = filter_tool_rows(rows, tools_filter, other_filter)
@@ -6381,6 +6479,7 @@ def complete_ssh_connection() -> bool:
             "info",
         )
         register_ssh_connection(host)
+        schedule_ollama_service_availability_refresh()
         save_ui_state()
     else:
         st.session_state["ssh_connection_status"] = "failed"
@@ -6425,6 +6524,7 @@ def clear_completed_ssh_disconnection(
             ),
             "warn",
         )
+    schedule_ollama_service_availability_refresh()
     save_ui_state()
 
 
@@ -7200,7 +7300,7 @@ def cache_clear() -> None:
     clear_render_caches()
 
 
-def clear_cached_ui_data_preserving_state() -> None:
+def clear_cached_ui_data_preserving_state(show_status: bool = True) -> None:
     """Clear cached command data while preserving UI selections and metadata."""
     stop_background_jobs(CACHE_CLEAR_BACKGROUND_JOBS)
     stop_background_jobs_with_state_prefix(background_job_state_key("cached_"))
@@ -7209,7 +7309,8 @@ def clear_cached_ui_data_preserving_state() -> None:
     for state_key in list(st.session_state):
         if str(state_key).startswith("_hhs_cached_command_error_"):
             st.session_state.pop(state_key, None)
-    push_floating_status("Cache cleared.", "info")
+    if show_status:
+        push_floating_status("Cache cleared.", "info")
 
 
 def expire_host_scoped_command_state() -> None:
@@ -7487,6 +7588,26 @@ def complete_hhs_services_list_refresh() -> subprocess.CompletedProcess[str] | N
     )
     remember_ollama_service_availability(result)
     return result
+
+
+def schedule_ollama_service_availability_refresh() -> None:
+    """Start a fresh services refresh so AI tab visibility follows the active host."""
+    stop_background_job(SERVICE_LIST_JOB)
+    cache_delete_tag("services")
+    st.session_state["service_list_error"] = ""
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = False
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = True
+    start_hhs_services_list_refresh()
+
+
+def update_ollama_service_availability_refresh() -> None:
+    """Complete or poll the services refresh that drives AI tab visibility."""
+    previous_availability = ollama_service_is_available()
+    result = complete_hhs_services_list_refresh()
+    if result is not None and ollama_service_is_available() != previous_availability:
+        st.rerun()
+    if background_job_is_running(SERVICE_LIST_JOB):
+        poll_background_job_completion(SERVICE_LIST_JOB)
 
 
 def monitor_metric_job_name(metric: str) -> str:
@@ -8587,6 +8708,8 @@ def filter_tool_rows(
         return [row for row in rows if home_tool_is_installed(row)]
     if tools_filter in ("Not Installed", "Not Found"):
         return [row for row in rows if home_tool_is_not_found(row)]
+    if tools_filter == "Aliased":
+        return [row for row in rows if home_tool_is_aliased(row)]
     if tools_filter == "Other":
         return [row for row in rows if row_matches_text_filter(row, other_filter)]
     return rows
@@ -12216,19 +12339,12 @@ def main() -> None:
     if st.session_state.get("theme_reload_pending"):
         render_theme_reload_overlay()
     st.session_state.setdefault("active_view", "Home")
-    if st.session_state["active_view"] not in (
-        *hhs_ui.VIEWS,
-        hhs_ui.SSH_VIEW,
-        hhs_ui.AI_VIEW,
-    ):
-        st.session_state["active_view"] = "Home"
     st.session_state.setdefault("ai_chat_messages", [])
     st.session_state.setdefault(hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY, False)
     st.session_state.setdefault(
         hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY,
         False,
     )
-    initialize_ollama_service_availability()
     if not isinstance(st.session_state["ai_chat_messages"], list):
         st.session_state["ai_chat_messages"] = []
     st.session_state.setdefault("ai_clear_chat_pending", False)
@@ -12288,6 +12404,10 @@ def main() -> None:
         return
     if render_ssh_connection_dialog():
         return
+    initialize_ollama_service_availability()
+    update_ollama_service_availability_refresh()
+    if st.session_state["active_view"] not in main_views():
+        st.session_state["active_view"] = "Home"
     handle_footer_actions()
     render_background_job_status(UPDATER_UPDATE_JOB)
     render_footer_shell_version_dialog()
@@ -12379,6 +12499,7 @@ def main() -> None:
     render_main_view()
     render_folder_picker_dialog()
     render_footer()
+    render_footer_cache_clear_menu()
     render_floating_status()
     render_browser_cleanup_script()
 

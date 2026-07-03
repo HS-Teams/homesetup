@@ -849,6 +849,10 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) {
   gap: var(--hhs-element-std-gap) !important;
 }
 
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_filter) {
+  gap: var(--hhs-element-std-gap) !important;
+}
+
 div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter) > div[data-testid="stColumn"]:first-child,
@@ -860,6 +864,12 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filte
 div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:first-child {
+  flex: 0 0 auto !important;
+  min-width: max-content !important;
+  width: auto !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_filter) > div[data-testid="stColumn"]:first-child {
   flex: 0 0 auto !important;
   min-width: max-content !important;
   width: auto !important;
@@ -881,6 +891,12 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[dat
   width: auto !important;
 }
 
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_filter) > div[data-testid="stColumn"]:nth-child(2) {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
+
 div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter) > div[data-testid="stColumn"]:last-child,
@@ -892,6 +908,13 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filte
 div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:last-child {
+  align-self: center !important;
+  flex: 0 0 2.1rem !important;
+  min-width: 2.1rem !important;
+  width: 2.1rem !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_filter) > div[data-testid="stColumn"]:last-child {
   align-self: center !important;
   flex: 0 0 2.1rem !important;
   min-width: 2.1rem !important;
@@ -1382,6 +1405,85 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 .hhs-footer-cache-clear-button:focus {
   background: color-mix(in srgb, var(--hhs-success) 14%, transparent);
   filter: brightness(1.15);
+}
+
+.st-key-footer_cache_clear_menu {
+  background: var(--hhs-theme-secondary-background-color);
+  border: 1px solid color-mix(in srgb, var(--hhs-theme-border-color) 82%, transparent);
+  border-radius: var(--hhs-theme-base-radius);
+  bottom: calc(var(--hhs-footer-guard-height) + 0.7rem);
+  box-shadow: 0 1rem 2rem color-mix(in srgb, #000 46%, transparent);
+  box-sizing: border-box;
+  color: var(--hhs-theme-text-color);
+  padding: 0.45rem;
+  position: fixed;
+  right: 1rem;
+  width: min(22rem, calc(100vw - 2rem)) !important;
+  z-index: 10060;
+}
+
+.st-key-footer_cache_clear_menu [data-testid="stVerticalBlock"] {
+  gap: var(--hhs-element-std-gap) !important;
+}
+
+.st-key-footer_cache_clear_menu [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]) {
+  width: 100%;
+}
+
+.st-key-footer_cache_clear_menu [data-testid="stCheckbox"] {
+  border-radius: calc(var(--hhs-theme-base-radius) - 0.1rem);
+  box-sizing: border-box;
+  min-height: 2.25rem;
+  transition: background 120ms ease, color 120ms ease;
+  width: 100%;
+}
+
+.st-key-footer_cache_clear_menu [data-testid="stCheckbox"]:hover,
+.st-key-footer_cache_clear_menu [data-testid="stCheckbox"]:focus-within {
+  background: color-mix(in srgb, var(--hhs-theme-primary-color) 18%, transparent);
+}
+
+.st-key-footer_cache_clear_menu [data-testid="stCheckbox"] label {
+  align-items: center;
+  color: var(--hhs-theme-text-color);
+  cursor: pointer;
+  display: flex;
+  font-family: var(--hhs-ui-font-family), monospace;
+  font-size: 0.84rem;
+  font-weight: 700;
+  min-height: 2.25rem;
+  padding: 0.34rem 0.45rem;
+  width: 100%;
+}
+
+.st-key-footer_cache_clear_menu [data-testid="stCheckbox"] label p {
+  font-size: inherit;
+}
+
+.st-key-footer_cache_clear_menu_ok {
+  align-items: center;
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 0.35rem;
+  padding-top: 0.25rem;
+  width: 100%;
+}
+
+.st-key-footer_cache_clear_menu_ok [data-testid="stButton"] {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.st-key-footer_cache_clear_menu_ok button {
+  border-radius: var(--hhs-theme-button-radius);
+  margin-left: auto;
+  margin-right: auto;
+  min-height: 1.9rem;
+  min-width: 5.5rem;
 }
 
 .hhs-footer-remote-status {

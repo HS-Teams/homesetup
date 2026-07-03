@@ -148,7 +148,7 @@ MONITOR_VIEW_LABELS = {
 }
 ENV_FILTERS = ("All", "HHS", "Other")
 LIST_FILTERS = ("All", "Other")
-HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Other")
+HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Aliased", "Other")
 LOG_FILTERS = ("All", "Containing")
 HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
@@ -354,6 +354,7 @@ SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"
 TWO_OPTION_FILTER_COLUMNS = [0.75, 3.25]
 THREE_OPTION_FILTER_COLUMNS = [1.1, 2.9]
 FOUR_OPTION_FILTER_COLUMNS = [1.75, 2.25]
+FIVE_OPTION_FILTER_COLUMNS = [2.75, 1.25]
 PATH_FILTER_COLUMNS = [2.25, 1.75]
 PROCESS_FILTER_COLUMNS = [2.65, 1.35]
 DOCUMENT_VIEW_ACTIVE_KEY = "document_view_active"
