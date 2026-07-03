@@ -8313,9 +8313,9 @@ def filter_service_rows(
     text_filter: str = "",
 ) -> list[dict[str, str]]:
     """Return service rows matching the selected service status filter."""
-    if service_filter == "Started":
+    if service_filter in ("Up", "Started"):
         return [row for row in rows if service_is_up(row)]
-    if service_filter == "Stopped":
+    if service_filter in ("Down", "Stopped"):
         return [row for row in rows if service_is_down(row)]
     if service_filter == "Other":
         return [row for row in rows if row_matches_text_filter(row, text_filter)]
@@ -11940,6 +11940,10 @@ def main() -> None:
     if st.session_state["cmds_filter"] not in hhs_ui.LIST_FILTERS:
         st.session_state["cmds_filter"] = "All"
     st.session_state.setdefault("service_filter", "All")
+    if st.session_state["service_filter"] == "Started":
+        st.session_state["service_filter"] = "Up"
+    elif st.session_state["service_filter"] == "Stopped":
+        st.session_state["service_filter"] = "Down"
     if st.session_state["service_filter"] not in hhs_ui.SERVICE_FILTERS:
         st.session_state["service_filter"] = "All"
     st.session_state.setdefault("history_commands_filter", "All")

@@ -143,7 +143,7 @@ LIST_FILTERS = ("All", "Other")
 HISTORY_FILTERS = ("All", "Others")
 PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
 PROCESS_FILTERS = ("All", "Active", "Inactive", "Ghost", "Other")
-SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")
+SERVICE_FILTERS = ("All", "Up", "Down", "Other")
 SHOPTS_FILTERS = ("All", "ON", "OFF", "Other")
 LOG_LEVELS = (
     "ALL_LEVELS",

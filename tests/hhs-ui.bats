@@ -2234,7 +2234,7 @@ PY
   run grep -q 'on_change=handle_monitor_disk_top_n_change' "${ui_file}"
   assert_success
 
-  run grep -q 'SERVICE_FILTERS = ("All", "Started", "Stopped", "Other")' "${constants_file}"
+  run grep -q 'SERVICE_FILTERS = ("All", "Up", "Down", "Other")' "${constants_file}"
   assert_success
 
   run grep -q 'PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")' "${constants_file}"
