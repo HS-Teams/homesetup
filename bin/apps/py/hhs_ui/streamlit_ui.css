@@ -16,7 +16,7 @@
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
   --hhs-sidebar-inline-inset: 20px;
-  --hhs-ssh-explorer-height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - (var(--hhs-view-gap) * 2) - 82px);
+  --hhs-ssh-explorer-height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - (var(--hhs-view-gap) * 3) - 55px);
   --hhs-ttyd-shell-gap: var(--hhs-view-section-gap);
   --hhs-ttyd-max-height: 760px;
   --hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
@@ -196,6 +196,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   border: 0 !important;
   display: block;
   height: var(--hhs-ssh-explorer-height) !important;
+  margin-bottom: var(--hhs-view-gap);
   min-height: 0;
   width: 100%;
 }

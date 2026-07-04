@@ -321,6 +321,8 @@
         remoteRows: [],
         localPath: "",
         remotePath: ".",
+        loading: false,
+        localLoading: false,
         remoteLoading: false,
         selectionHint: false,
         tableHeight: 420,
@@ -669,6 +671,10 @@
         return transfer;
       }
 
+      function explorerIsLoading() {
+        return Boolean(args.loading || args.localLoading || args.remoteLoading);
+      }
+
       function resizeFrame() {
         const height = Math.ceil(document.documentElement.scrollHeight);
         Streamlit.setFrameHeight(height);
@@ -690,6 +696,13 @@
           "--hhs-table-height",
           `${args.tableHeight}px`
         );
+        if (explorerIsLoading()) {
+          selectedPanel = "";
+          selectedPath = "";
+          app.replaceChildren();
+          requestAnimationFrame(() => Streamlit.setFrameHeight(0));
+          return;
+        }
         app.replaceChildren(
           createPanel("local", "Local", stringValue(args.localPath)),
           createTransferControls(),

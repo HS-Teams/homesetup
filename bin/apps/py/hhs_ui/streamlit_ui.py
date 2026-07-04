@@ -26,6 +26,7 @@ import html
 import importlib
 import json
 import os
+import posixpath
 import re
 import secrets
 import shlex
@@ -191,10 +192,18 @@ FOOTER_VERSION_JOB = "footer_hhs_version"
 FOOTER_WORKING_DIR_JOB = "footer_working_dir"
 SSH_CONNECT_JOB = "ssh_connect"
 SSH_DISCONNECT_JOB = "ssh_disconnect"
-HOST_SWITCH_CACHE_TAGS = ("env", "services", "monitor_disk", "monitor_process")
+SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"
+HOST_SWITCH_CACHE_TAGS = (
+    "env",
+    "services",
+    "monitor_disk",
+    "monitor_process",
+    "ssh_files",
+)
 HOST_SWITCH_BACKGROUND_JOBS = (
     SSH_CONNECT_JOB,
     SSH_DISCONNECT_JOB,
+    SSH_FILE_TRANSFER_JOB,
     SERVICE_LIST_JOB,
     SERVICE_ACTION_JOB,
     MONITOR_CPU_JOB,
@@ -204,6 +213,7 @@ HOST_SWITCH_BACKGROUND_JOBS = (
 CACHE_CLEAR_BACKGROUND_JOBS = (
     SSH_CONNECT_JOB,
     SSH_DISCONNECT_JOB,
+    SSH_FILE_TRANSFER_JOB,
     FOOTER_VERSION_JOB,
     ALIAS_LIST_JOB,
     SERVICE_LIST_JOB,
@@ -549,6 +559,11 @@ def reconnect_view_state_snapshot() -> dict[str, object]:
         "history_view",
         "home_view",
         "monitor_view",
+        "ssh_explorer_local_path",
+        "ssh_explorer_remote_path",
+        "ssh_tunnel_filter",
+        "ssh_tunnel_other_filter",
+        "ssh_view",
     )
     return {
         key: st.session_state[key]
@@ -3389,6 +3404,7 @@ def render_table(
     selected_action_buttons: list[dict[str, object]] | None = None,
     action_buttons: list[dict[str, object]] | None = None,
     action_column_weights: list[float] | None = None,
+    on_select: Callable[[], None] | str = "rerun",
     column_config: dict[str, object] | None = None,
 ) -> tuple[int | None, dict[str, str] | None]:
     """Render a reusable HomeSetup table and return the selected row."""
@@ -3414,7 +3430,7 @@ def render_table(
     else:
         dataframe_args["width"] = "stretch"
     if checkbox:
-        dataframe_args["on_select"] = "rerun"
+        dataframe_args["on_select"] = on_select
         dataframe_args["selection_mode"] = "single-row"
 
     selection = st.dataframe(rendered_data, **dataframe_args)
@@ -6295,7 +6311,9 @@ def restore_registered_ssh_connection_on_session_start() -> None:
                 f"Reconnecting to {ssh_connection_display(reconnect_host)}"
             )
         return
+    reconnect_state = reconnect_view_state_snapshot()
     clear_host_scoped_session_state()
+    restore_reconnect_view_state(reconnect_state)
     st.session_state["ssh_connection_status"] = "connected"
     st.session_state["ssh_connection_host"] = host
     st.session_state["ssh_host_selected"] = host
@@ -11967,8 +11985,646 @@ def render_ssh_tunnels_panel(host: str) -> None:
         st.caption("No active SSH tunnels or port forwards were found.")
 
 
+def ssh_explorer_mtime_text(epoch_text: str) -> str:
+    """Return a compact display timestamp from a Unix epoch string."""
+    try:
+        epoch = int(float(epoch_text))
+    except (TypeError, ValueError):
+        return ""
+    if epoch <= 0:
+        return ""
+    return datetime.fromtimestamp(epoch).strftime("%Y-%m-%d %H:%M")
+
+
+def ssh_explorer_size_text(size_text: str, kind: str) -> str:
+    """Return a compact file size label for explorer rows."""
+    if kind == "Dir":
+        return ""
+    try:
+        size = float(size_text)
+    except (TypeError, ValueError):
+        return ""
+    units = ("B", "KB", "MB", "GB", "TB")
+    unit_index = 0
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+    if unit_index == 0:
+        return f"{int(size)} {units[unit_index]}"
+    return f"{size:.1f} {units[unit_index]}"
+
+
+def ssh_explorer_kind_label(kind: str) -> str:
+    """Return the visible kind label for one explorer entry."""
+    return "" if kind == "Dir" else ""
+
+
+def ssh_explorer_entry_is_visible(name: str) -> bool:
+    """Return whether an explorer entry name should be visible."""
+    return bool(name) and name not in {".", ".."} and not name.startswith(".")
+
+
+def ssh_explorer_row_style(row: pd.Series) -> list[str]:
+    """Return dataframe row styles for SSH explorer file and folder entries."""
+    if str(row.get("_kind", "")) == "Dir":
+        return ["color: #38bdf8; font-weight: 800;"] * len(row)
+    return ["color: #ffffff;"] * len(row)
+
+
+def ssh_explorer_row(
+    kind: str, name: str, size: str, modified: str, path: str
+) -> dict[str, str]:
+    """Return a normalized explorer row."""
+    glyph = ssh_explorer_kind_label(kind)
+    return {
+        "Name": f"{glyph} {name}",
+        "Size": ssh_explorer_size_text(size, kind),
+        "Modified": ssh_explorer_mtime_text(modified),
+        "Path": path,
+        "_name": name,
+        "_kind": kind,
+    }
+
+
+def ssh_explorer_sort_key(row: dict[str, str]) -> tuple[int, str]:
+    """Return the folders-first alphabetical sort key for explorer rows."""
+    kind_order = 0 if str(row.get("_kind", "")) == "Dir" else 1
+    return (kind_order, str(row.get("_name", "")).casefold())
+
+
+def local_explorer_directory(path_value: str) -> Path:
+    """Return a usable local explorer directory."""
+    path = Path(path_value or os.getcwd()).expanduser()
+    if path.is_file():
+        return path.parent.resolve()
+    if path.is_dir():
+        return path.resolve()
+    return Path.home().resolve()
+
+
+def local_explorer_rows(path_value: str) -> list[dict[str, str]]:
+    """Return local filesystem entries for the explorer."""
+    directory = local_explorer_directory(path_value)
+    rows = []
+    try:
+        entries = list(directory.iterdir())
+    except OSError as error:
+        push_floating_status(f"Unable to list local files: {error}", "error")
+        return rows
+    for entry in entries:
+        if not ssh_explorer_entry_is_visible(entry.name):
+            continue
+        try:
+            stat_result = entry.stat()
+        except OSError:
+            continue
+        kind = "Dir" if entry.is_dir() else "File"
+        rows.append(
+            ssh_explorer_row(
+                kind,
+                entry.name,
+                str(stat_result.st_size),
+                str(int(stat_result.st_mtime)),
+                str(entry),
+            )
+        )
+    return sorted(rows, key=ssh_explorer_sort_key)
+
+
+def normalize_local_explorer_path(path_value: str, base_path: str | None = None) -> str:
+    """Return an absolute local explorer path from a possibly relative path."""
+    raw_path = str(path_value or ".").strip() or "."
+    path = Path(raw_path).expanduser()
+    if path.is_absolute():
+        return str(path.resolve())
+    base_directory = local_explorer_directory(base_path or os.getcwd())
+    return str((base_directory / path).resolve())
+
+
+def normalize_remote_explorer_path(path_value: str, base_path: str | None = None) -> str:
+    """Return a normalized remote explorer path from a possibly relative path."""
+    raw_path = str(path_value or ".").strip() or "."
+    if raw_path.startswith("/") or raw_path.startswith("~"):
+        return posixpath.normpath(raw_path)
+    normalized_base = str(base_path or ".").strip() or "."
+    if normalized_base.startswith("/"):
+        return posixpath.normpath(posixpath.join(normalized_base, raw_path))
+    return posixpath.normpath(raw_path)
+
+
+def ssh_explorer_local_default_path() -> str:
+    """Return the default local explorer directory path."""
+    return str(Path.home().resolve())
+
+
+def ssh_explorer_remote_default_path() -> str:
+    """Return the default remote explorer directory path."""
+    return "~"
+
+
+def create_local_explorer_folder(local_path: str) -> None:
+    """Create the requested local explorer folder path and parent folders."""
+    folder_path = Path(normalize_local_explorer_path(local_path))
+    try:
+        folder_path.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        push_floating_status(f"Unable to create local folder: {error}", "error")
+        return
+    open_local_explorer_path(str(folder_path))
+    created_name = folder_path.name or str(folder_path)
+    push_floating_status(f"Folder created on local {created_name}", "info")
+
+
+def remote_explorer_target_assignment(remote_path: str) -> str:
+    """Return shell lines that resolve an explorer path into target."""
+    safe_path = shlex.quote(remote_path.strip() or ssh_explorer_remote_default_path())
+    return textwrap.dedent(
+        f"""
+        raw_target={safe_path}
+        case "${{raw_target}}" in
+          "~") target=${{HOME:-.}} ;;
+          "~/"*) target="${{HOME:-.}}/${{raw_target#*/}}" ;;
+          *) target="${{raw_target}}" ;;
+        esac
+        [ -n "${{target}}" ] || target=.
+        """
+    ).strip()
+
+
+def build_remote_explorer_listing_command(remote_path: str) -> str:
+    """Build a portable remote shell command that lists one directory."""
+    return textwrap.dedent(
+        f"""
+        {remote_explorer_target_assignment(remote_path)}
+        if [ ! -d "${{target}}" ]; then
+          target=${{HOME:-.}}
+        fi
+        if [ ! -d "${{target}}" ]; then
+          target=.
+        fi
+        abs_dir=$(cd "${{target}}" && pwd -P) || {{
+          printf '__HHS_CWD__\\t%s\\n' .
+          exit 0
+        }}
+        file_row='__HHS_FILE__\\t%s\\t%s\\t%s\\t%s\\t%s\\n'
+        printf '__HHS_CWD__\\t%s\\n' "${{abs_dir}}"
+        for entry in "${{abs_dir}}"/*; do
+          [ -e "${{entry}}" ] || continue
+          name=${{entry##*/}}
+          case "${{name}}" in .*|"."|"..") continue ;; esac
+          if [ -d "${{entry}}" ]; then
+            kind=Dir
+          else
+            kind=File
+          fi
+          if stat -c %s "${{entry}}" >/dev/null 2>&1; then
+            size=$(stat -c %s "${{entry}}" 2>/dev/null || printf '0')
+            modified=$(stat -c %Y "${{entry}}" 2>/dev/null || printf '0')
+          else
+            size=$(stat -f %z "${{entry}}" 2>/dev/null || printf '0')
+            modified=$(stat -f %m "${{entry}}" 2>/dev/null || printf '0')
+          fi
+          printf "${{file_row}}" "${{kind}}" "${{name}}" "${{size}}" "${{modified}}" "${{entry}}"
+        done
+        """
+    ).strip()
+
+
+def build_remote_explorer_create_folder_command(remote_path: str) -> str:
+    """Build a remote shell command that creates the requested folder path."""
+    return textwrap.dedent(
+        f"""
+        {remote_explorer_target_assignment(remote_path)}
+        mkdir -p "${{target}}" || exit 1
+        abs_dir=$(cd "${{target}}" && pwd -P) || exit 1
+        printf '__HHS_CREATED_DIR__\\t%s\\n' "${{abs_dir}}"
+        """
+    ).strip()
+
+
+def parse_remote_explorer_created_dir(output: str) -> str:
+    """Parse the created remote explorer folder path from command output."""
+    for line in strip_ansi(output).splitlines():
+        if line.startswith("__HHS_CREATED_DIR__\t"):
+            return line.split("\t", 1)[1].strip()
+    return ""
+
+
+def parse_remote_explorer_rows(output: str) -> list[dict[str, str]]:
+    """Parse remote explorer command output into table rows."""
+    rows = []
+    for line in strip_ansi(output).splitlines():
+        if not line.startswith("__HHS_FILE__\t"):
+            continue
+        parts = line.split("\t", 5)
+        if len(parts) != 6:
+            continue
+        _marker, kind, name, size, modified, path = parts
+        if not ssh_explorer_entry_is_visible(name):
+            continue
+        rows.append(ssh_explorer_row(kind, name, size, modified, path))
+    return sorted(rows, key=ssh_explorer_sort_key)
+
+
+def parse_remote_explorer_cwd(output: str) -> str:
+    """Parse the resolved remote explorer directory from command output."""
+    for line in strip_ansi(output).splitlines():
+        if line.startswith("__HHS_CWD__\t"):
+            return line.split("\t", 1)[1].strip()
+    return ""
+
+
+def remote_explorer_rows(remote_path: str) -> list[dict[str, str]] | None:
+    """Return remote filesystem entries, or None while loading."""
+    result = render_cached_command_result(
+        build_remote_explorer_listing_command(remote_path),
+        "Loading remote files",
+        "ssh_files",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        "Unable to list remote files.",
+    )
+    if result is None:
+        return None
+    if result.returncode != 0:
+        st.error(result.stderr or result.stdout or "Unable to list remote files.")
+        return []
+    resolved_remote_path = parse_remote_explorer_cwd(result.stdout)
+    if resolved_remote_path:
+        st.session_state["ssh_explorer_remote_path"] = resolved_remote_path
+    return parse_remote_explorer_rows(result.stdout)
+
+
+def open_local_explorer_path(path: str, base_path: str | None = None) -> None:
+    """Open a local explorer directory."""
+    normalized_path = normalize_local_explorer_path(path, base_path)
+    st.session_state["ssh_explorer_local_path"] = str(
+        local_explorer_directory(normalized_path)
+    )
+    save_ui_state()
+
+
+def open_remote_explorer_path(path: str, base_path: str | None = None) -> None:
+    """Open a remote explorer directory."""
+    st.session_state["ssh_explorer_remote_path"] = normalize_remote_explorer_path(
+        path, base_path
+    )
+    cache_delete_tag("ssh_files")
+    save_ui_state()
+
+
+def remote_explorer_parent_path(path: str) -> str:
+    """Return a POSIX parent directory path for the remote explorer."""
+    clean_path = path.strip() or "."
+    normalized_path = posixpath.normpath(clean_path)
+    if normalized_path == "/":
+        return "/"
+    parent_path = posixpath.dirname(normalized_path)
+    if parent_path:
+        return parent_path
+    if normalized_path in {"", "."}:
+        return ".."
+    return "."
+
+
+def open_ssh_explorer_parent(panel: str, local_path: str, remote_path: str) -> None:
+    """Open the parent directory for one SSH explorer panel."""
+    if panel == "remote":
+        open_remote_explorer_path(remote_explorer_parent_path(remote_path))
+    else:
+        open_local_explorer_path(str(local_explorer_directory(local_path).parent))
+
+
+def open_ssh_explorer_selection(panel: str, path: str) -> None:
+    """Open the selected SSH explorer row on the given panel."""
+    if panel == "local":
+        open_local_explorer_path(path)
+    elif panel == "remote":
+        open_remote_explorer_path(path)
+
+
+def create_remote_explorer_folder(remote_path: str) -> None:
+    """Create the requested remote explorer folder path and parent folders."""
+    result = run_bash_command(
+        build_remote_explorer_create_folder_command(remote_path),
+        "Creating remote folder",
+        use_cache=False,
+        cache_tag="ssh_files",
+    )
+    if result.returncode != 0:
+        push_floating_status(
+            strip_ansi(result.stderr or result.stdout or "Unable to create folder."),
+            "error",
+        )
+        return
+    created_dir = parse_remote_explorer_created_dir(result.stdout)
+    created_path = created_dir or remote_path
+    created_name = posixpath.basename(created_path) or created_path
+    open_remote_explorer_path(created_path)
+    push_floating_status(f"Folder created on remote {created_name}", "info")
+
+
+def create_ssh_explorer_folder(panel: str, local_path: str, remote_path: str) -> None:
+    """Create a new folder in the active SSH explorer panel."""
+    if panel == "remote":
+        create_remote_explorer_folder(remote_path)
+    else:
+        create_local_explorer_folder(local_path)
+
+
+def resolve_css_custom_property(
+    properties: dict[str, str], property_name: str, fallback: str
+) -> str:
+    """Return a CSS custom property value with simple var references resolved."""
+    value = properties.get(property_name, fallback).strip()
+    visited = {property_name}
+    while value.startswith("var(--") and value.endswith(")"):
+        referenced_name = value[6:-1].strip()
+        if "," in referenced_name:
+            referenced_name, fallback_value = referenced_name.split(",", 1)
+            fallback = fallback_value.strip()
+        if referenced_name in visited:
+            return fallback
+        visited.add(referenced_name)
+        value = properties.get(referenced_name, fallback).strip()
+    return value or fallback
+
+
+def ssh_explorer_component_theme() -> dict[str, str]:
+    """Return CSS color tokens for the SSH explorer component iframe."""
+    theme_name = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
+    properties = theme_custom_properties(theme_name)
+    return {
+        "background": resolve_css_custom_property(
+            properties, "hhs-background", "#19181f"
+        ),
+        "field": resolve_css_custom_property(
+            properties, "hhs-theme-secondary-background-color", "#221f2b"
+        ),
+        "file": resolve_css_custom_property(
+            properties, "hhs-theme-text-color", "#fcfcfa"
+        ),
+        "folder": resolve_css_custom_property(
+            properties, "hhs-theme-link-color", "#78dce8"
+        ),
+        "border": resolve_css_custom_property(
+            properties, "hhs-theme-dataframe-border-color", "#6c5f91"
+        ),
+        "primary": resolve_css_custom_property(
+            properties, "hhs-theme-primary-color", "#bd93f9"
+        ),
+    }
+
+
+def ssh_explorer_remote_spec(host: str, path: str) -> str:
+    """Return an scp remote path spec for the active host and path."""
+    return f"{shlex.quote(host)}:{shlex.quote(path)}"
+
+
+def build_scp_to_remote_command(local_path: str, remote_dir: str, host: str) -> str:
+    """Build an scp command that copies a local path into the remote directory."""
+    safe_control_path = shlex.quote(ssh_control_path(host))
+    return (
+        f"scp -r {ssh_config_option()} -o ControlPath={safe_control_path} -- "
+        f"{shlex.quote(local_path)} {ssh_explorer_remote_spec(host, remote_dir)}"
+    )
+
+
+def build_scp_to_local_command(remote_path: str, local_dir: str, host: str) -> str:
+    """Build an scp command that copies a remote path into the local directory."""
+    safe_control_path = shlex.quote(ssh_control_path(host))
+    return (
+        f"scp -r {ssh_config_option()} -o ControlPath={safe_control_path} -- "
+        f"{ssh_explorer_remote_spec(host, remote_path)} {shlex.quote(local_dir)}"
+    )
+
+
+def start_ssh_explorer_transfer(command: str, description: str) -> None:
+    """Start a background explorer file transfer."""
+    if background_job_is_running(SSH_FILE_TRANSFER_JOB):
+        push_floating_status("A file transfer is already running.", "warn")
+        return
+    started = start_background_bash_command(
+        SSH_FILE_TRANSFER_JOB,
+        command,
+        description,
+        hhs_ui.UI_COMMAND_REMOTE_TIMEOUT_SECONDS,
+        force_local=True,
+    )
+    if not started:
+        push_floating_status("A file transfer is already running.", "warn")
+
+
+def copy_local_selection_to_remote(local_path: str, remote_dir: str) -> None:
+    """Copy the selected local path into the current remote directory."""
+    host = connected_ssh_host()
+    if not host:
+        push_floating_status("Connect to SSH before copying files.", "warn")
+        return
+    start_ssh_explorer_transfer(
+        build_scp_to_remote_command(local_path, remote_dir, host),
+        "Copying local file to remote",
+    )
+
+
+def copy_remote_selection_to_local(remote_path: str, local_dir: str) -> None:
+    """Copy the selected remote path into the current local directory."""
+    host = connected_ssh_host()
+    if not host:
+        push_floating_status("Connect to SSH before copying files.", "warn")
+        return
+    start_ssh_explorer_transfer(
+        build_scp_to_local_command(remote_path, local_dir, host),
+        "Copying remote file to local",
+    )
+
+
+def complete_ssh_explorer_transfer() -> None:
+    """Complete a background explorer file transfer and refresh listings."""
+    completed = background_job_result(SSH_FILE_TRANSFER_JOB)
+    if completed is None:
+        return
+    result, _metadata = completed
+    if result.returncode == 0:
+        cache_delete_tag("ssh_files")
+        push_floating_status("File transfer completed.", "info")
+    else:
+        push_floating_status(
+            strip_ansi(result.stderr or result.stdout or "File transfer failed."),
+            "error",
+        )
+
+
+@lru_cache(maxsize=1)
+def ssh_explorer_component() -> Callable[..., dict[str, object] | None]:
+    """Return the registered SSH explorer Streamlit component."""
+    return components.declare_component(
+        "hhs_ssh_explorer",
+        path=str(hhs_ui.SSH_EXPLORER_COMPONENT_DIR),
+    )
+
+
+def ssh_explorer_component_event_text(
+    event: dict[str, object], key: str, default: str = ""
+) -> str:
+    """Return a string value from an SSH explorer component event."""
+    value = event.get(key, default)
+    if value is None:
+        return default
+    return str(value)
+
+
+def handle_ssh_explorer_component_event(event: object) -> bool:
+    """Handle one SSH explorer component command event."""
+    if not isinstance(event, dict):
+        return False
+    event_id = ssh_explorer_component_event_text(event, "eventId")
+    if not event_id:
+        return False
+    if st.session_state.get("ssh_explorer_component_last_event_id") == event_id:
+        return False
+    st.session_state["ssh_explorer_component_last_event_id"] = event_id
+
+    action = ssh_explorer_component_event_text(event, "action")
+    panel = ssh_explorer_component_event_text(event, "panel")
+    path = ssh_explorer_component_event_text(event, "path")
+    local_path = ssh_explorer_component_event_text(
+        event,
+        "localPath",
+        str(
+            st.session_state.get(
+                "ssh_explorer_local_path", ssh_explorer_local_default_path()
+            )
+        ),
+    )
+    remote_path = ssh_explorer_component_event_text(
+        event,
+        "remotePath",
+        str(
+            st.session_state.get(
+                "ssh_explorer_remote_path", ssh_explorer_remote_default_path()
+            )
+        ),
+    )
+    local_base_path = ssh_explorer_component_event_text(
+        event,
+        "localBasePath",
+        str(
+            st.session_state.get(
+                "ssh_explorer_local_path", ssh_explorer_local_default_path()
+            )
+        ),
+    )
+    remote_base_path = ssh_explorer_component_event_text(
+        event,
+        "remoteBasePath",
+        str(
+            st.session_state.get(
+                "ssh_explorer_remote_path", ssh_explorer_remote_default_path()
+            )
+        ),
+    )
+    normalized_local_path = normalize_local_explorer_path(local_path, local_base_path)
+    normalized_remote_path = normalize_remote_explorer_path(
+        remote_path, remote_base_path
+    )
+
+    if action == "parent":
+        open_ssh_explorer_parent(panel, normalized_local_path, normalized_remote_path)
+        return True
+    if action == "create_folder":
+        create_ssh_explorer_folder(panel, normalized_local_path, normalized_remote_path)
+        return True
+    if action == "open":
+        open_ssh_explorer_selection(panel, path)
+        return True
+    if action in {"refresh", "submit_path"} and panel == "local":
+        open_local_explorer_path(local_path, local_base_path)
+        return True
+    if action in {"refresh", "submit_path"} and panel == "remote":
+        open_remote_explorer_path(remote_path, remote_base_path)
+        return True
+    if action == "copy_to_remote":
+        copy_local_selection_to_remote(path, normalized_remote_path)
+        return True
+    if action == "copy_to_local":
+        copy_remote_selection_to_local(
+            path, str(local_explorer_directory(normalized_local_path))
+        )
+        return True
+    return False
+
+
+def render_ssh_explorer_component(
+    local_rows: list[dict[str, str]] | None,
+    remote_rows: list[dict[str, str]] | None,
+    local_path: str,
+    remote_path: str,
+    transfer_running: bool,
+) -> dict[str, object] | None:
+    """Render the SSH explorer component and return its command event."""
+    component = ssh_explorer_component()
+    component_height = table_height(hhs_ui.ENV_TABLE_HEIGHT)
+    local_loading = local_rows is None
+    remote_loading = remote_rows is None
+    explorer_loading = local_loading or remote_loading
+    return component(
+        localRows=local_rows or [],
+        remoteRows=remote_rows or [],
+        localPath=local_path,
+        remotePath=remote_path,
+        loading=explorer_loading,
+        localLoading=local_loading,
+        remoteLoading=remote_loading,
+        selectionHint=False,
+        tableHeight=table_height(hhs_ui.ENV_TABLE_HEIGHT),
+        theme=ssh_explorer_component_theme(),
+        transferRunning=transfer_running,
+        height=component_height,
+        key="ssh_explorer_component",
+        default=None,
+    )
+
+
 def render_ssh_files_panel() -> None:
-    """Render the SSH file browser placeholder panel."""
+    """Render a three-column local/remote file explorer using scp transfers."""
+    complete_ssh_explorer_transfer()
+    st.session_state.setdefault(
+        "ssh_explorer_local_path", ssh_explorer_local_default_path()
+    )
+    st.session_state.setdefault(
+        "ssh_explorer_remote_path", ssh_explorer_remote_default_path()
+    )
+    local_path = str(
+        st.session_state.get(
+            "ssh_explorer_local_path", ssh_explorer_local_default_path()
+        )
+    )
+    remote_path = str(
+        st.session_state.get(
+            "ssh_explorer_remote_path", ssh_explorer_remote_default_path()
+        )
+    )
+    resolved_local_path = str(local_explorer_directory(local_path))
+    if resolved_local_path != local_path:
+        st.session_state["ssh_explorer_local_path"] = resolved_local_path
+        local_path = resolved_local_path
+    local_rows = local_explorer_rows(local_path)
+    remote_rows = remote_explorer_rows(remote_path)
+    remote_path = str(st.session_state.get("ssh_explorer_remote_path", remote_path))
+    if background_job_is_running(SSH_FILE_TRANSFER_JOB):
+        render_background_job_status(SSH_FILE_TRANSFER_JOB)
+
+    transfer_running = background_job_is_running(SSH_FILE_TRANSFER_JOB)
+    event = render_ssh_explorer_component(
+        local_rows,
+        remote_rows,
+        local_path,
+        remote_path,
+        transfer_running,
+    )
+    if handle_ssh_explorer_component_event(event):
+        st.rerun()
 
 
 def render_ssh_view() -> None:

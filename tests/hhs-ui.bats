@@ -1461,16 +1461,25 @@ PY
   run grep -q 'SSH_VIEWS = ("TUNNELS", "FILES")' "${constants_file}"
   assert_success
 
-  run grep -q '"TUNNELS": "Tunnels"' "${constants_file}"
+  run grep -q '"TUNNELS": " Tunnels"' "${constants_file}"
   assert_success
 
-  run grep -q '"FILES": "Files"' "${constants_file}"
+  run grep -q '"FILES": " Explorer"' "${constants_file}"
   assert_success
 
   run grep -q 'SSH_TUNNEL_FILTERS = ("All", "Reachable", "Other")' "${constants_file}"
   assert_success
 
+  run grep -q 'SSH_EXPLORER_COMPONENT_DIR = APP_DIR / "components/ssh_explorer"' "${constants_file}"
+  assert_success
+
   run grep -q '"ssh_view"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ssh_explorer_local_path"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ssh_explorer_remote_path"' "${constants_file}"
   assert_success
 
   run grep -q '"ssh_tunnel_filter"' "${constants_file}"
@@ -1984,6 +1993,21 @@ PY
   run grep -q 'SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"' "${constants_file}"
   assert_success
 
+  run grep -q 'SSH_EXPLORER_COMPONENT_DIR' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q 'SSH_EXPLORER_LOCAL_TABLE_KEY' "${constants_file}"
+  assert_failure
+
+  run grep -q 'SSH_EXPLORER_REMOTE_TABLE_KEY' "${constants_file}"
+  assert_failure
+
+  run grep -q 'SSH_EXPLORER_LOCAL_TABLE_KEY' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_failure
+
+  run grep -q 'SSH_EXPLORER_REMOTE_TABLE_KEY' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_failure
+
   run grep -q 'st.session_state.setdefault("ssh_view", "TUNNELS")' "${ui_file}"
   assert_success
 
@@ -2437,7 +2461,7 @@ PY
   run grep -q 'def synchronize_monitor_disk_directory_with_host' "${ui_file}"
   assert_success
 
-  run grep -q 'HOST_SWITCH_CACHE_TAGS = ("env", "services", "monitor_disk", "monitor_process")' "${ui_file}"
+  run grep -q '"ssh_files"' "${ui_file}"
   assert_success
 
   run grep -q 'return 10' "${ui_file}"
@@ -2498,8 +2522,9 @@ from types import SimpleNamespace
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 tree = ast.parse(source)
+source_lines = source.splitlines()
 functions = {
-    node.name: ast.get_source_segment(source, node)
+    node.name: "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
     for node in tree.body
     if isinstance(node, ast.FunctionDef)
 }
@@ -2564,8 +2589,9 @@ from pathlib import Path
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 tree = ast.parse(source)
+source_lines = source.splitlines()
 functions = {
-    node.name: ast.get_source_segment(source, node)
+    node.name: "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
     for node in tree.body
     if isinstance(node, ast.FunctionDef)
 }
@@ -2604,8 +2630,9 @@ from types import SimpleNamespace
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 tree = ast.parse(source)
+source_lines = source.splitlines()
 functions = {
-    node.name: ast.get_source_segment(source, node)
+    node.name: "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
     for node in tree.body
     if isinstance(node, ast.FunctionDef)
 }
@@ -2827,6 +2854,9 @@ assert "cache_clear()" in source.split("def execute_pending_ssh_disconnection", 
 assert 'st.session_state.pop("ssh_reconnect_restore_view_state", False)' in body
 assert "reconnect_view_state_snapshot()" in body
 assert "restore_reconnect_view_state(reconnect_state)" in body
+assert '"ssh_view"' in source.split("def reconnect_view_state_snapshot", 1)[1].split("\ndef ", 1)[0]
+assert '"ssh_explorer_local_path"' in source.split("def reconnect_view_state_snapshot", 1)[1].split("\ndef ", 1)[0]
+assert '"ssh_explorer_remote_path"' in source.split("def reconnect_view_state_snapshot", 1)[1].split("\ndef ", 1)[0]
 restore_reconnect_index = body.index("restore_reconnect_view_state(reconnect_state)")
 assert reset_index < restore_reconnect_index < status_index
 disconnect_body = source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
@@ -2848,6 +2878,16 @@ assert "clear_disconnected_ssh_host(host)" not in restore_body
 assert 'st.session_state["ssh_connect_pending"] = reconnect_host' in restore_body
 assert 'st.session_state["ssh_connect_pending_message"] = (' in restore_body
 assert 'st.session_state["ssh_reconnect_restore_view_state"] = True' in restore_body
+restore_registered_snapshot_index = restore_body.index("reconnect_state = reconnect_view_state_snapshot()")
+restore_registered_reset_index = restore_body.index("clear_host_scoped_session_state()")
+restore_registered_restore_index = restore_body.index("restore_reconnect_view_state(reconnect_state)")
+restore_registered_status_index = restore_body.index('st.session_state["ssh_connection_status"] = "connected"')
+assert (
+    restore_registered_snapshot_index
+    < restore_registered_reset_index
+    < restore_registered_restore_index
+    < restore_registered_status_index
+)
 PY
   assert_success
 
@@ -3067,6 +3107,9 @@ PY
   run grep -q 'column_config: dict\[str, object\] | None = None' "${ui_file}"
   assert_success
 
+  run grep -q 'on_select: Callable\[\[\], None\] | str = "rerun"' "${ui_file}"
+  assert_success
+
   run grep -q 'st.column_config.LinkColumn' "${ui_file}"
   assert_success
 
@@ -3080,6 +3123,96 @@ PY
   assert_success
 
   run grep -q 'def render_ssh_files_panel' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_explorer_row_style' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_explorer_entry_is_visible' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_explorer_sort_key' "${ui_file}"
+  assert_success
+
+  run grep -q 'def synchronize_ssh_explorer_table_selection' "${ui_file}"
+  assert_failure
+
+  run grep -q 'def ssh_explorer_component' "${ui_file}"
+  assert_success
+
+  run grep -q 'components.declare_component(' "${ui_file}"
+  assert_success
+
+  run grep -q 'def handle_ssh_explorer_component_event' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_ssh_explorer_component' "${ui_file}"
+  assert_success
+
+  run grep -q 'def remote_explorer_parent_path' "${ui_file}"
+  assert_success
+
+  run grep -q 'def normalize_local_explorer_path' "${ui_file}"
+  assert_success
+
+  run grep -q 'def normalize_remote_explorer_path' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_explorer_local_default_path' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_explorer_remote_default_path' "${ui_file}"
+  assert_success
+
+  run grep -q 'def open_ssh_explorer_parent' "${ui_file}"
+  assert_success
+
+  run grep -q 'def create_ssh_explorer_folder' "${ui_file}"
+  assert_success
+
+  run grep -q 'def resolve_css_custom_property' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_explorer_component_theme' "${ui_file}"
+  assert_success
+
+  run grep -q 'def open_ssh_explorer_selection' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_remote_explorer_listing_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def remote_explorer_target_assignment' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_remote_explorer_create_folder_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def parse_remote_explorer_created_dir' "${ui_file}"
+  assert_success
+
+  run grep -q 'def parse_remote_explorer_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_scp_to_remote_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_scp_to_local_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"' "${ui_file}"
+  assert_success
+
+  run grep -q '"ssh_files"' "${ui_file}"
+  assert_success
+
+  run grep -q 'scp -r' "${ui_file}"
+  assert_success
+
+  run grep -q 'ControlPath=' "${ui_file}"
+  assert_success
+
+  run grep -q 'ssh_config_option()' "${ui_file}"
   assert_success
 
   run grep -q 'def ssh_view_label' "${ui_file}"
@@ -3115,6 +3248,290 @@ PY
   run grep -q 'render_ssh_files_panel()' "${ui_file}"
   assert_success
 
+  run grep -q 'event = render_ssh_explorer_component(' "${ui_file}"
+  assert_success
+
+  run grep -q 'handle_ssh_explorer_component_event(event)' "${ui_file}"
+  assert_success
+
+  run grep -q 'if action == "create_folder"' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.rerun()' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ssh_explorer_component"' "${ui_file}"
+  assert_success
+
+  run grep -q 'localRows=local_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'localLoading=local_loading' "${ui_file}"
+  assert_success
+
+  run grep -q 'remoteRows=remote_rows or \[\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'remoteLoading=remote_loading' "${ui_file}"
+  assert_success
+
+  run grep -q 'loading=explorer_loading' "${ui_file}"
+  assert_success
+
+  run grep -q 'explorer_loading = local_loading or remote_loading' "${ui_file}"
+  assert_success
+
+  run grep -q 'tableHeight=table_height(hhs_ui.ENV_TABLE_HEIGHT)' "${ui_file}"
+  assert_success
+
+  run grep -q 'theme=ssh_explorer_component_theme()' "${ui_file}"
+  assert_success
+
+  run grep -q '"ssh_explorer_local_path", ssh_explorer_local_default_path()' "${ui_file}"
+  assert_success
+
+  run grep -q '"ssh_explorer_remote_path", ssh_explorer_remote_default_path()' "${ui_file}"
+  assert_success
+
+  run grep -q 'selectionHint=False' "${ui_file}"
+  assert_success
+
+  run grep -q 'component_height = table_height(hhs_ui.ENV_TABLE_HEIGHT)' "${ui_file}"
+  assert_success
+
+  run grep -q 'height=component_height' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_select=reset_ssh_explorer_remote_table_selection' "${ui_file}"
+  assert_failure
+
+  run grep -q 'on_select=reset_ssh_explorer_local_table_selection' "${ui_file}"
+  assert_failure
+
+  run grep -q 'key_prefix": "ssh_explorer_local_open_button"' "${ui_file}"
+  assert_failure
+
+  run grep -q 'key_prefix": "ssh_explorer_remote_open_button"' "${ui_file}"
+  assert_failure
+
+  run grep -q '.st-key-ssh_explorer_layout' "${css_file}"
+  assert_failure
+
+  run grep -q '.st-key-ssh_explorer_component iframe' "${css_file}"
+  assert_success
+
+  run grep -q 'background: var(--hhs-background) !important' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-ssh-explorer-height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - (var(--hhs-view-gap) \* 3) - 55px)' "${css_file}"
+  assert_success
+
+  run grep -q 'height: var(--hhs-ssh-explorer-height) !important' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-bottom: var(--hhs-view-gap)' "${css_file}"
+  assert_success
+
+  run grep -q 'min-height: 0' "${css_file}"
+  assert_success
+
+  run grep -q 'overflow: hidden !important' "${css_file}"
+  assert_success
+
+  run grep -F -q 'div:not([class*="st-key-ssh_explorer_component"]):has(iframe[height="0"])' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-ssh_explorer_transfer_controls' "${css_file}"
+  assert_failure
+
+  run grep -q '.st-key-ssh_explorer_open_selected button' "${css_file}"
+  assert_failure
+
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
+  assert_success
+
+  run cmp -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2" "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
+  assert_success
+
+  run grep -q 'grid-template-columns: minmax(0, 1fr) 3.2rem minmax(0, 1fr)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'height: 100vh' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'flex: 1 1 auto' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q -- '--hhs-panel-bg: color-mix' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'background: var(--hhs-panel-bg)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'overflow-y: auto' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'overflow-y: scroll' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_failure
+
+  run grep -q 'scrollbar-color: var(--hhs-scrollbar)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'scrollbar-gutter: stable' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'padding-right: var(--hhs-scrollbar-size)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '.icon-button:hover:not(:disabled)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'selectionHint: false' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'loading: false' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'localLoading: false' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'function explorerIsLoading' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'return Boolean(args.loading || args.localLoading || args.remoteLoading)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'function createLoadingState' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_failure
+
+  run grep -q 'app.replaceChildren()' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'Streamlit.setFrameHeight(0)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '.loading-state' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_failure
+
+  run grep -q 'Loading files' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_failure
+
+  run grep -q 'theme: {}' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'function applyTheme' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'message.theme' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'themeValues.background || themeValues.backgroundColor' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '"--hhs-primary": themeValues.primary || themeValues.primaryColor' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'border-color: var(--hhs-primary)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '.panel.active .panel-title' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'let activePanel = "local"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'function activatePanel' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'classList.toggle("active"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'localBasePath: args.localPath' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'remoteBasePath: args.remotePath' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'sendCommand("parent", activeExplorerPanel(), "")' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'sendCommand("create_folder", activeExplorerPanel(), "")' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'Folder created on local {created_name}' "${ui_file}"
+  assert_success
+
+  run grep -q 'Folder created on remote {created_name}' "${ui_file}"
+  assert_success
+
+  run grep -q 'Folder ready' "${ui_file}"
+  assert_failure
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+component = Path("bin/apps/py/hhs_ui/components/ssh_explorer/index.html").read_text(
+    encoding="utf-8"
+)
+controls = component[
+    component.index("function createTransferControls") : component.index("function resizeFrame")
+]
+assert controls.index('""') < controls.index('""')
+assert '"﬌"' in controls
+assert '"﬋"' in controls
+assert '""' not in controls
+assert '""' not in controls
+PY
+  assert_success
+
+  run grep -q 'args.selectionHint ? "Select a row to interact" : ""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'function selectRow' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'function sendCommand' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'Streamlit.setComponentValue' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '"﬌"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '"﬋"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+component = Path("bin/apps/py/hhs_ui/components/ssh_explorer/index.html").read_text(
+    encoding="utf-8"
+)
+select_body = component[
+    component.index("function selectRow") : component.index("function createElement")
+]
+assert "setComponentValue" not in select_body
+assert "sendCommand" not in select_body
+assert "activatePanel(panel, false)" in select_body
+assert "selectedPanel = panel" in select_body
+assert "selectedPath = stringValue(row.Path)" in select_body
+assert "render();" in select_body
+PY
+  assert_success
+
   run grep -F -q '<p>Connected to remote' "${ui_file}"
   assert_failure
 
@@ -3126,9 +3543,16 @@ PY
 
   run python3 - "${ui_file}" <<'PY'
 import csv
+import hashlib
+import os
+import posixpath
 import re
 import shlex
+import subprocess
 import sys
+import tempfile
+import textwrap
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
@@ -3138,14 +3562,22 @@ start = source.index("def split_ssh_command(")
 end = source.index("def parse_hhs_history(")
 namespace = {
     "csv": csv,
+    "datetime": datetime,
+    "hashlib": hashlib,
     "hhs_ui": SimpleNamespace(
         PORTS_DEFAULT_FILE=Path("assets/devel/ports-default.csv"),
+        THEME_SELECTED_KEY="theme_selected",
     ),
     "lru_cache": lru_cache,
     "Path": Path,
+    "posixpath": posixpath,
     "re": re,
     "shlex": shlex,
+    "ssh_control_path": lambda host: f"/tmp/{host}.sock",
+    "ssh_config_option": lambda: '-F "${HOME}/.ssh/config"',
     "ssh_config_file": lambda: Path.home() / ".ssh" / "config",
+    "st": SimpleNamespace(session_state={"theme_selected": "test-theme"}),
+    "textwrap": textwrap,
     "row_matches_text_filter": lambda row, text: (
         not text.strip()
         or text.strip().lower()
@@ -3266,6 +3698,154 @@ assert namespace["filter_ssh_tunnel_rows"](filter_rows, "Other", "http") == [
 assert namespace["filter_ssh_tunnel_rows"](filter_rows, "Other", "localhost") == []
 assert namespace["ssh_tunnel_kind"]({"Type": "Local", "Destination": "localhost:80"}) == "HTTP"
 assert namespace["ssh_tunnel_kind"]({"Type": "Dynamic", "Bind": "127.0.0.1:1080"}) == "SOCKS"
+
+explorer_start = source.index("def ssh_explorer_mtime_text(")
+explorer_end = source.index("def render_ssh_view(")
+exec("from __future__ import annotations\n" + source[explorer_start:explorer_end], namespace)
+
+assert namespace["remote_explorer_parent_path"]("/home/me/project") == "/home/me"
+assert namespace["remote_explorer_parent_path"]("/root") == "/"
+assert namespace["remote_explorer_parent_path"]("/") == "/"
+assert namespace["remote_explorer_parent_path"](".") == ".."
+assert namespace["normalize_remote_explorer_path"](".", "/root") == "/root"
+assert namespace["normalize_remote_explorer_path"]("..", "/root") == "/"
+assert namespace["normalize_remote_explorer_path"]("alerts", "/root") == "/root/alerts"
+local_base = Path.cwd().resolve()
+assert namespace["normalize_local_explorer_path"](".", str(local_base)) == str(local_base)
+assert namespace["normalize_local_explorer_path"]("..", str(local_base)) == str(local_base.parent)
+assert namespace["local_explorer_directory"]("/tmp/hhs-missing-explorer-dir") == Path.home().resolve()
+assert namespace["ssh_explorer_local_default_path"]() == str(Path.home().resolve())
+assert namespace["ssh_explorer_remote_default_path"]() == "~"
+target_assignment = namespace["remote_explorer_target_assignment"]("~/project")
+assert 'raw_target=' in target_assignment
+assert 'target="${HOME:-.}/${raw_target#*/}"' in target_assignment
+theme_properties = {
+    "hhs-background": "var(--hhs-theme-background-color)",
+    "hhs-theme-background-color": "#19181f",
+    "hhs-theme-primary-color": "#f1fa8c",
+    "hhs-panel": "var(--missing-panel, #14131a)",
+}
+namespace["theme_custom_properties"] = lambda _theme_name: theme_properties
+assert namespace["resolve_css_custom_property"](
+    theme_properties, "hhs-background", "#000000"
+) == "#19181f"
+assert namespace["resolve_css_custom_property"](
+    theme_properties, "hhs-panel", "#000000"
+) == "#14131a"
+theme = namespace["ssh_explorer_component_theme"]()
+assert theme["primary"] == "#f1fa8c"
+
+explorer_rows = namespace["parse_remote_explorer_rows"](
+    "__HHS_CWD__\t/home/me\n"
+    "__HHS_FILE__\tDir\t.\t0\t1710000000\t/home/me/.\n"
+    "__HHS_FILE__\tDir\t..\t0\t1710000000\t/home/me/..\n"
+    "__HHS_FILE__\tDir\t.hidden\t0\t1710000000\t/home/me/.hidden\n"
+    "__HHS_FILE__\tFile\t.env\t100\t1710000000\t/home/me/.env\n"
+    "__HHS_FILE__\tFile\tnotes.txt\t2048\t1710000000\t/home/me/notes.txt\n"
+)
+assert namespace["parse_remote_explorer_cwd"](
+    "__HHS_CWD__\t/home/me\n"
+) == "/home/me"
+assert namespace["ssh_explorer_entry_is_visible"]("src") is True
+assert namespace["ssh_explorer_entry_is_visible"](".env") is False
+assert namespace["ssh_explorer_entry_is_visible"](".config") is False
+sort_rows = [
+    {"_kind": "File", "_name": "zeta.txt"},
+    {"_kind": "Dir", "_name": "beta"},
+    {"_kind": "File", "_name": "alpha.txt"},
+    {"_kind": "Dir", "_name": "Alpha"},
+]
+assert [
+    row["_name"] for row in sorted(sort_rows, key=namespace["ssh_explorer_sort_key"])
+] == ["Alpha", "beta", "alpha.txt", "zeta.txt"]
+dir_style = namespace["ssh_explorer_row_style"]({"Name": " src", "_kind": "Dir"})
+file_style = namespace["ssh_explorer_row_style"]({"Name": " notes.txt", "_kind": "File"})
+assert all("#38bdf8" in style for style in dir_style)
+assert all("font-weight: 800" in style for style in dir_style)
+assert all("#ffffff" in style for style in file_style)
+assert len(explorer_rows) == 1
+assert explorer_rows[0]["Name"].endswith("notes.txt")
+assert explorer_rows[0]["_name"] == "notes.txt"
+assert explorer_rows[0]["_kind"] == "File"
+assert explorer_rows[0]["Size"] == "2.0 KB"
+assert explorer_rows[0]["Path"] == "/home/me/notes.txt"
+mixed_rows = namespace["parse_remote_explorer_rows"](
+    "__HHS_FILE__\tFile\tzeta.txt\t1\t1710000000\t/home/me/zeta.txt\n"
+    "__HHS_FILE__\tDir\tbeta\t0\t1710000000\t/home/me/beta\n"
+    "__HHS_FILE__\tFile\talpha.txt\t1\t1710000000\t/home/me/alpha.txt\n"
+    "__HHS_FILE__\tDir\tAlpha\t0\t1710000000\t/home/me/Alpha\n"
+)
+assert [row["_name"] for row in mixed_rows] == [
+    "Alpha",
+    "beta",
+    "alpha.txt",
+    "zeta.txt",
+]
+listing_command = namespace["build_remote_explorer_listing_command"]("/tmp")
+assert "__HHS_FILE__" in listing_command
+assert "__HHS_CWD__" in listing_command
+assert "\\t..\\t" not in listing_command
+assert '"${abs_dir}"/.[!.]*' not in listing_command
+assert 'case "${name}" in .*|"."|"..") continue ;; esac' in listing_command
+assert "target=${HOME:-.}" in listing_command
+assert "exit 1" not in listing_command
+assert "stat -c %s" in listing_command
+assert "stat -f %z" in listing_command
+with tempfile.TemporaryDirectory() as tmp_dir:
+    fake_home = Path(tmp_dir) / "home"
+    fake_home.mkdir()
+    (fake_home / "fallback.txt").write_text("ok", encoding="utf-8")
+    missing_dir = Path(tmp_dir) / "deleted" / "teste"
+    fallback_command = namespace["build_remote_explorer_listing_command"](
+        str(missing_dir)
+    )
+    result = subprocess.run(
+        ["bash", "-lc", fallback_command],
+        capture_output=True,
+        check=False,
+        env={"HOME": str(fake_home), "PATH": os.environ.get("PATH", "")},
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert f"__HHS_CWD__\t{fake_home.resolve()}" in result.stdout
+    assert "fallback.txt" in result.stdout
+with tempfile.TemporaryDirectory() as tmp_dir:
+    target_folder = Path(tmp_dir) / "parent" / "new-folder"
+    create_folder_command = namespace["build_remote_explorer_create_folder_command"](
+        str(target_folder)
+    )
+    result = subprocess.run(
+        ["bash", "-lc", create_folder_command],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert target_folder.is_dir()
+    created_dir = namespace["parse_remote_explorer_created_dir"](result.stdout)
+    assert Path(created_dir).resolve() == target_folder.resolve()
+
+assert "__HHS_CREATED_DIR__" in create_folder_command
+assert "mkdir -p" in create_folder_command
+assert 'abs_dir=$(cd "${target}" && pwd -P)' in create_folder_command
+assert "New Folder" not in create_folder_command
+assert namespace["parse_remote_explorer_created_dir"](
+    "__HHS_CREATED_DIR__\t/root/new-folder\n"
+) == "/root/new-folder"
+to_remote = namespace["build_scp_to_remote_command"](
+    "/local/file.txt", "/remote dir", "host.example"
+)
+to_local = namespace["build_scp_to_local_command"](
+    "/remote/file.txt", "/local dir", "host.example"
+)
+assert "scp -r" in to_remote
+assert "-F \"${HOME}/.ssh/config\"" in to_remote
+assert "-o ControlPath=" in to_remote
+assert "/local/file.txt" in to_remote
+assert "host.example:'/remote dir'" in to_remote
+assert "host.example:/remote/file.txt" in to_local
+assert "'/local dir'" in to_local
 PY
   assert_success
 
@@ -3550,7 +4130,7 @@ PY
   run grep -F -q '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stMarkdownContainer"] style)' "${css_file}"
   assert_success
 
-  run grep -F -q '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stAppIframeResizerAnchor"])' "${css_file}"
+  run grep -F -q 'div:not([class*="st-key-ssh_explorer_component"]):has(iframe[height="0"])' "${css_file}"
   assert_success
 
   run grep -q 'height: 0 !important' "${css_file}"
@@ -4257,8 +4837,9 @@ from types import SimpleNamespace
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 tree = ast.parse(source)
+source_lines = source.splitlines()
 functions = {
-    node.name: ast.get_source_segment(source, node)
+    node.name: "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
     for node in tree.body
     if isinstance(node, ast.FunctionDef)
 }
@@ -4853,8 +5434,9 @@ from types import SimpleNamespace
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 tree = ast.parse(source)
+source_lines = source.splitlines()
 functions = {
-    node.name: ast.get_source_segment(source, node)
+    node.name: "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
     for node in tree.body
     if isinstance(node, ast.FunctionDef)
 }
