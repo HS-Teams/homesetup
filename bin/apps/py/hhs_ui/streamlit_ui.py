@@ -2695,13 +2695,7 @@ def handle_footer_actions() -> None:
 
     if query_param_requested(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM)
-        result = run_open_working_directory()
-        if result.returncode != 0:
-            message = result.stderr or "Unable to open working directory."
-            push_floating_status(message, "error")
-            st.error(message)
-        else:
-            push_floating_status("Opened working directory.", "info")
+        open_footer_working_directory()
 
 
 def render_home_view() -> None:
@@ -8000,6 +7994,25 @@ def run_open_working_directory() -> subprocess.CompletedProcess[str]:
     )
 
 
+def open_footer_working_directory() -> None:
+    """Open the footer working directory locally or in the remote SSH explorer."""
+    if connected_ssh_host():
+        working_dir = footer_working_directory()
+        st.session_state["active_view"] = hhs_ui.SSH_VIEW
+        st.session_state["ssh_view"] = "FILES"
+        open_remote_explorer_path(working_dir)
+        push_floating_status("Opened remote working directory in SSH Explorer.", "info")
+        return
+
+    result = run_open_working_directory()
+    if result.returncode != 0:
+        message = result.stderr or "Unable to open working directory."
+        push_floating_status(message, "error")
+        st.error(message)
+    else:
+        push_floating_status("Opened working directory.", "info")
+
+
 def run_shell_version() -> subprocess.CompletedProcess[str]:
     """Run the active host Bash version command used by the footer shell status."""
     return run_bash_command(
@@ -12241,6 +12254,13 @@ def parse_remote_explorer_cwd(output: str) -> str:
     return ""
 
 
+def set_remote_footer_working_directory(path: str) -> None:
+    """Store the SSH footer working directory from remote explorer navigation."""
+    clean_path = str(path or "").strip()
+    if clean_path:
+        st.session_state[hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY] = clean_path
+
+
 def remote_explorer_rows(remote_path: str) -> list[dict[str, str]] | None:
     """Return remote filesystem entries, or None while loading."""
     result = render_cached_command_result(
@@ -12259,6 +12279,7 @@ def remote_explorer_rows(remote_path: str) -> list[dict[str, str]] | None:
     resolved_remote_path = parse_remote_explorer_cwd(result.stdout)
     if resolved_remote_path:
         st.session_state["ssh_explorer_remote_path"] = resolved_remote_path
+        set_remote_footer_working_directory(resolved_remote_path)
     return parse_remote_explorer_rows(result.stdout)
 
 
@@ -12273,9 +12294,9 @@ def open_local_explorer_path(path: str, base_path: str | None = None) -> None:
 
 def open_remote_explorer_path(path: str, base_path: str | None = None) -> None:
     """Open a remote explorer directory."""
-    st.session_state["ssh_explorer_remote_path"] = normalize_remote_explorer_path(
-        path, base_path
-    )
+    normalized_path = normalize_remote_explorer_path(path, base_path)
+    st.session_state["ssh_explorer_remote_path"] = normalized_path
+    set_remote_footer_working_directory(normalized_path)
     cache_delete_tag("ssh_files")
     save_ui_state()
 
@@ -12291,10 +12312,12 @@ def refresh_ssh_explorer_paths(
     st.session_state["ssh_explorer_local_path"] = str(
         local_explorer_directory(normalized_local_path)
     )
-    st.session_state["ssh_explorer_remote_path"] = normalize_remote_explorer_path(
+    normalized_remote_path = normalize_remote_explorer_path(
         remote_path,
         remote_base_path,
     )
+    st.session_state["ssh_explorer_remote_path"] = normalized_remote_path
+    set_remote_footer_working_directory(normalized_remote_path)
     cache_delete_tag("ssh_files")
     save_ui_state()
 

@@ -1010,6 +1010,13 @@ assert '>Clear AI history</span>' in ui_source
 assert '>OK</button>' in ui_source
 assert 'def build_open_directory_command' in ui_source
 assert 'def run_open_working_directory' in ui_source
+assert 'def open_footer_working_directory' in ui_source
+open_footer_working_directory_body = ui_source.split("def open_footer_working_directory", 1)[1].split("\ndef ", 1)[0]
+assert 'if connected_ssh_host():' in open_footer_working_directory_body
+assert 'st.session_state["active_view"] = hhs_ui.SSH_VIEW' in open_footer_working_directory_body
+assert 'st.session_state["ssh_view"] = "FILES"' in open_footer_working_directory_body
+assert 'open_remote_explorer_path(working_dir)' in open_footer_working_directory_body
+assert 'run_open_working_directory()' in open_footer_working_directory_body
 assert 'def build_footer_working_directory_command' in ui_source
 assert 'return r' in ui_source and '__HHS_UI_PWD__' in ui_source and '\\pwd' in ui_source
 assert 'def run_footer_working_directory' in ui_source
@@ -1023,6 +1030,8 @@ assert "show_overlay=False" not in run_footer_working_directory_body
 assert 'def parse_footer_working_directory_output' in ui_source
 assert 'def update_remote_footer_working_directory' in ui_source
 assert 'def footer_working_directory' in ui_source
+handle_footer_actions_body = ui_source.split("def handle_footer_actions", 1)[1].split("\ndef ", 1)[0]
+assert "open_footer_working_directory()" in handle_footer_actions_body
 footer_working_directory_body = ui_source.split("def footer_working_directory", 1)[1].split("\ndef ", 1)[0]
 assert 'run_footer_working_directory()' not in footer_working_directory_body
 assert 'hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY' in footer_working_directory_body
@@ -3180,6 +3189,9 @@ PY
   run grep -q 'def refresh_ssh_explorer_paths' "${ui_file}"
   assert_success
 
+  run grep -q 'def set_remote_footer_working_directory' "${ui_file}"
+  assert_success
+
   run grep -q 'def build_recoverable_delete_command' "${ui_file}"
   assert_success
 
@@ -3792,7 +3804,12 @@ assert namespace["ssh_explorer_remote_default_path"]() == "~"
 refresh_body = source.split("def refresh_ssh_explorer_paths", 1)[1].split("\ndef ", 1)[0]
 assert 'st.session_state["ssh_explorer_local_path"]' in refresh_body
 assert 'st.session_state["ssh_explorer_remote_path"]' in refresh_body
+assert 'set_remote_footer_working_directory(normalized_remote_path)' in refresh_body
 assert 'cache_delete_tag("ssh_files")' in refresh_body
+open_remote_body = source.split("def open_remote_explorer_path", 1)[1].split("\ndef ", 1)[0]
+assert 'set_remote_footer_working_directory(normalized_path)' in open_remote_body
+remote_rows_body = source.split("def remote_explorer_rows", 1)[1].split("\ndef ", 1)[0]
+assert "set_remote_footer_working_directory(resolved_remote_path)" in remote_rows_body
 delete_command = namespace["build_recoverable_delete_command"](
     ["/tmp/delete-one.txt", "/tmp/delete two"]
 )
