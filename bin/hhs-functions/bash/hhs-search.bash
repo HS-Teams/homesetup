@@ -17,7 +17,8 @@
 # @compatible: bash zsh
 function __hhs_search_file() {
 
-  local names expr file_globs dir full_cmd
+  local names file_globs dir full_cmd glob
+  local -a file_glob_values name_args
 
   if [[ "$#" -lt 2 || "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} <search_path> [file_globs...]"
@@ -28,12 +29,19 @@ function __hhs_search_file() {
   else
     dir="${1}"
     file_globs="${2}"
-    expr="e=\"${file_globs}\"; a=e.split(','); print(' -o '.join(['-iname \"{}\"'.format(s) for s in a]))"
-    names=$(python3 -c "${expr}")
+    IFS=',' read -r -a file_glob_values <<<"${file_globs}"
+    for glob in "${file_glob_values[@]}"; do
+      [[ -z "${glob}" ]] && continue
+      [[ -n "${names}" ]] && names="${names} -o "
+      names="${names}-iname \"${glob}\""
+      [[ "${#name_args[@]}" -gt 0 ]] && name_args+=("-o")
+      name_args+=("-iname" "${glob}")
+    done
     full_cmd="find -L ${dir} -type f \( ${names} \) 2> /dev/null | __hhs_highlight \"(${file_globs//\*/.*}|$)\""
     echo "${YELLOW}Searching for files matching: \"${file_globs}\" in \"${dir}\" ${NC}"
     __hhs_log "DEBUG" "${FUNCNAME[0]} ${full_cmd}"
-    eval "${full_cmd}"
+    find -L "${dir}" -type f \( "${name_args[@]}" \) 2>/dev/null |
+      __hhs_highlight "(${file_globs//\*/.*}|$)"
 
     return $?
   fi
@@ -45,7 +53,8 @@ function __hhs_search_file() {
 # @compatible: bash zsh
 function __hhs_search_dir() {
 
-  local names expr dir dir_globs full_cmd
+  local names dir dir_globs full_cmd glob
+  local -a dir_glob_values name_args
 
   if [[ "$#" -lt 2 || "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} <search_path> [dir_globs...]"
@@ -56,14 +65,21 @@ function __hhs_search_dir() {
   else
     dir="${1}"
     dir_globs="${2}"
-    expr="e=\"${dir_globs}\"; a=e.split(','); print(' -o '.join(['-iname \"{}\"'.format(s) for s in a]))"
-    names=$(python3 -c "${expr}")
+    IFS=',' read -r -a dir_glob_values <<<"${dir_globs}"
+    for glob in "${dir_glob_values[@]}"; do
+      [[ -z "${glob}" ]] && continue
+      [[ -n "${names}" ]] && names="${names} -o "
+      names="${names}-iname \"${glob}\""
+      [[ "${#name_args[@]}" -gt 0 ]] && name_args+=("-o")
+      name_args+=("-iname" "${glob}")
+    done
     full_cmd="find -L ${dir} -type d \( ${names} \) 2> /dev/null | __hhs_highlight \"(${dir_globs//\*/.*}|$)\""
 
     # Execute the search command.
     echo "${YELLOW}Searching for folders matching: [${dir_globs}] in \"${dir}\" ${NC}"
     __hhs_log "DEBUG" "${FUNCNAME[0]} ${full_cmd}"
-    eval "${full_cmd}"
+    find -L "${dir}" -type d \( "${name_args[@]}" \) 2>/dev/null |
+      __hhs_highlight "(${dir_globs//\*/.*}|$)"
 
     return $?
   fi
@@ -79,8 +95,9 @@ function __hhs_search_dir() {
 # @compatible: bash zsh
 function __hhs_search_string() {
 
-  local gflags extra_str replace names file_globs_type='regex' gflags='-HnEI' sflags='g'
-  local names_expr search_str base_cmd full_cmd dir repl_str
+  local extra_str replace names file_globs_type='regex' gflags='-HnEI' sflags='g'
+  local search_str base_cmd full_cmd dir repl_str file_globs glob ised
+  local -a file_glob_values name_args sed_args
 
   if [[ "$#" -lt 2 || "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} <search_path> [options] <regex/string> [file_globs]"
@@ -139,20 +156,34 @@ function __hhs_search_string() {
       return 1
     fi
     file_globs="${2:-*.*}"
-    names_expr="e=\"${file_globs}\"; a=e.split(','); print(' -o '.join(['-iname \"{}\"'.format(s) for s in a]))"
-    names=$(python3 -c "${names_expr}")
+    IFS=',' read -r -a file_glob_values <<<"${file_globs}"
+    for glob in "${file_glob_values[@]}"; do
+      [[ -z "${glob}" ]] && continue
+      [[ -n "${names}" ]] && names="${names} -o "
+      names="${names}-iname \"${glob}\""
+      [[ "${#name_args[@]}" -gt 0 ]] && name_args+=("-o")
+      name_args+=("-iname" "${glob}")
+    done
     base_cmd="find -L ${dir} -type f \( ${names} \) -exec grep ${gflags} \"${search_str}\" {}"
 
-    echo "${YELLOW}Searching for \"${file_globs_type}\" matching: \"${search_str}\" in \"${dir}\" , file_globs = [${file_globs}] ${extra_str} ${NC}"
+    echo "${YELLOW}Searching for \"${file_globs_type}\" matching: \"${search_str}\" in \"${dir}\" , " \
+      "file_globs = [${file_globs}] ${extra_str} ${NC}"
 
     if [[ -n "${replace}" ]]; then
       if [[ "${file_globs_type}" = 'string' ]]; then
         __hhs_errcho "${FUNCNAME[0]}" "Can't search and replace non-Regex expressions !"
         return 1
       else
-        [[ "${HHS_MY_OS}" == "Darwin" ]] && ised="sed -i '' -E"
-        [[ "${HHS_MY_OS}" == "Linux" ]] && ised="sed -i'' -r"
-        full_cmd="${base_cmd} \; -exec $ised \"s/${search_str}/${repl_str}/${sflags}\" {} + | sed \"s/${search_str}/${repl_str}/${sflags}\"  | __hhs_highlight \"${repl_str}\""
+        if [[ "${HHS_MY_OS:-$(uname -s)}" == "Darwin" ]]; then
+          ised="sed -i '' -E"
+          sed_args=(sed -i '' -E)
+        else
+          ised="sed -i'' -r"
+          sed_args=(sed -i'' -r)
+        fi
+        full_cmd="${base_cmd} \; -exec $ised \"s/${search_str}/${repl_str}/${sflags}\" {} +"
+        full_cmd="${full_cmd} | sed \"s/${search_str}/${repl_str}/${sflags}\""
+        full_cmd="${full_cmd} | __hhs_highlight \"${repl_str}\""
       fi
     else
       full_cmd="${base_cmd} + 2> /dev/null | __hhs_highlight \"${search_str}\""
@@ -160,7 +191,17 @@ function __hhs_search_string() {
 
     # Execute the search command.
     __hhs_log "DEBUG" "${FUNCNAME[0]} ${full_cmd}"
-    eval "${full_cmd}"
+    if [[ -n "${replace}" ]]; then
+      find -L "${dir}" -type f \( "${name_args[@]}" \) \
+        -exec grep "${gflags}" "${search_str}" {} \; \
+        -exec "${sed_args[@]}" "s/${search_str}/${repl_str}/${sflags}" {} + |
+        sed "s/${search_str}/${repl_str}/${sflags}" |
+        __hhs_highlight "${repl_str}"
+    else
+      find -L "${dir}" -type f \( "${name_args[@]}" \) \
+        -exec grep "${gflags}" "${search_str}" {} + 2>/dev/null |
+        __hhs_highlight "${search_str}"
+    fi
 
     return $?
   fi

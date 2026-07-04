@@ -108,6 +108,24 @@ teardown() {
   assert_output --partial "grep -HnEI \"target\""
 }
 
+@test "when-searching-inside-spaced-path-then-results-are-returned" {
+  spaced_root="${FIXTURE_ROOT}/workspace with spaces"
+  mkdir -p "${spaced_root}/docs" "${spaced_root}/nested folder"
+  printf '%s\n' "Alpha target line" >"${spaced_root}/docs/report.txt"
+
+  run __hhs_search_file "${spaced_root}" "*.txt"
+  assert_success
+  assert_output --partial "report.txt"
+
+  run __hhs_search_dir "${spaced_root}" "*nested*"
+  assert_success
+  assert_output --partial "nested folder"
+
+  run __hhs_search_string "${spaced_root}" "target" "*.txt"
+  assert_success
+  assert_output --partial "report.txt:1:Alpha target line"
+}
+
 # TC - 6
 @test "when-search-string-with-word-option-then-uses-fixed-word-grep" {
   : >"${HHS_LOG_FILE}"
