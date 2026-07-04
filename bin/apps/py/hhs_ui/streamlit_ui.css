@@ -393,6 +393,7 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 .st-key-config_view,
 .st-key-history_view,
 .st-key-monitor_view,
+.st-key-ssh_view,
 .st-key-ai_view {
   margin-top: 0 !important;
   padding-top: 0 !important;
@@ -407,6 +408,7 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-config_view),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-history_view),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-monitor_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ssh_view),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ai_view) {
   margin: 0 !important;
   min-height: 0 !important;
@@ -417,6 +419,7 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 .st-key-config_view [data-baseweb="button-group"],
 .st-key-history_view [data-baseweb="button-group"],
 .st-key-monitor_view [data-baseweb="button-group"],
+.st-key-ssh_view [data-baseweb="button-group"],
 .st-key-ai_view [data-baseweb="button-group"] {
   margin: 0 0 var(--hhs-view-gap) !important;
 }
@@ -830,7 +833,8 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
 .st-key-history_directories_other_filter,
 .st-key-monitor_process_other_filter,
 .st-key-path_other_filter,
-.st-key-service_other_filter {
+.st-key-service_other_filter,
+.st-key-ssh_tunnel_other_filter {
   max-width: none;
   width: 100%;
 }
@@ -845,11 +849,16 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter),
-div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) {
+div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_other_filter) {
   gap: var(--hhs-element-std-gap) !important;
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_filter) {
+  gap: var(--hhs-element-std-gap) !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_filter) {
   gap: var(--hhs-element-std-gap) !important;
 }
 
@@ -863,13 +872,20 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) 
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:first-child,
-div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:first-child {
+div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_other_filter) > div[data-testid="stColumn"]:first-child {
   flex: 0 0 auto !important;
   min-width: max-content !important;
   width: auto !important;
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_filter) > div[data-testid="stColumn"]:first-child {
+  flex: 0 0 auto !important;
+  min-width: max-content !important;
+  width: auto !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_filter) > div[data-testid="stColumn"]:first-child {
   flex: 0 0 auto !important;
   min-width: max-content !important;
   width: auto !important;
@@ -885,13 +901,20 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) 
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:nth-child(2),
 div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter) > div[data-testid="stColumn"]:nth-child(2),
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:nth-child(2),
-div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:nth-child(2) {
+div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:nth-child(2),
+div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_other_filter) > div[data-testid="stColumn"]:nth-child(2) {
   flex: 1 1 auto !important;
   min-width: 0 !important;
   width: auto !important;
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_filter) > div[data-testid="stColumn"]:nth-child(2) {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_filter) > div[data-testid="stColumn"]:nth-child(2) {
   flex: 1 1 auto !important;
   min-width: 0 !important;
   width: auto !important;
@@ -907,7 +930,8 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-history_commands_other_filter) 
 div[data-testid="stHorizontalBlock"]:has(.st-key-history_directories_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-monitor_process_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_other_filter) > div[data-testid="stColumn"]:last-child,
-div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:last-child {
+div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_other_filter) > div[data-testid="stColumn"]:last-child {
   align-self: center !important;
   flex: 0 0 2.1rem !important;
   min-width: 2.1rem !important;
@@ -915,6 +939,13 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-service_other_filter) > div[dat
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-home_tools_filter) > div[data-testid="stColumn"]:last-child {
+  align-self: center !important;
+  flex: 0 0 2.1rem !important;
+  min-width: 2.1rem !important;
+  width: 2.1rem !important;
+}
+
+div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_filter) > div[data-testid="stColumn"]:last-child {
   align-self: center !important;
   flex: 0 0 2.1rem !important;
   min-width: 2.1rem !important;
@@ -1378,36 +1409,49 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   text-decoration: underline !important;
 }
 
-.hhs-footer-cache-clear-button,
-.hhs-footer-cache-clear-button:visited,
-.hhs-footer-cache-clear-button:hover,
-.hhs-footer-cache-clear-button:focus {
+.hhs-footer-cache-clear-menu {
   align-items: center;
-  border-radius: 4px;
   color: var(--hhs-success);
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 0.68rem;
   height: 1.18rem;
+  line-height: 1;
+  position: relative;
+}
+
+.hhs-footer-cache-clear-trigger {
+  align-items: center;
+  border-radius: 4px;
+  color: var(--hhs-success);
+  cursor: pointer;
+  display: inline-flex;
+  height: 1.18rem;
   justify-content: center;
   line-height: 1;
+  list-style: none;
   padding: 0 0.12rem;
   text-decoration: none !important;
 }
 
+.hhs-footer-cache-clear-trigger::-webkit-details-marker {
+  display: none;
+}
+
 .hhs-footer-cache-refresh-glyph {
   color: var(--hhs-success);
-  font-size: 3em;
+  font-size: 2.5em;
   margin-top: -3px;
 }
 
-.hhs-footer-cache-clear-button:hover,
-.hhs-footer-cache-clear-button:focus {
+.hhs-footer-cache-clear-trigger:hover,
+.hhs-footer-cache-clear-trigger:focus,
+.hhs-footer-cache-clear-menu[open] .hhs-footer-cache-clear-trigger {
   background: color-mix(in srgb, var(--hhs-success) 14%, transparent);
   filter: brightness(1.15);
 }
 
-.st-key-footer_cache_clear_menu {
+.hhs-footer-cache-clear-form {
   background: var(--hhs-theme-secondary-background-color);
   border: 1px solid color-mix(in srgb, var(--hhs-theme-border-color) 82%, transparent);
   border-radius: var(--hhs-theme-base-radius);
@@ -1415,6 +1459,9 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   box-shadow: 0 1rem 2rem color-mix(in srgb, #000 46%, transparent);
   box-sizing: border-box;
   color: var(--hhs-theme-text-color);
+  display: flex;
+  flex-direction: column;
+  gap: var(--hhs-element-std-gap);
   padding: 0.45rem;
   position: fixed;
   right: 1rem;
@@ -1422,29 +1469,10 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   z-index: 10060;
 }
 
-.st-key-footer_cache_clear_menu [data-testid="stVerticalBlock"] {
-  gap: var(--hhs-element-std-gap) !important;
-}
-
-.st-key-footer_cache_clear_menu [data-testid="stElementContainer"]:has([data-testid="stCheckbox"]) {
-  width: 100%;
-}
-
-.st-key-footer_cache_clear_menu [data-testid="stCheckbox"] {
+.hhs-footer-cache-clear-form label {
+  align-items: center;
   border-radius: calc(var(--hhs-theme-base-radius) - 0.1rem);
   box-sizing: border-box;
-  min-height: 2.25rem;
-  transition: background 120ms ease, color 120ms ease;
-  width: 100%;
-}
-
-.st-key-footer_cache_clear_menu [data-testid="stCheckbox"]:hover,
-.st-key-footer_cache_clear_menu [data-testid="stCheckbox"]:focus-within {
-  background: color-mix(in srgb, var(--hhs-theme-primary-color) 18%, transparent);
-}
-
-.st-key-footer_cache_clear_menu [data-testid="stCheckbox"] label {
-  align-items: center;
   color: var(--hhs-theme-text-color);
   cursor: pointer;
   display: flex;
@@ -1453,37 +1481,41 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   font-weight: 700;
   min-height: 2.25rem;
   padding: 0.34rem 0.45rem;
+  transition: background 120ms ease, color 120ms ease;
   width: 100%;
 }
 
-.st-key-footer_cache_clear_menu [data-testid="stCheckbox"] label p {
-  font-size: inherit;
+.hhs-footer-cache-clear-form label:hover,
+.hhs-footer-cache-clear-form label:focus-within {
+  background: color-mix(in srgb, var(--hhs-theme-primary-color) 18%, transparent);
 }
 
-.st-key-footer_cache_clear_menu_ok {
-  align-items: center;
-  align-self: stretch;
-  display: flex;
-  justify-content: center;
+.hhs-footer-cache-clear-form input[type="checkbox"] {
+  accent-color: var(--hhs-theme-primary-color);
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0 0.65rem 0 0;
+  width: 1rem;
+}
+
+.hhs-footer-cache-clear-form button {
+  background: transparent;
+  border: 1px solid var(--hhs-theme-border-color);
+  border-radius: calc(var(--hhs-theme-base-radius) - 0.1rem);
+  color: var(--hhs-theme-text-color);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  height: 2.25rem;
   margin-left: auto;
   margin-right: auto;
-  margin-top: 0.35rem;
-  padding-top: 0.25rem;
   width: 100%;
 }
 
-.st-key-footer_cache_clear_menu_ok [data-testid="stButton"] {
-  display: flex;
-  justify-content: center;
-  width: 100%;
-}
-
-.st-key-footer_cache_clear_menu_ok button {
-  border-radius: var(--hhs-theme-button-radius);
-  margin-left: auto;
-  margin-right: auto;
-  min-height: 1.9rem;
-  min-width: 5.5rem;
+.hhs-footer-cache-clear-form button:hover,
+.hhs-footer-cache-clear-form button:focus {
+  background: color-mix(in srgb, var(--hhs-theme-primary-color) 18%, transparent);
+  border-color: var(--hhs-theme-primary-color);
 }
 
 .hhs-footer-remote-status {

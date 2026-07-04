@@ -191,7 +191,7 @@ FOOTER_VERSION_JOB = "footer_hhs_version"
 FOOTER_WORKING_DIR_JOB = "footer_working_dir"
 SSH_CONNECT_JOB = "ssh_connect"
 SSH_DISCONNECT_JOB = "ssh_disconnect"
-HOST_SWITCH_CACHE_TAGS = ("env", "services", "monitor_process")
+HOST_SWITCH_CACHE_TAGS = ("env", "services", "monitor_disk", "monitor_process")
 HOST_SWITCH_BACKGROUND_JOBS = (
     SSH_CONNECT_JOB,
     SSH_DISCONNECT_JOB,
@@ -1902,11 +1902,18 @@ def ollama_prompt_file() -> Path:
 
 def monitor_default_disk_directory() -> str:
     """Return the default directory for the disk monitor."""
+    if connected_ssh_host():
+        return "${HHS_HOME}"
     return str(homesetup_home())
 
 
-def normalized_monitor_disk_top_n(value: object) -> int:
-    """Return a valid monitor disk Top N value."""
+def monitor_disk_directory_is_hhs_home_token(directory: object) -> bool:
+    """Return whether a disk monitor directory references HomeSetup home."""
+    return str(directory or "").strip() in {"${HHS_HOME}", "$HHS_HOME"}
+
+
+def normalized_monitor_top_n(value: object) -> int:
+    """Return a valid monitor Top N value."""
     try:
         top_n = int(value)
     except (TypeError, ValueError):
@@ -1914,6 +1921,28 @@ def normalized_monitor_disk_top_n(value: object) -> int:
     if top_n < 1 or top_n > 100:
         return 10
     return top_n
+
+
+def normalized_monitor_disk_top_n(value: object) -> int:
+    """Return a valid monitor disk Top N value."""
+    return normalized_monitor_top_n(value)
+
+
+def monitor_process_top_n_state_key(metric: str) -> str:
+    """Return the session key for the applied process monitor Top N value."""
+    return f"monitor_{metric.lower()}_top_n"
+
+
+def monitor_process_top_n_input_key(metric: str) -> str:
+    """Return the session key for the pending process monitor Top N value."""
+    return f"monitor_{metric.lower()}_top_n_input"
+
+
+def normalized_monitor_process_top_n(metric: str) -> int:
+    """Return the applied Top N value for a process monitor metric."""
+    return normalized_monitor_top_n(
+        st.session_state.get(monitor_process_top_n_state_key(metric))
+    )
 
 
 def handle_monitor_disk_top_n_change() -> None:
@@ -1924,16 +1953,41 @@ def handle_monitor_disk_top_n_change() -> None:
     save_ui_state()
 
 
+def handle_monitor_process_top_n_change(metric: str) -> None:
+    """Persist the pending process monitor Top N widget value."""
+    input_key = monitor_process_top_n_input_key(metric)
+    st.session_state[input_key] = normalized_monitor_top_n(
+        st.session_state.get(input_key)
+    )
+    save_ui_state()
+
+
 def apply_monitor_disk_controls() -> None:
     """Apply pending disk monitor controls before the next command refresh."""
-    directory = str(st.session_state.get("monitor_disk_directory", "")).strip()
-    st.session_state["monitor_disk_directory_applied"] = (
-        directory or monitor_default_disk_directory()
+    directory = monitor_disk_directory_for_host(
+        st.session_state.get("monitor_disk_directory", "")
     )
+    st.session_state["monitor_disk_directory"] = directory
+    st.session_state["monitor_disk_directory_applied"] = directory
     st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
         st.session_state.get("monitor_disk_top_n_input")
     )
     cache_delete_tag("monitor_disk")
+    save_ui_state()
+
+
+def apply_monitor_process_controls(metric: str) -> None:
+    """Apply pending process monitor controls before the next command refresh."""
+    input_key = monitor_process_top_n_input_key(metric)
+    state_key = monitor_process_top_n_state_key(metric)
+    top_n = normalized_monitor_top_n(st.session_state.get(input_key))
+    st.session_state[state_key] = top_n
+    st.session_state[input_key] = top_n
+    cache_delete_command(
+        build_process_monitor_command(metric, top_n),
+        "monitor_process",
+    )
+    st.session_state[f"monitor_{metric.lower()}_error"] = ""
     save_ui_state()
 
 
@@ -1946,6 +2000,37 @@ def applied_monitor_disk_directory() -> str:
         )
     ).strip()
     return directory or monitor_default_disk_directory()
+
+
+def monitor_disk_directory_for_host(directory: object) -> str:
+    """Return a disk monitor directory normalized for the active command host."""
+    clean_directory = str(directory or "").strip()
+    default_directory = monitor_default_disk_directory()
+    if not clean_directory:
+        return default_directory
+    if not connected_ssh_host() and monitor_disk_directory_is_hhs_home_token(
+        clean_directory
+    ):
+        return default_directory
+    if connected_ssh_host() and expand_monitor_disk_directory(clean_directory) == str(
+        homesetup_home()
+    ):
+        return default_directory
+    return clean_directory
+
+
+def synchronize_monitor_disk_directory_with_host() -> None:
+    """Keep disk monitor path controls aligned with the current execution host."""
+    host_key = command_remote_host() or "local"
+    if st.session_state.get("monitor_disk_host_key") == host_key:
+        return
+    st.session_state["monitor_disk_host_key"] = host_key
+    directory = monitor_disk_directory_for_host(
+        st.session_state.get("monitor_disk_directory", "")
+    )
+    st.session_state["monitor_disk_directory"] = directory
+    st.session_state["monitor_disk_directory_applied"] = directory
+    cache_delete_tag("monitor_disk")
 
 
 def hhs_log_dir() -> Path:
@@ -2258,6 +2343,78 @@ def render_floating_status() -> None:
     )
 
 
+def footer_cache_clear_menu_markup() -> str:
+    """Return the native HTML footer cleanup menu."""
+    clear_param = html.escape(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM, quote=True)
+    app_cache_param = html.escape(
+        hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM,
+        quote=True,
+    )
+    app_states_param = html.escape(
+        hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM,
+        quote=True,
+    )
+    ai_history_param = html.escape(
+        hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM,
+        quote=True,
+    )
+    return f"""
+      <details class="hhs-footer-cache-clear-menu">
+        <summary class="hhs-footer-cache-clear-trigger"
+                 title="Clear application cache"
+                 aria-label="Clear application cache">
+          <span class="hhs-footer-cache-refresh-glyph">♻</span>
+        </summary>
+        <form class="hhs-footer-cache-clear-form" method="get">
+          <input type="hidden" name="{clear_param}" value="1">
+          <label>
+            <input type="checkbox" name="{app_cache_param}" value="1">
+            <span>Clear application cache</span>
+          </label>
+          <label>
+            <input type="checkbox" name="{app_states_param}" value="1">
+            <span>Clear application states</span>
+          </label>
+          <label>
+            <input type="checkbox" name="{ai_history_param}" value="1">
+            <span>Clear AI history</span>
+          </label>
+          <button type="submit">OK</button>
+        </form>
+      </details>
+    """.strip()
+
+
+def render_footer_cache_clear_menu_script() -> None:
+    """Close the native footer cleanup menu locally when no option is selected."""
+    components.html(
+        """
+        <script>
+          (() => {
+            const doc = window.parent.document;
+            const form = doc.querySelector(".hhs-footer-cache-clear-form");
+            if (!form || form.dataset.emptySubmitGuard === "true") {
+              return;
+            }
+            form.dataset.emptySubmitGuard = "true";
+            form.addEventListener("submit", (event) => {
+              if (form.querySelector('input[type="checkbox"]:checked')) {
+                return;
+              }
+              event.preventDefault();
+              const menu = form.closest(".hhs-footer-cache-clear-menu");
+              if (menu) {
+                menu.removeAttribute("open");
+              }
+            });
+          })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def render_footer() -> None:
     """Render the HomeSetup UI footer."""
     version = homesetup_version()
@@ -2266,7 +2423,6 @@ def render_footer() -> None:
     working_dir_url = f"?{hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM}=1"
     update_url = f"?{hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM}=1"
     shell_version_url = f"?{hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM}=1"
-    cache_clear_url = f"?{hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM}=1"
     updater_markup = ""
     if bool(st.session_state.get("updater_update_available", False)):
         updater_markup = (
@@ -2285,9 +2441,7 @@ def render_footer() -> None:
         )
         cache_clear_markup = (
             f'<span class="hhs-footer-glyph"></span>'
-            f'<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}" '
-            f'target="_self" title="Clear application cache" aria-label="Clear application cache">'
-            f'<span class="hhs-footer-cache-refresh-glyph">♻</span></a>'
+            f"{footer_cache_clear_menu_markup()}"
         )
     connected_host = str(st.session_state.get("ssh_connection_host", "")).strip()
     remote_status_markup = ""
@@ -2328,6 +2482,8 @@ def render_footer() -> None:
           {status_group_markup}
         </footer>
         """)
+    if shell_name:
+        render_footer_cache_clear_menu_script()
 
 
 def query_param_requested(name: str) -> bool:
@@ -2384,19 +2540,6 @@ def render_footer_shell_version_dialog() -> bool:
     )
 
 
-def open_footer_cache_clear_menu() -> None:
-    """Open the footer cleanup menu and reset its pending choices."""
-    st.session_state["footer_cache_clear_menu_open"] = True
-    st.session_state["footer_cache_clear_application_cache"] = False
-    st.session_state["footer_cache_clear_application_states"] = False
-    st.session_state["footer_cache_clear_ai_history"] = False
-
-
-def close_footer_cache_clear_menu() -> None:
-    """Close the footer cleanup menu."""
-    st.session_state["footer_cache_clear_menu_open"] = False
-
-
 def clear_application_state_data() -> None:
     """Delete persisted UI state and remove persistable selections from this session."""
     try:
@@ -2408,66 +2551,62 @@ def clear_application_state_data() -> None:
             st.session_state.pop(state_key, None)
 
 
-def selected_footer_cleanup_labels() -> list[str]:
-    """Return the footer cleanup labels selected in the popup menu."""
+def selected_footer_cleanup_labels(
+    clear_application_cache: bool,
+    clear_application_states: bool,
+    clear_ai_history: bool,
+) -> list[str]:
+    """Return footer cleanup labels selected in the native popup menu."""
     labels = []
-    if st.session_state.get("footer_cache_clear_application_cache"):
+    if clear_application_cache:
         labels.append("application cache")
-    if st.session_state.get("footer_cache_clear_application_states"):
+    if clear_application_states:
         labels.append("application states")
-    if st.session_state.get("footer_cache_clear_ai_history"):
+    if clear_ai_history:
         labels.append("AI history")
     return labels
 
 
-def apply_footer_cache_clear_menu() -> None:
-    """Apply selected footer cleanup menu actions."""
-    labels = selected_footer_cleanup_labels()
+def apply_footer_cache_clear_options(
+    clear_application_cache: bool,
+    clear_application_states: bool,
+    clear_ai_history: bool,
+) -> None:
+    """Apply selected footer cleanup actions from query parameters."""
+    labels = selected_footer_cleanup_labels(
+        clear_application_cache,
+        clear_application_states,
+        clear_ai_history,
+    )
     if not labels:
-        close_footer_cache_clear_menu()
         push_floating_status("No cleanup option selected.", "warn")
         return
 
     failed_labels = []
-    if st.session_state.get("footer_cache_clear_application_cache"):
+    if clear_application_cache:
         clear_cached_ui_data_preserving_state(show_status=False)
-    if st.session_state.get("footer_cache_clear_ai_history"):
+    if clear_ai_history:
         result = clear_ai_chat_history_data()
         if result.returncode != 0:
             failed_labels.append("AI history")
-    if st.session_state.get("footer_cache_clear_application_states"):
+    if clear_application_states:
         clear_application_state_data()
 
-    close_footer_cache_clear_menu()
     if failed_labels:
         push_floating_status(f"Unable to clear {', '.join(failed_labels)}.", "error")
     else:
         push_floating_status(f"Cleared {', '.join(labels)}.", "info")
 
 
-def render_footer_cache_clear_menu() -> None:
-    """Render the footer cleanup menu opened by the cache glyph button."""
-    if not st.session_state.get("footer_cache_clear_menu_open"):
-        return
-    with st.container(key="footer_cache_clear_menu"):
-        st.checkbox(
-            "Clear application cache",
-            key="footer_cache_clear_application_cache",
-        )
-        st.checkbox(
-            "Clear application states",
-            key="footer_cache_clear_application_states",
-        )
-        st.checkbox(
-            "Clear AI history",
-            key="footer_cache_clear_ai_history",
-        )
-        st.button(
-            "OK",
-            key="footer_cache_clear_menu_ok",
-            on_click=apply_footer_cache_clear_menu,
-            width="content",
-        )
+def remove_footer_cache_clear_query_params() -> None:
+    """Remove footer cache clear query parameters from the browser URL."""
+    for name in (
+        hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM,
+        hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM,
+        hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM,
+        hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM,
+    ):
+        remove_query_param(name)
 
 
 def handle_footer_actions() -> None:
@@ -2502,8 +2641,21 @@ def handle_footer_actions() -> None:
         st.session_state["footer_shell_version_dialog_title"] = "Shell version"
 
     if query_param_requested(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM):
-        remove_query_param(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM)
-        open_footer_cache_clear_menu()
+        clear_application_cache = query_param_requested(
+            hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM
+        )
+        clear_application_states = query_param_requested(
+            hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM
+        )
+        clear_ai_history = query_param_requested(
+            hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM
+        )
+        remove_footer_cache_clear_query_params()
+        apply_footer_cache_clear_options(
+            clear_application_cache,
+            clear_application_states,
+            clear_ai_history,
+        )
 
     if query_param_requested(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM)
@@ -5607,6 +5759,23 @@ def relative_disk_usage_path(path: str, directory: str) -> str:
     return path
 
 
+def parse_hhs_disk_usage_directory(output: str) -> str:
+    """Parse the expanded directory from __hhs_du output."""
+    for line in strip_ansi(output).splitlines():
+        match = re.search(r"disk usage at:\s+\"?(.+?)\"?\s*$", line)
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def monitor_disk_display_directory(directory: str, output: str) -> str:
+    """Return the expanded disk monitor directory for UI display."""
+    output_directory = parse_hhs_disk_usage_directory(output)
+    if output_directory:
+        return output_directory
+    return expand_monitor_disk_directory(directory)
+
+
 def escape_markdown_table_cell(value: str) -> str:
     """Return a cell value escaped for a Markdown table."""
     return value.replace("|", "\\|")
@@ -7617,7 +7786,7 @@ def monitor_metric_job_name(metric: str) -> str:
 
 def monitor_metric_command(metric: str) -> str:
     """Return the command used to load one process monitor metric."""
-    return build_process_monitor_command(metric)
+    return build_process_monitor_command(metric, normalized_monitor_process_top_n(metric))
 
 
 def cached_monitor_metric_result(
@@ -8109,7 +8278,8 @@ def build_hhs_disk_usage_command(directory: str, top_n: int = 10) -> str:
     expanded_directory = expand_monitor_disk_directory(directory)
     directory_arg = (
         '"${HHS_HOME}"'
-        if expanded_directory == str(hhs_home)
+        if monitor_disk_directory_is_hhs_home_token(directory)
+        or expanded_directory == str(hhs_home)
         else shlex.quote(expanded_directory)
     )
     return (
@@ -8130,12 +8300,17 @@ def build_process_monitor_command(metric: str, top_n: int = 10) -> str:
     linux_sort = sort_keys["linux"]
     ps_sort = "-r" if metric == "CPU" else "-m"
     linux_ps_sort = "pcpu" if metric == "CPU" else "pmem"
+    linux_top_sample = (
+        f"top -b -n 2 -d 1 -o {linux_sort} -w 512"
+        if metric == "CPU"
+        else f"top -b -n 1 -o {linux_sort} -w 512"
+    )
     return (
         'if [[ "$(uname -s)" == "Darwin" ]]; then '
         f"top -l 2 -s 1 -o {darwin_sort} -n {safe_top_n} 2>/dev/null || "
         f"ps -axo pid,user,%cpu,%mem,comm {ps_sort} 2>/dev/null | head -n {safe_top_n + 1}; "
         "else "
-        f"top -b -n 1 -o {linux_sort} -w 512 2>/dev/null || "
+        f"{linux_top_sample} 2>/dev/null || "
         f"ps -eo pid,user,%cpu,%mem,comm --sort=-{linux_ps_sort} 2>/dev/null | head -n {safe_top_n + 1}; "
         "fi"
     )
@@ -9333,6 +9508,28 @@ def display_ssh_tunnel_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     ]
 
 
+def filter_ssh_tunnel_rows(
+    rows: list[dict[str, str]],
+    tunnel_filter: str,
+    text_filter: str = "",
+) -> list[dict[str, str]]:
+    """Return SSH tunnel rows matching the selected displayed Kind filter."""
+    clean_filter = text_filter.strip().lower()
+    if tunnel_filter == "Other":
+        return [
+            row
+            for row in rows
+            if not clean_filter or clean_filter in ssh_tunnel_kind(row).lower()
+        ]
+    if tunnel_filter == "All":
+        return rows
+    return [
+        row
+        for row in rows
+        if ssh_tunnel_kind(row).lower() == tunnel_filter.strip().lower()
+    ]
+
+
 def ssh_tunnel_status_cell_style(value: object) -> str:
     """Return the dataframe cell style for SSH tunnel status values."""
     value_text = str(value).strip().lower()
@@ -9505,6 +9702,24 @@ def parse_process_monitor(output: str, metric: str) -> list[dict[str, float | st
             }
         )
     return rows
+
+
+def process_monitor_chart_rows(
+    output: str, metric: str, limit: int = 10
+) -> list[dict[str, float | str]]:
+    """Return sorted process monitor rows ready for charting."""
+    rows = sorted(
+        parse_rows_cached(
+            f"process_monitor_{metric}",
+            output,
+            lambda parsed_output: parse_process_monitor(parsed_output, metric),
+        ),
+        key=lambda row: float(row["Value"]),
+        reverse=True,
+    )
+    if metric == "CPU":
+        rows = [row for row in rows if float(row["Value"]) > 0.0]
+    return rows[: max(1, int(limit))]
 
 
 def parse_hhs_process_list(output: str) -> list[dict[str, str]]:
@@ -11269,12 +11484,13 @@ def render_monitor_disk_chart() -> None:
         key=lambda row: float(row["Bytes"]),
         reverse=True,
     )
+    display_directory = monitor_disk_display_directory(selected_directory, result.stdout)
     for row in rows:
-        row["Label"] = relative_disk_usage_path(str(row["Path"]), selected_directory)
+        row["Label"] = relative_disk_usage_path(str(row["Path"]), display_directory)
     if not rows:
         st.caption("No disk usage entries found.")
         return
-    st.markdown(f"##### Top {applied_top_n} disk usage at `{selected_directory}`")
+    st.markdown(f"##### Top {applied_top_n} disk usage at `{display_directory}`")
     render_bar_chart(
         rows,
         x=alt.X(
@@ -11305,13 +11521,44 @@ def render_monitor_disk_chart() -> None:
 def render_process_monitor_chart(metric: str) -> None:
     """Render a process monitor chart for CPU or MEM usage."""
     job_name = monitor_metric_job_name(metric)
-    complete_monitor_metric_refresh(metric)
-    refresh_clicked = st.button(
-        "Refresh", key=f"monitor_{metric.lower()}_refresh_button"
+    top_n_key = monitor_process_top_n_state_key(metric)
+    top_n_input_key = monitor_process_top_n_input_key(metric)
+    st.session_state[top_n_key] = normalized_monitor_top_n(
+        st.session_state.get(top_n_key)
     )
-    if refresh_clicked:
-        cache_delete_command(monitor_metric_command(metric), "monitor_process")
-        st.session_state[f"monitor_{metric.lower()}_error"] = ""
+    st.session_state[top_n_input_key] = normalized_monitor_top_n(
+        st.session_state.get(top_n_input_key, st.session_state[top_n_key])
+    )
+    complete_monitor_metric_refresh(metric)
+    top_label_col, top_input_col, action_col = st.columns(
+        [0.55, 0.75, 0.45],
+        vertical_alignment="center",
+    )
+    with top_label_col:
+        st.markdown(
+            '<span class="hhs-inline-form-label">Top N</span>', unsafe_allow_html=True
+        )
+    with top_input_col:
+        st.number_input(
+            "Top N",
+            min_value=1,
+            max_value=100,
+            step=1,
+            key=top_n_input_key,
+            label_visibility="collapsed",
+            on_change=handle_monitor_process_top_n_change,
+            args=(metric,),
+        )
+    with action_col:
+        refresh_clicked = st.button(
+            "",
+            key=f"monitor_{metric.lower()}_refresh_button",
+            help="Refresh",
+            on_click=apply_monitor_process_controls,
+            args=(metric,),
+            width="stretch",
+        )
+    applied_top_n = normalized_monitor_process_top_n(metric)
     result, fresh_cache = cached_monitor_metric_result(metric)
     if (refresh_clicked or not fresh_cache) and not background_job_is_running(job_name):
         start_monitor_metric_refresh(metric)
@@ -11337,17 +11584,12 @@ def render_process_monitor_chart(metric: str) -> None:
             )
         )
         return
-    rows = sorted(
-        parse_rows_cached(
-            f"process_monitor_{metric}",
-            result.stdout,
-            lambda output: parse_process_monitor(output, metric),
-        ),
-        key=lambda row: float(row["Value"]),
-        reverse=True,
-    )[:10]
+    rows = process_monitor_chart_rows(result.stdout, metric, applied_top_n)
     if not rows:
-        st.caption(f"No {metric.lower()} usage entries found.")
+        if metric == "CPU":
+            st.caption("No CPU usage above 0.0% found.")
+        else:
+            st.caption(f"No {metric.lower()} usage entries found.")
         return
     for row in rows:
         row["Label"] = row["Command"]
@@ -11370,7 +11612,7 @@ def render_process_monitor_chart(metric: str) -> None:
     title = "Memory" if metric == "MEM" else "CPU"
     unit_suffix = "" if has_byte_values else " %"
     color = "#ffb86c"
-    st.markdown(f"##### Top 10 {title} processes")
+    st.markdown(f"##### Top {applied_top_n} {title} processes")
     render_bar_chart(
         rows,
         x=alt.X("Value:Q", title=f"{title}{unit_suffix}", axis=axis),
@@ -11668,18 +11910,13 @@ def monitor_view_label(monitor_view: str) -> str:
     return hhs_ui.MONITOR_VIEW_LABELS.get(monitor_view, monitor_view)
 
 
-def render_ssh_view() -> None:
-    """Render the SSH tunnel and port-forward view."""
-    host = connected_ssh_host()
-    st.markdown(
-        f"""
-        <section class="hhs-view-heading">
-          <h2> SSH</h2>
-          <p>Connected to remote  {html.escape(ssh_connection_display(host))}</p>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
+def ssh_view_label(ssh_view: str) -> str:
+    """Return the display label for an SSH subview key."""
+    return hhs_ui.SSH_VIEW_LABELS.get(ssh_view, ssh_view)
+
+
+def render_ssh_tunnels_panel(host: str) -> None:
+    """Render the SSH tunnel and port-forward panel."""
     result = render_cached_command_result(
         build_ssh_tunnels_command(host),
         "Loading SSH tunnels",
@@ -11699,6 +11936,16 @@ def render_ssh_view() -> None:
     )
     if status_job_names:
         render_ssh_tunnel_status_loader(status_job_names)
+    tunnel_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
+            hhs_ui.SSH_TUNNEL_FILTERS,
+            "ssh_tunnel_filter",
+            "ssh_tunnel_other_filter",
+            hhs_ui.THREE_OPTION_FILTER_COLUMNS,
+            placeholder="Type tunnel filter",
+        )
+    )
+    rows = filter_ssh_tunnel_rows(rows, tunnel_filter, other_filter)
     headers = ["Local Port", "Remote Host:Port", "Kind", "Status", "Link"]
     render_table(
         rows,
@@ -11718,6 +11965,37 @@ def render_ssh_view() -> None:
     )
     if not rows:
         st.caption("No active SSH tunnels or port forwards were found.")
+
+
+def render_ssh_files_panel() -> None:
+    """Render the SSH file browser placeholder panel."""
+
+
+def render_ssh_view() -> None:
+    """Render the SSH remote connection view."""
+    host = connected_ssh_host()
+    st.markdown(
+        """
+        <section class="hhs-view-heading">
+          <h2> Remote Connection</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    ssh_view = st.segmented_control(
+        "SSH view",
+        options=hhs_ui.SSH_VIEWS,
+        default=st.session_state["ssh_view"],
+        format_func=ssh_view_label,
+        key="ssh_view",
+        label_visibility="collapsed",
+        on_change=save_ui_state,
+        width="stretch",
+    )
+    if ssh_view == "TUNNELS":
+        render_ssh_tunnels_panel(host)
+    elif ssh_view == "FILES":
+        render_ssh_files_panel()
 
 
 def history_view_label(history_view: str) -> str:
@@ -12436,6 +12714,13 @@ def main() -> None:
     st.session_state.setdefault("monitor_view", "DISK")
     if st.session_state["monitor_view"] not in hhs_ui.MONITOR_VIEWS:
         st.session_state["monitor_view"] = "DISK"
+    st.session_state.setdefault("ssh_view", "TUNNELS")
+    if st.session_state["ssh_view"] not in hhs_ui.SSH_VIEWS:
+        st.session_state["ssh_view"] = "TUNNELS"
+    st.session_state.setdefault("ssh_tunnel_filter", "All")
+    if st.session_state["ssh_tunnel_filter"] not in hhs_ui.SSH_TUNNEL_FILTERS:
+        st.session_state["ssh_tunnel_filter"] = "All"
+    st.session_state.setdefault("ssh_tunnel_other_filter", "")
     st.session_state.setdefault("monitor_process_filter", "All")
     st.session_state.setdefault("monitor_process_other_filter", "")
     monitor_process_filter = str(st.session_state["monitor_process_filter"]).strip()
@@ -12453,10 +12738,17 @@ def main() -> None:
         "monitor_disk_directory_applied",
         st.session_state["monitor_disk_directory"],
     )
+    synchronize_monitor_disk_directory_with_host()
     st.session_state.setdefault("monitor_disk_top_n", 10)
     st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
         st.session_state.get("monitor_disk_top_n")
     )
+    for metric in ("CPU", "MEM"):
+        top_n_key = monitor_process_top_n_state_key(metric)
+        st.session_state.setdefault(top_n_key, 10)
+        st.session_state[top_n_key] = normalized_monitor_top_n(
+            st.session_state.get(top_n_key)
+        )
     st.session_state.setdefault("monitor_log_file", "")
     st.session_state.setdefault("monitor_log_filter", "All")
     if st.session_state["monitor_log_filter"] not in hhs_ui.LOG_FILTERS:
@@ -12499,7 +12791,6 @@ def main() -> None:
     render_main_view()
     render_folder_picker_dialog()
     render_footer()
-    render_footer_cache_clear_menu()
     render_floating_status()
     render_browser_cleanup_script()
 

@@ -954,8 +954,14 @@ assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in constan
 assert 'FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"' in constants_source
 assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM = "hhs_show_shell_version"' in constants_source
 assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"' in constants_source
+assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cache"' in constants_source
+assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"' in constants_source
+assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM = "hhs_clear_ai_history"' in constants_source
 assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM' in init_source
+assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in init_source
+assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in init_source
+assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in init_source
 assert '"updater_last_check_epoch"' in constants_source
 assert '"updater_last_check_output"' in constants_source
 assert '"updater_update_available"' in constants_source
@@ -972,19 +978,29 @@ assert 'class="hhs-footer-update-link"' in ui_source
 assert 'href="{update_url}" target="_self"' in ui_source
 assert '' in ui_source
 assert 'class="hhs-footer-shell-group"' in ui_source
-assert 'class="hhs-footer-cache-clear-button"' in ui_source
-assert 'href="{cache_clear_url}"' in ui_source
-assert 'title="Clear application cache" aria-label="Clear application cache">' in ui_source
+assert 'def footer_cache_clear_menu_markup' in ui_source
+assert 'def render_footer_cache_clear_menu_script' in ui_source
+assert '<details class="hhs-footer-cache-clear-menu">' in ui_source
+assert '<summary class="hhs-footer-cache-clear-trigger"' in ui_source
+assert '<form class="hhs-footer-cache-clear-form" method="get">' in ui_source
+assert '<button type="submit">OK</button>' in ui_source
+assert 'form.querySelector(\'input[type="checkbox"]:checked\')' in ui_source
+assert 'event.preventDefault()' in ui_source
+assert 'menu.removeAttribute("open")' in ui_source
+assert 'render_footer_cache_clear_menu_script()' in ui_source
+assert 'href="{cache_clear_url}"' not in ui_source
+assert 'key="footer_cache_clear_button"' not in ui_source
+assert 'on_click=open_footer_cache_clear_menu' not in ui_source
 assert 'f\'<span class="hhs-footer-glyph"></span>\'' in ui_source
-assert 'f\'<span class="hhs-footer-cache-refresh-glyph">♻</span></a>\'' in ui_source
-assert '<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}"' in ui_source
+assert '<span class="hhs-footer-cache-refresh-glyph">♻</span>' in ui_source
+assert '<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}"' not in ui_source
 assert '<span class="hhs-footer-glyph"></span><span class="hhs-footer-cache-refresh-glyph">♻</span></a>' not in ui_source
-assert 'def render_footer_cache_clear_menu' in ui_source
-assert 'st.container(key="footer_cache_clear_menu")' in ui_source
-assert '"Clear application cache"' in ui_source
-assert '"Clear application states"' in ui_source
-assert '"Clear AI history"' in ui_source
-assert '"OK"' in ui_source
+assert 'def render_footer_cache_clear_menu(' not in ui_source
+assert 'st.container(key="footer_cache_clear_menu")' not in ui_source
+assert '>Clear application cache</span>' in ui_source
+assert '>Clear application states</span>' in ui_source
+assert '>Clear AI history</span>' in ui_source
+assert '>OK</button>' in ui_source
 assert 'def build_open_directory_command' in ui_source
 assert 'def run_open_working_directory' in ui_source
 assert 'def build_footer_working_directory_command' in ui_source
@@ -1035,7 +1051,12 @@ assert shell_result_index < shell_output_index < shell_title_index
 assert 'cache_delete_tag("env")' in footer_actions_body
 assert 'st.session_state["footer_hhs_version_cache_loaded"] = False' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM' in footer_actions_body
-assert 'open_footer_cache_clear_menu()' in footer_actions_body
+assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in footer_actions_body
+assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in footer_actions_body
+assert 'hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in footer_actions_body
+assert 'remove_footer_cache_clear_query_params()' in footer_actions_body
+assert 'apply_footer_cache_clear_options(' in footer_actions_body
+assert 'open_footer_cache_clear_menu()' not in footer_actions_body
 assert 'clear_cached_ui_data_preserving_state()' not in footer_actions_body
 assert 'def cache_delete_command' in ui_source
 assert 'cache_delete_command(command, "env")' in ui_source
@@ -1044,11 +1065,17 @@ assert "cache_clear()" in clear_cache_body
 assert "st.session_state.clear()" not in clear_cache_body
 assert "UI_STATE_FILE" not in clear_cache_body
 assert "push_floating_status" in clear_cache_body
-apply_cache_menu_body = ui_source.split("def apply_footer_cache_clear_menu", 1)[1].split("\ndef ", 1)[0]
-assert "clear_cached_ui_data_preserving_state(show_status=False)" in apply_cache_menu_body
-assert "clear_application_state_data()" in apply_cache_menu_body
-assert "clear_ai_chat_history_data()" in apply_cache_menu_body
-assert "st.rerun()" not in apply_cache_menu_body
+apply_cache_options_body = ui_source.split("def apply_footer_cache_clear_options", 1)[1].split("\ndef ", 1)[0]
+assert "clear_cached_ui_data_preserving_state(show_status=False)" in apply_cache_options_body
+assert "clear_application_state_data()" in apply_cache_options_body
+assert "clear_ai_chat_history_data()" in apply_cache_options_body
+assert "selected_footer_cleanup_labels(" in apply_cache_options_body
+assert "st.rerun()" not in apply_cache_options_body
+remove_cache_params_body = ui_source.split("def remove_footer_cache_clear_query_params", 1)[1].split("\ndef ", 1)[0]
+assert "hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM" in remove_cache_params_body
+assert "hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM" in remove_cache_params_body
+assert "hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM" in remove_cache_params_body
+assert "hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM" in remove_cache_params_body
 state_clear_body = ui_source.split("def clear_application_state_data", 1)[1].split("\ndef ", 1)[0]
 assert "hhs_ui.UI_STATE_FILE.unlink" in state_clear_body
 assert "is_persisted_ui_key" in state_clear_body
@@ -1093,13 +1120,12 @@ shell_name_hover_block = re.search(r"\.hhs-footer-shell-status:hover \.hhs-foote
 remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", base_css).group(1)
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
 shell_group_block = re.search(r"\.hhs-footer-shell-group\s*\{([^}]*)\}", base_css).group(1)
-cache_clear_block = re.search(r"\.hhs-footer-cache-clear-button,[^{]+\{([^}]*)\}", base_css).group(1)
-footer_cache_menu_gap_block = re.search(r"\.st-key-footer_cache_clear_menu \[data-testid=\"stVerticalBlock\"\]\s*\{([^}]*)\}", base_css).group(1)
-footer_cache_menu_checkbox_container_block = re.search(r"\.st-key-footer_cache_clear_menu \[data-testid=\"stElementContainer\"\]:has\(\[data-testid=\"stCheckbox\"\]\)\s*\{([^}]*)\}", base_css).group(1)
-footer_cache_menu_checkbox_block = re.search(r"\.st-key-footer_cache_clear_menu \[data-testid=\"stCheckbox\"\]\s*\{([^}]*)\}", base_css).group(1)
-footer_cache_menu_ok_block = re.search(r"\.st-key-footer_cache_clear_menu_ok\s*\{([^}]*)\}", base_css).group(1)
-footer_cache_menu_ok_stbutton_block = re.search(r"\.st-key-footer_cache_clear_menu_ok \[data-testid=\"stButton\"\]\s*\{([^}]*)\}", base_css).group(1)
-footer_cache_menu_ok_button_block = re.search(r"\.st-key-footer_cache_clear_menu_ok button\s*\{([^}]*)\}", base_css).group(1)
+cache_menu_block = re.search(r"\.hhs-footer-cache-clear-menu\s*\{([^}]*)\}", base_css).group(1)
+cache_trigger_block = re.search(r"\.hhs-footer-cache-clear-trigger\s*\{([^}]*)\}", base_css).group(1)
+cache_form_block = re.search(r"\.hhs-footer-cache-clear-form\s*\{([^}]*)\}", base_css).group(1)
+cache_form_label_block = re.search(r"\.hhs-footer-cache-clear-form label\s*\{([^}]*)\}", base_css).group(1)
+cache_form_checkbox_block = re.search(r"\.hhs-footer-cache-clear-form input\[type=\"checkbox\"\]\s*\{([^}]*)\}", base_css).group(1)
+cache_form_button_block = re.search(r"\.hhs-footer-cache-clear-form button\s*\{([^}]*)\}", base_css).group(1)
 block_container_block = re.search(r"\.block-container\s*\{([^}]*)\}", base_css).group(1)
 main_block_gap_block = re.search(r"\[data-testid=\"stMainBlockContainer\"\] > \[data-testid=\"stVerticalBlock\"\],[^{]+\{([^}]*)\}", base_css).group(1)
 active_view_block = re.search(r"\.st-key-active_view\s*\{([^}]*)\}", base_css).group(1)
@@ -1120,7 +1146,10 @@ assert "height:" in logo_block
 assert "width:" in logo_block
 assert ".hhs-footer-shell-status" in base_css
 assert ".hhs-footer-shell-group" in base_css
-assert ".hhs-footer-cache-clear-button" in base_css
+assert ".hhs-footer-cache-clear-menu" in base_css
+assert ".hhs-footer-cache-clear-trigger" in base_css
+assert ".hhs-footer-cache-clear-form" in base_css
+assert ".st-key-footer_cache_clear_button" not in base_css
 assert ".hhs-footer-remote-status" in base_css
 assert ".hhs-footer-status-group" in base_css
 assert ".hhs-footer-repository-link:hover" in base_css
@@ -1131,30 +1160,33 @@ assert "text-decoration: none !important" in shell_name_block
 assert "text-decoration: underline !important" in shell_name_hover_block
 assert "text-decoration: underline" not in shell_status_hover_block
 assert "gap: var(--hhs-element-std-gap)" in shell_group_block
-assert "border:" not in cache_clear_block
-assert "gap:" not in cache_clear_block
-assert "padding: 0 0.12rem" in cache_clear_block
-assert "height: 1.18rem" in cache_clear_block
-assert "var(--hhs-success)" in cache_clear_block
+assert "font-size: 0.68rem" in cache_menu_block
+assert "height: 1.18rem" in cache_menu_block
+assert "position: relative" in cache_menu_block
+assert "cursor: pointer" in cache_trigger_block
+assert "height: 1.18rem" in cache_trigger_block
+assert "list-style: none" in cache_trigger_block
+assert "padding: 0 0.12rem" in cache_trigger_block
 assert ".hhs-footer-cache-refresh-glyph" in base_css
-assert "font-size: 3em" in base_css
-assert ".hhs-footer-cache-clear-button .hhs-footer-glyph" not in base_css
-assert ".st-key-footer_cache_clear_menu" in base_css
+assert "font-size: 2.5em" in base_css
+assert ".hhs-footer-cache-clear-button" not in base_css
+assert ".hhs-footer-cache-clear-trigger:hover" in base_css
 assert "bottom: calc(var(--hhs-footer-guard-height) + 0.7rem)" in base_css
 assert "right: 1rem" in base_css
-assert "background: var(--hhs-theme-secondary-background-color)" in base_css
-assert "box-shadow: 0 1rem 2rem" in base_css
-assert '.st-key-footer_cache_clear_menu [data-testid="stCheckbox"]:hover' in base_css
-assert ".st-key-footer_cache_clear_menu_ok button" in base_css
-assert "gap: var(--hhs-element-std-gap) !important" in footer_cache_menu_gap_block
-assert "width: 100%" in footer_cache_menu_checkbox_container_block
-assert "width: 100%" in footer_cache_menu_checkbox_block
-assert "justify-content: center" in footer_cache_menu_ok_block
-assert "width: 100%" in footer_cache_menu_ok_block
-assert "justify-content: center" in footer_cache_menu_ok_stbutton_block
-assert "width: 100%" in footer_cache_menu_ok_stbutton_block
-assert "margin-left: auto" in footer_cache_menu_ok_button_block
-assert "margin-right: auto" in footer_cache_menu_ok_button_block
+assert "background: var(--hhs-theme-secondary-background-color)" in cache_form_block
+assert "box-shadow: 0 1rem 2rem" in cache_form_block
+assert "gap: var(--hhs-element-std-gap)" in cache_form_block
+assert "position: fixed" in cache_form_block
+assert "width: min(22rem, calc(100vw - 2rem)) !important" in cache_form_block
+assert "width: 100%" in cache_form_label_block
+assert "min-height: 2.25rem" in cache_form_label_block
+assert "accent-color: var(--hhs-theme-primary-color)" in cache_form_checkbox_block
+assert "height: 1rem" in cache_form_checkbox_block
+assert "background: transparent" in cache_form_button_block
+assert "height: 2.25rem" in cache_form_button_block
+assert "width: 100%" in cache_form_button_block
+assert ".hhs-footer-cache-clear-form label:hover" in base_css
+assert ".hhs-footer-cache-clear-form button:hover" in base_css
 assert 'div[role="dialog"]:has(.hhs-shell-version-output)' in base_css
 assert ".hhs-shell-version-output" in base_css
 assert "max-height: 88dvh" in base_css
@@ -1213,13 +1245,16 @@ assert ".st-key-home_view" in base_css
 assert ".st-key-config_view" in base_css
 assert ".st-key-history_view" in base_css
 assert ".st-key-monitor_view" in base_css
+assert ".st-key-ssh_view" in base_css
 assert ".st-key-ai_view" in base_css
 assert "margin-top: 0 !important" in view_key_block
 assert "padding-top: 0 !important" in view_key_block
 assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-active_view)' in base_css
 assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-home_view)' in base_css
+assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ssh_view)' in base_css
 assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ai_view)' in base_css
 assert '.st-key-home_view [data-baseweb="button-group"]' in base_css
+assert '.st-key-ssh_view [data-baseweb="button-group"]' in base_css
 assert "padding-right: var(--hhs-streamlit-toolbar-guard-width)" in active_view_tabs_block
 assert '[data-testid="stToolbar"]' in base_css
 assert '[data-testid="stDecoration"]' in base_css
@@ -1423,6 +1458,27 @@ PY
   run grep -q 'SSH_VIEW = "SSH"' "${constants_file}"
   assert_success
 
+  run grep -q 'SSH_VIEWS = ("TUNNELS", "FILES")' "${constants_file}"
+  assert_success
+
+  run grep -q '"TUNNELS": "Tunnels"' "${constants_file}"
+  assert_success
+
+  run grep -q '"FILES": "Files"' "${constants_file}"
+  assert_success
+
+  run grep -q 'SSH_TUNNEL_FILTERS = ("All", "Reachable", "Other")' "${constants_file}"
+  assert_success
+
+  run grep -q '"ssh_view"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ssh_tunnel_filter"' "${constants_file}"
+  assert_success
+
+  run grep -q '"ssh_tunnel_other_filter"' "${constants_file}"
+  assert_success
+
   run grep -q 'SSH_RECONNECT_HOST_KEY = "ssh_reconnect_host"' "${constants_file}"
   assert_success
 
@@ -1489,7 +1545,7 @@ PY
   run grep -q '<h2> History</h2>' "${ui_file}"
   assert_success
 
-  run grep -q '<h2> SSH</h2>' "${ui_file}"
+  run grep -q '<h2> Remote Connection</h2>' "${ui_file}"
   assert_success
 
   run grep -q '<h2> Ask Ollama HomeSetup AI</h2>' "${ui_file}"
@@ -1820,6 +1876,18 @@ PY
   run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-home_tools_filter)' "${css_file}"
   assert_success
 
+  run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-ssh_tunnel_filter)' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-ssh_tunnel_other_filter)' "${css_file}"
+  assert_success
+
+  run grep -q 'div\[data-testid="stHorizontalBlock"\]:has(.st-key-ssh_tunnel_filter) > div\[data-testid="stColumn"\]:first-child' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-ssh_tunnel_filter \[role="radiogroup"\]' "${css_file}"
+  assert_failure
+
   run grep -q '.st-key-home_shopts_other_filter input' "${css_file}"
   assert_success
 
@@ -1914,6 +1982,18 @@ PY
   assert_success
 
   run grep -q 'SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"' "${constants_file}"
+  assert_success
+
+  run grep -q 'st.session_state.setdefault("ssh_view", "TUNNELS")' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["ssh_view"\] not in hhs_ui.SSH_VIEWS' "${ui_file}"
+  assert_success
+
+  run grep -q 'SSH_VIEW_LABELS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
+  assert_success
+
+  run grep -q 'SSH_VIEWS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
   assert_success
 
   run grep -q 'def main_view_label' "${ui_file}"
@@ -2342,6 +2422,24 @@ PY
   run grep -q 'def normalized_monitor_disk_top_n' "${ui_file}"
   assert_success
 
+  run grep -q 'def normalized_monitor_top_n' "${ui_file}"
+  assert_success
+
+  run grep -q '"monitor_cpu_top_n"' "${constants_file}"
+  assert_success
+
+  run grep -q '"monitor_mem_top_n"' "${constants_file}"
+  assert_success
+
+  run grep -q 'def monitor_disk_directory_for_host' "${ui_file}"
+  assert_success
+
+  run grep -q 'def synchronize_monitor_disk_directory_with_host' "${ui_file}"
+  assert_success
+
+  run grep -q 'HOST_SWITCH_CACHE_TAGS = ("env", "services", "monitor_disk", "monitor_process")' "${ui_file}"
+  assert_success
+
   run grep -q 'return 10' "${ui_file}"
   assert_success
 
@@ -2351,10 +2449,237 @@ PY
   run grep -q 'on_change=handle_monitor_disk_top_n_change' "${ui_file}"
   assert_success
 
+  run grep -q 'def monitor_process_top_n_state_key' "${ui_file}"
+  assert_success
+
+  run grep -q 'def handle_monitor_process_top_n_change' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_change=handle_monitor_process_top_n_change' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click=apply_monitor_process_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'for metric in ("CPU", "MEM"):' "${ui_file}"
+  assert_success
+
+  run grep -q 'build_process_monitor_command(metric, normalized_monitor_process_top_n(metric))' "${ui_file}"
+  assert_success
+
+  run grep -q 'process_monitor_chart_rows(result.stdout, metric, applied_top_n)' "${ui_file}"
+  assert_success
+
+  run grep -q 'Top {applied_top_n} {title} processes' "${ui_file}"
+  assert_success
+
+  run grep -q 'def process_monitor_chart_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'top -b -n 2 -d 1 -o {linux_sort} -w 512' "${ui_file}"
+  assert_success
+
+  run grep -q 'No CPU usage above 0.0% found.' "${ui_file}"
+  assert_success
+
   run grep -q 'SERVICE_FILTERS = ("All", "Up", "Down", "Other")' "${constants_file}"
   assert_success
 
   run grep -q 'PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")' "${constants_file}"
+  assert_success
+
+  run python3 - <<'PY'
+import ast
+import os
+import re
+import shlex
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+tree = ast.parse(source)
+functions = {
+    node.name: ast.get_source_segment(source, node)
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
+}
+host = ""
+namespace = {
+    "hhs_ui": SimpleNamespace(
+        ANSI_ESCAPE_PATTERN=re.compile(
+            r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[()][A-Za-z0-9])"
+        ),
+        ESCAPED_ANSI_ESCAPE_PATTERN=re.compile(
+            r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
+        ),
+    ),
+    "os": os,
+    "re": re,
+    "shlex": shlex,
+    "connected_ssh_host": lambda: host,
+    "homesetup_home": lambda: Path("/Users/hjunior/HomeSetup"),
+}
+exec(
+    "from __future__ import annotations\n"
+    + "\n\n".join(
+        functions[name]
+        for name in (
+            "strip_ansi",
+            "monitor_default_disk_directory",
+            "monitor_disk_directory_is_hhs_home_token",
+            "expand_monitor_disk_directory",
+            "monitor_disk_directory_for_host",
+            "parse_hhs_disk_usage_directory",
+            "monitor_disk_display_directory",
+            "relative_disk_usage_path",
+            "build_hhs_disk_usage_command",
+        )
+    ),
+    namespace,
+)
+
+assert namespace["monitor_default_disk_directory"]() == "/Users/hjunior/HomeSetup"
+assert namespace["monitor_disk_directory_for_host"]("") == "/Users/hjunior/HomeSetup"
+assert namespace["monitor_disk_directory_for_host"]("/Users/hjunior/HomeSetup") == "/Users/hjunior/HomeSetup"
+assert namespace["monitor_disk_directory_for_host"]("${HHS_HOME}") == "/Users/hjunior/HomeSetup"
+
+host = "remote-box"
+assert namespace["monitor_default_disk_directory"]() == "${HHS_HOME}"
+assert namespace["monitor_disk_directory_for_host"]("") == "${HHS_HOME}"
+assert namespace["monitor_disk_directory_for_host"]("/Users/hjunior/HomeSetup") == "${HHS_HOME}"
+assert namespace["monitor_disk_directory_for_host"]("/root/HomeSetup") == "/root/HomeSetup"
+command = namespace["build_hhs_disk_usage_command"]("${HHS_HOME}", 10)
+assert '__hhs_du "${HHS_HOME}" 10' in command
+output = 'Top 10 disk usage at: "/root/HomeSetup"\n1: /root/HomeSetup/bin..... 12M |'
+display_directory = namespace["monitor_disk_display_directory"]("${HHS_HOME}", output)
+assert display_directory == "/root/HomeSetup"
+assert namespace["relative_disk_usage_path"]("/root/HomeSetup/bin", display_directory) == "bin"
+assert namespace["relative_disk_usage_path"]("/root/HomeSetup", display_directory) == "."
+PY
+  assert_success
+
+  run python3 - <<'PY'
+import ast
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+tree = ast.parse(source)
+functions = {
+    node.name: ast.get_source_segment(source, node)
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
+}
+namespace = {}
+exec(
+    "from __future__ import annotations\n"
+    + "\n\n".join(
+        functions[name]
+        for name in (
+            "normalized_monitor_top_n",
+            "normalized_monitor_disk_top_n",
+            "monitor_process_top_n_state_key",
+            "monitor_process_top_n_input_key",
+        )
+    ),
+    namespace,
+)
+
+assert namespace["normalized_monitor_top_n"](None) == 10
+assert namespace["normalized_monitor_top_n"]("0") == 10
+assert namespace["normalized_monitor_top_n"]("101") == 10
+assert namespace["normalized_monitor_top_n"]("25") == 25
+assert namespace["normalized_monitor_disk_top_n"]("12") == 12
+assert namespace["monitor_process_top_n_state_key"]("CPU") == "monitor_cpu_top_n"
+assert namespace["monitor_process_top_n_state_key"]("MEM") == "monitor_mem_top_n"
+assert namespace["monitor_process_top_n_input_key"]("CPU") == "monitor_cpu_top_n_input"
+assert namespace["monitor_process_top_n_input_key"]("MEM") == "monitor_mem_top_n_input"
+PY
+  assert_success
+
+  run python3 - <<'PY'
+import ast
+import re
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+tree = ast.parse(source)
+functions = {
+    node.name: ast.get_source_segment(source, node)
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
+}
+namespace = {
+    "hhs_ui": SimpleNamespace(
+        ANSI_ESCAPE_PATTERN=re.compile(
+            r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[()][A-Za-z0-9])"
+        ),
+        ESCAPED_ANSI_ESCAPE_PATTERN=re.compile(
+            r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
+        ),
+        TOP_PROCESS_SORT_KEYS={
+            "CPU": {"darwin": "cpu", "linux": "%CPU", "field": "CPU"},
+            "MEM": {"darwin": "mem", "linux": "%MEM", "field": "MEM"},
+        },
+    ),
+    "parse_rows_cached": lambda _name, output, parser: parser(output),
+    "re": re,
+}
+exec(
+    "from __future__ import annotations\n"
+    + "\n\n".join(
+        functions[name]
+        for name in (
+            "strip_ansi",
+            "human_size_to_bytes",
+            "metric_value",
+            "parse_process_monitor",
+            "process_monitor_chart_rows",
+        )
+    ),
+    namespace,
+)
+
+output = """
+PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND
+1 root 20 0 1 1 1 S 0.0 0.1 0:01 systemd
+2 root 20 0 1 1 1 S 0.0 0.0 0:00 kthreadd
+PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND
+88 root 20 0 1 1 1 R 14.5 0.2 0:02 python
+1 root 20 0 1 1 1 S 0.0 0.1 0:01 systemd
+"""
+cpu_rows = namespace["process_monitor_chart_rows"](output, "CPU")
+assert [row["Command"] for row in cpu_rows] == ["python"], cpu_rows
+assert cpu_rows[0]["Value"] == 14.5
+
+limited_output = """
+PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND
+88 root 20 0 1 1 1 R 14.5 0.2 0:02 python
+99 root 20 0 1 1 1 R 7.0 0.8 0:01 node
+"""
+limited_cpu_rows = namespace["process_monitor_chart_rows"](limited_output, "CPU", 1)
+assert [row["Command"] for row in limited_cpu_rows] == ["python"], limited_cpu_rows
+limited_mem_rows = namespace["process_monitor_chart_rows"](limited_output, "MEM", 1)
+assert [row["Command"] for row in limited_mem_rows] == ["node"], limited_mem_rows
+
+zero_rows = namespace["process_monitor_chart_rows"](
+    """
+PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND
+1 root 20 0 1 1 1 S 0.0 0.1 0:01 systemd
+""",
+    "CPU",
+)
+assert zero_rows == [], zero_rows
+
+mem_rows = namespace["process_monitor_chart_rows"](
+    """
+PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND
+1 root 20 0 1 1 1 S 0.0 0.1 0:01 systemd
+""",
+    "MEM",
+)
+assert [row["Command"] for row in mem_rows] == ["systemd"], mem_rows
+PY
   assert_success
 }
 
@@ -2724,6 +3049,9 @@ PY
   run grep -q 'def display_ssh_tunnel_rows' "${ui_file}"
   assert_success
 
+  run grep -q 'def filter_ssh_tunnel_rows' "${ui_file}"
+  assert_success
+
   run grep -q 'headers = \["Local Port", "Remote Host:Port", "Kind", "Status", "Link"\]' "${ui_file}"
   assert_success
 
@@ -2747,6 +3075,48 @@ PY
 
   run grep -q 'def render_ssh_view' "${ui_file}"
   assert_success
+
+  run grep -q 'def render_ssh_tunnels_panel' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_ssh_files_panel' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ssh_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'options=hhs_ui.SSH_VIEWS' "${ui_file}"
+  assert_success
+
+  run grep -q 'format_func=ssh_view_label' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="ssh_view"' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_ssh_tunnels_panel(host)' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.SSH_TUNNEL_FILTERS' "${ui_file}"
+  assert_success
+
+  run grep -q '"ssh_tunnel_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q '"ssh_tunnel_other_filter"' "${ui_file}"
+  assert_success
+
+  run grep -q 'filter_ssh_tunnel_rows(rows, tunnel_filter, other_filter)' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state.setdefault("ssh_tunnel_filter", "All")' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_ssh_files_panel()' "${ui_file}"
+  assert_success
+
+  run grep -F -q '<p>Connected to remote' "${ui_file}"
+  assert_failure
 
   run grep -q 'key=hhs_ui.SSH_TUNNEL_TABLE_KEY' "${ui_file}"
   assert_success
@@ -2776,6 +3146,11 @@ namespace = {
     "re": re,
     "shlex": shlex,
     "ssh_config_file": lambda: Path.home() / ".ssh" / "config",
+    "row_matches_text_filter": lambda row, text: (
+        not text.strip()
+        or text.strip().lower()
+        in " ".join(str(value).lower() for value in row.values())
+    ),
     "strip_ansi": lambda value: value,
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
@@ -2876,6 +3251,19 @@ assert display_rows == [
         "Link": "http://127.0.0.1:15432",
     }
 ], display_rows
+filter_rows = [
+    {"Bind": "15432", "Destination": "127.0.0.1:5432", "Status": "Reachable"},
+    {"Bind": "8080", "Destination": "localhost:80", "Status": "Not reachable"},
+]
+assert namespace["filter_ssh_tunnel_rows"](filter_rows, "All") == filter_rows
+assert namespace["filter_ssh_tunnel_rows"](filter_rows, "Reachable") == []
+assert namespace["filter_ssh_tunnel_rows"](filter_rows, "PostgreSQL") == [
+    filter_rows[0]
+]
+assert namespace["filter_ssh_tunnel_rows"](filter_rows, "Other", "http") == [
+    filter_rows[1]
+]
+assert namespace["filter_ssh_tunnel_rows"](filter_rows, "Other", "localhost") == []
 assert namespace["ssh_tunnel_kind"]({"Type": "Local", "Destination": "localhost:80"}) == "HTTP"
 assert namespace["ssh_tunnel_kind"]({"Type": "Dynamic", "Bind": "127.0.0.1:1080"}) == "SOCKS"
 PY

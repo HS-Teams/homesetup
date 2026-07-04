@@ -146,6 +146,12 @@ MONITOR_VIEW_LABELS = {
     "PROCESSES": " Processes",
     "LOGS": " Logs",
 }
+SSH_VIEWS = ("TUNNELS", "FILES")
+SSH_VIEW_LABELS = {
+    "TUNNELS": "Tunnels",
+    "FILES": "Files",
+}
+SSH_TUNNEL_FILTERS = ("All", "Reachable", "Other")
 ENV_FILTERS = ("All", "HHS", "Other")
 LIST_FILTERS = ("All", "Other")
 HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Aliased", "Other")
@@ -216,6 +222,7 @@ PERSISTED_UI_KEYS = (
     "history_directories_other_filter",
     "history_stats_top_n",
     "history_view",
+    "monitor_cpu_top_n",
     "monitor_disk_directory",
     "monitor_disk_top_n",
     "monitor_log_file",
@@ -223,6 +230,7 @@ PERSISTED_UI_KEYS = (
     "monitor_log_level",
     "monitor_log_other_filter",
     "monitor_logs_tail",
+    "monitor_mem_top_n",
     "monitor_process_filter",
     "monitor_process_other_filter",
     "monitor_view",
@@ -232,6 +240,9 @@ PERSISTED_UI_KEYS = (
     "service_filter",
     "service_other_filter",
     SSH_RECONNECT_HOST_KEY,
+    "ssh_tunnel_filter",
+    "ssh_tunnel_other_filter",
+    "ssh_view",
     "theme_selected",
     "updater_last_check_epoch",
     "updater_last_check_output",
@@ -370,3 +381,6 @@ FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"
 FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"
 FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM = "hhs_show_shell_version"
 FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"
+FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cache"
+FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"
+FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM = "hhs_clear_ai_history"
