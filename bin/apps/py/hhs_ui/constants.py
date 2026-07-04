@@ -8,11 +8,12 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
 APP_THEME_CSS_FILE = APP_DIR / "themes/dracula.css"
+SSH_EXPLORER_COMPONENT_DIR = APP_DIR / "components/ssh_explorer"
 APP_FONT_FAMILY = "Droid Sans Mono for Powerline Nerd Font Complete"
 APP_FONT_FILE = (
     APP_DIR / "assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
@@ -148,8 +149,8 @@ MONITOR_VIEW_LABELS = {
 }
 SSH_VIEWS = ("TUNNELS", "FILES")
 SSH_VIEW_LABELS = {
-    "TUNNELS": "Tunnels",
-    "FILES": "Files",
+    "TUNNELS": " Tunnels",
+    "FILES": " Explorer",
 }
 SSH_TUNNEL_FILTERS = ("All", "Reachable", "Other")
 ENV_FILTERS = ("All", "HHS", "Other")
@@ -212,6 +213,8 @@ PERSISTED_UI_KEYS = (
     "env_value_overrides",
     "home_view",
     "ssh_host_selected",
+    "ssh_explorer_local_path",
+    "ssh_explorer_remote_path",
     "home_tools_filter",
     "home_tools_other_filter",
     "home_shopts_filter",

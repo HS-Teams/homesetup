@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      @font-face {
+        font-family: "Droid Sans Mono for Powerline Nerd Font Complete";
+        src: url("./Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2")
+          format("woff2");
+        font-weight: 400 900;
+      }
+
+      :root {
+        --hhs-bg: #19181f;
+        --hhs-field: #221f2b;
+        --hhs-border: #6c5f91;
+        --hhs-border-muted: rgba(108, 95, 145, 0.68);
+        --hhs-folder: #78dce8;
+        --hhs-file: #fcfcfa;
+        --hhs-primary: #bd93f9;
+        --hhs-muted: rgba(248, 248, 242, 0.62);
+        --hhs-hover: rgba(108, 95, 145, 0.2);
+        --hhs-panel-bg: color-mix(in srgb, var(--hhs-bg) 84%, var(--hhs-field) 16%);
+        --hhs-selected: rgba(56, 189, 248, 0.13);
+        --hhs-disabled: rgba(248, 248, 242, 0.34);
+        --hhs-scrollbar: #8d8b93;
+        --hhs-scrollbar-size: 0.65rem;
+        --hhs-table-height: 420px;
+        color-scheme: dark;
+        font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        background: var(--hhs-bg);
+        color: var(--hhs-file);
+        height: 100%;
+        margin: 0;
+        min-width: 0;
+        overflow: hidden;
+        padding: 0;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .explorer {
+        align-items: stretch;
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: minmax(0, 1fr) 3.2rem minmax(0, 1fr);
+        height: 100vh;
+        min-height: 0;
+        width: 100%;
+      }
+
+      .panel {
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        min-width: 0;
+      }
+
+      .panel.active .path-input,
+      .panel.active .table-shell {
+        border-color: var(--hhs-primary);
+        box-shadow: 0 0 0 1px var(--hhs-primary);
+      }
+
+      .panel.active .panel-title {
+        color: var(--hhs-primary);
+      }
+
+      .panel-title {
+        color: var(--hhs-file);
+        font-size: 1.55rem;
+        font-weight: 900;
+        line-height: 1.2;
+        margin: 0 0 0.9rem;
+      }
+
+      .path-form {
+        display: grid;
+        gap: 0.8rem;
+        grid-template-columns: minmax(0, 1fr) 2.8rem;
+        margin-bottom: 1rem;
+      }
+
+      .path-input,
+      .icon-button {
+        background: var(--hhs-field);
+        border: 1px solid var(--hhs-border);
+        border-radius: 4px;
+        color: var(--hhs-file);
+        min-height: 2.8rem;
+        outline: none;
+      }
+
+      .path-input {
+        min-width: 0;
+        padding: 0 0.9rem;
+        width: 100%;
+      }
+
+      .path-input:focus,
+      .icon-button:focus-visible,
+      .row:focus-visible {
+        border-color: var(--hhs-folder);
+        box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.45);
+      }
+
+      .icon-button {
+        align-items: center;
+        cursor: pointer;
+        display: inline-flex;
+        font-size: 1.1rem;
+        font-weight: 900;
+        justify-content: center;
+        padding: 0;
+        width: 2.8rem;
+      }
+
+      .icon-button:hover:not(:disabled) {
+        background: var(--hhs-hover);
+        border-color: var(--hhs-primary);
+      }
+
+      .icon-button:disabled {
+        color: var(--hhs-disabled);
+        cursor: not-allowed;
+        opacity: 0.72;
+      }
+
+      .table-shell {
+        background: var(--hhs-panel-bg);
+        border: 1px solid var(--hhs-border);
+        border-radius: 4px;
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .table-grid {
+        display: grid;
+        grid-template-columns: 2.1rem minmax(0, 1.55fr) minmax(4.5rem, 0.55fr) minmax(8.5rem, 0.9fr);
+      }
+
+      .header {
+        background: var(--hhs-field);
+        border-bottom: 1px solid var(--hhs-border);
+        color: var(--hhs-muted);
+        font-weight: 900;
+        padding-right: var(--hhs-scrollbar-size);
+      }
+
+      .header-cell,
+      .cell {
+        align-items: center;
+        border-right: 1px solid var(--hhs-border-muted);
+        display: flex;
+        min-width: 0;
+        padding: 0 0.55rem;
+      }
+
+      .header-cell {
+        min-height: 2.45rem;
+      }
+
+      .header-cell:last-child,
+      .cell:last-child {
+        border-right: 0;
+      }
+
+      .table-body {
+        background: var(--hhs-panel-bg);
+        flex: 1 1 auto;
+        height: auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        scrollbar-color: var(--hhs-scrollbar) transparent;
+        scrollbar-gutter: stable;
+        scrollbar-width: auto;
+      }
+
+      .table-body::-webkit-scrollbar {
+        width: var(--hhs-scrollbar-size);
+      }
+
+      .table-body::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .table-body::-webkit-scrollbar-thumb {
+        background: var(--hhs-scrollbar);
+        border-radius: 999px;
+      }
+
+      .row {
+        background: var(--hhs-panel-bg);
+        border: 0;
+        border-bottom: 1px solid var(--hhs-border-muted);
+        color: var(--hhs-file);
+        cursor: pointer;
+        min-height: 2.45rem;
+        outline: none;
+        padding: 0;
+        text-align: left;
+        width: 100%;
+      }
+
+      .row:hover {
+        background: var(--hhs-hover);
+      }
+
+      .row.selected {
+        background: var(--hhs-selected);
+      }
+
+      .row.dir {
+        color: var(--hhs-folder);
+        font-weight: 900;
+      }
+
+      .cell-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .check-cell {
+        justify-content: center;
+        padding: 0;
+      }
+
+      .row-checkbox {
+        accent-color: var(--hhs-folder);
+        cursor: pointer;
+        height: 1rem;
+        margin: 0;
+        width: 1rem;
+      }
+
+      .empty {
+        background: var(--hhs-panel-bg);
+        color: var(--hhs-muted);
+        min-height: 100%;
+        padding: 1rem;
+      }
+
+      .transfer {
+        align-items: center;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        height: 100%;
+        justify-content: center;
+        min-height: 0;
+        width: 3.2rem;
+      }
+
+      .transfer .icon-button {
+        height: 2.4rem;
+        min-height: 2.4rem;
+        width: 2.4rem;
+      }
+
+      .status {
+        color: var(--hhs-muted);
+        font-size: 0.95rem;
+        margin-top: 0.8rem;
+        min-height: 1.3rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app" class="explorer" aria-label="SSH Explorer"></main>
+    <script>
+      const Streamlit = {
+        sendMessage(type, data = {}) {
+          window.parent.postMessage(
+            {
+              isStreamlitMessage: true,
+              type,
+              ...data,
+            },
+            "*"
+          );
+        },
+        setComponentReady() {
+          this.sendMessage("streamlit:componentReady", { apiVersion: 1 });
+        },
+        setFrameHeight(height) {
+          this.sendMessage("streamlit:setFrameHeight", { height });
+        },
+        setComponentValue(value) {
+          this.sendMessage("streamlit:setComponentValue", {
+            dataType: "json",
+            value,
+          });
+        },
+      };
+
+      const app = document.getElementById("app");
+      let args = {
+        localRows: [],
+        remoteRows: [],
+        localPath: "",
+        remotePath: ".",
+        remoteLoading: false,
+        selectionHint: false,
+        tableHeight: 420,
+        theme: {},
+        transferRunning: false,
+      };
+      let selectedPanel = "";
+      let selectedPath = "";
+      let activePanel = "local";
+
+      function stringValue(value, fallback = "") {
+        if (value === null || value === undefined) {
+          return fallback;
+        }
+        return String(value);
+      }
+
+      function rowsFor(panel) {
+        const rows = panel === "local" ? args.localRows : args.remoteRows;
+        return Array.isArray(rows) ? rows : [];
+      }
+
+      function visibleRows(panel) {
+        return rowsFor(panel).filter((row) => {
+          const name = stringValue(row._name);
+          return name && name !== "." && name !== ".." && !name.startsWith(".");
+        });
+      }
+
+      function selectedRow() {
+        if (!selectedPanel || !selectedPath) {
+          return null;
+        }
+        return visibleRows(selectedPanel).find(
+          (row) => stringValue(row.Path) === selectedPath
+        );
+      }
+
+      function selectedStatus(panel) {
+        const row = selectedPanel === panel ? selectedRow() : null;
+        if (!row) {
+          return args.selectionHint ? "Select a row to interact" : "";
+        }
+        return `Selected: ${stringValue(row.Path)}`;
+      }
+
+      function syncPanelState() {
+        const selected = selectedRow();
+        const selectedKind = selected ? stringValue(selected._kind) : "";
+        document.querySelectorAll(".panel").forEach((element) => {
+          element.classList.toggle("active", element.dataset.panel === activePanel);
+        });
+        document.querySelectorAll(".row").forEach((element) => {
+          const selected =
+            element.dataset.panel === selectedPanel &&
+            element.dataset.path === selectedPath;
+          element.classList.toggle("selected", selected);
+          const checkbox = element.querySelector(".row-checkbox");
+          if (checkbox) {
+            checkbox.checked = selected;
+          }
+        });
+        document.querySelectorAll(".status").forEach((element) => {
+          const statusText = selectedStatus(element.dataset.panel);
+          element.textContent = statusText;
+          element.hidden = !statusText;
+        });
+        document.querySelectorAll("[data-transfer-action='open']").forEach((button) => {
+          button.disabled = selectedKind !== "Dir";
+        });
+        document
+          .querySelectorAll("[data-transfer-action='copy_to_remote']")
+          .forEach((button) => {
+            button.disabled =
+              Boolean(args.transferRunning) || selectedPanel !== "local" || !selected;
+          });
+        document
+          .querySelectorAll("[data-transfer-action='copy_to_local']")
+          .forEach((button) => {
+            button.disabled =
+              Boolean(args.transferRunning) || selectedPanel !== "remote" || !selected;
+          });
+      }
+
+      function activatePanel(panel, clearSelection = true) {
+        let changed = activePanel !== panel;
+        activePanel = panel;
+        if (clearSelection && selectedPanel && selectedPanel !== panel) {
+          selectedPanel = "";
+          selectedPath = "";
+          changed = true;
+        }
+        if (changed) {
+          syncPanelState();
+        }
+        return changed;
+      }
+
+      function validateSelection() {
+        if (!selectedRow()) {
+          selectedPanel = "";
+          selectedPath = "";
+        }
+      }
+
+      function inputPath(panel) {
+        const input = document.getElementById(`${panel}-path`);
+        if (input) {
+          return input.value;
+        }
+        return panel === "local" ? args.localPath : args.remotePath;
+      }
+
+      function eventId() {
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      function sendCommand(action, panel = selectedPanel, path = selectedPath) {
+        const commandPanel = panel || activePanel || "local";
+        Streamlit.setComponentValue({
+          action,
+          eventId: eventId(),
+          localBasePath: args.localPath,
+          localPath: inputPath("local"),
+          panel: commandPanel,
+          path,
+          remoteBasePath: args.remotePath,
+          remotePath: inputPath("remote"),
+        });
+      }
+
+      function selectRow(panel, row) {
+        activatePanel(panel, false);
+        selectedPanel = panel;
+        selectedPath = stringValue(row.Path);
+        render();
+      }
+
+      function activeExplorerPanel() {
+        return selectedPanel || activePanel || "local";
+      }
+
+      function applyTheme(theme) {
+        const styles = document.documentElement.style;
+        const themeValues = theme || {};
+        const assignments = {
+          "--hhs-bg": themeValues.background || themeValues.backgroundColor,
+          "--hhs-field": themeValues.field || themeValues.secondaryBackgroundColor,
+          "--hhs-border": themeValues.border || themeValues.borderColor,
+          "--hhs-folder":
+            themeValues.folder || themeValues.linkColor || themeValues.primaryColor,
+          "--hhs-file": themeValues.file || themeValues.textColor,
+          "--hhs-primary": themeValues.primary || themeValues.primaryColor,
+        };
+        Object.entries(assignments).forEach(([name, value]) => {
+          if (value) {
+            styles.setProperty(name, value);
+          }
+        });
+      }
+
+      function createElement(tag, className, text) {
+        const element = document.createElement(tag);
+        if (className) {
+          element.className = className;
+        }
+        if (text !== undefined) {
+          element.textContent = text;
+        }
+        return element;
+      }
+
+      function createCell(className, text) {
+        const cell = createElement("div", `cell ${className || ""}`);
+        const textElement = createElement("span", "cell-text", text);
+        cell.appendChild(textElement);
+        return cell;
+      }
+
+      function createRow(panel, row) {
+        const rowPath = stringValue(row.Path);
+        const rowKind = stringValue(row._kind);
+        const selected = selectedPanel === panel && selectedPath === rowPath;
+        const button = createElement(
+          "button",
+          `row table-grid ${rowKind === "Dir" ? "dir" : "file"}${
+            selected ? " selected" : ""
+          }`
+        );
+        button.type = "button";
+        button.title = rowPath;
+        button.dataset.panel = panel;
+        button.dataset.path = rowPath;
+        button.addEventListener("click", () => selectRow(panel, row));
+        button.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectRow(panel, row);
+          }
+        });
+
+        const checkCell = createElement("div", "cell check-cell");
+        const checkbox = createElement("input", "row-checkbox");
+        checkbox.type = "checkbox";
+        checkbox.checked = selected;
+        checkbox.setAttribute("aria-label", `Select ${stringValue(row._name)}`);
+        checkbox.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectRow(panel, row);
+        });
+        checkCell.appendChild(checkbox);
+
+        button.appendChild(checkCell);
+        button.appendChild(createCell("name-cell", stringValue(row.Name)));
+        button.appendChild(createCell("size-cell", stringValue(row.Size)));
+        button.appendChild(createCell("modified-cell", stringValue(row.Modified)));
+        return button;
+      }
+
+      function createHeader() {
+        const header = createElement("div", "header table-grid");
+        ["", "Name", "Size", "Modified"].forEach((label) => {
+          header.appendChild(createElement("div", "header-cell", label));
+        });
+        return header;
+      }
+
+      function createTable(panel) {
+        const shell = createElement("div", "table-shell");
+        const body = createElement("div", "table-body");
+        const rows = visibleRows(panel);
+        shell.appendChild(createHeader());
+
+        if (panel === "remote" && args.remoteLoading) {
+          body.appendChild(createElement("div", "empty", "Loading remote files"));
+        } else if (rows.length === 0) {
+          body.appendChild(createElement("div", "empty", "No files"));
+        } else {
+          rows.forEach((row) => body.appendChild(createRow(panel, row)));
+        }
+
+        shell.appendChild(body);
+        return shell;
+      }
+
+      function createPathForm(panel, value) {
+        const form = createElement("form", "path-form");
+        const input = createElement("input", "path-input");
+        const button = createElement("button", "icon-button", "");
+        input.id = `${panel}-path`;
+        input.name = "path";
+        input.type = "text";
+        input.value = value;
+        input.autocomplete = "off";
+        input.setAttribute("aria-label", `${panel} path`);
+        input.addEventListener("focus", () => {
+          activatePanel(panel);
+        });
+        input.addEventListener("input", () => {
+          activatePanel(panel);
+        });
+        button.type = "submit";
+        button.title = "Open path";
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          activatePanel(panel);
+          sendCommand("submit_path", panel, input.value);
+        });
+        form.appendChild(input);
+        form.appendChild(button);
+        return form;
+      }
+
+      function createPanel(panel, title, path) {
+        const section = createElement(
+          "section",
+          `panel${activePanel === panel ? " active" : ""}`
+        );
+        const statusText = selectedStatus(panel);
+        section.dataset.panel = panel;
+        section.addEventListener("click", () => {
+          activatePanel(panel);
+        });
+        section.appendChild(createElement("h3", "panel-title", title));
+        section.appendChild(createPathForm(panel, path));
+        section.appendChild(createTable(panel));
+        if (statusText) {
+          const status = createElement("div", "status", statusText);
+          status.dataset.panel = panel;
+          section.appendChild(status);
+        }
+        return section;
+      }
+
+      function createTransferButton(label, title, disabled, handler, action = "") {
+        const button = createElement("button", "icon-button", label);
+        button.type = "button";
+        button.title = title;
+        button.disabled = disabled;
+        if (action) {
+          button.dataset.transferAction = action;
+        }
+        button.addEventListener("click", handler);
+        return button;
+      }
+
+      function createTransferControls() {
+        const selected = selectedRow();
+        const selectedKind = selected ? stringValue(selected._kind) : "";
+        const disabled = Boolean(args.transferRunning);
+        const transfer = createElement("nav", "transfer");
+        transfer.setAttribute("aria-label", "Transfer controls");
+        transfer.appendChild(
+          createTransferButton("", "Create folder", disabled, () => {
+            sendCommand("create_folder", activeExplorerPanel(), "");
+          }, "create_folder")
+        );
+        transfer.appendChild(
+          createTransferButton("", "Open parent directory", false, () => {
+            sendCommand("parent", activeExplorerPanel(), "");
+          }, "parent")
+        );
+        transfer.appendChild(
+          createTransferButton("", "Open selected folder", selectedKind !== "Dir", () => {
+            sendCommand("open");
+          }, "open")
+        );
+        transfer.appendChild(
+          createTransferButton(
+            "﬌",
+            "Copy selected local item to remote",
+            disabled || selectedPanel !== "local" || !selected,
+            () => sendCommand("copy_to_remote", "local", selectedPath),
+            "copy_to_remote"
+          )
+        );
+        transfer.appendChild(
+          createTransferButton(
+            "﬋",
+            "Copy selected remote item to local",
+            disabled || selectedPanel !== "remote" || !selected,
+            () => sendCommand("copy_to_local", "remote", selectedPath),
+            "copy_to_local"
+          )
+        );
+        return transfer;
+      }
+
+      function resizeFrame() {
+        const height = Math.ceil(document.documentElement.scrollHeight);
+        Streamlit.setFrameHeight(height);
+      }
+
+      function render(nextArgs) {
+        if (nextArgs) {
+          args = {
+            ...args,
+            ...nextArgs,
+            localPath: stringValue(nextArgs.localPath, args.localPath),
+            remotePath: stringValue(nextArgs.remotePath, args.remotePath),
+            tableHeight: Number(nextArgs.tableHeight || args.tableHeight || 420),
+          };
+        }
+        validateSelection();
+        applyTheme(args.theme);
+        document.documentElement.style.setProperty(
+          "--hhs-table-height",
+          `${args.tableHeight}px`
+        );
+        app.replaceChildren(
+          createPanel("local", "Local", stringValue(args.localPath)),
+          createTransferControls(),
+          createPanel("remote", "Remote", stringValue(args.remotePath, "."))
+        );
+        requestAnimationFrame(resizeFrame);
+      }
+
+      window.addEventListener("message", (event) => {
+        const message = event.data || {};
+        if (message.type !== "streamlit:render") {
+          return;
+        }
+        const renderArgs = message.args || {};
+        render({
+          ...renderArgs,
+          theme: renderArgs.theme || message.theme || {},
+        });
+      });
+
+      new ResizeObserver(resizeFrame).observe(document.body);
+      Streamlit.setComponentReady();
+      render();
+    </script>
+  </body>
+</html>

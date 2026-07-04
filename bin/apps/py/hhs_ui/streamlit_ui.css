@@ -16,6 +16,7 @@
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
   --hhs-sidebar-inline-inset: 20px;
+  --hhs-ssh-explorer-height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - (var(--hhs-view-gap) * 2) - 82px);
   --hhs-ttyd-shell-gap: var(--hhs-view-section-gap);
   --hhs-ttyd-max-height: 760px;
   --hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
@@ -188,6 +189,24 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   min-width: 2rem;
   padding: 0;
   width: 2rem;
+}
+
+.st-key-ssh_explorer_component iframe {
+  background: var(--hhs-background) !important;
+  border: 0 !important;
+  display: block;
+  height: var(--hhs-ssh-explorer-height) !important;
+  min-height: 0;
+  width: 100%;
+}
+
+[data-testid="stMain"] [data-testid="stVerticalBlock"]
+  > div[class*="st-key-ssh_explorer_component"]:has(iframe) {
+  display: block !important;
+  height: var(--hhs-ssh-explorer-height) !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  width: 100% !important;
 }
 
 .st-key-dir_folder_picker_button,
@@ -1045,10 +1064,12 @@ div[class*="st-key-service_selected_value_"] input {
 
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:empty,
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stMarkdownContainer"] style),
-[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stAppIframeResizerAnchor"]):has(iframe[height="0"]),
-[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(iframe[height="0"]),
-[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(iframe[style*="height: 0px"]),
-[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stIFrame"][height="0"]) {
+[data-testid="stMain"] [data-testid="stVerticalBlock"]
+  > div:not([class*="st-key-ssh_explorer_component"]):has(iframe[height="0"]),
+[data-testid="stMain"] [data-testid="stVerticalBlock"]
+  > div:not([class*="st-key-ssh_explorer_component"]):has(iframe[style*="height: 0px"]),
+[data-testid="stMain"] [data-testid="stVerticalBlock"]
+  > div:not([class*="st-key-ssh_explorer_component"]):has([data-testid="stIFrame"][height="0"]) {
   display: none !important;
   height: 0 !important;
   margin: 0 !important;
