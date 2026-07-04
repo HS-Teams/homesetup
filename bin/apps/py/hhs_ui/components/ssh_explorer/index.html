@@ -330,7 +330,10 @@
         transferRunning: false,
       };
       let selectedPanel = "";
-      let selectedPath = "";
+      let selectedPaths = {
+        local: new Set(),
+        remote: new Set(),
+      };
       let activePanel = "local";
 
       function stringValue(value, fallback = "") {
@@ -352,33 +355,42 @@
         });
       }
 
-      function selectedRow() {
-        if (!selectedPanel || !selectedPath) {
-          return null;
+      function selectedPathList(panel) {
+        const paths = selectedPaths[panel];
+        return paths instanceof Set ? Array.from(paths) : [];
+      }
+
+      function selectedRows(panel) {
+        const paths = selectedPaths[panel];
+        if (!(paths instanceof Set) || paths.size === 0) {
+          return [];
         }
-        return visibleRows(selectedPanel).find(
-          (row) => stringValue(row.Path) === selectedPath
-        );
+        return visibleRows(panel).filter((row) => paths.has(stringValue(row.Path)));
+      }
+
+      function primarySelectedRow(panel = selectedPanel) {
+        return selectedRows(panel)[0] || null;
       }
 
       function selectedStatus(panel) {
-        const row = selectedPanel === panel ? selectedRow() : null;
-        if (!row) {
+        const rows = selectedRows(panel);
+        if (rows.length === 0) {
           return args.selectionHint ? "Select a row to interact" : "";
         }
-        return `Selected: ${stringValue(row.Path)}`;
+        return `Selected: [${rows.map((row) => stringValue(row.Path)).join(", ")}]`;
       }
 
       function syncPanelState() {
-        const selected = selectedRow();
+        const selected = primarySelectedRow();
         const selectedKind = selected ? stringValue(selected._kind) : "";
+        const localSelectionCount = selectedRows("local").length;
+        const remoteSelectionCount = selectedRows("remote").length;
         document.querySelectorAll(".panel").forEach((element) => {
           element.classList.toggle("active", element.dataset.panel === activePanel);
         });
         document.querySelectorAll(".row").forEach((element) => {
-          const selected =
-            element.dataset.panel === selectedPanel &&
-            element.dataset.path === selectedPath;
+          const paths = selectedPaths[element.dataset.panel];
+          const selected = paths instanceof Set && paths.has(element.dataset.path);
           element.classList.toggle("selected", selected);
           const checkbox = element.querySelector(".row-checkbox");
           if (checkbox) {
@@ -391,28 +403,28 @@
           element.hidden = !statusText;
         });
         document.querySelectorAll("[data-transfer-action='open']").forEach((button) => {
-          button.disabled = selectedKind !== "Dir";
+          button.disabled =
+            selectedRows(selectedPanel).length !== 1 || selectedKind !== "Dir";
         });
         document
           .querySelectorAll("[data-transfer-action='copy_to_remote']")
           .forEach((button) => {
             button.disabled =
-              Boolean(args.transferRunning) || selectedPanel !== "local" || !selected;
+              Boolean(args.transferRunning) || localSelectionCount === 0;
           });
         document
           .querySelectorAll("[data-transfer-action='copy_to_local']")
           .forEach((button) => {
             button.disabled =
-              Boolean(args.transferRunning) || selectedPanel !== "remote" || !selected;
+              Boolean(args.transferRunning) || remoteSelectionCount === 0;
           });
       }
 
       function activatePanel(panel, clearSelection = true) {
         let changed = activePanel !== panel;
         activePanel = panel;
-        if (clearSelection && selectedPanel && selectedPanel !== panel) {
+        if (clearSelection && selectedPanel !== panel) {
           selectedPanel = "";
-          selectedPath = "";
           changed = true;
         }
         if (changed) {
@@ -422,9 +434,16 @@
       }
 
       function validateSelection() {
-        if (!selectedRow()) {
+        ["local", "remote"].forEach((panel) => {
+          const visiblePaths = new Set(
+            visibleRows(panel).map((row) => stringValue(row.Path))
+          );
+          selectedPaths[panel] = new Set(
+            selectedPathList(panel).filter((path) => visiblePaths.has(path))
+          );
+        });
+        if (selectedPanel && selectedRows(selectedPanel).length === 0) {
           selectedPanel = "";
-          selectedPath = "";
         }
       }
 
@@ -440,15 +459,18 @@
         return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       }
 
-      function sendCommand(action, panel = selectedPanel, path = selectedPath) {
+      function sendCommand(action, panel = selectedPanel, path = "") {
         const commandPanel = panel || activePanel || "local";
+        const paths = selectedPathList(commandPanel);
+        const commandPath = path || paths[0] || "";
         Streamlit.setComponentValue({
           action,
           eventId: eventId(),
           localBasePath: args.localPath,
           localPath: inputPath("local"),
           panel: commandPanel,
-          path,
+          path: commandPath,
+          paths,
           remoteBasePath: args.remotePath,
           remotePath: inputPath("remote"),
         });
@@ -457,7 +479,16 @@
       function selectRow(panel, row) {
         activatePanel(panel, false);
         selectedPanel = panel;
-        selectedPath = stringValue(row.Path);
+        const path = stringValue(row.Path);
+        const paths = selectedPaths[panel];
+        if (paths.has(path)) {
+          paths.delete(path);
+          if (selectedPanel === panel && paths.size === 0) {
+            selectedPanel = "";
+          }
+        } else {
+          paths.add(path);
+        }
         render();
       }
 
@@ -505,7 +536,7 @@
       function createRow(panel, row) {
         const rowPath = stringValue(row.Path);
         const rowKind = stringValue(row._kind);
-        const selected = selectedPanel === panel && selectedPath === rowPath;
+        const selected = selectedPaths[panel].has(rowPath);
         const button = createElement(
           "button",
           `row table-grid ${rowKind === "Dir" ? "dir" : "file"}${
@@ -630,11 +661,20 @@
       }
 
       function createTransferControls() {
-        const selected = selectedRow();
+        const selected = primarySelectedRow();
         const selectedKind = selected ? stringValue(selected._kind) : "";
+        const selectedPath = selected ? stringValue(selected.Path) : "";
+        const activeSelectionCount = selectedRows(activeExplorerPanel()).length;
+        const localSelectionCount = selectedRows("local").length;
+        const remoteSelectionCount = selectedRows("remote").length;
         const disabled = Boolean(args.transferRunning);
         const transfer = createElement("nav", "transfer");
         transfer.setAttribute("aria-label", "Transfer controls");
+        transfer.appendChild(
+          createTransferButton("", "Refresh", disabled, () => {
+            sendCommand("refresh", "all", "");
+          }, "refresh")
+        );
         transfer.appendChild(
           createTransferButton("", "Create folder", disabled, () => {
             sendCommand("create_folder", activeExplorerPanel(), "");
@@ -647,15 +687,15 @@
         );
         transfer.appendChild(
           createTransferButton("", "Open selected folder", selectedKind !== "Dir", () => {
-            sendCommand("open");
+            sendCommand("open", selectedPanel, selectedPath);
           }, "open")
         );
         transfer.appendChild(
           createTransferButton(
             "﬌",
             "Copy selected local item to remote",
-            disabled || selectedPanel !== "local" || !selected,
-            () => sendCommand("copy_to_remote", "local", selectedPath),
+            disabled || localSelectionCount === 0,
+            () => sendCommand("copy_to_remote", "local"),
             "copy_to_remote"
           )
         );
@@ -663,9 +703,20 @@
           createTransferButton(
             "﬋",
             "Copy selected remote item to local",
-            disabled || selectedPanel !== "remote" || !selected,
-            () => sendCommand("copy_to_local", "remote", selectedPath),
+            disabled || remoteSelectionCount === 0,
+            () => sendCommand("copy_to_local", "remote"),
             "copy_to_local"
+          )
+        );
+        transfer.appendChild(
+          createTransferButton(
+            "",
+            "Delete selected",
+            disabled || activeSelectionCount === 0,
+            () => {
+              sendCommand("delete", activeExplorerPanel(), "");
+            },
+            "delete"
           )
         );
         return transfer;
@@ -698,7 +749,10 @@
         );
         if (explorerIsLoading()) {
           selectedPanel = "";
-          selectedPath = "";
+          selectedPaths = {
+            local: new Set(),
+            remote: new Set(),
+          };
           app.replaceChildren();
           requestAnimationFrame(() => Streamlit.setFrameHeight(0));
           return;

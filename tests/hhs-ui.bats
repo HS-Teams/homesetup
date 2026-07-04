@@ -512,6 +512,7 @@ namespace = {
         DOCUMENT_VIEW_ACTIVE_KEY="document_view_active",
         DOCUMENT_PREVIOUS_VIEW_KEY="document_previous_view",
         DOCUMENT_SELECTED_KEY="document_selected",
+        VIEWS=("Home", "Configs", "Services", "SSH", "History", "Monitor", "AI"),
     ),
     "st": SimpleNamespace(session_state=session_state),
     "activate_terminal_document_view": lambda: activated.append(True),
@@ -522,11 +523,17 @@ namespace["restore_terminal_document_view"](False)
 assert session_state == {}
 assert activated == []
 
+session_state["active_view"] = "Monitor"
+session_state["document_previous_view"] = "SSH"
 namespace["restore_terminal_document_view"](True)
 assert session_state["document_view_active"] is True
-assert session_state["document_previous_view"] == "Home"
+assert session_state["document_previous_view"] == "SSH"
 assert session_state["document_selected"] == "TERMINAL"
 assert activated == [True]
+
+session_state["document_previous_view"] = "Missing"
+namespace["restore_terminal_document_view"](True)
+assert session_state["document_previous_view"] == "Home"
 PY
   assert_success
 }
@@ -3146,6 +3153,9 @@ PY
   run grep -q 'def handle_ssh_explorer_component_event' "${ui_file}"
   assert_success
 
+  run grep -q 'def ssh_explorer_component_event_paths' "${ui_file}"
+  assert_success
+
   run grep -q 'def render_ssh_explorer_component' "${ui_file}"
   assert_success
 
@@ -3165,6 +3175,18 @@ PY
   assert_success
 
   run grep -q 'def open_ssh_explorer_parent' "${ui_file}"
+  assert_success
+
+  run grep -q 'def refresh_ssh_explorer_paths' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_recoverable_delete_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def request_ssh_explorer_delete_confirmation' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_ssh_explorer_delete_dialog' "${ui_file}"
   assert_success
 
   run grep -q 'def create_ssh_explorer_folder' "${ui_file}"
@@ -3207,6 +3229,15 @@ PY
   assert_success
 
   run grep -q 'scp -r' "${ui_file}"
+  assert_success
+
+  run grep -q 'Copying local file(s)/folder(s) to remote' "${ui_file}"
+  assert_success
+
+  run grep -q 'Copying remote file(s)/folder(s) to local' "${ui_file}"
+  assert_success
+
+  run grep -q 'paths = ssh_explorer_component_event_paths(event)' "${ui_file}"
   assert_success
 
   run grep -q 'ControlPath=' "${ui_file}"
@@ -3255,6 +3286,18 @@ PY
   assert_success
 
   run grep -q 'if action == "create_folder"' "${ui_file}"
+  assert_success
+
+  run grep -q 'if action == "refresh"' "${ui_file}"
+  assert_success
+
+  run grep -q 'refresh_ssh_explorer_paths(' "${ui_file}"
+  assert_success
+
+  run grep -q 'if action == "delete"' "${ui_file}"
+  assert_success
+
+  run grep -q 'request_ssh_explorer_delete_confirmation(' "${ui_file}"
   assert_success
 
   run grep -q 'st.rerun()' "${ui_file}"
@@ -3479,7 +3522,8 @@ component = Path("bin/apps/py/hhs_ui/components/ssh_explorer/index.html").read_t
 controls = component[
     component.index("function createTransferControls") : component.index("function resizeFrame")
 ]
-assert controls.index('""') < controls.index('""')
+assert controls.index('""') < controls.index('""') < controls.index('""')
+assert controls.index('"﬋"') < controls.index('""')
 assert '"﬌"' in controls
 assert '"﬋"' in controls
 assert '""' not in controls
@@ -3502,7 +3546,19 @@ PY
   run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
   assert_success
 
+  run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'sendCommand("refresh", "all", "")' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
   run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'sendCommand("delete", activeExplorerPanel(), "")' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
   assert_success
 
   run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
@@ -3527,9 +3583,26 @@ assert "setComponentValue" not in select_body
 assert "sendCommand" not in select_body
 assert "activatePanel(panel, false)" in select_body
 assert "selectedPanel = panel" in select_body
-assert "selectedPath = stringValue(row.Path)" in select_body
+assert "selectedPaths[panel]" in select_body
+assert "paths.add(path)" in select_body
+assert "paths.delete(path)" in select_body
 assert "render();" in select_body
 PY
+  assert_success
+
+  run grep -q 'let selectedPaths = {' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'function selectedPathList' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'function selectedRows' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'paths,' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -F -q 'Selected: [${rows.map((row) => stringValue(row.Path)).join(", ")}]' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
   assert_success
 
   run grep -F -q '<p>Connected to remote' "${ui_file}"
@@ -3716,6 +3789,24 @@ assert namespace["normalize_local_explorer_path"]("..", str(local_base)) == str(
 assert namespace["local_explorer_directory"]("/tmp/hhs-missing-explorer-dir") == Path.home().resolve()
 assert namespace["ssh_explorer_local_default_path"]() == str(Path.home().resolve())
 assert namespace["ssh_explorer_remote_default_path"]() == "~"
+refresh_body = source.split("def refresh_ssh_explorer_paths", 1)[1].split("\ndef ", 1)[0]
+assert 'st.session_state["ssh_explorer_local_path"]' in refresh_body
+assert 'st.session_state["ssh_explorer_remote_path"]' in refresh_body
+assert 'cache_delete_tag("ssh_files")' in refresh_body
+delete_command = namespace["build_recoverable_delete_command"](
+    ["/tmp/delete-one.txt", "/tmp/delete two"]
+)
+assert "gtrash put" in delete_command
+assert "trash-put" in delete_command
+assert "gio trash" in delete_command
+assert "kioclient" in delete_command
+assert "${HOME}/.Trash" in delete_command
+assert "trash_with_freedesktop" in delete_command
+assert "/tmp/delete-one.txt" in delete_command
+assert "'/tmp/delete two'" in delete_command
+assert namespace["ssh_explorer_delete_message"](
+    "remote", ["/srv/app/file.txt", "/srv/app/folder"]
+) == "Are you sure you want to delete file.txt, folder?"
 target_assignment = namespace["remote_explorer_target_assignment"]("~/project")
 assert 'raw_target=' in target_assignment
 assert 'target="${HOME:-.}/${raw_target#*/}"' in target_assignment
@@ -3839,6 +3930,12 @@ to_remote = namespace["build_scp_to_remote_command"](
 to_local = namespace["build_scp_to_local_command"](
     "/remote/file.txt", "/local dir", "host.example"
 )
+multi_to_remote = namespace["build_scp_to_remote_command"](
+    ["/local/file one.txt", "/local/file two.txt"], "/remote dir", "host.example"
+)
+multi_to_local = namespace["build_scp_to_local_command"](
+    ["/remote/file-one.txt", "/remote/file-two.txt"], "/local dir", "host.example"
+)
 assert "scp -r" in to_remote
 assert "-F \"${HOME}/.ssh/config\"" in to_remote
 assert "-o ControlPath=" in to_remote
@@ -3846,6 +3943,9 @@ assert "/local/file.txt" in to_remote
 assert "host.example:'/remote dir'" in to_remote
 assert "host.example:/remote/file.txt" in to_local
 assert "'/local dir'" in to_local
+assert "'/local/file one.txt' '/local/file two.txt'" in multi_to_remote
+assert "host.example:/remote/file-one.txt" in multi_to_local
+assert "host.example:/remote/file-two.txt" in multi_to_local
 PY
   assert_success
 

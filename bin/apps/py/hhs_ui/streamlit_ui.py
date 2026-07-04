@@ -541,8 +541,14 @@ def restore_terminal_document_view(was_terminal_active: bool) -> None:
     """Restore the Terminal document view after a host-scoped state reset."""
     if not was_terminal_active:
         return
+    previous_view = st.session_state.get(
+        hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY,
+        st.session_state.get("active_view", "Home"),
+    )
+    if previous_view not in hhs_ui.VIEWS:
+        previous_view = "Home"
     st.session_state[hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = True
-    st.session_state[hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] = "Home"
+    st.session_state[hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] = previous_view
     st.session_state[hhs_ui.DOCUMENT_SELECTED_KEY] = "TERMINAL"
     activate_terminal_document_view()
 
@@ -1389,6 +1395,7 @@ def close_all_dialogs() -> None:
     st.session_state["ai_model_select_pending"] = None
     st.session_state["ai_model_delete_pending"] = None
     st.session_state["home_tool_action_execute_pending"] = None
+    st.session_state["ssh_explorer_delete_pending"] = None
     st.session_state["ssh_connection_dialog_title"] = ""
     st.session_state["footer_shell_version_dialog_title"] = ""
     st.session_state.pop("home_tool_action_operation", None)
@@ -12273,6 +12280,25 @@ def open_remote_explorer_path(path: str, base_path: str | None = None) -> None:
     save_ui_state()
 
 
+def refresh_ssh_explorer_paths(
+    local_path: str,
+    local_base_path: str,
+    remote_path: str,
+    remote_base_path: str,
+) -> None:
+    """Refresh both local and remote explorer listings at their current paths."""
+    normalized_local_path = normalize_local_explorer_path(local_path, local_base_path)
+    st.session_state["ssh_explorer_local_path"] = str(
+        local_explorer_directory(normalized_local_path)
+    )
+    st.session_state["ssh_explorer_remote_path"] = normalize_remote_explorer_path(
+        remote_path,
+        remote_base_path,
+    )
+    cache_delete_tag("ssh_files")
+    save_ui_state()
+
+
 def remote_explorer_parent_path(path: str) -> str:
     """Return a POSIX parent directory path for the remote explorer."""
     clean_path = path.strip() or "."
@@ -12381,22 +12407,107 @@ def ssh_explorer_remote_spec(host: str, path: str) -> str:
     return f"{shlex.quote(host)}:{shlex.quote(path)}"
 
 
-def build_scp_to_remote_command(local_path: str, remote_dir: str, host: str) -> str:
-    """Build an scp command that copies a local path into the remote directory."""
+def shell_array_assignment(name: str, values: list[str]) -> str:
+    """Return a Bash array assignment for quoted string values."""
+    quoted_values = " ".join(shlex.quote(value) for value in values if value)
+    return f"{name}=({quoted_values})"
+
+
+def build_scp_to_remote_command(
+    local_paths: str | list[str], remote_dir: str, host: str
+) -> str:
+    """Build an scp command that copies local paths into the remote directory."""
     safe_control_path = shlex.quote(ssh_control_path(host))
+    paths = [local_paths] if isinstance(local_paths, str) else local_paths
+    quoted_paths = " ".join(shlex.quote(path) for path in paths if path)
     return (
         f"scp -r {ssh_config_option()} -o ControlPath={safe_control_path} -- "
-        f"{shlex.quote(local_path)} {ssh_explorer_remote_spec(host, remote_dir)}"
+        f"{quoted_paths} {ssh_explorer_remote_spec(host, remote_dir)}"
     )
 
 
-def build_scp_to_local_command(remote_path: str, local_dir: str, host: str) -> str:
-    """Build an scp command that copies a remote path into the local directory."""
+def build_scp_to_local_command(
+    remote_paths: str | list[str], local_dir: str, host: str
+) -> str:
+    """Build an scp command that copies remote paths into the local directory."""
     safe_control_path = shlex.quote(ssh_control_path(host))
+    paths = [remote_paths] if isinstance(remote_paths, str) else remote_paths
+    remote_specs = " ".join(
+        ssh_explorer_remote_spec(host, path) for path in paths if path
+    )
     return (
         f"scp -r {ssh_config_option()} -o ControlPath={safe_control_path} -- "
-        f"{ssh_explorer_remote_spec(host, remote_path)} {shlex.quote(local_dir)}"
+        f"{remote_specs} {shlex.quote(local_dir)}"
     )
+
+
+def build_recoverable_delete_command(paths: list[str]) -> str:
+    """Build a command that moves paths to a recoverable trash location."""
+    return textwrap.dedent(
+        f"""
+        {shell_array_assignment("targets", paths)}
+        if [ "${{#targets[@]}}" -eq 0 ]; then
+          printf '%s\\n' 'No files selected.'
+          exit 1
+        fi
+        trash_with_freedesktop() {{
+          trash_home="${{XDG_DATA_HOME:-${{HOME}}/.local/share}}/Trash"
+          files_dir="${{trash_home}}/files"
+          info_dir="${{trash_home}}/info"
+          mkdir -p "${{files_dir}}" "${{info_dir}}" || return 1
+          for target in "$@"; do
+            [ -e "${{target}}" ] || [ -L "${{target}}" ] || {{
+              printf 'Path does not exist: %s\\n' "${{target}}" >&2
+              return 1
+            }}
+            base=$(basename -- "${{target}}")
+            destination="${{files_dir}}/${{base}}"
+            suffix=0
+            while [ -e "${{destination}}" ] || [ -L "${{destination}}" ]; do
+              suffix=$((suffix + 1))
+              destination="${{files_dir}}/${{base}}.${{suffix}}"
+            done
+            escaped_path=$(printf '%s' "${{target}}" | sed 's/%/%25/g; s/#/%23/g; s/ /%20/g')
+            deletion_date=$(date '+%Y-%m-%dT%H:%M:%S')
+            mv -- "${{target}}" "${{destination}}" || return 1
+            {{
+              printf '[Trash Info]\\n'
+              printf 'Path=%s\\n' "${{escaped_path}}"
+              printf 'DeletionDate=%s\\n' "${{deletion_date}}"
+            }} > "${{info_dir}}/$(basename -- "${{destination}}").trashinfo"
+          done
+        }}
+        if command -v gtrash >/dev/null 2>&1; then
+          gtrash put -- "${{targets[@]}}" || gtrash -- "${{targets[@]}}"
+        elif command -v trash-put >/dev/null 2>&1; then
+          trash-put -- "${{targets[@]}}"
+        elif command -v gio >/dev/null 2>&1; then
+          gio trash "${{targets[@]}}"
+        elif command -v kioclient5 >/dev/null 2>&1; then
+          kioclient5 move "${{targets[@]}}" trash:/
+        elif command -v kioclient >/dev/null 2>&1; then
+          kioclient move "${{targets[@]}}" trash:/
+        elif [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
+          mkdir -p "${{HOME}}/.Trash" || exit 1
+          for target in "${{targets[@]}}"; do
+            [ -e "${{target}}" ] || [ -L "${{target}}" ] || {{
+              printf 'Path does not exist: %s\\n' "${{target}}" >&2
+              exit 1
+            }}
+            base=$(basename -- "${{target}}")
+            destination="${{HOME}}/.Trash/${{base}}"
+            suffix=0
+            while [ -e "${{destination}}" ] || [ -L "${{destination}}" ]; do
+              suffix=$((suffix + 1))
+              destination="${{HOME}}/.Trash/${{base}}.${{suffix}}"
+            done
+            mv -- "${{target}}" "${{destination}}" || exit 1
+          done
+        else
+          trash_with_freedesktop "${{targets[@]}}"
+        fi
+        """
+    ).strip()
 
 
 def start_ssh_explorer_transfer(command: str, description: str) -> None:
@@ -12415,27 +12526,124 @@ def start_ssh_explorer_transfer(command: str, description: str) -> None:
         push_floating_status("A file transfer is already running.", "warn")
 
 
-def copy_local_selection_to_remote(local_path: str, remote_dir: str) -> None:
-    """Copy the selected local path into the current remote directory."""
+def copy_local_selection_to_remote(local_paths: list[str], remote_dir: str) -> None:
+    """Copy the selected local paths into the current remote directory."""
+    if not local_paths:
+        push_floating_status("Select local files before copying.", "warn")
+        return
     host = connected_ssh_host()
     if not host:
         push_floating_status("Connect to SSH before copying files.", "warn")
         return
     start_ssh_explorer_transfer(
-        build_scp_to_remote_command(local_path, remote_dir, host),
-        "Copying local file to remote",
+        build_scp_to_remote_command(local_paths, remote_dir, host),
+        "Copying local file(s)/folder(s) to remote",
     )
 
 
-def copy_remote_selection_to_local(remote_path: str, local_dir: str) -> None:
-    """Copy the selected remote path into the current local directory."""
+def copy_remote_selection_to_local(remote_paths: list[str], local_dir: str) -> None:
+    """Copy the selected remote paths into the current local directory."""
+    if not remote_paths:
+        push_floating_status("Select remote files before copying.", "warn")
+        return
     host = connected_ssh_host()
     if not host:
         push_floating_status("Connect to SSH before copying files.", "warn")
         return
     start_ssh_explorer_transfer(
-        build_scp_to_local_command(remote_path, local_dir, host),
-        "Copying remote file to local",
+        build_scp_to_local_command(remote_paths, local_dir, host),
+        "Copying remote file(s)/folder(s) to local",
+    )
+
+
+def ssh_explorer_delete_name(panel: str, path: str) -> str:
+    """Return a display name for one SSH explorer delete target."""
+    if panel == "remote":
+        return posixpath.basename(path.rstrip("/")) or path
+    return Path(path).name or path
+
+
+def ssh_explorer_delete_message(panel: str, paths: list[str]) -> str:
+    """Return the confirmation message for selected explorer delete targets."""
+    names = [
+        ssh_explorer_delete_name(panel, path)
+        for path in paths
+        if str(path).strip()
+    ]
+    target_names = ", ".join(names) if names else "selected item(s)"
+    return f"Are you sure you want to delete {target_names}?"
+
+
+def request_ssh_explorer_delete_confirmation(
+    panel: str,
+    paths: list[str],
+    local_path: str,
+    remote_path: str,
+) -> None:
+    """Show the SSH explorer delete confirmation dialog."""
+    if panel not in {"local", "remote"} or not paths:
+        push_floating_status("Select files or folders before deleting.", "warn")
+        return
+    st.session_state["ssh_explorer_delete_pending"] = {
+        "panel": panel,
+        "paths": paths,
+        "local_path": local_path,
+        "remote_path": remote_path,
+    }
+
+
+def cancel_ssh_explorer_delete_confirmation() -> None:
+    """Hide the SSH explorer delete confirmation dialog."""
+    st.session_state["ssh_explorer_delete_pending"] = None
+
+
+def confirm_ssh_explorer_delete() -> None:
+    """Execute the pending SSH explorer delete request."""
+    pending = st.session_state.get("ssh_explorer_delete_pending")
+    st.session_state["ssh_explorer_delete_pending"] = None
+    if not isinstance(pending, dict):
+        return
+    panel = str(pending.get("panel", ""))
+    paths_value = pending.get("paths", [])
+    paths = paths_value if isinstance(paths_value, list) else []
+    clean_paths = [str(path) for path in paths if str(path).strip()]
+    if panel not in {"local", "remote"} or not clean_paths:
+        push_floating_status("Select files or folders before deleting.", "warn")
+        return
+    result = run_bash_command(
+        build_recoverable_delete_command(clean_paths),
+        "Deleting selected file(s)/folder(s)",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=panel == "local",
+        cache_tag="ssh_files",
+    )
+    if result.returncode != 0:
+        push_floating_status(
+            strip_ansi(result.stderr or result.stdout or "Unable to delete selection."),
+            "error",
+        )
+        return
+    cache_delete_tag("ssh_files")
+    push_floating_status("Deleted selected file(s)/folder(s).", "info")
+
+
+def render_ssh_explorer_delete_dialog() -> bool:
+    """Render the SSH explorer delete confirmation dialog when pending."""
+    pending = st.session_state.get("ssh_explorer_delete_pending")
+    if not isinstance(pending, dict):
+        return False
+    panel = str(pending.get("panel", ""))
+    paths_value = pending.get("paths", [])
+    paths = paths_value if isinstance(paths_value, list) else []
+    return pop_dialog(
+        title="Confirm delete",
+        message=ssh_explorer_delete_message(panel, [str(path) for path in paths]),
+        confirm_key="ssh_explorer_confirm_delete_button",
+        cancel_key="ssh_explorer_cancel_delete_button",
+        on_confirm=confirm_ssh_explorer_delete,
+        on_cancel=cancel_ssh_explorer_delete_confirmation,
+        confirm_label="Delete",
     )
 
 
@@ -12474,6 +12682,18 @@ def ssh_explorer_component_event_text(
     return str(value)
 
 
+def ssh_explorer_component_event_paths(event: dict[str, object]) -> list[str]:
+    """Return selected path values from an SSH explorer component event."""
+    paths = event.get("paths", [])
+    if not isinstance(paths, list):
+        paths = []
+    values = [str(path) for path in paths if str(path).strip()]
+    if values:
+        return values
+    path = ssh_explorer_component_event_text(event, "path")
+    return [path] if path else []
+
+
 def handle_ssh_explorer_component_event(event: object) -> bool:
     """Handle one SSH explorer component command event."""
     if not isinstance(event, dict):
@@ -12488,6 +12708,7 @@ def handle_ssh_explorer_component_event(event: object) -> bool:
     action = ssh_explorer_component_event_text(event, "action")
     panel = ssh_explorer_component_event_text(event, "panel")
     path = ssh_explorer_component_event_text(event, "path")
+    paths = ssh_explorer_component_event_paths(event)
     local_path = ssh_explorer_component_event_text(
         event,
         "localPath",
@@ -12538,18 +12759,34 @@ def handle_ssh_explorer_component_event(event: object) -> bool:
     if action == "open":
         open_ssh_explorer_selection(panel, path)
         return True
-    if action in {"refresh", "submit_path"} and panel == "local":
+    if action == "refresh":
+        refresh_ssh_explorer_paths(
+            local_path,
+            local_base_path,
+            remote_path,
+            remote_base_path,
+        )
+        return True
+    if action == "submit_path" and panel == "local":
         open_local_explorer_path(local_path, local_base_path)
         return True
-    if action in {"refresh", "submit_path"} and panel == "remote":
+    if action == "submit_path" and panel == "remote":
         open_remote_explorer_path(remote_path, remote_base_path)
         return True
     if action == "copy_to_remote":
-        copy_local_selection_to_remote(path, normalized_remote_path)
+        copy_local_selection_to_remote(paths, normalized_remote_path)
         return True
     if action == "copy_to_local":
         copy_remote_selection_to_local(
-            path, str(local_explorer_directory(normalized_local_path))
+            paths, str(local_explorer_directory(normalized_local_path))
+        )
+        return True
+    if action == "delete":
+        request_ssh_explorer_delete_confirmation(
+            panel,
+            paths,
+            normalized_local_path,
+            normalized_remote_path,
         )
         return True
     return False
@@ -12589,6 +12826,7 @@ def render_ssh_explorer_component(
 def render_ssh_files_panel() -> None:
     """Render a three-column local/remote file explorer using scp transfers."""
     complete_ssh_explorer_transfer()
+    render_ssh_explorer_delete_dialog()
     st.session_state.setdefault(
         "ssh_explorer_local_path", ssh_explorer_local_default_path()
     )
@@ -13323,6 +13561,7 @@ def main() -> None:
     st.session_state.setdefault("ssh_connection_host", "")
     st.session_state.setdefault("ssh_connection_error", "")
     st.session_state.setdefault("ssh_connection_dialog_title", "")
+    st.session_state.setdefault("ssh_explorer_delete_pending", None)
     st.session_state.setdefault(hhs_ui.SSH_RECONNECT_HOST_KEY, "")
     restore_registered_ssh_connection_on_session_start()
     synchronize_selected_ssh_host_with_connection()
