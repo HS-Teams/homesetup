@@ -147,7 +147,7 @@ is_updated() {
 update_hhs() {
 
   local repo_ver re ai_enabled
-  local VERSION_URL='https://github.com/HS-Teams/homesetup/blob/master/.VERSION'
+  local VERSION_URL='https://raw.githubusercontent.com/HS-Teams/homesetup/master/.VERSION'
 
   refresh_hhs_version
 

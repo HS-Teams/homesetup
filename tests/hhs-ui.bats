@@ -1097,20 +1097,45 @@ assert "hhs_ui.UI_STATE_FILE.unlink" in state_clear_body
 assert "is_persisted_ui_key" in state_clear_body
 assert 'def updater_output_has_updates' in ui_source
 assert 'def updater_check_due' in ui_source
+assert 'def updater_check_context' in ui_source
+assert 'def restore_local_updater_status' in ui_source
+assert 'def reset_updater_remote_check_state' in ui_source
+assert 'def start_updater_check' in ui_source
 assert 'def store_updater_check_result' in ui_source
 assert 'def execute_due_updater_check' in ui_source
 assert 'execute_due_updater_check()' in ui_source
 constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
 assert "UPDATER_CHECK_INTERVAL_SECONDS = 24 * 60 * 60" in constants_source
 store_updater_body = ui_source.split("def store_updater_check_result", 1)[1].split("\ndef ", 1)[0]
+assert 'context: str = "local"' in store_updater_body
+assert 'st.session_state["updater_check_started_context"] = ""' in store_updater_body
+assert 'st.session_state["updater_check_context"] = context' in store_updater_body
 assert 'st.session_state["updater_last_check_epoch"] = time.time()' in store_updater_body
 assert 'st.session_state["updater_last_check_output"] = output' in store_updater_body
 assert 'result.returncode == 0 and updater_output_has_updates(output)' in store_updater_body
+assert 'if context == "local":' in store_updater_body
+assert 'st.session_state["updater_remote_checked_context"] = context' in store_updater_body
 assert 'save_ui_state()' in store_updater_body
+execute_updater_body = ui_source.split("def execute_due_updater_check", 1)[1].split("\ndef ", 1)[0]
+assert 'current_context = updater_check_context()' in execute_updater_body
+assert 'restore_local_updater_status()' in execute_updater_body
+assert 'updater_remote_checked_context' in execute_updater_body
+assert 'start_updater_check(current_context, force_local=False)' in execute_updater_body
+assert 'start_updater_check("local", force_local=True)' in execute_updater_body
+start_updater_body = ui_source.split("def start_updater_check", 1)[1].split("\ndef ", 1)[0]
+assert 'metadata={"updater_context": context}' in start_updater_body
+assert 'st.session_state["updater_check_started_context"] = context' in start_updater_body
+reset_updater_body = ui_source.split("def reset_updater_remote_check_state", 1)[1].split("\ndef ", 1)[0]
+assert 'st.session_state["updater_check_started_context"] = ""' in reset_updater_body
+assert 'st.session_state["updater_remote_checked_context"] = ""' in reset_updater_body
+assert 'st.session_state["updater_check_context"] = ""' in reset_updater_body
+assert 'st.session_state["updater_update_available"] = False' in reset_updater_body
 assert '__hhs updater execute "{safe_operation}"' in ui_source
 assert 'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")";' in ui_source
 assert 'printf "y\\\\n" | ' in ui_source
 assert 'def handle_footer_actions' in ui_source
+assert 'force_local=not bool(connected_ssh_host())' in footer_actions_body
+assert 'metadata={"updater_context": updater_check_context()}' in footer_actions_body
 assert 'def push_floating_status' in ui_source
 assert 'def pop_floating_status' in ui_source
 assert 'def current_floating_status' in ui_source
@@ -2868,6 +2893,7 @@ assert "show_overlay=False" not in body
 assert "cache_clear()" in source.split("def clear_host_scoped_session_state", 1)[1].split("\ndef ", 1)[0]
 assert "cache_clear()" in source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
 assert 'st.session_state.pop("ssh_reconnect_restore_view_state", False)' in body
+assert "reset_updater_remote_check_state()" in complete_body
 assert "reconnect_view_state_snapshot()" in body
 assert "restore_reconnect_view_state(reconnect_state)" in body
 assert '"ssh_view"' in source.split("def reconnect_view_state_snapshot", 1)[1].split("\ndef ", 1)[0]
@@ -2894,6 +2920,7 @@ assert "clear_disconnected_ssh_host(host)" not in restore_body
 assert 'st.session_state["ssh_connect_pending"] = reconnect_host' in restore_body
 assert 'st.session_state["ssh_connect_pending_message"] = (' in restore_body
 assert 'st.session_state["ssh_reconnect_restore_view_state"] = True' in restore_body
+assert "reset_updater_remote_check_state()" in restore_body
 restore_registered_snapshot_index = restore_body.index("reconnect_state = reconnect_view_state_snapshot()")
 restore_registered_reset_index = restore_body.index("clear_host_scoped_session_state()")
 restore_registered_restore_index = restore_body.index("restore_reconnect_view_state(reconnect_state)")
@@ -4655,6 +4682,9 @@ sidebar_index = main_body.index("render_sidebar()")
 main_view_index = main_body.index("render_main_view()")
 footer_index = main_body.index("render_footer()")
 floating_status_index = main_body.index("render_floating_status()")
+assert 'st.session_state.setdefault("updater_check_context", "local")' in main_body
+assert 'st.session_state.setdefault("updater_check_started_context", "")' in main_body
+assert 'st.session_state.setdefault("updater_remote_checked_context", "")' in main_body
 assert disconnect_index < connect_index < ssh_dialog_index
 assert ssh_dialog_index < ai_initialize_index < ai_refresh_index < active_view_validation_index
 assert active_view_validation_index < footer_actions_index < shell_dialog_index
@@ -6848,6 +6878,12 @@ PY
 
   run grep -q 'refresh_hhs_version' "${updater_file}"
   assert_success
+
+  run grep -q "https://raw.githubusercontent.com/HS-Teams/homesetup/master/.VERSION" "${updater_file}"
+  assert_success
+
+  run grep -q "https://github.com/HS-Teams/homesetup/blob/master/.VERSION" "${updater_file}"
+  assert_failure
 
   run grep -q 'HHS_VERSION="$(grep -m 1 . "${version_file}")"' "${updater_file}"
   assert_success

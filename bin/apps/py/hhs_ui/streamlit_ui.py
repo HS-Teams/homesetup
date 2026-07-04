@@ -2635,18 +2635,22 @@ def handle_footer_actions() -> None:
     """Run footer actions requested through Streamlit query parameters."""
     updater_completed = background_job_result(UPDATER_UPDATE_JOB)
     if updater_completed is not None:
-        result, _metadata = updater_completed
+        result, metadata = updater_completed
+        updater_context = str(metadata.get("updater_context", "local"))
         output = strip_ansi(result.stdout or result.stderr or "").strip()
         if result.returncode != 0:
             message = output or "Unable to update HomeSetup."
             push_floating_status(message, "error")
             st.error(message)
         else:
-            st.session_state["updater_last_check_epoch"] = time.time()
-            st.session_state["updater_last_check_output"] = (
-                output or "HomeSetup update command completed."
-            )
+            if updater_context == "local":
+                st.session_state["updater_last_check_epoch"] = time.time()
+                st.session_state["updater_last_check_output"] = (
+                    output or "HomeSetup update command completed."
+                )
             st.session_state["updater_update_available"] = False
+            st.session_state["updater_check_context"] = updater_context
+            st.session_state["updater_remote_checked_context"] = updater_context
             cache_delete_tag("env")
             st.session_state["footer_hhs_version_cache_loaded"] = False
             save_ui_state()
@@ -2689,7 +2693,8 @@ def handle_footer_actions() -> None:
                 build_hhs_updater_command("update"),
                 "Updating HomeSetup",
                 600,
-                force_local=True,
+                force_local=not bool(connected_ssh_host()),
+                metadata={"updater_context": updater_check_context()},
             )
             push_floating_status("HomeSetup update started.", "info")
 
@@ -5084,17 +5089,59 @@ def updater_check_due(now: float | None = None) -> bool:
     )
 
 
-def store_updater_check_result(result: subprocess.CompletedProcess[str]) -> None:
+def updater_check_context() -> str:
+    """Return the active updater check context for local or SSH execution."""
+    host = connected_ssh_host()
+    return f"ssh:{host}" if host else "local"
+
+
+def restore_local_updater_status() -> None:
+    """Restore the footer update icon state from the latest local daily check."""
+    output = str(st.session_state.get("updater_last_check_output", ""))
+    st.session_state["updater_update_available"] = updater_output_has_updates(output)
+    st.session_state["updater_check_context"] = "local"
+
+
+def reset_updater_remote_check_state() -> None:
+    """Clear updater context state so the active SSH host is checked fresh."""
+    st.session_state["updater_check_started_context"] = ""
+    st.session_state["updater_remote_checked_context"] = ""
+    st.session_state["updater_check_context"] = ""
+    st.session_state["updater_update_available"] = False
+
+
+def start_updater_check(context: str, force_local: bool) -> None:
+    """Start a HomeSetup updater check for the given execution context."""
+    started = start_background_bash_command(
+        UPDATER_CHECK_JOB,
+        build_hhs_updater_command("check"),
+        "Checking HomeSetup updates",
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        force_local=force_local,
+        metadata={"updater_context": context},
+    )
+    if started:
+        st.session_state["updater_check_started_context"] = context
+
+
+def store_updater_check_result(
+    result: subprocess.CompletedProcess[str], context: str = "local"
+) -> None:
     """Persist the latest updater check output and update-availability flag."""
     output = strip_ansi(f"{result.stdout or ''}\n{result.stderr or ''}").strip()
     if not output:
         output = "No HomeSetup updater output."
-    st.session_state["updater_last_check_epoch"] = time.time()
-    st.session_state["updater_last_check_output"] = output
+    st.session_state["updater_check_started_context"] = ""
+    st.session_state["updater_check_context"] = context
     st.session_state["updater_update_available"] = (
         result.returncode == 0 and updater_output_has_updates(output)
     )
-    save_ui_state()
+    if context == "local":
+        st.session_state["updater_last_check_epoch"] = time.time()
+        st.session_state["updater_last_check_output"] = output
+        save_ui_state()
+    else:
+        st.session_state["updater_remote_checked_context"] = context
     if result.returncode == 0:
         return
     push_floating_status(output or "Unable to check HomeSetup updates.", "warn")
@@ -5104,21 +5151,32 @@ def execute_due_updater_check() -> None:
     """Start or complete the updater check when persisted check state is stale."""
     completed = background_job_result(UPDATER_CHECK_JOB)
     if completed is not None:
-        result, _metadata = completed
-        store_updater_check_result(result)
+        result, metadata = completed
+        context = str(metadata.get("updater_context", "local"))
+        store_updater_check_result(result, context)
+
+    current_context = updater_check_context()
+    if st.session_state.get("updater_check_context") != current_context:
+        if current_context == "local":
+            restore_local_updater_status()
+        else:
+            st.session_state["updater_update_available"] = False
+            st.session_state["updater_check_context"] = current_context
+
+    if current_context != "local":
+        if st.session_state.get("updater_check_started_context") == current_context:
+            return
+        if st.session_state.get("updater_remote_checked_context") == current_context:
+            return
+        start_updater_check(current_context, force_local=False)
+        return
 
     if bool(st.session_state.get("updater_check_attempted", False)):
         return
     if not updater_check_due():
         return
     st.session_state["updater_check_attempted"] = True
-    start_background_bash_command(
-        UPDATER_CHECK_JOB,
-        build_hhs_updater_command("check"),
-        "Checking HomeSetup updates",
-        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        force_local=True,
-    )
+    start_updater_check("local", force_local=True)
 
 
 def overlaps_existing_range(
@@ -6321,6 +6379,7 @@ def restore_registered_ssh_connection_on_session_start() -> None:
     st.session_state["ssh_host_selector"] = host
     st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = host
     st.session_state["ssh_connection_error"] = ""
+    reset_updater_remote_check_state()
     update_remote_footer_working_directory()
     save_ui_state()
 
@@ -6660,6 +6719,7 @@ def complete_ssh_connection() -> bool:
         st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = host
         st.session_state["ssh_connection_error"] = ""
         st.session_state["ssh_connection_dialog_title"] = ""
+        reset_updater_remote_check_state()
         update_remote_footer_working_directory()
         restore_terminal_document_view(was_terminal_active)
         push_floating_status(
@@ -13526,6 +13586,9 @@ def main() -> None:
     st.session_state.setdefault("updater_last_check_epoch", 0.0)
     st.session_state.setdefault("updater_last_check_output", "")
     st.session_state.setdefault("updater_update_available", False)
+    st.session_state.setdefault("updater_check_context", "local")
+    st.session_state.setdefault("updater_check_started_context", "")
+    st.session_state.setdefault("updater_remote_checked_context", "")
     st.session_state.setdefault("footer_hhs_version_cache_loaded", False)
     st.session_state.setdefault("footer_shell_version_dialog_title", "")
     st.session_state.setdefault("footer_shell_version_output", "")
