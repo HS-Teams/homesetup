@@ -2557,6 +2557,14 @@ def query_param_requested(name: str) -> bool:
     return str(value).lower() in {"1", "true", "yes"}
 
 
+def query_param_value(name: str) -> str:
+    """Return a Streamlit query parameter value as text."""
+    value = st.query_params.get(name)
+    if isinstance(value, list):
+        value = value[0] if value else ""
+    return str(value or "")
+
+
 def remove_query_param(name: str) -> None:
     """Remove a Streamlit query parameter if it exists."""
     if name in st.query_params:
@@ -2742,6 +2750,11 @@ def handle_footer_actions() -> None:
     if query_param_requested(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM):
         remove_query_param(hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM)
         open_footer_working_directory()
+
+    search_result_path = query_param_value(hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM)
+    if search_result_path:
+        remove_query_param(hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM)
+        open_search_result_path(search_result_path)
 
 
 def render_home_view() -> None:
@@ -13146,7 +13159,71 @@ def build_hhs_search_command(search_type: str, query: str, search_path: str) -> 
     return build_hhs_search_modified_results_command(search_command)
 
 
-def parse_hhs_search_results(output: str, search_type: str) -> list[dict[str, str]]:
+def build_hhs_open_search_result_command(path: str) -> str:
+    """Build the HomeSetup command used to open one Search result path."""
+    safe_path = shlex.quote(path.strip())
+    return (
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
+        f"__hhs_open {safe_path}"
+    )
+
+
+def open_search_result_path(path: str) -> None:
+    """Open one Search result path through the HomeSetup generic opener."""
+    clean_path = path.strip()
+    if not clean_path:
+        return
+    result = run_bash_command(
+        build_hhs_open_search_result_command(clean_path),
+        f"Opening {clean_path}",
+        ttl_seconds=0,
+        use_cache=False,
+        cache_tag="search",
+    )
+    if result.returncode != 0:
+        push_floating_status(
+            clean_command_status_message(result.stderr or result.stdout),
+            "error",
+        )
+
+
+def search_relative_path(path: str, search_path: str) -> str:
+    """Return a Search result path relative to the submitted Search folder."""
+    clean_path = path.strip()
+    clean_search_path = search_path.strip()
+    if not clean_path or not clean_search_path:
+        return clean_path
+    normalized_path = posixpath.normpath(clean_path)
+    normalized_search_path = posixpath.normpath(clean_search_path)
+    if posixpath.isabs(normalized_path) != posixpath.isabs(normalized_search_path):
+        return clean_path
+    try:
+        relative_path = posixpath.relpath(normalized_path, normalized_search_path)
+    except ValueError:
+        return clean_path
+    if relative_path == ".":
+        return "."
+    if relative_path.startswith("../"):
+        return clean_path
+    return relative_path
+
+
+def search_full_path(path: str, search_path: str) -> str:
+    """Return the full path represented by a Search result path."""
+    clean_path = path.strip()
+    clean_search_path = search_path.strip()
+    if not clean_path:
+        return ""
+    if posixpath.isabs(clean_path) or not clean_search_path:
+        return posixpath.normpath(clean_path)
+    return posixpath.normpath(posixpath.join(clean_search_path, clean_path))
+
+
+def parse_hhs_search_results(
+    output: str, search_type: str, search_path: str
+) -> list[dict[str, str]]:
     """Parse HomeSetup search command output into table rows."""
     rows: list[dict[str, str]] = []
     result_type = "Folder" if search_type == "Folders" else search_type.rstrip("s")
@@ -13157,6 +13234,7 @@ def parse_hhs_search_results(output: str, search_type: str) -> list[dict[str, st
         row = {
             "Type": result_type,
             "Path": clean_line,
+            "FullPath": search_full_path(clean_line, search_path),
             "Modified": "",
             "Line": "",
             "LineNumber": "",
@@ -13165,17 +13243,24 @@ def parse_hhs_search_results(output: str, search_type: str) -> list[dict[str, st
         if clean_line.startswith("__HHS_SEARCH_RESULT__\t"):
             parts = clean_line.split("\t", 2)
             if len(parts) == 3:
-                row["Path"] = parts[1]
+                row["Path"] = search_relative_path(parts[1], search_path)
+                row["FullPath"] = search_full_path(parts[1], search_path)
                 row["Modified"] = ssh_explorer_mtime_text(parts[2])
             rows.append(row)
             continue
         if search_type == "Strings":
             match = re.match(r"^(.+?):(\d+):(.*)$", clean_line)
             if match:
-                row["Path"] = match.group(1)
-                row["LineNumber"] = match.group(2)
-                row["Line"] = f"{match.group(2)}: {match.group(3).strip()}"
+                row["Path"] = search_relative_path(match.group(1), search_path)
+                row["FullPath"] = search_full_path(match.group(1), search_path)
+                row["Line"] = match.group(2)
                 row["Match"] = match.group(3).strip()
+            else:
+                row["Path"] = search_relative_path(clean_line, search_path)
+                row["FullPath"] = search_full_path(clean_line, search_path)
+        else:
+            row["Path"] = search_relative_path(clean_line, search_path)
+            row["FullPath"] = search_full_path(clean_line, search_path)
         rows.append(row)
     return rows
 
@@ -13206,6 +13291,18 @@ def colorize_search_result_line(value: str, text_filter: str = "") -> str:
     return "".join(html_parts)
 
 
+def search_result_path_link(row: dict[str, str]) -> str:
+    """Return a clickable Search result path link."""
+    display_path = display_path_value(row.get("Path", ""))
+    full_path = str(row.get("FullPath") or row.get("Path") or "").strip()
+    query = urllib.parse.urlencode({hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM: full_path})
+    safe_display_path = html.escape(display_path)
+    return (
+        f'<a class="hhs-search-result-path-link" href="?{query}" target="_self">'
+        f"{safe_display_path}</a>"
+    )
+
+
 def render_search_string_results(
     rows: list[dict[str, str]], query: str, text_filter: str = ""
 ) -> None:
@@ -13218,14 +13315,39 @@ def render_search_string_results(
     for row in rows:
         table_rows.append(
             "<tr>"
-            f"<td>{html.escape(display_path_value(row.get('Path', '')))}</td>"
-            f"<td>{colorize_search_result_line(row.get('Line', ''), line_filter)}</td>"
+            f"<td>{search_result_path_link(row)}</td>"
+            f"<td>{html.escape(row.get('Line', ''))}</td>"
+            f"<td>{colorize_search_result_line(row.get('Match', ''), line_filter)}</td>"
             "</tr>"
         )
     st.markdown(
-        '<div class="hhs-search-string-results">'
+        '<div class="hhs-search-results hhs-search-string-results">'
         "<table>"
-        "<thead><tr><th>Path</th><th>Line</th></tr></thead>"
+        "<thead><tr><th>Path</th><th>Line</th><th>Match</th></tr></thead>"
+        f"<tbody>{''.join(table_rows)}</tbody>"
+        "</table>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def render_search_path_results(rows: list[dict[str, str]]) -> None:
+    """Render file and folder Search results with clickable paths."""
+    if not rows:
+        st.caption("No search results.")
+        return
+    table_rows = []
+    for row in rows:
+        table_rows.append(
+            "<tr>"
+            f"<td>{search_result_path_link(row)}</td>"
+            f"<td>{html.escape(row.get('Modified', ''))}</td>"
+            "</tr>"
+        )
+    st.markdown(
+        '<div class="hhs-search-results hhs-search-string-results">'
+        "<table>"
+        "<thead><tr><th>Path</th><th>Modified</th></tr></thead>"
         f"<tbody>{''.join(table_rows)}</tbody>"
         "</table>"
         "</div>",
@@ -13236,7 +13358,7 @@ def render_search_string_results(
 def search_result_headers(search_type: str) -> list[str]:
     """Return visible Search result table columns for one Search type."""
     if search_type == "Strings":
-        return ["Path", "Line"]
+        return ["Path", "Line", "Match"]
     return ["Path", "Modified"]
 
 
@@ -13373,23 +13495,16 @@ def render_search_results(search_filter: str = "All", text_filter: str = "") -> 
             return
         rows = parse_rows_cached(
             "search",
-            f"{search_type}\n{result.stdout}",
+            f"{search_type}\n{search_path}\n{result.stdout}",
             lambda output: parse_hhs_search_results(
-                output.split("\n", 1)[1], search_type
+                output.split("\n", 2)[2], search_type, search_path
             ),
         )
         rows = filter_search_rows(rows, search_filter, text_filter)
         if search_type == "Strings":
             render_search_string_results(rows, query, text_filter)
             return
-        render_table(
-            rows,
-            key=None,
-            checkbox=False,
-            headers=search_result_headers(search_type),
-            height=hhs_ui.ENV_TABLE_HEIGHT,
-            empty_hint="",
-        )
+        render_search_path_results(rows)
 
 
 def render_search_view() -> None:

@@ -2174,10 +2174,31 @@ PY
   run grep -q 'timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS' "${ui_file}"
   assert_success
 
-  run grep -q 'headers=search_result_headers(search_type)' "${ui_file}"
+  run grep -q 'def build_hhs_open_search_result_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def open_search_result_path' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhs_open' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM' "${ui_file}"
+  assert_success
+
+  run grep -q 'search_result_path_link(row)' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_search_path_results(rows)' "${ui_file}"
   assert_success
 
   run grep -q 'render_search_string_results(rows, query, text_filter)' "${ui_file}"
+  assert_success
+
+  run grep -q '<thead><tr><th>Path</th><th>Line</th><th>Match</th></tr></thead>' "${ui_file}"
+  assert_success
+
+  run grep -q '<thead><tr><th>Path</th><th>Modified</th></tr></thead>' "${ui_file}"
   assert_success
 
   run grep -q '__hhs_search_file' "${ui_file}"
@@ -2456,6 +2477,15 @@ PY
   assert_success
 
   run grep -q '.hhs-search-string-results' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-search-result-path-link' "${css_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-primary)' "${css_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-theme-link-color)' "${css_file}"
   assert_success
 
   run grep -q '.st-key-dir_add_submit' "${css_file}"
@@ -7080,16 +7110,23 @@ PY
   run python3 - "${ui_file}" <<'PY'
 from pathlib import Path
 import html
+import posixpath
 import re
 import shlex
 import types
+import urllib.parse
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
 start = source.index("def search_type_label(")
 end = source.index("def render_ai_models_result(")
 namespace = {
+    "posixpath": posixpath,
     "re": re,
     "shlex": shlex,
+    "urllib": types.SimpleNamespace(parse=urllib.parse),
+    "hhs_ui": types.SimpleNamespace(
+        SEARCH_OPEN_RESULT_QUERY_PARAM="hhs_open_search_result",
+    ),
     "hhs_ui_constants": types.SimpleNamespace(
         SEARCH_TYPES=("Files", "Folders", "Strings"),
         SEARCH_TYPE_LABELS={
@@ -7099,6 +7136,7 @@ namespace = {
         },
     ),
     "html": html,
+    "display_path_value": lambda value: value,
     "strip_ansi": lambda value: value,
     "ssh_explorer_mtime_text": lambda value: f"mtime:{value}",
     "row_matches_text_filter": lambda row, value: value.lower() in " ".join(
@@ -7140,30 +7178,45 @@ assert "__hhs_search_dir '/tmp/search root' '*docs*'" in folders_command
 assert "__HHS_SEARCH_RESULT__" in folders_command
 assert strings_command.endswith("__hhs_search_string '/tmp/search root' 'needle value'")
 assert "__HHS_SEARCH_RESULT__" not in strings_command
+open_command = namespace["build_hhs_open_search_result_command"](
+    "/tmp/search root/report.txt"
+)
+assert 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash";' in open_command
+assert "__hhs_open '/tmp/search root/report.txt'" in open_command
+assert namespace["search_relative_path"](
+    "/tmp/search root/docs/report.txt", "/tmp/search root"
+) == "docs/report.txt"
+assert namespace["search_relative_path"](
+    "/tmp/other/report.txt", "/tmp/search root"
+) == "/tmp/other/report.txt"
 string_rows = namespace["parse_hhs_search_results"](
     'Searching for "regex" matching: "target" in "."\n'
-    "/tmp/report.txt:12:Alpha target line\n",
+    "/tmp/search root/report.txt:12:Alpha target line\n",
     "Strings",
+    "/tmp/search root",
 )
 assert string_rows == [
     {
         "Type": "String",
-        "Path": "/tmp/report.txt",
+        "Path": "report.txt",
+        "FullPath": "/tmp/search root/report.txt",
         "Modified": "",
-        "Line": "12: Alpha target line",
-        "LineNumber": "12",
+        "Line": "12",
+        "LineNumber": "",
         "Match": "Alpha target line",
     }
 ]
 folder_rows = namespace["parse_hhs_search_results"](
     "Searching for folders matching: [docs] in .\n"
-    "__HHS_SEARCH_RESULT__\t/tmp/docs\t1710000000\n",
+    "__HHS_SEARCH_RESULT__\t/tmp/search root/docs\t1710000000\n",
     "Folders",
+    "/tmp/search root",
 )
 assert folder_rows == [
     {
         "Type": "Folder",
-        "Path": "/tmp/docs",
+        "Path": "docs",
+        "FullPath": "/tmp/search root/docs",
         "Modified": "mtime:1710000000",
         "Line": "",
         "LineNumber": "",
@@ -7172,7 +7225,11 @@ assert folder_rows == [
 ]
 assert namespace["search_result_headers"]("Files") == ["Path", "Modified"]
 assert namespace["search_result_headers"]("Folders") == ["Path", "Modified"]
-assert namespace["search_result_headers"]("Strings") == ["Path", "Line"]
+assert namespace["search_result_headers"]("Strings") == ["Path", "Line", "Match"]
+link = namespace["search_result_path_link"](string_rows[0])
+assert 'class="hhs-search-result-path-link"' in link
+assert "hhs_open_search_result=%2Ftmp%2Fsearch+root%2Freport.txt" in link
+assert ">report.txt</a>" in link
 assert namespace["search_loader_message"]("*.md", "/tmp/search root") == (
     "Searching for %primary_color%*.md%primary_color% "
     "in %secondary_color%/tmp/search root%secondary_color%"
@@ -7181,7 +7238,7 @@ assert namespace["filter_search_rows"](string_rows, "All", "missing") == string_
 assert namespace["filter_search_rows"](string_rows, "Containing", "target") == string_rows
 assert namespace["filter_search_rows"](string_rows, "Containing", "missing") == []
 highlighted_line = namespace["colorize_search_result_line"](
-    "12: Alpha target line", "target"
+    "Alpha target line", "target"
 )
 assert '<span class="hhs-log-filter-match">target</span>' in highlighted_line
 PY

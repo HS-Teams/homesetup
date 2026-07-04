@@ -269,7 +269,21 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 .hhs-search-string-results {
   border: 1px solid var(--hhs-theme-border-color);
   border-radius: var(--hhs-theme-base-radius);
+  color: var(--hhs-primary);
   overflow: auto;
+}
+
+.hhs-search-result-path-link,
+.hhs-search-result-path-link:visited {
+  color: var(--hhs-theme-link-color);
+  text-decoration: underline;
+}
+
+.hhs-search-result-path-link:hover,
+.hhs-search-result-path-link:focus {
+  color: var(--hhs-theme-link-color);
+  filter: brightness(1.15);
+  text-decoration: underline;
 }
 
 .hhs-search-string-results table {
