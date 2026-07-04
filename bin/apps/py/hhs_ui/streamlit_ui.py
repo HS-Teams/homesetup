@@ -1215,6 +1215,43 @@ def command_loader_html(
     """
 
 
+def loader_label_html(message: str) -> str:
+    """Return escaped loader label markup with optional theme color markers."""
+    marker_classes = {
+        "%primary_color%": "hhs-loader-primary",
+        "%secondary_color%": "hhs-loader-secondary",
+    }
+    raw_message = str(message or "Loading...").strip() or "Loading..."
+    cursor = 0
+    active_class = ""
+    html_parts: list[str] = []
+    markers = tuple(marker_classes)
+    while cursor < len(raw_message):
+        next_marker = ""
+        next_index = len(raw_message)
+        for marker in markers:
+            marker_index = raw_message.find(marker, cursor)
+            if 0 <= marker_index < next_index:
+                next_marker = marker
+                next_index = marker_index
+        html_parts.append(html.escape(raw_message[cursor:next_index]))
+        if not next_marker:
+            break
+        next_class = marker_classes[next_marker]
+        if active_class == next_class:
+            html_parts.append("</span>")
+            active_class = ""
+        else:
+            if active_class:
+                html_parts.append("</span>")
+            html_parts.append(f'<span class="{next_class}">')
+            active_class = next_class
+        cursor = next_index + len(next_marker)
+    if active_class:
+        html_parts.append("</span>")
+    return "".join(html_parts)
+
+
 def render_command_loader_timer(loader_id: str) -> None:
     """Start the elapsed-time updater for one in-flow command loader."""
     components.html(
@@ -1274,6 +1311,7 @@ def render_preloader(
         "hhs-tab-loader hhs-tab-loader-transient" if transient else "hhs-tab-loader"
     )
     safe_timeout = int(timeout_seconds or command_timeout_seconds())
+    safe_message_html = loader_label_html(message)
     components.html(
         f"""
         <script>
@@ -1304,7 +1342,10 @@ def render_preloader(
                 </span>
               </div>
             `;
-            overlay.querySelector(".hhs-tab-loader-label").textContent = {json.dumps(str(message))};
+            const label = overlay.querySelector(".hhs-tab-loader-label");
+            if (label) {{
+              label.innerHTML = {json.dumps(safe_message_html)};
+            }}
             doc.body.appendChild(overlay);
             const node = overlay.querySelector(".hhs-tab-loader-elapsed");
             if (!node || node.dataset.timerStarted === "true") {{
@@ -12079,7 +12120,7 @@ def ssh_explorer_mtime_text(epoch_text: str) -> str:
 def ssh_explorer_size_text(size_text: str, kind: str) -> str:
     """Return a compact file size label for explorer rows."""
     if kind == "Dir":
-        return ""
+        return "--"
     try:
         size = float(size_text)
     except (TypeError, ValueError):
@@ -13040,6 +13081,333 @@ def render_monitor_view() -> None:
         render_monitor_logs_panel()
 
 
+def search_type_label(search_type: str) -> str:
+    """Return the display label for a Search type key."""
+    return hhs_ui_constants.SEARCH_TYPE_LABELS.get(search_type, search_type)
+
+
+def normalized_search_type(search_type: object) -> str:
+    """Return a valid Search type key."""
+    candidate = str(search_type or "").strip()
+    if candidate in hhs_ui_constants.SEARCH_TYPES:
+        return candidate
+    return hhs_ui_constants.SEARCH_TYPES[0]
+
+
+def search_glob_from_query(query: str) -> str:
+    """Return the file or folder glob used for a Search query."""
+    clean_query = query.strip()
+    if any(character in clean_query for character in "*?[],"):
+        return clean_query
+    return f"*{clean_query}*"
+
+
+def build_hhs_search_setup_command() -> str:
+    """Build shell setup for HomeSetup Search helper functions."""
+    return (
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-text.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-search.bash"; '
+        "function __hhs_highlight() { cat -; }; "
+    )
+
+
+def build_hhs_search_modified_results_command(search_command: str) -> str:
+    """Wrap a Search command so path results include modification timestamps."""
+    return (
+        f"{search_command} | while IFS= read -r line; do "
+        'case "${line}" in '
+        '""|Searching\\ for*) printf "%s\\n" "${line}" ;; '
+        '*) '
+        'if [ -e "${line}" ]; then '
+        'if modified=$(stat -c %Y "${line}" 2>/dev/null); then :; '
+        'else modified=$(stat -f %m "${line}" 2>/dev/null || printf "0"); fi; '
+        'else modified=0; fi; '
+        'printf "__HHS_SEARCH_RESULT__\\t%s\\t%s\\n" "${line}" "${modified}" ;; '
+        "esac; "
+        "done"
+    )
+
+
+def build_hhs_search_command(search_type: str, query: str, search_path: str) -> str:
+    """Build the HomeSetup search command for the selected Search type."""
+    setup_command = build_hhs_search_setup_command()
+    search_root = shlex.quote(search_path.strip() or ".")
+    safe_query = shlex.quote(query.strip())
+    if search_type == "Folders":
+        safe_glob = shlex.quote(search_glob_from_query(query))
+        search_command = f"{setup_command}__hhs_search_dir {search_root} {safe_glob}"
+        return build_hhs_search_modified_results_command(search_command)
+    if search_type == "Strings":
+        return f"{setup_command}__hhs_search_string {search_root} {safe_query}"
+    safe_glob = shlex.quote(search_glob_from_query(query))
+    search_command = f"{setup_command}__hhs_search_file {search_root} {safe_glob}"
+    return build_hhs_search_modified_results_command(search_command)
+
+
+def parse_hhs_search_results(output: str, search_type: str) -> list[dict[str, str]]:
+    """Parse HomeSetup search command output into table rows."""
+    rows: list[dict[str, str]] = []
+    result_type = "Folder" if search_type == "Folders" else search_type.rstrip("s")
+    for line in strip_ansi(output).splitlines():
+        clean_line = line.strip()
+        if not clean_line or clean_line.startswith("Searching for "):
+            continue
+        row = {
+            "Type": result_type,
+            "Path": clean_line,
+            "Modified": "",
+            "Line": "",
+            "LineNumber": "",
+            "Match": "",
+        }
+        if clean_line.startswith("__HHS_SEARCH_RESULT__\t"):
+            parts = clean_line.split("\t", 2)
+            if len(parts) == 3:
+                row["Path"] = parts[1]
+                row["Modified"] = ssh_explorer_mtime_text(parts[2])
+            rows.append(row)
+            continue
+        if search_type == "Strings":
+            match = re.match(r"^(.+?):(\d+):(.*)$", clean_line)
+            if match:
+                row["Path"] = match.group(1)
+                row["LineNumber"] = match.group(2)
+                row["Line"] = f"{match.group(2)}: {match.group(3).strip()}"
+                row["Match"] = match.group(3).strip()
+        rows.append(row)
+    return rows
+
+
+def filter_search_rows(
+    rows: list[dict[str, str]], search_filter: str = "All", text_filter: str = ""
+) -> list[dict[str, str]]:
+    """Return Search result rows matching the selected result filter."""
+    if search_filter != "Containing":
+        return rows
+    return [row for row in rows if row_matches_text_filter(row, text_filter)]
+
+
+def colorize_search_result_line(value: str, text_filter: str = "") -> str:
+    """Return a Search result line with matching text highlighted."""
+    clean_value = strip_ansi(value)
+    ranges = log_filter_highlight_ranges(clean_value, text_filter)
+    html_parts: list[str] = []
+    cursor = 0
+    for start, end, css_class in ranges:
+        if start > cursor:
+            html_parts.append(html.escape(clean_value[cursor:start]))
+        html_parts.append(
+            f'<span class="hhs-log-{css_class}">{html.escape(clean_value[start:end])}</span>'
+        )
+        cursor = end
+    html_parts.append(html.escape(clean_value[cursor:]))
+    return "".join(html_parts)
+
+
+def render_search_string_results(
+    rows: list[dict[str, str]], query: str, text_filter: str = ""
+) -> None:
+    """Render string Search results with highlighted matching text."""
+    if not rows:
+        st.caption("No search results.")
+        return
+    line_filter = query or text_filter
+    table_rows = []
+    for row in rows:
+        table_rows.append(
+            "<tr>"
+            f"<td>{html.escape(display_path_value(row.get('Path', '')))}</td>"
+            f"<td>{colorize_search_result_line(row.get('Line', ''), line_filter)}</td>"
+            "</tr>"
+        )
+    st.markdown(
+        '<div class="hhs-search-string-results">'
+        "<table>"
+        "<thead><tr><th>Path</th><th>Line</th></tr></thead>"
+        f"<tbody>{''.join(table_rows)}</tbody>"
+        "</table>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def search_result_headers(search_type: str) -> list[str]:
+    """Return visible Search result table columns for one Search type."""
+    if search_type == "Strings":
+        return ["Path", "Line"]
+    return ["Path", "Modified"]
+
+
+def search_loader_message(query: str, search_path: str) -> str:
+    """Return the themed preloader message for one Search execution."""
+    return (
+        f"Searching for %primary_color%{query}%primary_color% "
+        f"in %secondary_color%{search_path}%secondary_color%"
+    )
+
+
+def submit_search_query() -> None:
+    """Persist the Search form values that should be executed."""
+    query = str(st.session_state.get("search_query", "")).strip()
+    search_path = str(st.session_state.get("search_path", "")).strip()
+    if not query:
+        st.session_state["search_result_query"] = ""
+        push_floating_status("Enter a search query before searching.", "warn")
+        return
+    if not search_path:
+        search_path = footer_working_directory() or "."
+        st.session_state["search_path"] = search_path
+    search_type = normalized_search_type(st.session_state.get("search_type"))
+    st.session_state["search_result_type"] = search_type
+    st.session_state["search_result_path"] = search_path
+    st.session_state["search_result_query"] = query
+    save_ui_state()
+
+
+def render_search_controls() -> None:
+    """Render the Search controls in one compact row."""
+    with st.container(key="search_controls"):
+        kind_column, term_column, path_column, picker_column, search_column = (
+            st.columns([1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment="center")
+        )
+        with kind_column:
+            st.selectbox(
+                "Search type",
+                options=hhs_ui_constants.SEARCH_TYPES,
+                key="search_type",
+                format_func=search_type_label,
+                label_visibility="collapsed",
+            )
+        with term_column:
+            st.text_input(
+                "Search query",
+                key="search_query",
+                placeholder="Search for files, folders, or strings",
+                label_visibility="collapsed",
+                width="stretch",
+            )
+        with path_column:
+            st.text_input(
+                "Search path",
+                key="search_path",
+                label_visibility="collapsed",
+                width="stretch",
+            )
+        with picker_column:
+            st.button(
+                "",
+                key="search_path_folder_picker_button",
+                help="Select search path",
+                on_click=request_path_picker,
+                args=("search_path", st.session_state.get("search_path", ""), "folder"),
+                width="stretch",
+            )
+        with search_column:
+            st.button(
+                "",
+                key="search_submit_button",
+                help="Search",
+                on_click=submit_search_query,
+                width="stretch",
+            )
+
+
+def render_search_filters() -> tuple[str, str]:
+    """Render Search result filters and return selected filter values."""
+    with st.container(key="search_filter_controls"):
+        filter_column, other_filter_column, _spacer_column, _action_column, clear_column = (
+            st.columns([1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment="center")
+        )
+        with filter_column:
+            selected_filter = st.radio(
+                "Table filter",
+                hhs_ui.SEARCH_FILTERS,
+                horizontal=True,
+                key="search_filter",
+                label_visibility="collapsed",
+                on_change=save_ui_state,
+            )
+        other_filter = ""
+        if selected_filter == "Containing":
+            with other_filter_column:
+                other_filter = st.text_input(
+                    "Filters",
+                    key="search_other_filter",
+                    label_visibility="collapsed",
+                    on_change=save_ui_state,
+                    placeholder="Type result filter text",
+                    width="stretch",
+                )
+            with clear_column:
+                st.button(
+                    "",
+                    key="search_other_filter_clear",
+                    help="Clear filter text",
+                    on_click=clear_table_other_filter,
+                    args=("search_other_filter",),
+                    disabled=not bool(str(other_filter)),
+                    width="stretch",
+                )
+        return selected_filter, other_filter
+
+
+def render_search_results(search_filter: str = "All", text_filter: str = "") -> None:
+    """Render the Search results table for the submitted query."""
+    search_type = normalized_search_type(st.session_state.get("search_result_type"))
+    search_path = str(st.session_state.get("search_result_path", "")).strip()
+    query = str(st.session_state.get("search_result_query", "")).strip()
+    if not query:
+        return
+    result = run_bash_command(
+        build_hhs_search_command(search_type, query, search_path),
+        search_loader_message(query, search_path),
+        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        cache_tag="search",
+    )
+    with st.container(key="search_results"):
+        if result.returncode != 0:
+            st.error(clean_command_status_message(result.stderr or result.stdout))
+            return
+        rows = parse_rows_cached(
+            "search",
+            f"{search_type}\n{result.stdout}",
+            lambda output: parse_hhs_search_results(
+                output.split("\n", 1)[1], search_type
+            ),
+        )
+        rows = filter_search_rows(rows, search_filter, text_filter)
+        if search_type == "Strings":
+            render_search_string_results(rows, query, text_filter)
+            return
+        render_table(
+            rows,
+            key=None,
+            checkbox=False,
+            headers=search_result_headers(search_type),
+            height=hhs_ui.ENV_TABLE_HEIGHT,
+            empty_hint="",
+        )
+
+
+def render_search_view() -> None:
+    """Render the HomeSetup Search view."""
+    st.markdown(
+        """
+        <section class="hhs-view-heading">
+          <h2> Search</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.expander("Search", expanded=True):
+        render_search_controls()
+        search_filter, search_text_filter = render_search_filters()
+    render_search_results(search_filter, search_text_filter)
+
+
 def render_ai_models_result() -> subprocess.CompletedProcess[str] | None:
     """Render the cached/background AI model listing command result."""
     return render_cached_command_result(
@@ -13568,6 +13936,8 @@ def render_main_view() -> None:
         render_history_view()
     elif active_view == "Monitor":
         render_monitor_view()
+    elif active_view == "Search":
+        render_search_view()
     elif active_view == hhs_ui.AI_VIEW:
         render_ai_view()
 
@@ -13695,6 +14065,26 @@ def main() -> None:
     st.session_state.setdefault("monitor_view", "DISK")
     if st.session_state["monitor_view"] not in hhs_ui.MONITOR_VIEWS:
         st.session_state["monitor_view"] = "DISK"
+    st.session_state.setdefault("search_type", "Files")
+    st.session_state["search_type"] = normalized_search_type(
+        st.session_state.get("search_type")
+    )
+    st.session_state.setdefault("search_path", footer_working_directory())
+    if not str(st.session_state.get("search_path", "")).strip():
+        st.session_state["search_path"] = footer_working_directory() or "."
+    st.session_state.setdefault("search_query", "")
+    st.session_state.setdefault("search_result_type", st.session_state["search_type"])
+    st.session_state["search_result_type"] = normalized_search_type(
+        st.session_state.get("search_result_type")
+    )
+    st.session_state.setdefault("search_result_path", st.session_state["search_path"])
+    if not str(st.session_state.get("search_result_path", "")).strip():
+        st.session_state["search_result_path"] = st.session_state["search_path"]
+    st.session_state.setdefault("search_result_query", "")
+    st.session_state.setdefault("search_filter", "All")
+    if st.session_state["search_filter"] not in hhs_ui.SEARCH_FILTERS:
+        st.session_state["search_filter"] = "All"
+    st.session_state.setdefault("search_other_filter", "")
     st.session_state.setdefault("ssh_view", "TUNNELS")
     if st.session_state["ssh_view"] not in hhs_ui.SSH_VIEWS:
         st.session_state["ssh_view"] = "TUNNELS"

@@ -1490,7 +1490,7 @@ PY
 
 # TC - 9
 @test "when rendering the main UI then current navigation tabs should be registered" {
-  run grep -q 'VIEWS = ("Home", "Configs", "Services", "Monitor", "History")' "${constants_file}"
+  run grep -q 'VIEWS = ("Home", "Configs", "Services", "Monitor", "Search", "History")' "${constants_file}"
   assert_success
 
   run grep -q 'AI_VIEW = "AI"' "${constants_file}"
@@ -1509,6 +1509,9 @@ PY
   assert_success
 
   run grep -q 'SSH_TUNNEL_FILTERS = ("All", "Reachable", "Other")' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_FILTERS = ("All", "Containing")' "${constants_file}"
   assert_success
 
   run grep -q 'SSH_EXPLORER_COMPONENT_DIR = APP_DIR / "components/ssh_explorer"' "${constants_file}"
@@ -1571,7 +1574,16 @@ PY
   run grep -q '"Monitor": " Monitor"' "${constants_file}"
   assert_success
 
+  run grep -q '"Search": " Search"' "${constants_file}"
+  assert_success
+
   run grep -q '"History": " History"' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_TYPES = ("Files", "Folders", "Strings")' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_FILTERS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
   assert_success
 
   run grep -q 'SSH_VIEW: " SSH"' "${constants_file}"
@@ -1590,6 +1602,9 @@ PY
   assert_success
 
   run grep -q '<h2> Activity Monitor</h2>' "${ui_file}"
+  assert_success
+
+  run grep -q '<h2> Search</h2>' "${ui_file}"
   assert_success
 
   run grep -q '<h2> History</h2>' "${ui_file}"
@@ -2031,6 +2046,149 @@ PY
   run grep -q 'render_ssh_view()' "${ui_file}"
   assert_success
 
+  run grep -q 'elif active_view == "Search":' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_search_view()' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_search_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def parse_hhs_search_results' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_search_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'placeholder="Search for files, folders, or strings"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="search_path"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="search_path_folder_picker_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_click=request_path_picker' "${ui_file}"
+  assert_success
+
+  run grep -q 'args=("search_path", st.session_state.get("search_path", ""), "folder")' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.container(key="search_controls")' "${ui_file}"
+  assert_success
+
+  run grep -q 'with st.expander("Search", expanded=True):' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.container(key="search_results")' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_search_filters' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.container(key="search_filter_controls")' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.SEARCH_FILTERS' "${ui_file}"
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = source.split("def render_search_filters", 1)[1].split("\ndef ", 1)[0]
+assert "render_table_filter_controls" not in body
+assert "[1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment=\"center\"" in body
+assert "key=\"search_filter\"" in body
+assert "key=\"search_other_filter\"" in body
+assert "key=\"search_other_filter_clear\"" in body
+assert "width=\"stretch\"" in body
+PY
+  assert_success
+
+  run grep -q '"search_filter",' "${ui_file}"
+  assert_success
+
+  run grep -q '"search_other_filter",' "${ui_file}"
+  assert_success
+
+  run grep -q 'options=hhs_ui_constants.SEARCH_TYPES' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.columns(' "${ui_file}"
+  assert_success
+
+  run grep -q '\[1.15, 3.0, 3.0, 0.22, 0.22\], vertical_alignment="center"' "${ui_file}"
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = source.split("def render_search_controls", 1)[1].split("\ndef ", 1)[0]
+assert (
+    'key="search_query",\n'
+    '                placeholder="Search for files, folders, or strings",\n'
+    '                label_visibility="collapsed",\n'
+    '                width="stretch",'
+) in body
+assert (
+    'key="search_path",\n'
+    '                label_visibility="collapsed",\n'
+    '                width="stretch",'
+) in body
+assert body.index('key="search_path_folder_picker_button"') < body.index(
+    'key="search_submit_button"'
+)
+PY
+  assert_success
+
+  run grep -q '\[5.0, 0.85\], vertical_alignment="center"' "${ui_file}"
+  assert_failure
+
+  run grep -q '""' "${ui_file}"
+  assert_success
+
+  run grep -q 'if st.button("Search", key="search_submit_button"' "${ui_file}"
+  assert_failure
+
+  run grep -q 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-search.bash";' "${ui_file}"
+  assert_success
+
+  run grep -q 'def search_loader_message' "${ui_file}"
+  assert_success
+
+  run grep -q 'search_loader_message(query, search_path)' "${ui_file}"
+  assert_success
+
+  run grep -q 'Searching for %primary_color%{query}%primary_color%' "${ui_file}"
+  assert_success
+
+  run grep -q 'in %secondary_color%{search_path}%secondary_color%' "${ui_file}"
+  assert_success
+
+  run grep -q 'timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS' "${ui_file}"
+  assert_success
+
+  run grep -q 'headers=search_result_headers(search_type)' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_search_string_results(rows, query, text_filter)' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhs_search_file' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhs_search_dir' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhs_search_string' "${ui_file}"
+  assert_success
+
   run grep -q 'SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"' "${constants_file}"
   assert_success
 
@@ -2247,6 +2405,57 @@ PY
   assert_success
 
   run grep -q '.st-key-path_folder_picker_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_path_folder_picker_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_submit_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_other_filter_clear button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_submit_button {' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_controls \[data-testid="stVerticalBlock"\]' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_controls \[data-testid="stHorizontalBlock"\]' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_filter_controls \[data-testid="stHorizontalBlock"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'grid-template-columns: minmax(9rem, 1.15fr)' "${css_file}"
+  assert_success
+
+  run grep -q 'grid-template-columns: max-content minmax(0, 3fr)' "${css_file}"
+  assert_success
+
+  run grep -q 'grid-column: 2 / 5' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_filter_controls \[role="radiogroup"\]\[aria-label$="filter"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'overflow-x: visible' "${css_file}"
+  assert_success
+
+  run grep -q 'grid-column: 5' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_controls {' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-top: var(--hhs-element-std-gap) !important' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_results {' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-search-string-results' "${css_file}"
   assert_success
 
   run grep -q '.st-key-dir_add_submit' "${css_file}"
@@ -3819,6 +4028,11 @@ assert namespace["remote_explorer_parent_path"]("/home/me/project") == "/home/me
 assert namespace["remote_explorer_parent_path"]("/root") == "/"
 assert namespace["remote_explorer_parent_path"]("/") == "/"
 assert namespace["remote_explorer_parent_path"](".") == ".."
+assert namespace["ssh_explorer_size_text"]("4096", "Dir") == "--"
+assert namespace["ssh_explorer_size_text"]("2048", "File") == "2.0 KB"
+assert namespace["ssh_explorer_row"](
+    "Dir", "project", "4096", "0", "/tmp/project"
+)["Size"] == "--"
 assert namespace["normalize_remote_explorer_path"](".", "/root") == "/root"
 assert namespace["normalize_remote_explorer_path"]("..", "/root") == "/"
 assert namespace["normalize_remote_explorer_path"]("alerts", "/root") == "/root/alerts"
@@ -4196,6 +4410,40 @@ PY
   run grep -q 'hhs-tab-loader-label' "${ui_file}"
   assert_success
 
+  run grep -q 'def loader_label_html' "${ui_file}"
+  assert_success
+
+  run grep -q '"%primary_color%": "hhs-loader-primary"' "${ui_file}"
+  assert_success
+
+  run grep -q '"%secondary_color%": "hhs-loader-secondary"' "${ui_file}"
+  assert_success
+
+  run grep -q 'safe_message_html = loader_label_html(message)' "${ui_file}"
+  assert_success
+
+  run grep -q 'label.innerHTML = {json.dumps(safe_message_html)}' "${ui_file}"
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import html
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def loader_label_html(")
+end = source.index("def render_command_loader_timer(")
+namespace = {"html": html}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+rendered = namespace["loader_label_html"](
+    "Searching for %primary_color%<term>%primary_color% "
+    "in %secondary_color%/tmp/a&b%secondary_color%"
+)
+assert '<span class="hhs-loader-primary">&lt;term&gt;</span>' in rendered
+assert '<span class="hhs-loader-secondary">/tmp/a&amp;b</span>' in rendered
+PY
+  assert_success
+
   run grep -q 'time.sleep(0.1)' "${ui_file}"
   assert_success
 
@@ -4254,6 +4502,18 @@ PY
   assert_success
 
   run grep -q '.hhs-tab-loader-elapsed.hhs-loader-elapsed-warning' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-loader-primary' "${css_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-primary)' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-loader-secondary' "${css_file}"
+  assert_success
+
+  run grep -q 'color: var(--hhs-secondary)' "${css_file}"
   assert_success
 
   run grep -q 'color: #facc15 !important' "${css_file}"
@@ -6812,6 +7072,118 @@ main_calls = {
 assert "initialize_ollama_service_availability" in main_calls
 assert "main_views" in main_calls
 assert "update_ollama_service_availability_refresh" in main_calls
+PY
+  assert_success
+}
+
+@test "when building Search commands then query type should choose the matching hhs helper" {
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import html
+import re
+import shlex
+import types
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+start = source.index("def search_type_label(")
+end = source.index("def render_ai_models_result(")
+namespace = {
+    "re": re,
+    "shlex": shlex,
+    "hhs_ui_constants": types.SimpleNamespace(
+        SEARCH_TYPES=("Files", "Folders", "Strings"),
+        SEARCH_TYPE_LABELS={
+            "Files": "Files",
+            "Folders": "Folders",
+            "Strings": "Strings",
+        },
+    ),
+    "html": html,
+    "strip_ansi": lambda value: value,
+    "ssh_explorer_mtime_text": lambda value: f"mtime:{value}",
+    "row_matches_text_filter": lambda row, value: value.lower() in " ".join(
+        str(item).lower() for item in row.values()
+    ),
+    "log_filter_highlight_ranges": lambda value, text_filter: [
+        (match.start(), match.end(), "filter-match")
+        for match in re.finditer(re.escape(text_filter), value, flags=re.IGNORECASE)
+    ]
+    if text_filter
+    else [],
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+submit_body = source.split("def submit_search_query", 1)[1].split("\ndef ", 1)[0]
+assert 'st.session_state["search_type"] =' not in submit_body
+assert 'st.session_state["search_result_type"] = search_type' in submit_body
+assert namespace["normalized_search_type"]("Folders") == "Folders"
+assert namespace["normalized_search_type"]("Unknown") == "Files"
+assert namespace["search_glob_from_query"]("report") == "*report*"
+assert namespace["search_glob_from_query"]("*.md") == "*.md"
+files_command = namespace["build_hhs_search_command"](
+    "Files", "report", "/tmp/search root"
+)
+folders_command = namespace["build_hhs_search_command"](
+    "Folders", "docs", "/tmp/search root"
+)
+strings_command = namespace["build_hhs_search_command"](
+    "Strings", "needle value", "/tmp/search root"
+)
+for command in (files_command, folders_command, strings_command):
+    assert 'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash";' in command
+    assert 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-text.bash";' in command
+    assert 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-search.bash";' in command
+    assert "function __hhs_highlight() { cat -; };" in command
+assert "__hhs_search_file '/tmp/search root' '*report*'" in files_command
+assert "__HHS_SEARCH_RESULT__" in files_command
+assert "__hhs_search_dir '/tmp/search root' '*docs*'" in folders_command
+assert "__HHS_SEARCH_RESULT__" in folders_command
+assert strings_command.endswith("__hhs_search_string '/tmp/search root' 'needle value'")
+assert "__HHS_SEARCH_RESULT__" not in strings_command
+string_rows = namespace["parse_hhs_search_results"](
+    'Searching for "regex" matching: "target" in "."\n'
+    "/tmp/report.txt:12:Alpha target line\n",
+    "Strings",
+)
+assert string_rows == [
+    {
+        "Type": "String",
+        "Path": "/tmp/report.txt",
+        "Modified": "",
+        "Line": "12: Alpha target line",
+        "LineNumber": "12",
+        "Match": "Alpha target line",
+    }
+]
+folder_rows = namespace["parse_hhs_search_results"](
+    "Searching for folders matching: [docs] in .\n"
+    "__HHS_SEARCH_RESULT__\t/tmp/docs\t1710000000\n",
+    "Folders",
+)
+assert folder_rows == [
+    {
+        "Type": "Folder",
+        "Path": "/tmp/docs",
+        "Modified": "mtime:1710000000",
+        "Line": "",
+        "LineNumber": "",
+        "Match": "",
+    }
+]
+assert namespace["search_result_headers"]("Files") == ["Path", "Modified"]
+assert namespace["search_result_headers"]("Folders") == ["Path", "Modified"]
+assert namespace["search_result_headers"]("Strings") == ["Path", "Line"]
+assert namespace["search_loader_message"]("*.md", "/tmp/search root") == (
+    "Searching for %primary_color%*.md%primary_color% "
+    "in %secondary_color%/tmp/search root%secondary_color%"
+)
+assert namespace["filter_search_rows"](string_rows, "All", "missing") == string_rows
+assert namespace["filter_search_rows"](string_rows, "Containing", "target") == string_rows
+assert namespace["filter_search_rows"](string_rows, "Containing", "missing") == []
+highlighted_line = namespace["colorize_search_result_line"](
+    "12: Alpha target line", "target"
+)
+assert '<span class="hhs-log-filter-match">target</span>' in highlighted_line
 PY
   assert_success
 }

@@ -100,7 +100,7 @@ AI_CONTEXT_UPLOAD_TYPES = (
 )
 RUN_SHELL_ENV_KEY = "RUN_SHELL"
 APP_CSS = ""
-VIEWS = ("Home", "Configs", "Services", "Monitor", "History")
+VIEWS = ("Home", "Configs", "Services", "Monitor", "Search", "History")
 AI_VIEW = "AI"
 SSH_VIEW = "SSH"
 VIEW_LABELS = {
@@ -108,6 +108,7 @@ VIEW_LABELS = {
     "Configs": " Configs",
     "Services": " Services",
     "Monitor": " Monitor",
+    "Search": " Search",
     "History": " History",
     SSH_VIEW: " SSH",
     AI_VIEW: " AI",
@@ -147,6 +148,13 @@ MONITOR_VIEW_LABELS = {
     "PROCESSES": " Processes",
     "LOGS": " Logs",
 }
+SEARCH_TYPES = ("Files", "Folders", "Strings")
+SEARCH_TYPE_LABELS = {
+    "Files": "Files",
+    "Folders": "Folders",
+    "Strings": "Strings",
+}
+SEARCH_FILTERS = ("All", "Containing")
 SSH_VIEWS = ("TUNNELS", "FILES")
 SSH_VIEW_LABELS = {
     "TUNNELS": " Tunnels",
@@ -242,6 +250,14 @@ PERSISTED_UI_KEYS = (
     "path_value_overrides",
     "service_filter",
     "service_other_filter",
+    "search_filter",
+    "search_other_filter",
+    "search_path",
+    "search_query",
+    "search_result_path",
+    "search_result_query",
+    "search_result_type",
+    "search_type",
     SSH_RECONNECT_HOST_KEY,
     "ssh_tunnel_filter",
     "ssh_tunnel_other_filter",
