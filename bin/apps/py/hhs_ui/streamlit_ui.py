@@ -1388,7 +1388,7 @@ def render_preloader(
             overlay.style.display = "flex";
             overlay.style.alignItems = "center";
             overlay.style.justifyContent = "center";
-            overlay.style.zIndex = "999999";
+            overlay.style.zIndex = "1000010";
             overlay.innerHTML = `
               <div class="hhs-tab-loader-panel">
                 <span class="hhs-tab-loader-spinner"></span>
@@ -1478,6 +1478,10 @@ def clear_preloader() -> None:
             if (parentWindow.__hhsCommandOverlayExpiryTimer) {
               parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
               parentWindow.__hhsCommandOverlayExpiryTimer = null;
+            }
+            if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {
+              parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
+              parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
             }
             doc.body.dataset.hhsCommandOverlayHidden = "true";
             const remove_overlay = () => {
@@ -1690,7 +1694,7 @@ def pop_dialog(
 
 def folder_picker_start_directory(value: str = "") -> str:
     """Return the best existing directory to open in the folder picker."""
-    raw_value = str(value or "").strip() or os.getcwd()
+    raw_value = str(value or "").strip() or str(Path.home())
     expanded_value = os.path.expandvars(os.path.expanduser(raw_value))
     candidate = Path(expanded_value)
     if candidate.is_file():
@@ -1700,15 +1704,83 @@ def folder_picker_start_directory(value: str = "") -> str:
     return str(candidate.resolve())
 
 
+def path_picker_uses_remote() -> bool:
+    """Return whether the reusable path picker should browse the SSH host."""
+    return bool(connected_ssh_host())
+
+
+def remote_path_picker_default_directory() -> str:
+    """Return the default remote directory for the reusable path picker."""
+    return "$HOME"
+
+
 def path_picker_mode() -> str:
     """Return the active path picker mode."""
     mode = str(st.session_state.get("_hhs_folder_picker_mode", "folder")).strip()
     return "file" if mode == "file" else "folder"
 
 
+def normalize_remote_path_picker_path(
+    path_value: str, base_path: str | None = None
+) -> str:
+    """Return a normalized remote picker path without local filesystem access."""
+    raw_path = str(path_value or "").strip()
+    if not raw_path:
+        return remote_path_picker_default_directory()
+    if (
+        raw_path in {"~", "$HOME", "${HOME}"}
+        or raw_path.startswith("~/")
+        or raw_path.startswith("$HOME/")
+        or raw_path.startswith("${HOME}/")
+    ):
+        return posixpath.normpath(raw_path)
+    if raw_path.startswith("/"):
+        return posixpath.normpath(raw_path)
+    normalized_base = str(base_path or remote_path_picker_default_directory()).strip()
+    if normalized_base.startswith("/"):
+        return posixpath.normpath(posixpath.join(normalized_base, raw_path))
+    if normalized_base == "~" or normalized_base.startswith("~/"):
+        base_tail = "" if normalized_base == "~" else normalized_base[2:]
+        joined_tail = posixpath.normpath(posixpath.join(base_tail, raw_path))
+        return "~" if joined_tail == "." else f"~/{joined_tail}"
+    for home_token in ("$HOME", "${HOME}"):
+        if normalized_base == home_token or normalized_base.startswith(f"{home_token}/"):
+            base_tail = (
+                ""
+                if normalized_base == home_token
+                else normalized_base[len(home_token) + 1 :]
+            )
+            joined_tail = posixpath.normpath(posixpath.join(base_tail, raw_path))
+            return home_token if joined_tail == "." else f"{home_token}/{joined_tail}"
+    return posixpath.normpath(raw_path)
+
+
+def remote_path_picker_parent_path(path_value: str) -> str:
+    """Return the parent directory for a remote picker path."""
+    clean_path = normalize_remote_path_picker_path(path_value).rstrip("/")
+    if clean_path in {"", ".", "~", "$HOME", "${HOME}", "/"}:
+        return clean_path or "."
+    if clean_path.startswith("~/"):
+        tail = clean_path[2:]
+        parent_tail = posixpath.dirname(tail)
+        return "~" if not parent_tail else f"~/{parent_tail}"
+    for home_token in ("$HOME", "${HOME}"):
+        home_prefix = f"{home_token}/"
+        if clean_path.startswith(home_prefix):
+            tail = clean_path[len(home_prefix) :]
+            parent_tail = posixpath.dirname(tail)
+            return home_token if not parent_tail else f"{home_token}/{parent_tail}"
+    parent_path = posixpath.dirname(clean_path)
+    if clean_path.startswith("/") and not parent_path:
+        return "/"
+    return parent_path or "."
+
+
 def path_picker_start_path(value: str = "", mode: str = "folder") -> str:
     """Return the best existing path to seed a folder or file picker."""
-    raw_value = str(value or "").strip() or os.getcwd()
+    if path_picker_uses_remote():
+        return normalize_remote_path_picker_path(value)
+    raw_value = str(value or "").strip() or str(Path.home())
     expanded_value = os.path.expandvars(os.path.expanduser(raw_value))
     candidate = Path(expanded_value)
     if mode == "file" and candidate.is_file():
@@ -1718,10 +1790,212 @@ def path_picker_start_path(value: str = "", mode: str = "folder") -> str:
 
 def path_picker_current_directory(value: str = "", mode: str = "folder") -> str:
     """Return the browsing directory for a folder or file picker value."""
+    if path_picker_uses_remote():
+        normalized_path = normalize_remote_path_picker_path(value)
+        if mode == "file":
+            return remote_path_picker_parent_path(normalized_path)
+        return normalized_path
     selected_path = Path(path_picker_start_path(value, mode))
     if mode == "file" and selected_path.is_file():
         return str(selected_path.parent.resolve())
     return folder_picker_start_directory(str(selected_path))
+
+
+def build_remote_path_picker_listing_command(
+    directory: str, mode: str = "folder", include_dot_folders: bool = False
+) -> str:
+    """Build a remote shell command that lists path picker entries."""
+    picker_mode = "file" if mode == "file" else "folder"
+    include_hidden = "1" if include_dot_folders else "0"
+    safe_path = shlex.quote(directory.strip() or remote_path_picker_default_directory())
+    return textwrap.dedent(f"""
+        raw_target={safe_path}
+        picker_mode={shlex.quote(picker_mode)}
+        include_hidden={include_hidden}
+        case "${{raw_target}}" in
+          "~"|"\$HOME"|"\${{HOME}}") target=${{HOME:-.}} ;;
+          "~/"*) target="${{HOME:-.}}/${{raw_target#*/}}" ;;
+          "\$HOME/"*) target="${{HOME:-.}}/${{raw_target#\$HOME/}}" ;;
+          "\${{HOME}}/"*) target="${{HOME:-.}}/${{raw_target#\$\{{HOME\}}/}}" ;;
+          *) target="${{raw_target}}" ;;
+        esac
+        if [ "${{picker_mode}}" = "file" ] && [ -f "${{target}}" ]; then
+          target=$(dirname "${{target}}")
+        fi
+        if [ ! -d "${{target}}" ]; then
+          target=${{HOME:-.}}
+        fi
+        if [ ! -d "${{target}}" ]; then
+          target=.
+        fi
+        abs_dir=$(cd "${{target}}" && pwd -P) || {{
+          printf '__HHS_PICKER_CWD__\\t%s\\n' .
+          exit 0
+        }}
+        printf '__HHS_PICKER_CWD__\\t%s\\n' "${{abs_dir}}"
+        for entry in "${{abs_dir}}"/* "${{abs_dir}}"/.[!.]* "${{abs_dir}}"/..?*; do
+          [ -e "${{entry}}" ] || continue
+          name=${{entry##*/}}
+          case "${{name}}" in "."|"..") continue ;; esac
+          if [ "${{include_hidden}}" != "1" ]; then
+            case "${{name}}" in .*) continue ;; esac
+          fi
+          if [ -d "${{entry}}" ]; then
+            kind=Dir
+          elif [ -f "${{entry}}" ]; then
+            kind=File
+          else
+            continue
+          fi
+          if [ "${{picker_mode}}" = "folder" ] && [ "${{kind}}" != "Dir" ]; then
+            continue
+          fi
+          printf '__HHS_PICKER_ENTRY__\\t%s\\t%s\\n' "${{kind}}" "${{entry}}"
+        done
+        """).strip()
+
+
+def parse_remote_path_picker_listing(output: str) -> tuple[str, list[tuple[str, str]]]:
+    """Parse remote path picker command output into current dir and entries."""
+    current_directory = ""
+    entries: list[tuple[str, str]] = []
+    for line in strip_ansi(output).splitlines():
+        if line.startswith("__HHS_PICKER_CWD__\t"):
+            current_directory = line.split("\t", 1)[1].strip()
+            continue
+        if not line.startswith("__HHS_PICKER_ENTRY__\t"):
+            continue
+        parts = line.split("\t", 2)
+        if len(parts) == 3 and parts[1] in {"Dir", "File"} and parts[2].strip():
+            entries.append((parts[1], parts[2].strip()))
+    entries.sort(key=lambda item: (item[0] != "Dir", posixpath.basename(item[1]).lower()))
+    return current_directory, entries
+
+
+def clear_folder_picker_listing_cache() -> None:
+    """Clear the dialog-local remote path picker listing cache."""
+    st.session_state.pop("_hhs_folder_picker_listing_cache", None)
+
+
+def folder_picker_listing_cache() -> dict[str, dict[str, object]]:
+    """Return the dialog-local remote path picker listing cache."""
+    cache = st.session_state.get("_hhs_folder_picker_listing_cache")
+    if not isinstance(cache, dict):
+        cache = {}
+        st.session_state["_hhs_folder_picker_listing_cache"] = cache
+    return cache
+
+
+def remote_path_picker_listing_cache_key(
+    directory: str, mode: str = "folder", include_dot_folders: bool = False
+) -> str:
+    """Return the cache key for one remote path picker directory listing."""
+    host = connected_ssh_host()
+    picker_mode = "file" if mode == "file" else "folder"
+    include_hidden = "1" if include_dot_folders else "0"
+    normalized_directory = normalize_remote_path_picker_path(directory)
+    return "\0".join((host, picker_mode, include_hidden, normalized_directory))
+
+
+def cached_remote_path_picker_listing(
+    directory: str, mode: str = "folder", include_dot_folders: bool = False
+) -> tuple[str, list[tuple[str, str]]] | None:
+    """Return a cached remote path picker listing, when available."""
+    cache_key = remote_path_picker_listing_cache_key(
+        directory, mode, include_dot_folders
+    )
+    listing = folder_picker_listing_cache().get(cache_key)
+    if not isinstance(listing, dict):
+        return None
+    current_directory = str(listing.get("current_directory", "")).strip()
+    raw_entries = listing.get("entries", [])
+    if not current_directory or not isinstance(raw_entries, list):
+        return None
+    entries: list[tuple[str, str]] = []
+    for raw_entry in raw_entries:
+        if not isinstance(raw_entry, (list, tuple)) or len(raw_entry) != 2:
+            return None
+        kind = str(raw_entry[0])
+        path = str(raw_entry[1]).strip()
+        if kind not in {"Dir", "File"} or not path:
+            return None
+        entries.append((kind, path))
+    return current_directory, entries
+
+
+def remember_remote_path_picker_listing(
+    requested_directory: str,
+    current_directory: str,
+    entries: list[tuple[str, str]],
+    mode: str = "folder",
+    include_dot_folders: bool = False,
+) -> None:
+    """Cache one remote path picker listing for this open dialog."""
+    clean_current_directory = current_directory.strip() or normalize_remote_path_picker_path(
+        requested_directory
+    )
+    listing = {
+        "current_directory": clean_current_directory,
+        "entries": list(entries),
+    }
+    cache = folder_picker_listing_cache()
+    for directory in {requested_directory, clean_current_directory}:
+        cache[
+            remote_path_picker_listing_cache_key(
+                directory, mode, include_dot_folders
+            )
+        ] = listing
+
+
+def apply_remote_path_picker_listing(
+    current_directory: str, entries: list[tuple[str, str]]
+) -> list[str]:
+    """Apply one remote path picker listing to session state and return paths."""
+    if current_directory:
+        st.session_state["_hhs_folder_picker_current_dir"] = current_directory
+        if path_picker_mode() == "folder":
+            st.session_state["_hhs_folder_picker_current_dir_input"] = current_directory
+    st.session_state["_hhs_folder_picker_path_kinds"] = {
+        path: kind for kind, path in entries
+    }
+    return [path for _kind, path in entries]
+
+
+def remote_path_picker_child_paths(
+    directory: str, mode: str = "folder", include_dot_folders: bool = False
+) -> list[str]:
+    """Return remote child paths for the reusable path picker."""
+    if not connected_ssh_host():
+        return []
+    cached_listing = cached_remote_path_picker_listing(
+        directory, mode, include_dot_folders
+    )
+    if cached_listing is not None:
+        return apply_remote_path_picker_listing(*cached_listing)
+    result = run_bash_command(
+        build_remote_path_picker_listing_command(directory, mode, include_dot_folders),
+        "Loading directories and files...",
+        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        cache_tag="path_picker",
+        show_overlay=False,
+    )
+    if result.returncode != 0:
+        push_floating_status(
+            clean_command_status_message(result.stderr or result.stdout),
+            "error",
+        )
+        current_directory = normalize_remote_path_picker_path(directory)
+        remember_remote_path_picker_listing(
+            directory, current_directory, [], mode, include_dot_folders
+        )
+        apply_remote_path_picker_listing(current_directory, [])
+        return []
+    current_directory, entries = parse_remote_path_picker_listing(result.stdout)
+    remember_remote_path_picker_listing(
+        directory, current_directory, entries, mode, include_dot_folders
+    )
+    return apply_remote_path_picker_listing(current_directory, entries)
 
 
 def folder_picker_child_directories(
@@ -1746,6 +2020,8 @@ def path_picker_child_paths(
     directory: str, mode: str = "folder", include_dot_folders: bool = False
 ) -> list[str]:
     """Return readable child paths for a folder or file picker."""
+    if path_picker_uses_remote():
+        return remote_path_picker_child_paths(directory, mode, include_dot_folders)
     if mode == "folder":
         return folder_picker_child_directories(directory, include_dot_folders)
     current_directory = Path(folder_picker_start_directory(directory))
@@ -1765,12 +2041,16 @@ def path_picker_child_paths(
 
 def folder_picker_label(directory: str) -> str:
     """Return the display label for a folder picker option."""
+    if path_picker_uses_remote():
+        return posixpath.basename(str(directory).rstrip("/")) or str(directory)
     path = Path(directory)
     return path.name or str(path)
 
 
 def path_picker_label(path_value: str) -> str:
     """Return the display label for a folder or file picker option."""
+    if path_picker_uses_remote():
+        return posixpath.basename(str(path_value).rstrip("/")) or str(path_value)
     path = Path(path_value)
     return path.name or str(path)
 
@@ -1792,6 +2072,16 @@ def request_path_picker(
     st.session_state["_hhs_folder_picker_current_dir_input"] = start_path
     st.session_state.setdefault("_hhs_folder_picker_include_dot_folders", False)
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+    st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+    clear_folder_picker_listing_cache()
+    prune_folder_picker_child_selection_widget_keys()
+    if path_picker_uses_remote():
+        child_paths = path_picker_child_paths(
+            start_directory,
+            picker_mode,
+            bool(st.session_state.get("_hhs_folder_picker_include_dot_folders", False)),
+        )
+        sync_folder_picker_child_selection(child_paths)
 
 
 def request_folder_picker(
@@ -1816,6 +2106,9 @@ def close_folder_picker() -> None:
     st.session_state.pop("_hhs_folder_picker_mode", None)
     st.session_state.pop("_hhs_folder_picker_target_key", None)
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+    st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+    clear_folder_picker_listing_cache()
+    prune_folder_picker_child_selection_widget_keys()
 
 
 def selected_folder_picker_path() -> str:
@@ -1824,6 +2117,12 @@ def selected_folder_picker_path() -> str:
         st.session_state.get("_hhs_folder_picker_current_dir_input", "")
     ).strip()
     mode = path_picker_mode()
+    if path_picker_uses_remote():
+        if typed_path:
+            return normalize_remote_path_picker_path(typed_path)
+        return normalize_remote_path_picker_path(
+            str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
+        )
     if typed_path:
         return path_picker_start_path(typed_path, mode)
     return path_picker_start_path(
@@ -1851,21 +2150,93 @@ def apply_pending_folder_picker_selection() -> None:
         st.session_state[target_key] = selected_path
 
 
-def set_folder_picker_current_directory(directory: str) -> None:
+def sync_folder_picker_child_selection(child_paths: list[str]) -> None:
+    """Keep the selected path picker child valid for the loaded child list."""
+    current_selection = str(
+        st.session_state.get("_hhs_folder_picker_selected_dir", "")
+    )
+    if child_paths:
+        if current_selection not in child_paths:
+            st.session_state["_hhs_folder_picker_selected_dir"] = child_paths[0]
+        return
+    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+
+
+def folder_picker_child_selection_widget_key(
+    directory: str, mode: str, include_dot_folders: bool
+) -> str:
+    """Return a directory-scoped widget key for the path picker child combo."""
+    key_material = "\0".join((str(directory), str(mode), str(include_dot_folders)))
+    digest = hashlib.sha1(key_material.encode("utf-8")).hexdigest()[:16]
+    return f"_hhs_folder_picker_selected_dir_widget_{digest}"
+
+
+def prune_folder_picker_child_selection_widget_keys(active_key: str = "") -> None:
+    """Remove stale directory-scoped path picker child combo widget state."""
+    key_prefix = "_hhs_folder_picker_selected_dir_widget_"
+    for key in list(st.session_state.keys()):
+        if str(key).startswith(key_prefix) and key != active_key:
+            st.session_state.pop(key, None)
+
+
+def folder_picker_browsing_directory() -> str:
+    """Return the path picker directory that should be listed now."""
+    current_value = str(
+        st.session_state.get("_hhs_folder_picker_current_dir_input", "")
+    ).strip()
+    if not current_value:
+        current_value = str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
+    return path_picker_current_directory(current_value, path_picker_mode())
+
+
+def refresh_folder_picker_current_children() -> None:
+    """Load and select children for the current path picker directory."""
+    current_directory = folder_picker_browsing_directory()
+    st.session_state["_hhs_folder_picker_current_dir"] = current_directory
+    include_dot_folders = bool(
+        st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
+    )
+    child_paths = path_picker_child_paths(
+        current_directory, path_picker_mode(), include_dot_folders
+    )
+    sync_folder_picker_child_selection(child_paths)
+
+
+def prepare_path_picker_dialog_listing(mode: str) -> None:
+    """Load the current remote picker listing before mounting the dialog."""
+    if not path_picker_uses_remote():
+        return
+    current_directory = folder_picker_browsing_directory()
+    include_dot_folders = bool(
+        st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
+    )
+    child_paths = path_picker_child_paths(current_directory, mode, include_dot_folders)
+    sync_folder_picker_child_selection(child_paths)
+
+
+def set_folder_picker_current_directory(
+    directory: str, load_children: bool = True
+) -> None:
     """Set the folder picker current directory."""
-    selected_directory = folder_picker_start_directory(directory)
+    selected_directory = (
+        normalize_remote_path_picker_path(directory)
+        if path_picker_uses_remote()
+        else folder_picker_start_directory(directory)
+    )
     st.session_state["_hhs_folder_picker_current_dir"] = selected_directory
     st.session_state["_hhs_folder_picker_current_dir_input"] = selected_directory
+    if not load_children:
+        st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+        st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+        prune_folder_picker_child_selection_widget_keys()
+        return
     include_dot_folders = bool(
         st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
     )
     child_directories = path_picker_child_paths(
         selected_directory, path_picker_mode(), include_dot_folders
     )
-    if child_directories:
-        st.session_state["_hhs_folder_picker_selected_dir"] = child_directories[0]
-    else:
-        st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+    sync_folder_picker_child_selection(child_directories)
 
 
 def apply_folder_picker_typed_directory() -> None:
@@ -1874,6 +2245,19 @@ def apply_folder_picker_typed_directory() -> None:
     mode = path_picker_mode()
     if mode == "folder":
         set_folder_picker_current_directory(typed_path)
+        return
+    if path_picker_uses_remote():
+        selected_path = normalize_remote_path_picker_path(typed_path)
+        current_directory = path_picker_current_directory(selected_path, mode)
+        st.session_state["_hhs_folder_picker_current_dir"] = current_directory
+        st.session_state["_hhs_folder_picker_current_dir_input"] = selected_path
+        include_dot_folders = bool(
+            st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
+        )
+        child_paths = path_picker_child_paths(
+            current_directory, mode, include_dot_folders
+        )
+        sync_folder_picker_child_selection(child_paths)
         return
     selected_path = path_picker_start_path(typed_path, mode)
     current_directory = path_picker_current_directory(selected_path, mode)
@@ -1885,14 +2269,20 @@ def apply_folder_picker_typed_directory() -> None:
     child_directories = path_picker_child_paths(
         current_directory, mode, include_dot_folders
     )
-    if child_directories:
-        st.session_state["_hhs_folder_picker_selected_dir"] = child_directories[0]
-    else:
-        st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+    clear_preloader()
+    sync_folder_picker_child_selection(child_directories)
 
 
 def open_folder_picker_parent() -> None:
     """Move the folder picker to the parent directory."""
+    if path_picker_uses_remote():
+        current_directory = normalize_remote_path_picker_path(
+            str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
+        )
+        set_folder_picker_current_directory(
+            remote_path_picker_parent_path(current_directory),
+        )
+        return
     current_directory = Path(
         folder_picker_start_directory(
             str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
@@ -1905,6 +2295,16 @@ def open_folder_picker_selected_directory() -> None:
     """Move the path picker into the selected child or select a child file."""
     selected_path = str(st.session_state.get("_hhs_folder_picker_selected_dir", ""))
     if not selected_path:
+        return
+    if path_picker_uses_remote():
+        path_kinds = st.session_state.get("_hhs_folder_picker_path_kinds", {})
+        selected_kind = (
+            path_kinds.get(selected_path) if isinstance(path_kinds, dict) else ""
+        )
+        if path_picker_mode() == "file" and selected_kind == "File":
+            st.session_state["_hhs_folder_picker_current_dir_input"] = selected_path
+            return
+        set_folder_picker_current_directory(selected_path)
         return
     selected_entry = Path(selected_path)
     if path_picker_mode() == "file" and selected_entry.is_file():
@@ -1942,87 +2342,430 @@ def render_path_picker_dialog() -> bool:
     if not st.session_state.get("_hhs_folder_picker_open"):
         return False
 
+    mode = path_picker_mode()
+    selected_label = "Selected file" if mode == "file" else "Selected folder"
+    option_label = "Files" if mode == "file" else "Folders"
+    empty_caption = "No files or folders." if mode == "file" else "No child folders."
+    prepare_path_picker_dialog_listing(mode)
+
     def render_body() -> None:
         """Render the visual path picker controls."""
-        mode = path_picker_mode()
-        selected_label = "Selected file" if mode == "file" else "Selected folder"
-        option_label = "Files" if mode == "file" else "Folders"
-        empty_caption = (
-            "No files or folders." if mode == "file" else "No child folders."
-        )
-        current_directory = folder_picker_start_directory(
-            str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
-        )
-        st.text_input(
-            selected_label,
-            key="_hhs_folder_picker_current_dir_input",
-            on_change=apply_folder_picker_typed_directory,
-        )
+        current_directory = folder_picker_browsing_directory()
+        st.session_state["_hhs_folder_picker_current_dir"] = current_directory
         include_dot_folders = bool(
             st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
         )
         child_directories = path_picker_child_paths(
             current_directory, mode, include_dot_folders
         )
-        selected_directory = st.session_state.get("_hhs_folder_picker_selected_dir")
-        if selected_directory not in child_directories:
-            st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+        sync_folder_picker_child_selection(child_directories)
+        clear_preloader()
+        st.text_input(
+            selected_label,
+            key="_hhs_folder_picker_current_dir_input",
+            on_change=apply_folder_picker_typed_directory,
+        )
+        selected_widget_key = folder_picker_child_selection_widget_key(
+            current_directory, mode, include_dot_folders
+        )
+        prune_folder_picker_child_selection_widget_keys(selected_widget_key)
+        selected_directory = str(
+            st.session_state.get("_hhs_folder_picker_selected_dir", "")
+        )
         if child_directories:
-            st.selectbox(
-                option_label,
-                child_directories,
-                key="_hhs_folder_picker_selected_dir",
-                format_func=path_picker_label,
-            )
+            if selected_directory not in child_directories:
+                selected_directory = child_directories[0]
+            if st.session_state.get(selected_widget_key) not in child_directories:
+                st.session_state[selected_widget_key] = selected_directory
         else:
-            st.caption(empty_caption)
+            st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+            st.session_state.pop(selected_widget_key, None)
+        selectbox_kwargs: dict[str, object] = {
+            "key": selected_widget_key,
+            "format_func": path_picker_label,
+            "placeholder": empty_caption,
+            "disabled": not bool(child_directories),
+        }
+        if not child_directories:
+            selectbox_kwargs["index"] = None
+        selected_directory = st.selectbox(
+            option_label,
+            child_directories,
+            **selectbox_kwargs,
+        )
+        if selected_directory:
+            st.session_state["_hhs_folder_picker_selected_dir"] = selected_directory
         st.checkbox(
             "Include .dot-folders",
             key="_hhs_folder_picker_include_dot_folders",
             value=False,
+            on_change=refresh_folder_picker_current_children,
         )
         with st.container(key="folder_picker_action_grid"):
-            st.button(
-                "",
-                key="folder_picker_parent_button",
-                help="Parent",
-                on_click=open_folder_picker_parent,
-                width="stretch",
+            (
+                _left_spacer,
+                parent_column,
+                open_column,
+                select_column,
+                cancel_column,
+                _right_spacer,
+            ) = st.columns(
+                [1.0, 0.12, 0.12, 0.12, 0.12, 1.0],
+                gap="small",
+                vertical_alignment="center",
             )
-            st.button(
-                "",
-                key="folder_picker_open_button",
-                help="Open",
-                disabled=not bool(child_directories),
-                on_click=open_folder_picker_selected_directory,
-                width="stretch",
-            )
-            st.button(
-                "﬌",
-                key="folder_picker_select_button",
-                help="Select",
-                on_click=apply_folder_picker_selection_and_dismiss,
-                width="stretch",
-            )
-            st.button(
-                "ﰸ",
-                key="folder_picker_cancel_button",
-                help="Cancel",
-                on_click=cancel_folder_picker_and_dismiss,
-                width="stretch",
-            )
+            with parent_column:
+                st.button(
+                    "",
+                    key="folder_picker_parent_button",
+                    help="Parent",
+                    on_click=open_folder_picker_parent,
+                    width="content",
+                )
+            with open_column:
+                st.button(
+                    "",
+                    key="folder_picker_open_button",
+                    help="Open",
+                    disabled=not bool(child_directories),
+                    on_click=open_folder_picker_selected_directory,
+                    width="content",
+                )
+            with select_column:
+                st.button(
+                    "﬌",
+                    key="folder_picker_select_button",
+                    help="Select",
+                    on_click=apply_folder_picker_selection_and_dismiss,
+                    width="content",
+                )
+            with cancel_column:
+                st.button(
+                    "ﰸ",
+                    key="folder_picker_cancel_button",
+                    help="Cancel",
+                    on_click=cancel_folder_picker_and_dismiss,
+                    width="content",
+                )
 
-    return pop_dialog(
+    dialog_rendered = pop_dialog(
         title="Select file" if path_picker_mode() == "file" else "Select folder",
         body=render_body,
         buttons=(),
         close_callback=close_folder_picker,
     )
+    clear_preloader()
+    return dialog_rendered
 
 
 def render_folder_picker_dialog() -> bool:
     """Render the reusable path picker dialog when requested."""
     return render_path_picker_dialog()
+
+
+def render_path_picker_open_preloader_script() -> None:
+    """Attach a browser-side preloader to remote path picker open buttons."""
+    timeout_seconds = int(hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS)
+    remote_picker_enabled = "true" if connected_ssh_host() else "false"
+    components.html(
+        f"""
+        <script>
+          (() => {{
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            if (parentWindow.__hhsPathPickerOpenPreloaderCleanup) {{
+              parentWindow.__hhsPathPickerOpenPreloaderCleanup();
+            }}
+            const enabled = {remote_picker_enabled};
+            const buttonSelector = [
+              '[class*="st-key-"][class*="_folder_picker_button"] button',
+              ".st-key-folder_picker_open_button button",
+              ".st-key-folder_picker_parent_button button",
+            ].join(", ");
+            const timeoutSeconds = {timeout_seconds};
+            const clearOverlayTimers = () => {{
+              if (parentWindow.__hhsCommandOverlayTimer) {{
+                parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
+                parentWindow.__hhsCommandOverlayTimer = null;
+              }}
+              if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
+                parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
+                parentWindow.__hhsCommandOverlayExpiryTimer = null;
+              }}
+            }};
+            const renderElapsed = (overlay, startedAt) => {{
+              const node = overlay.querySelector(".hhs-tab-loader-elapsed");
+              if (!node) {{
+                return;
+              }}
+              const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+              const elapsedRatio = elapsedSeconds / Math.max(1, timeoutSeconds);
+              const minutes = Math.floor(elapsedSeconds / 60);
+              const seconds = String(elapsedSeconds % 60).padStart(2, "0");
+              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
+              node.classList.toggle("hhs-loader-elapsed-warning", elapsedRatio >= 0.3 && elapsedRatio < 0.6);
+              node.classList.toggle("hhs-loader-elapsed-danger", elapsedRatio >= 0.6);
+            }};
+            const showOverlay = () => {{
+              clearOverlayTimers();
+              const createdAt = Date.now();
+              const overlayToken = `path-picker-${{createdAt}}`;
+              parentWindow.__hhsCommandOverlayToken = overlayToken;
+              doc.body.dataset.hhsCommandOverlayHidden = "false";
+              const existing = doc.getElementById("hhs-command-overlay");
+              if (existing) {{
+                existing.remove();
+              }}
+              const overlay = doc.createElement("div");
+              overlay.id = "hhs-command-overlay";
+              overlay.className = "hhs-tab-loader hhs-tab-loader-transient";
+              overlay.dataset.hhsOverlayToken = overlayToken;
+              overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
+              overlay.style.position = "fixed";
+              overlay.style.inset = "0";
+              overlay.style.width = "100vw";
+              overlay.style.height = "100dvh";
+              overlay.style.display = "flex";
+              overlay.style.alignItems = "center";
+              overlay.style.justifyContent = "center";
+              overlay.style.zIndex = "1000010";
+              overlay.innerHTML = `
+                <div class="hhs-tab-loader-panel">
+                  <span class="hhs-tab-loader-spinner"></span>
+                  <span class="hhs-tab-loader-copy">
+                    <span class="hhs-tab-loader-label">Loading directories and files...</span>
+                    <span class="hhs-tab-loader-elapsed" data-timeout-seconds="${{timeoutSeconds}}">
+                      time elapsed: 0m:00s
+                    </span>
+                  </span>
+                </div>
+              `;
+              doc.body.appendChild(overlay);
+              renderElapsed(overlay, createdAt);
+              parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(
+                () => renderElapsed(overlay, createdAt),
+                1000
+              );
+              parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout(
+                () => {{
+                  const current = doc.getElementById("hhs-command-overlay");
+                  if (current && current.dataset.hhsOverlayToken === overlayToken) {{
+                    current.remove();
+                    doc.body.dataset.hhsCommandOverlayHidden = "true";
+                  }}
+                  clearOverlayTimers();
+                }},
+                Math.max(1, timeoutSeconds + 2) * 1000
+              );
+            }};
+            const onClick = (event) => {{
+              if (!enabled || !event.target) {{
+                return;
+              }}
+              const button = event.target.closest(buttonSelector);
+              if (!button || button.disabled || button.getAttribute("aria-disabled") === "true") {{
+                return;
+              }}
+              showOverlay();
+            }};
+            doc.addEventListener("click", onClick, true);
+            parentWindow.__hhsPathPickerOpenPreloaderCleanup = () => {{
+              doc.removeEventListener("click", onClick, true);
+            }};
+          }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def render_combobox_vt100_shortcuts_script() -> None:
+    """Attach readline-style keyboard shortcuts to editable combobox inputs."""
+    components.html(
+        """
+        <script>
+          (() => {
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            if (parentWindow.__hhsComboboxVt100Cleanup) {
+              parentWindow.__hhsComboboxVt100Cleanup();
+            }
+            const isEditableComboboxInput = (node) => {
+              if (!node || typeof node.closest !== "function") {
+                return false;
+              }
+              const tagName = String(node.tagName || "").toLowerCase();
+              if (tagName !== "input" && tagName !== "textarea") {
+                return false;
+              }
+              if (node.disabled || node.readOnly) {
+                return false;
+              }
+              return Boolean(
+                node.closest('[data-baseweb="select"]') ||
+                node.closest('[role="combobox"]') ||
+                String(node.getAttribute("role") || "").toLowerCase() === "combobox"
+              );
+            };
+            const setNativeValue = (node, value) => {
+              const prototype = Object.getPrototypeOf(node);
+              const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+              if (descriptor && descriptor.set) {
+                descriptor.set.call(node, value);
+                return;
+              }
+              node.value = value;
+            };
+            const dispatchInputEvent = (node, inputType, data = null) => {
+              let inputEvent = null;
+              try {
+                inputEvent = new InputEvent("input", {
+                  bubbles: true,
+                  inputType,
+                  data,
+                });
+              } catch (error) {
+                inputEvent = new Event("input", { bubbles: true });
+              }
+              node.dispatchEvent(inputEvent);
+            };
+            const selectionState = (node) => {
+              const value = String(node.value || "");
+              const fallback = value.length;
+              const rawStart = Number.isInteger(node.selectionStart)
+                ? node.selectionStart
+                : fallback;
+              const rawEnd = Number.isInteger(node.selectionEnd)
+                ? node.selectionEnd
+                : rawStart;
+              const start = Math.max(0, Math.min(rawStart, value.length));
+              const end = Math.max(start, Math.min(rawEnd, value.length));
+              return { value, start, end };
+            };
+            const setCaret = (
+              node,
+              position,
+              length = String(node.value || "").length
+            ) => {
+              if (typeof node.setSelectionRange !== "function") {
+                return;
+              }
+              const cursor = Math.max(0, Math.min(position, length));
+              node.setSelectionRange(cursor, cursor);
+            };
+            const replaceRange = (node, start, end, replacement, inputType) => {
+              const state = selectionState(node);
+              const boundedStart = Math.max(0, Math.min(start, state.value.length));
+              const boundedEnd = Math.max(boundedStart, Math.min(end, state.value.length));
+              const nextValue =
+                state.value.slice(0, boundedStart) +
+                replacement +
+                state.value.slice(boundedEnd);
+              setNativeValue(node, nextValue);
+              setCaret(node, boundedStart + replacement.length, nextValue.length);
+              dispatchInputEvent(node, inputType, replacement || null);
+            };
+            const previousWordStart = (value, start) => {
+              let index = Math.max(0, Math.min(start, value.length));
+              while (index > 0 && /\s/.test(value.charAt(index - 1))) {
+                index -= 1;
+              }
+              while (index > 0 && !/\s/.test(value.charAt(index - 1))) {
+                index -= 1;
+              }
+              return index;
+            };
+            const onKeydown = (event) => {
+              if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+                return;
+              }
+              const node = event.target;
+              if (!isEditableComboboxInput(node)) {
+                return;
+              }
+              const key = String(event.key || "").toLowerCase();
+              const state = selectionState(node);
+              const hasSelection = state.start !== state.end;
+              let handled = true;
+              switch (key) {
+                case "a":
+                  setCaret(node, 0, state.value.length);
+                  break;
+                case "e":
+                  setCaret(node, state.value.length, state.value.length);
+                  break;
+                case "b":
+                  setCaret(node, Math.max(0, state.start - 1), state.value.length);
+                  break;
+                case "f":
+                  setCaret(
+                    node,
+                    Math.min(state.value.length, state.end + 1),
+                    state.value.length
+                  );
+                  break;
+                case "d":
+                  if (hasSelection) {
+                    replaceRange(node, state.start, state.end, "", "deleteContentForward");
+                  } else if (state.start < state.value.length) {
+                    replaceRange(node, state.start, state.start + 1, "", "deleteContentForward");
+                  }
+                  break;
+                case "h":
+                  if (hasSelection) {
+                    replaceRange(node, state.start, state.end, "", "deleteContentBackward");
+                  } else if (state.start > 0) {
+                    replaceRange(node, state.start - 1, state.start, "", "deleteContentBackward");
+                  }
+                  break;
+                case "k":
+                  if (state.start < state.value.length) {
+                    replaceRange(node, state.start, state.value.length, "", "deleteContentForward");
+                  }
+                  break;
+                case "u":
+                  if (hasSelection) {
+                    replaceRange(node, state.start, state.end, "", "deleteContentBackward");
+                  } else if (state.start > 0) {
+                    replaceRange(node, 0, state.start, "", "deleteContentBackward");
+                  }
+                  break;
+                case "w":
+                  if (hasSelection) {
+                    replaceRange(node, state.start, state.end, "", "deleteContentBackward");
+                  } else if (state.start > 0) {
+                    replaceRange(
+                      node,
+                      previousWordStart(state.value, state.start),
+                      state.start,
+                      "",
+                      "deleteWordBackward"
+                    );
+                  }
+                  break;
+                default:
+                  handled = false;
+              }
+              if (!handled) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              if (typeof event.stopImmediatePropagation === "function") {
+                event.stopImmediatePropagation();
+              }
+            };
+            doc.addEventListener("keydown", onKeydown, true);
+            parentWindow.__hhsComboboxVt100Cleanup = () => {
+              doc.removeEventListener("keydown", onKeydown, true);
+            };
+          })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def homesetup_version(refresh_cache: bool = False) -> str:
@@ -6601,6 +7344,7 @@ def restore_registered_ssh_connection_on_session_start() -> None:
     st.session_state["ssh_connection_error"] = ""
     reset_updater_remote_check_state()
     update_remote_footer_working_directory()
+    reset_search_directory_to_home()
     save_ui_state()
 
 
@@ -6686,6 +7430,7 @@ def clear_disconnected_ssh_host(host: str) -> None:
     st.session_state["ssh_host_selector"] = local_hostname()
     st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""
     st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
+    queue_search_directory_home_reset()
     clear_registered_ssh_connection()
     cache_clear()
     save_ui_state()
@@ -6884,7 +7629,8 @@ def remote_command_motd_line_is_boundary(line: str) -> bool:
 def strip_remote_command_motd_block(value: str) -> str:
     """Return remote command output after the leading HomeSetup MOTD block."""
     lines = value.splitlines(keepends=True)
-    for index, line in enumerate(lines[:20]):
+    scan_line_limit = 80
+    for index, line in enumerate(lines[:scan_line_limit]):
         if not remote_command_motd_line_is_boundary(line):
             continue
         remaining_lines = lines[index + 1 :]
@@ -7058,6 +7804,7 @@ def complete_ssh_connection() -> bool:
         st.session_state["ssh_connection_dialog_title"] = ""
         reset_updater_remote_check_state()
         update_remote_footer_working_directory()
+        reset_search_directory_to_home()
         restore_terminal_document_view(was_terminal_active)
         push_floating_status(
             f"Connected to remote  {ssh_connection_display(host)}",
@@ -7093,6 +7840,7 @@ def clear_completed_ssh_disconnection(
     st.session_state["ssh_host_selector"] = local_hostname()
     st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""
     st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
+    reset_search_directory_to_home()
     clear_registered_ssh_connection()
     cache_clear()
     if result.returncode == 124:
@@ -13425,7 +14173,7 @@ def build_hhs_search_modified_results_command(search_command: str) -> str:
     return (
         f"{search_command} | while IFS= read -r line; do "
         'case "${line}" in '
-        '""|Searching\\ for*) printf "%s\\n" "${line}" ;; '
+        '""|Searching\\ for*) ;; '
         "*) "
         'if [ -e "${line}" ]; then '
         'if modified=$(stat -c %Y "${line}" 2>/dev/null); then :; '
@@ -13439,6 +14187,20 @@ def build_hhs_search_modified_results_command(search_command: str) -> str:
         "esac; "
         "done"
     )
+
+
+def shell_home_path_argument(path_value: str) -> str:
+    """Return a shell-safe path argument, expanding home tokens on the target host."""
+    clean_path = path_value.strip() or "."
+    if clean_path in {"~", "$HOME", "${HOME}"}:
+        return '"${HOME:-.}"'
+    for home_prefix in ("~/", "$HOME/", "${HOME}/"):
+        if clean_path.startswith(home_prefix):
+            suffix = clean_path[len(home_prefix) :]
+            if not suffix:
+                return '"${HOME:-.}"'
+            return f'"${{HOME:-.}}"/{shlex.quote(suffix)}'
+    return shlex.quote(clean_path)
 
 
 def normalized_search_option_values(
@@ -13479,7 +14241,7 @@ def build_hhs_search_command(
 ) -> str:
     """Build the HomeSetup search command for the selected Search type."""
     setup_command = build_hhs_search_setup_command()
-    search_root = shlex.quote(search_path.strip() or ".")
+    search_root = shell_home_path_argument(search_path)
     safe_query = shlex.quote(query.strip())
     if search_type == "Folders":
         safe_glob = shlex.quote(search_glob_from_query(query))
@@ -13586,6 +14348,12 @@ def search_full_path(path: str, search_path: str) -> str:
     return posixpath.normpath(posixpath.join(clean_search_path, clean_path))
 
 
+def search_output_line_is_status(line: str) -> bool:
+    """Return whether one Search output line is helper or UI status text."""
+    clean_line = re.sub(r"\s+", " ", strip_ansi(line)).strip()
+    return clean_line.startswith("Searching for")
+
+
 def parse_hhs_search_results(
     output: str, search_type: str, search_path: str
 ) -> list[dict[str, str]]:
@@ -13594,7 +14362,7 @@ def parse_hhs_search_results(
     result_type = "Folder" if search_type == "Folders" else search_type.rstrip("s")
     for line in strip_ansi(output).splitlines():
         clean_line = line.strip()
-        if not clean_line or clean_line.startswith("Searching for "):
+        if not clean_line or search_output_line_is_status(clean_line):
             continue
         row = {
             "Type": result_type,
@@ -13609,6 +14377,8 @@ def parse_hhs_search_results(
         if clean_line.startswith("__HHS_SEARCH_RESULT__\t"):
             parts = clean_line.split("\t", 3)
             if len(parts) >= 3:
+                if search_output_line_is_status(parts[1]):
+                    continue
                 row["Path"] = search_relative_path(parts[1], search_path)
                 row["FullPath"] = search_full_path(parts[1], search_path)
                 row["Modified"] = ssh_explorer_mtime_text(parts[2])
@@ -13988,6 +14758,126 @@ def clean_search_term_value(value: object) -> str:
     return "" if clean_value == "None" else clean_value
 
 
+def path_variable_names(path_value: str) -> list[str]:
+    """Return shell variable names referenced by a path-like value."""
+    names = set(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", path_value))
+    names.update(re.findall(r"\$([A-Za-z_][A-Za-z0-9_]*)", path_value))
+    return sorted(names)
+
+
+def expand_path_with_environment(
+    path_value: str, environment_values: dict[str, str]
+) -> str:
+    """Expand tilde and shell variables in a path-like value."""
+    expanded_path = path_value.strip()
+    home_directory = environment_values.get("HOME", "")
+    if expanded_path == "~":
+        expanded_path = home_directory or expanded_path
+    elif expanded_path.startswith("~/") and home_directory:
+        expanded_path = f"{home_directory}/{expanded_path[2:]}"
+
+    def replace_variable(match: re.Match[str]) -> str:
+        """Return the environment value for one matched variable token."""
+        name = match.group(1) or match.group(2)
+        return environment_values.get(name, match.group(0))
+
+    expanded_path = re.sub(
+        r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)",
+        replace_variable,
+        expanded_path,
+    )
+    if expanded_path.startswith("/"):
+        return posixpath.normpath(expanded_path)
+    return expanded_path
+
+
+def build_remote_environment_values_command(variable_names: list[str]) -> str:
+    """Build a shell command that prints selected remote environment values."""
+    safe_names = [
+        name for name in variable_names if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
+    ]
+    commands = ['printf "__HHS_UI_ENV__\\n"']
+    for name in safe_names:
+        commands.append(f'printf "%s\\t%s\\n" {shlex.quote(name)} "${{{name}-}}"')
+    return "; ".join(commands)
+
+
+def parse_remote_environment_values(output: str) -> dict[str, str]:
+    """Parse marked remote environment output into name/value pairs."""
+    clean_output = strip_ansi(output or "").replace("\r", "")
+    marker = "__HHS_UI_ENV__"
+    marker_index = clean_output.rfind(marker)
+    if marker_index < 0:
+        return {}
+    values: dict[str, str] = {}
+    for line in clean_output[marker_index + len(marker) :].splitlines():
+        if "\t" not in line:
+            continue
+        name, value = line.split("\t", 1)
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            values[name] = value
+    return values
+
+
+def remote_environment_values(variable_names: list[str]) -> dict[str, str]:
+    """Return selected environment values from the connected SSH host."""
+    host = connected_ssh_host()
+    if not host:
+        return {}
+    safe_names = sorted(
+        {
+            name
+            for name in variable_names
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
+        }
+    )
+    if not safe_names:
+        return {}
+    cache_key = f"_hhs_remote_environment_values:{host}:{','.join(safe_names)}"
+    cached_values = st.session_state.get(cache_key)
+    if isinstance(cached_values, dict):
+        return {str(name): str(value) for name, value in cached_values.items()}
+    result = run_bash_command(
+        build_remote_environment_values_command(safe_names),
+        "Resolving remote environment...",
+        timeout_seconds=10,
+        cache_tag="system",
+        show_overlay=False,
+    )
+    values = parse_remote_environment_values(result.stdout if result.returncode == 0 else "")
+    st.session_state[cache_key] = values
+    return values
+
+
+def expand_path_for_active_host(path_value: str) -> str:
+    """Expand path variables against the active local or SSH host."""
+    clean_path = path_value.strip()
+    if not connected_ssh_host():
+        expanded_path = os.path.expandvars(os.path.expanduser(clean_path))
+        return posixpath.normpath(expanded_path) if expanded_path.startswith("/") else expanded_path
+    variable_names = path_variable_names(clean_path)
+    if clean_path == "~" or clean_path.startswith("~/") or "HOME" in variable_names:
+        variable_names.append("HOME")
+    environment_values = remote_environment_values(variable_names)
+    return expand_path_with_environment(clean_path, environment_values)
+
+
+def default_search_directory() -> str:
+    """Return the expanded default directory for Search controls."""
+    if connected_ssh_host():
+        expanded_home = expand_path_for_active_host("$HOME")
+        if "$" not in expanded_home and expanded_home:
+            return expanded_home
+        return footer_working_directory() or "."
+    return str(Path.home().resolve())
+
+
+def search_host_context() -> str:
+    """Return the active execution host context key for Search state."""
+    host = connected_ssh_host()
+    return f"ssh:{host}" if host else "local"
+
+
 def normalize_recent_search_values(
     values: object,
     current_value: object = "",
@@ -14031,8 +14921,11 @@ def normalize_search_terms(terms: object, current_term: str = "") -> list[str]:
 
 def remember_search_directory(search_path: object) -> str:
     """Store one Search directory in recent history and return its clean value."""
+    clean_path = clean_recent_search_value(search_path)
     clean_path = (
-        clean_recent_search_value(search_path) or footer_working_directory() or "."
+        expand_path_for_active_host(clean_path)
+        if clean_path
+        else default_search_directory()
     )
     st.session_state["search_path"] = clean_path
     st.session_state["search_directories"] = normalize_search_directories(
@@ -14042,14 +14935,58 @@ def remember_search_directory(search_path: object) -> str:
     return clean_path
 
 
+def reset_search_directory_to_home(clear_results: bool = True) -> str:
+    """Reset the Search directory state to the active host home directory."""
+    search_path = remember_search_directory(default_search_directory())
+    st.session_state["_hhs_search_home_context"] = search_host_context()
+    if clear_results:
+        st.session_state["search_result_path"] = search_path
+        st.session_state["search_result_query"] = ""
+        st.session_state["search_visible_count"] = hhs_ui_constants.SEARCH_PAGE_SIZE
+    return search_path
+
+
+def queue_search_directory_home_reset(clear_results: bool = True) -> None:
+    """Queue a Search directory reset for the next pre-widget render phase."""
+    st.session_state["_hhs_search_directory_home_reset_pending"] = True
+    st.session_state["_hhs_search_directory_home_reset_clear_results"] = bool(
+        clear_results
+    )
+
+
+def apply_pending_search_directory_home_reset() -> None:
+    """Apply a queued Search directory reset before Search widgets render."""
+    if not st.session_state.pop("_hhs_search_directory_home_reset_pending", False):
+        st.session_state.pop("_hhs_search_directory_home_reset_clear_results", None)
+        return
+    clear_results = bool(
+        st.session_state.pop(
+            "_hhs_search_directory_home_reset_clear_results",
+            True,
+        )
+    )
+    reset_search_directory_to_home(clear_results=clear_results)
+
+
+def initialize_search_directory_home_default() -> None:
+    """Ensure Search starts at home for the current host context."""
+    current_context = search_host_context()
+    search_context = str(st.session_state.get("_hhs_search_home_context", ""))
+    if search_context != current_context:
+        reset_search_directory_to_home()
+        return
+    if not clean_recent_search_value(st.session_state.get("search_path", "")):
+        reset_search_directory_to_home()
+
+
 def search_directory_options() -> list[str]:
     """Return Search directory select options including the current value."""
     remember_search_directory(st.session_state.get("search_path", ""))
     return list(st.session_state.get("search_directories", []))
 
 
-def handle_search_directory_change() -> None:
-    """Persist the selected Search directory and update recent directories."""
+def apply_search_directory_change() -> None:
+    """Persist Search directory changes without submitting a Search."""
     remember_search_directory(st.session_state.get("search_path", ""))
     save_ui_state()
 
@@ -14115,14 +15052,14 @@ def submit_search_query() -> None:
     """Persist the Search form values that should be executed."""
     query = clean_search_term_value(st.session_state.get("search_query", ""))
     search_path = clean_recent_search_value(st.session_state.get("search_path", ""))
+    if not search_path:
+        search_path = default_search_directory()
+    search_path = remember_search_directory(search_path)
     if not query:
         st.session_state["search_result_query"] = ""
         push_floating_status("Enter a search query before searching.", "warn")
         return
     query = remember_search_term(query)
-    if not search_path:
-        search_path = footer_working_directory() or "."
-    search_path = remember_search_directory(search_path)
     search_type = normalized_search_type(st.session_state.get("search_type"))
     st.session_state["search_result_type"] = search_type
     st.session_state["search_result_path"] = search_path
@@ -14170,7 +15107,8 @@ def render_search_controls() -> None:
                 "Search directory",
                 options=search_directory_options(),
                 key="search_path",
-                on_change=handle_search_directory_change,
+                accept_new_options=True,
+                on_change=apply_search_directory_change,
                 width="stretch",
             )
         with picker_column:
@@ -14239,14 +15177,22 @@ def render_search_submit_preloader_script() -> None:
               }}
             }};
             const searchValue = (selector) => {{
-              const node = doc.querySelector(selector);
-              if (!node) {{
-                return "";
+              const nodes = Array.from(doc.querySelectorAll(selector));
+              for (const node of nodes) {{
+                if ("value" in node) {{
+                  const value = String(node.value || "").trim();
+                  if (value) {{
+                    return value;
+                  }}
+                }}
               }}
-              if ("value" in node) {{
-                return String(node.value || "").trim();
+              for (const node of nodes) {{
+                const value = String(node.textContent || "").trim();
+                if (value) {{
+                  return value;
+                }}
               }}
-              return String(node.textContent || "").trim();
+              return "";
             }};
             const renderElapsed = (overlay, startedAt) => {{
               const node = overlay.querySelector(".hhs-tab-loader-elapsed");
@@ -14286,7 +15232,7 @@ def render_search_submit_preloader_script() -> None:
               overlay.style.display = "flex";
               overlay.style.alignItems = "center";
               overlay.style.justifyContent = "center";
-              overlay.style.zIndex = "999999";
+              overlay.style.zIndex = "1000010";
               overlay.innerHTML = `
                 <div class="hhs-tab-loader-panel">
                   <span class="hhs-tab-loader-spinner"></span>
@@ -14359,7 +15305,6 @@ def render_search_submit_preloader_script() -> None:
             parentWindow.__hhsSearchSubmitPreloaderCleanup = () => {{
               doc.removeEventListener("click", onClick, true);
               doc.removeEventListener("keydown", onKeydown, true);
-              clearPendingSearchOverlay();
             }};
           }})();
         </script>
@@ -15118,6 +16063,7 @@ def main() -> None:
     handle_footer_actions()
     render_background_job_status(UPDATER_UPDATE_JOB)
     render_footer_shell_version_dialog()
+    apply_pending_search_directory_home_reset()
     st.session_state.setdefault("home_view", "System")
     if st.session_state["home_view"] not in hhs_ui.HOME_VIEWS:
         st.session_state["home_view"] = "System"
@@ -15147,9 +16093,7 @@ def main() -> None:
     st.session_state["search_type"] = normalized_search_type(
         st.session_state.get("search_type")
     )
-    st.session_state.setdefault("search_path", footer_working_directory())
-    if not str(st.session_state.get("search_path", "")).strip():
-        st.session_state["search_path"] = footer_working_directory() or "."
+    initialize_search_directory_home_default()
     st.session_state.setdefault("search_directories", [])
     st.session_state["search_directories"] = normalize_search_directories(
         st.session_state.get("search_directories", []),
@@ -15252,9 +16196,11 @@ def main() -> None:
     apply_pending_folder_picker_selection()
     render_sidebar()
     render_main_view()
-    render_folder_picker_dialog()
+    render_combobox_vt100_shortcuts_script()
+    render_path_picker_open_preloader_script()
     render_footer()
     render_floating_status()
+    render_folder_picker_dialog()
     render_browser_cleanup_script()
 
 

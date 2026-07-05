@@ -392,6 +392,23 @@ setup() {
   run grep -q 'def clear_disconnected_ssh_host' "${ui_file}"
   assert_success
 
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+clear_body = source.split("def clear_disconnected_ssh_host", 1)[1].split("\ndef ", 1)[0]
+assert "queue_search_directory_home_reset()" in clear_body
+assert "reset_search_directory_to_home()" not in clear_body
+assert "def apply_pending_search_directory_home_reset" in source
+main_body = source.split("def main(", 1)[1].split('\n\nif __name__ == "__main__":', 1)[0]
+pending_reset_index = main_body.index("apply_pending_search_directory_home_reset()")
+initialize_search_index = main_body.index("initialize_search_directory_home_default()")
+render_main_index = main_body.index("render_main_view()")
+assert pending_reset_index < initialize_search_index < render_main_index
+PY
+  assert_success
+
   run grep -q 'handle_remote_command_result(remote_host, result)' "${ui_file}"
   assert_success
 
@@ -420,6 +437,7 @@ setup() {
 @test "when remote commands print HomeSetup startup chatter then command output should be sanitized" {
   run python3 - "${ui_file}" <<'PY'
 import re
+import os
 import subprocess
 import sys
 from functools import lru_cache
@@ -438,14 +456,39 @@ namespace = {
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
 motd_fragments = namespace["homesetup_motd_fragment_groups"]()[0]
-rendered_motd = f"[Linux-ubuntu/bash] {' root '.join(motd_fragments)} v1.9.19 "
+hhs_version = os.environ.get("HHS_VERSION") or Path(".VERSION").read_text(encoding="utf-8").strip()
+rendered_motd = f"[Linux-ubuntu/bash] {' root '.join(motd_fragments)} v{hhs_version} "
 assert namespace["remote_command_motd_line_is_boundary"](
     rendered_motd
 )
+ubuntu_motd = """Welcome to Ubuntu 24.04.4 LTS (GNU/Linux 6.8.0-134-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Sun Jul  5 01:47:39 -03 2026
+
+  System load:  0.02               Processes:             128
+  Usage of /:   35.4% of 32.86GB   Users logged in:       0
+  Memory usage: 48%                IPv4 address for eth0: 167.99.120.81
+  Swap usage:   43%                IPv4 address for eth0: 10.17.0.5
+
+Expanded Security Maintenance for Applications is not enabled.
+
+1 update can be applied immediately.
+To see these additional updates run: apt list --upgradable
+
+4 additional security updates can be applied with ESM Apps.
+Learn more about enabling ESM Apps service at https://ubuntu.com/esm
+
+
+"""
 noisy_stdout = (
     "[bash] HomeSetup is starting...\n"
     "dynamic shell setup output\n"
     "\n"
+    f"{ubuntu_motd}"
     f"{rendered_motd}\n"
     "\n"
     "GNU bash, version 5.2.21(1)-release\n"
@@ -455,6 +498,8 @@ result = subprocess.CompletedProcess(["cmd"], 0, noisy_stdout, noisy_stderr)
 remote = namespace["sanitize_remote_command_result"]("remote-host", result)
 assert remote.stdout == "GNU bash, version 5.2.21(1)-release\n"
 assert remote.stderr == "real error\n"
+assert "Welcome to Ubuntu" not in remote.stdout
+assert "Expanded Security Maintenance" not in remote.stdout
 
 local = namespace["sanitize_remote_command_result"]("", result)
 assert local.stdout == noisy_stdout
@@ -1199,7 +1244,7 @@ status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_
 shell_group_block = re.search(r"\.hhs-footer-shell-group\s*\{([^}]*)\}", base_css).group(1)
 cache_menu_block = re.search(r"\.hhs-footer-cache-clear-menu\s*\{([^}]*)\}", base_css).group(1)
 cache_trigger_block = re.search(r"\.hhs-footer-cache-clear-trigger\s*\{([^}]*)\}", base_css).group(1)
-cache_form_block = re.search(r"\.hhs-footer-cache-clear-form\s*\{([^}]*)\}", base_css).group(1)
+cache_form_block = re.search(r"^\.hhs-footer-cache-clear-form\s*\{([^}]*)\}", base_css, re.M).group(1)
 cache_form_label_block = re.search(r"\.hhs-footer-cache-clear-form label\s*\{([^}]*)\}", base_css).group(1)
 cache_form_checkbox_block = re.search(r"\.hhs-footer-cache-clear-form input\[type=\"checkbox\"\]\s*\{([^}]*)\}", base_css).group(1)
 cache_form_button_block = re.search(r"\.hhs-footer-cache-clear-form button\s*\{([^}]*)\}", base_css).group(1)
@@ -1361,8 +1406,23 @@ assert "--hhs-floating-status-timeout: 5s" in base_css
 assert "animation-delay: var(--hhs-floating-status-timeout, 5s)" in base_css
 assert "font-family: var(--hhs-ui-font-family)" in base_css
 assert "var(--hhs-font-family)" not in base_css
+assert "--hhs-modal-scrim-z-index: 1000001" in base_css
+assert "--hhs-modal-z-index: 1000002" in base_css
+assert "--hhs-command-overlay-z-index: 1000010" in base_css
+assert '[data-testid="stDialog"][data-baseweb="modal"]' in base_css
+assert '[data-testid="stDialog"][data-baseweb="modal"] > div' in base_css
+assert '[data-testid="stDialog"][data-baseweb="modal"] [role="dialog"]' in base_css
+assert "min-height: 100dvh !important" in base_css
+assert 'body:has(div[role="dialog"]) .hhs-app-footer' in base_css
+assert 'body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-app-footer' in base_css
+assert 'body:has(div[role="dialog"]) .hhs-sidebar-clock' in base_css
+assert "z-index: calc(var(--hhs-modal-scrim-z-index) - 1) !important" in base_css
+assert "z-index: var(--hhs-modal-z-index) !important" in base_css
+assert "z-index: var(--hhs-command-overlay-z-index)" in base_css
 main_body = ui_source.split("def main()", 1)[1].split('if __name__ == "__main__"', 1)[0]
 assert main_body.index("render_footer()") < main_body.index("render_floating_status()")
+assert main_body.index("render_floating_status()") < main_body.index("render_folder_picker_dialog()")
+assert main_body.index("render_folder_picker_dialog()") < main_body.index("render_browser_cleanup_script()")
 assert "color: var(--hhs-warning)" in base_css
 assert ".hhs-footer-spacer" not in base_css
 assert "gap: 0.8rem" in base_css
@@ -2221,7 +2281,8 @@ assert (
     '"Search directory",\n'
     '                options=search_directory_options(),\n'
     '                key="search_path",\n'
-    '                on_change=handle_search_directory_change,\n'
+    '                accept_new_options=True,\n'
+    '                on_change=apply_search_directory_change,\n'
     '                width="stretch",'
 ) in body
 assert 'st.text_input(\n                "Search terms"' not in body
@@ -2284,6 +2345,35 @@ PY
 
   run grep -q 'event.key === "Enter"' "${ui_file}"
   assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = source.split("def render_combobox_vt100_shortcuts_script", 1)[1].split("\ndef ", 1)[0]
+assert "parentWindow.__hhsComboboxVt100Cleanup" in body
+assert 'node.closest(\'[data-baseweb="select"]\')' in body
+assert "event.ctrlKey || event.metaKey" in body
+assert 'case "a":' in body
+assert 'case "e":' in body
+assert 'case "b":' in body
+assert 'case "f":' in body
+assert 'case "d":' in body
+assert 'case "h":' in body
+assert 'case "k":' in body
+assert 'case "u":' in body
+assert 'case "w":' in body
+assert "setCaret(node, 0, state.value.length)" in body
+assert "setCaret(node, state.value.length, state.value.length)" in body
+assert 'replaceRange(node, state.start, state.value.length, "", "deleteContentForward")' in body
+assert 'doc.addEventListener("keydown", onKeydown, true)' in body
+assert "render_combobox_vt100_shortcuts_script()" in source
+PY
+  assert_success
+
+  run grep -q 'event.target.closest(".st-key-search_path")' "${ui_file}"
+  assert_failure
 
   run grep -q 'label.append("Searching for ", queryNode, " in ", pathNode)' "${ui_file}"
   assert_success
@@ -4872,6 +4962,9 @@ PY
   run grep -q 'components.html(' "${ui_file}"
   assert_success
 
+  run grep -q 'overlay.style.zIndex = "1000010"' "${ui_file}"
+  assert_success
+
   run grep -q 'parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(render_elapsed, 1000)' "${ui_file}"
   assert_success
 
@@ -6865,10 +6958,52 @@ LOGS
   run grep -q 'def apply_folder_picker_selection' "${ui_file}"
   assert_success
 
-  run grep -q 'st.session_state\["_hhs_folder_picker_selected_dir"\] = child_directories\[0\]' "${ui_file}"
+  run grep -q 'sync_folder_picker_child_selection(child_directories)' "${ui_file}"
   assert_success
 
+  run grep -q 'def folder_picker_child_selection_widget_key' "${ui_file}"
+  assert_success
+
+  run grep -q '_hhs_folder_picker_selected_dir_widget_' "${ui_file}"
+  assert_success
+
+  run grep -q 'prune_folder_picker_child_selection_widget_keys(selected_widget_key)' "${ui_file}"
+  assert_success
+
+  run grep -q '"key": selected_widget_key' "${ui_file}"
+  assert_success
+
+  run grep -q 'placeholder": empty_caption' "${ui_file}"
+  assert_success
+
+  run grep -q 'disabled": not bool(child_directories)' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.caption(empty_caption)' "${ui_file}"
+  assert_failure
+
+  run grep -q 'def folder_picker_browsing_directory' "${ui_file}"
+  assert_success
+
+  run grep -q 'rerun_after_folder_picker_navigation()' "${ui_file}"
+  assert_failure
+
   run grep -q 'st.container(key="folder_picker_action_grid")' "${ui_file}"
+  assert_success
+
+  run grep -q '_left_spacer,' "${ui_file}"
+  assert_success
+
+  run grep -q '_parent_open_gap,' "${ui_file}"
+  assert_failure
+
+  run grep -q '\[1.0, 0.12, 0.12, 0.12, 0.12, 1.0\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'gap="small"' "${ui_file}"
+  assert_success
+
+  run grep -q 'width="content"' "${ui_file}"
   assert_success
 
   run grep -q '""' "${ui_file}"
@@ -6896,15 +7031,30 @@ LOGS
   assert_success
 
   run grep -q '.st-key-folder_picker_action_grid,' "${css_file}"
-  assert_success
+  assert_failure
 
   run grep -q '.st-key-folder_picker_action_grid \[data-testid="stVerticalBlock"\]' "${css_file}"
+  assert_failure
+
+  run grep -q '.st-key-folder_picker_action_grid \[data-testid="stHorizontalBlock"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'gap: var(--hhs-element-std-gap) !important' "${css_file}"
   assert_success
 
   run grep -q 'grid-auto-flow: column' "${css_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'grid-template-columns: repeat(4, 2rem)' "${css_file}"
+  assert_failure
+
+  run grep -q 'var(--hhs-element-std-gap)' "${css_file}"
+  assert_success
+
+  run grep -q 'nth-child(8)' "${css_file}"
+  assert_failure
+
+  run grep -q 'nth-child(5)' "${css_file}"
   assert_success
 
   run grep -q 'min-width: 2rem' "${css_file}"
@@ -6914,6 +7064,30 @@ LOGS
   assert_success
 
   run grep -q '"Include .dot-folders"' "${ui_file}"
+  assert_success
+
+  run grep -q '"Loading directories and files..."' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_path_picker_open_preloader_script' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_path_picker_open_preloader_script()' "${ui_file}"
+  assert_success
+
+  run grep -q '__hhsPathPickerOpenPreloaderCleanup' "${ui_file}"
+  assert_success
+
+  run grep -q 'path-picker-' "${ui_file}"
+  assert_success
+
+  run grep -Fq '[class*="st-key-"][class*="_folder_picker_button"] button' "${ui_file}"
+  assert_success
+
+  run grep -q '.st-key-folder_picker_open_button button' "${ui_file}"
+  assert_success
+
+  run grep -q '.st-key-folder_picker_parent_button button' "${ui_file}"
   assert_success
 
   run grep -q '_hhs_folder_picker_include_dot_folders' "${ui_file}"
@@ -7146,6 +7320,252 @@ if any(
     for node in ast.walk(read_only)
 ):
     raise SystemExit("read-only selected rows should not render disabled text areas")
+PY
+  assert_success
+}
+
+@test "when connected over SSH then reusable path picker should list remote paths" {
+  run python3 - "${ui_file}" <<'PY'
+import os
+import posixpath
+import shlex
+import subprocess
+import sys
+import textwrap
+import types
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def folder_picker_start_directory(")
+end = source.index("def homesetup_version(")
+host = "remote-box"
+statuses = []
+commands = []
+session_state = {
+    "_hhs_folder_picker_mode": "file",
+    "_hhs_folder_picker_current_dir": "/home/root",
+    "_hhs_folder_picker_current_dir_input": "/home/root/readme.md",
+}
+
+def run_bash_command(command, *args, **kwargs):
+    commands.append((command, kwargs))
+    if "raw_target=/home/root/app" in command:
+        return subprocess.CompletedProcess(
+            ["ssh"],
+            0,
+            "__HHS_PICKER_CWD__\t/home/root/app\n"
+            "__HHS_PICKER_ENTRY__\tDir\t/home/root/app/logs\n"
+            "__HHS_PICKER_ENTRY__\tDir\t/home/root/app/tmp\n",
+            "",
+        )
+    output = (
+        "__HHS_PICKER_CWD__\t/home/root\n"
+        "__HHS_PICKER_ENTRY__\tDir\t/home/root/app\n"
+    )
+    if "picker_mode=file" in command:
+        output += "__HHS_PICKER_ENTRY__\tFile\t/home/root/readme.md\n"
+    return subprocess.CompletedProcess(
+        ["ssh"],
+        0,
+        output,
+        "",
+    )
+
+namespace = {
+    "Path": Path,
+    "os": os,
+    "posixpath": posixpath,
+    "shlex": shlex,
+    "subprocess": subprocess,
+    "textwrap": textwrap,
+    "hhs_ui": types.SimpleNamespace(UI_CACHE_REALTIME_TTL_SECONDS=1),
+    "hhs_ui_constants": types.SimpleNamespace(
+        FOOTER_REMOTE_WORKING_DIR_KEY="footer_remote_cwd",
+        UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS=30,
+    ),
+    "st": types.SimpleNamespace(session_state=session_state),
+    "connected_ssh_host": lambda: host,
+    "run_bash_command": run_bash_command,
+    "strip_ansi": lambda value: value,
+    "push_floating_status": lambda message, level: statuses.append((message, level)),
+    "clean_command_status_message": lambda value: str(value).strip(),
+    "dismiss_streamlit_dialog": lambda: None,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+dialog_body = source.split("def render_path_picker_dialog", 1)[1].split("\ndef ", 1)[0]
+assert "dialog_rendered = pop_dialog(" in dialog_body
+assert dialog_body.index("dialog_rendered = pop_dialog(") < dialog_body.rindex(
+    "clear_preloader()"
+)
+assert dialog_body.index("prepare_path_picker_dialog_listing(mode)") < dialog_body.index(
+    "dialog_rendered = pop_dialog("
+)
+render_body = dialog_body.split("def render_body", 1)[1].split(
+    "dialog_rendered = pop_dialog", 1
+)[0]
+assert "current_directory = folder_picker_browsing_directory()" in dialog_body
+assert "sync_folder_picker_child_selection(child_directories)" in dialog_body
+assert render_body.index(
+    "current_directory = folder_picker_browsing_directory()"
+) < render_body.index("path_picker_child_paths(")
+assert render_body.index("path_picker_child_paths(") < render_body.index(
+    "st.text_input("
+)
+assert render_body.index(
+    "sync_folder_picker_child_selection(child_directories)"
+) < render_body.index("st.text_input(")
+assert "st.caption(empty_caption)" not in render_body
+assert '"placeholder": empty_caption' in render_body
+assert '"disabled": not bool(child_directories)' in render_body
+assert render_body.index("st.selectbox(") < render_body.index("st.checkbox(")
+assert namespace["path_picker_uses_remote"]()
+assert namespace["remote_path_picker_default_directory"]() == "$HOME"
+assert namespace["request_path_picker"]("search_path", "", "folder") is None
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
+children = namespace["path_picker_child_paths"]("$HOME", "folder", False)
+assert children == ["/home/root/app"]
+assert len(commands) == 1
+assert "raw_target='$HOME'" in commands[0][0]
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
+children = namespace["path_picker_child_paths"]("/home/root", "folder", False)
+assert children == ["/home/root/app"]
+assert len(commands) == 1
+
+assert namespace["request_path_picker"]("search_path", "/srv", "folder") is None
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
+
+command_count = len(commands)
+session_state["_hhs_folder_picker_mode"] = "folder"
+session_state["_hhs_folder_picker_current_dir"] = "/home/root"
+session_state["_hhs_folder_picker_current_dir_input"] = "/home/root"
+session_state["_hhs_folder_picker_path_kinds"] = {"/home/root/app": "Dir"}
+session_state["_hhs_folder_picker_selected_dir"] = "/home/root/app"
+namespace["open_folder_picker_selected_directory"]()
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/app"
+assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app/logs"
+assert session_state["_hhs_folder_picker_path_kinds"]["/home/root/app/logs"] == "Dir"
+assert len(commands) == command_count + 1
+namespace["sync_folder_picker_child_selection"](
+    ["/home/root/app/logs", "/home/root/app/tmp"]
+)
+assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app/logs"
+namespace["sync_folder_picker_child_selection"](
+    ["/home/root/app/logs", "/home/root/app/tmp"]
+)
+assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app/logs"
+session_state["_hhs_folder_picker_selected_dir"] = "/home/root/app/tmp"
+namespace["sync_folder_picker_child_selection"](
+    ["/home/root/app/logs", "/home/root/app/tmp"]
+)
+assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app/tmp"
+namespace["sync_folder_picker_child_selection"]([])
+assert "_hhs_folder_picker_selected_dir" not in session_state
+
+namespace["open_folder_picker_parent"]()
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
+assert len(commands) == command_count + 1
+session_state["_hhs_folder_picker_selected_dir"] = "/home/root/app"
+namespace["open_folder_picker_selected_directory"]()
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
+assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app/logs"
+assert len(commands) == command_count + 1
+
+session_state["_hhs_folder_picker_mode"] = "file"
+session_state["_hhs_folder_picker_current_dir"] = "/home/root"
+session_state["_hhs_folder_picker_current_dir_input"] = "/home/root/readme.md"
+children = namespace["path_picker_child_paths"]("/home/root", "file", False)
+assert children == ["/home/root/app", "/home/root/readme.md"]
+assert commands[-1][1]["show_overlay"] is False
+assert commands[-1][1]["cache_tag"] == "path_picker"
+assert commands[-1][1]["timeout_seconds"] == 30
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/readme.md"
+assert session_state["_hhs_folder_picker_path_kinds"]["/home/root/readme.md"] == "File"
+
+session_state["_hhs_folder_picker_selected_dir"] = "/home/root/readme.md"
+namespace["open_folder_picker_selected_directory"]()
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/readme.md"
+assert namespace["selected_folder_picker_path"]() == "/home/root/readme.md"
+assert "raw_target=/home/root" in commands[-1][0]
+assert statuses == []
+PY
+  assert_success
+}
+
+@test "when local path picker opens a child folder then its children should be selected" {
+  run python3 - "${ui_file}" "${BATS_TEST_TMPDIR}" <<'PY'
+import hashlib
+import os
+import posixpath
+import shlex
+import subprocess
+import sys
+import textwrap
+import types
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+tmpdir = Path(sys.argv[2])
+start = source.index("def folder_picker_start_directory(")
+end = source.index("def homesetup_version(")
+home = tmpdir / "home"
+apps = home / "Applications"
+alpha = apps / "alpha"
+beta = apps / "Beta"
+for directory in (alpha, beta):
+    directory.mkdir(parents=True, exist_ok=True)
+other_widget_key = "_hhs_folder_picker_selected_dir_widget_stale"
+session_state = {
+    "_hhs_folder_picker_mode": "folder",
+    "_hhs_folder_picker_current_dir": str(home),
+    "_hhs_folder_picker_current_dir_input": str(home),
+    "_hhs_folder_picker_selected_dir": str(apps),
+    other_widget_key: str(apps),
+}
+
+namespace = {
+    "Path": Path,
+    "hashlib": hashlib,
+    "os": os,
+    "posixpath": posixpath,
+    "shlex": shlex,
+    "subprocess": subprocess,
+    "textwrap": textwrap,
+    "st": types.SimpleNamespace(
+        session_state=session_state,
+    ),
+    "connected_ssh_host": lambda: "",
+    "dismiss_streamlit_dialog": lambda: None,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+namespace["open_folder_picker_selected_directory"]()
+assert session_state["_hhs_folder_picker_current_dir"] == str(apps.resolve())
+assert session_state["_hhs_folder_picker_current_dir_input"] == str(apps.resolve())
+assert session_state["_hhs_folder_picker_selected_dir"] == str(alpha.resolve())
+
+session_state["_hhs_folder_picker_current_dir"] = str(home)
+session_state["_hhs_folder_picker_current_dir_input"] = str(apps)
+assert namespace["folder_picker_browsing_directory"]() == str(apps.resolve())
+children = namespace["path_picker_child_paths"](
+    namespace["folder_picker_browsing_directory"](), "folder", False
+)
+assert children == [str(alpha.resolve()), str(beta.resolve())]
+
+widget_key = namespace["folder_picker_child_selection_widget_key"](
+    str(apps.resolve()), "folder", False
+)
+session_state[widget_key] = str(beta.resolve())
+namespace["prune_folder_picker_child_selection_widget_keys"](widget_key)
+assert session_state[widget_key] == str(beta.resolve())
+assert other_widget_key not in session_state
+assert widget_key.startswith("_hhs_folder_picker_selected_dir_widget_")
 PY
   assert_success
 }
@@ -7583,9 +8003,11 @@ PY
 from pathlib import Path
 import hashlib
 import html
+import os
 import posixpath
 import re
 import shlex
+import subprocess
 import types
 import urllib.parse
 
@@ -7615,10 +8037,26 @@ namespace = {
         },
     ),
     "st": types.SimpleNamespace(session_state={}),
+    "Path": Path,
+    "os": os,
     "html": html,
     "hashlib": hashlib,
     "safe_cache_tag": lambda value: value,
     "display_path_value": lambda value: value,
+    "footer_working_directory": lambda: "/work/current",
+    "connected_ssh_host": lambda: namespace.get("connected_host", ""),
+    "run_bash_command": lambda command, *args, **kwargs: remote_commands.append(
+        (command, kwargs)
+    )
+    or subprocess.CompletedProcess(
+        ["remote-env"],
+        0,
+        "__HHS_UI_ENV__\nHOME\t/remote/home\nHHS_HOME\t/opt/hhs\n",
+        "",
+    ),
+    "push_floating_status": lambda message, level: statuses.append((message, level)),
+    "cache_delete_tag": lambda tag: deleted_cache_tags.append(tag),
+    "save_ui_state": lambda: None,
     "strip_ansi": lambda value: value,
     "ssh_explorer_mtime_text": lambda value: f"mtime:{value}",
     "ssh_explorer_size_text": lambda value, kind: (
@@ -7636,6 +8074,9 @@ namespace = {
 }
 term_cache = {}
 cache_writes = []
+statuses = []
+deleted_cache_tags = []
+remote_commands = []
 
 def cache_get(key):
     return term_cache.get(key)
@@ -7648,19 +8089,85 @@ namespace["cache_get"] = cache_get
 namespace["cache_set"] = cache_set
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
+controls_body = source.split("def render_search_controls", 1)[1].split("\ndef ", 1)[0]
+assert (
+    '"Search directory",\n'
+    '                options=search_directory_options(),\n'
+    '                key="search_path",\n'
+    '                accept_new_options=True,\n'
+    '                on_change=apply_search_directory_change,\n'
+    '                width="stretch",'
+) in controls_body
 submit_body = source.split("def submit_search_query", 1)[1].split("\ndef ", 1)[0]
 assert 'st.session_state["search_type"] =' not in submit_body
 assert 'st.session_state["search_result_type"] = search_type' in submit_body
 assert "query = remember_search_term(query)" in submit_body
 assert "search_path = remember_search_directory(search_path)" in submit_body
+assert submit_body.index("search_path = remember_search_directory(search_path)") < (
+    submit_body.index('if not query:')
+)
 assert namespace["normalized_search_type"]("Folders") == "Folders"
 assert namespace["normalized_search_type"]("Unknown") == "Files"
 assert namespace["search_glob_from_query"]("report") == "*report*"
 assert namespace["search_glob_from_query"]("*.md") == "*.md"
+local_home = str(Path.home().resolve())
+assert namespace["default_search_directory"]() == local_home
+namespace["st"].session_state["search_path"] = "/persisted/path"
+namespace["st"].session_state["search_directories"] = ["/persisted/path", "/tmp"]
+namespace["initialize_search_directory_home_default"]()
+assert namespace["st"].session_state["search_path"] == local_home
+assert namespace["st"].session_state["search_result_path"] == local_home
+assert namespace["st"].session_state["search_result_query"] == ""
+assert namespace["st"].session_state["_hhs_search_home_context"] == "local"
+namespace["st"].session_state["search_path"] = "$HOME/projects"
+assert namespace["remember_search_directory"]("$HOME/projects") == f"{local_home}/projects"
+namespace["st"].session_state["search_path"] = "/srv/homeselect"
+namespace["st"].session_state["search_result_query"] = "homeselect"
+namespace["initialize_search_directory_home_default"]()
+assert namespace["st"].session_state["search_path"] == "/srv/homeselect"
+namespace["connected_host"] = "remote-box"
+namespace["initialize_search_directory_home_default"]()
+assert namespace["st"].session_state["search_path"] == "/remote/home"
+assert namespace["st"].session_state["search_result_query"] == ""
+assert namespace["st"].session_state["_hhs_search_home_context"] == "ssh:remote-box"
+assert any("__HHS_UI_ENV__" in command for command, _kwargs in remote_commands)
+assert namespace["remember_search_directory"]("$HHS_HOME/projects") == "/opt/hhs/projects"
 assert namespace["normalize_search_directories"](
     ["/tmp", " /var ", "/tmp", "", "/opt"],
     "/home",
 ) == ["/home", "/tmp", "/var"]
+namespace["st"].session_state["search_path"] = "/srv/homeselect"
+namespace["st"].session_state["search_directories"] = ["/tmp", "/var"]
+assert namespace["search_directory_options"]() == ["/srv/homeselect", "/tmp", "/var"]
+assert namespace["st"].session_state["search_path"] == "/srv/homeselect"
+namespace["st"].session_state["search_query"] = None
+namespace["st"].session_state["search_path"] = "$HHS_HOME/selected"
+statuses_before = list(statuses)
+namespace["apply_search_directory_change"]()
+assert namespace["st"].session_state["search_path"] == "/opt/hhs/selected"
+assert namespace["st"].session_state["search_directories"] == [
+    "/opt/hhs/selected",
+    "/srv/homeselect",
+    "/tmp",
+]
+assert statuses == statuses_before
+namespace["st"].session_state["search_query"] = None
+namespace["st"].session_state["search_path"] = ""
+namespace["submit_search_query"]()
+assert namespace["st"].session_state["search_directories"] == [
+    "/remote/home",
+    "/opt/hhs/selected",
+    "/srv/homeselect",
+]
+assert namespace["st"].session_state["search_result_query"] == ""
+assert statuses[-1] == ("Enter a search query before searching.", "warn")
+namespace["st"].session_state["search_query"] = "homeselect"
+namespace["st"].session_state["search_path"] = "/srv/homeselect"
+namespace["st"].session_state["search_type"] = "Files"
+namespace["submit_search_query"]()
+assert namespace["st"].session_state["search_result_query"] == "homeselect"
+assert namespace["st"].session_state["search_result_path"] == "/srv/homeselect"
+assert deleted_cache_tags[-1] == "search"
 assert namespace["normalize_search_terms"](
     ["admin", " saridon ", "admin", "", "root"],
     "needle",
@@ -7716,6 +8223,10 @@ strings_command = namespace["build_hhs_search_command"](
 strings_options_command = namespace["build_hhs_search_command"](
     "Strings", "needle value", "/tmp/search root", True, True, True
 )
+home_files_command = namespace["build_hhs_search_command"]("Files", "report", "$HOME")
+home_child_command = namespace["build_hhs_search_command"](
+    "Files", "report", "$HOME/Project Files"
+)
 for command in (files_command, folders_command, strings_command):
     assert 'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash";' in command
     assert 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-text.bash";' in command
@@ -7724,12 +8235,16 @@ for command in (files_command, folders_command, strings_command):
 assert "__hhs_search_file '/tmp/search root' '*report*'" in files_command
 assert "__HHS_SEARCH_RESULT__" in files_command
 assert "stat -c %s" in files_command
+assert '""|Searching\\ for*) ;;' in files_command
 assert "__hhs_search_dir '/tmp/search root' '*docs*'" in folders_command
 assert "__HHS_SEARCH_RESULT__" in folders_command
 assert strings_command.endswith("__hhs_search_string '/tmp/search root' 'needle value'")
 assert strings_options_command.endswith(
     "__hhs_search_string '/tmp/search root' -i -w -b 'needle value'"
 )
+assert '__hhs_search_file "${HOME:-.}"' in home_files_command
+assert '__hhs_search_file "${HOME:-.}"/' in home_child_command
+assert "'Project Files'" in home_child_command
 assert "__HHS_SEARCH_RESULT__" not in strings_command
 assert namespace["search_command_cache_key"]("Files", "*.mp4", "/tmp/search root") == (
     "command_tag:search:"
@@ -7774,6 +8289,18 @@ assert string_rows == [
         "Match": "Alpha target line",
     }
 ]
+assert namespace["parse_hhs_search_results"](
+    "Searching for %primary_color%homeselect%primary_color% "
+    "in %secondary_color%${HHS_HOME}%secondary_color%\n",
+    "Files",
+    "/tmp/search root",
+) == []
+assert namespace["parse_hhs_search_results"](
+    '__HHS_SEARCH_RESULT__\tSearching for files matching: "*homeselect*" '
+    'in "${HHS_HOME}"\t0\t\n',
+    "Files",
+    "/tmp/search root",
+) == []
 file_rows = namespace["parse_hhs_search_results"](
     "Searching for files matching: [movie] in .\n"
     "__HHS_SEARCH_RESULT__\t/tmp/search root/movie.mp4\t1710000000\t2048\n",

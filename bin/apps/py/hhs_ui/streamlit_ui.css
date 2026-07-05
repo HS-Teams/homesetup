@@ -9,6 +9,9 @@
   --hhs-log-expander-height: var(--hhs-log-expander-collapsed-height);
   --hhs-log-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height) - var(--hhs-log-expander-height));
   --hhs-log-max-height: calc(var(--hhs-ttyd-max-height, 760px) - var(--hhs-log-expander-height));
+  --hhs-modal-scrim-z-index: 1000001;
+  --hhs-modal-z-index: 1000002;
+  --hhs-command-overlay-z-index: 1000010;
   --hhs-streamlit-toolbar-guard-width: 8rem;
   --hhs-view-gap: 0.95rem;
   --hhs-view-section-gap: 0.8rem;
@@ -468,20 +471,42 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   width: 2rem;
 }
 
-.st-key-folder_picker_action_grid,
-.st-key-folder_picker_action_grid [data-testid="stVerticalBlock"] {
+.st-key-folder_picker_action_grid [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]) {
   align-items: center;
   display: grid !important;
-  gap: var(--hhs-element-std-gap);
-  grid-auto-flow: column;
-  grid-template-columns: repeat(4, 2rem);
+  gap: var(--hhs-element-std-gap) !important;
+  grid-template-columns:
+    minmax(0, 1fr)
+    2rem
+    2rem
+    2rem
+    2rem
+    minmax(0, 1fr);
   justify-content: center;
 }
 
-.st-key-folder_picker_action_grid > div,
-.st-key-folder_picker_action_grid [data-testid="stVerticalBlock"] > div {
-  min-width: 2rem;
-  width: 2rem;
+.st-key-folder_picker_action_grid
+  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"] {
+  flex: initial !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+.st-key-folder_picker_action_grid
+  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"]:nth-child(2),
+.st-key-folder_picker_action_grid
+  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"]:nth-child(3),
+.st-key-folder_picker_action_grid
+  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"]:nth-child(4),
+.st-key-folder_picker_action_grid
+  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"]:nth-child(5) {
+  display: flex;
+  justify-content: center;
 }
 
 div[class*="st-key-alias_selected_value_"] [data-testid="stTextInput"],
@@ -906,12 +931,44 @@ div[class*="st-key-monitor_process_kill_button_"] button {
   word-break: normal;
 }
 
+[data-testid="stDialog"][data-baseweb="modal"] {
+  background: var(--hhs-theme-background-color) !important;
+  isolation: isolate;
+  z-index: var(--hhs-modal-scrim-z-index) !important;
+}
+
+[data-testid="stDialog"][data-baseweb="modal"] > div {
+  background: var(--hhs-theme-background-color) !important;
+  min-height: 100dvh !important;
+}
+
+[data-testid="stDialog"][data-baseweb="modal"] [role="dialog"],
 div[role="dialog"] {
   background: var(--hhs-panel) !important;
   border: 1px solid var(--hhs-theme-border-color) !important;
   border-radius: 0.5rem !important;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34) !important;
   color: var(--hhs-theme-text-color);
+  isolation: isolate;
+  position: relative;
+  z-index: var(--hhs-modal-z-index) !important;
+}
+
+body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-sidebar-clock,
+body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-sidebar-title,
+body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-floating-status,
+body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-app-footer,
+body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-footer-cache-clear-form,
+body:has(div[role="dialog"]) .hhs-sidebar-clock,
+body:has(div[role="dialog"]) .hhs-sidebar-title,
+body:has(div[role="dialog"]) .hhs-floating-status,
+body:has(div[role="dialog"]) .hhs-app-footer,
+body:has(div[role="dialog"]) .hhs-footer-cache-clear-form {
+  z-index: calc(var(--hhs-modal-scrim-z-index) - 1) !important;
+}
+
+body:has(div[role="dialog"]) #hhs-command-overlay {
+  z-index: var(--hhs-command-overlay-z-index) !important;
 }
 
 div[role="dialog"] button[aria-label="Close"] {
@@ -1316,7 +1373,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   position: fixed;
   right: 0;
   top: 0;
-  z-index: 999999;
+  z-index: var(--hhs-command-overlay-z-index);
 }
 
 .hhs-tab-loader-transient {
