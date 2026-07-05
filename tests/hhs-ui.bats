@@ -2321,7 +2321,7 @@ PY
   run grep -q 'render_search_path_results(rows)' "${ui_file}"
   assert_failure
 
-  run grep -q 'render_search_path_results(visible_rows, search_type)' "${ui_file}"
+  run grep -q 'render_search_path_results(visible_rows, search_type, total_count)' "${ui_file}"
   assert_success
 
   run grep -q 'def visible_search_rows' "${ui_file}"
@@ -2334,6 +2334,12 @@ PY
   assert_success
 
   run grep -q 'def render_search_auto_load_more' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_search_auto_load_more_cleanup' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_search_auto_load_more_cleanup()' "${ui_file}"
   assert_success
 
   run grep -q 'key="search_load_more_button"' "${ui_file}"
@@ -2363,6 +2369,12 @@ PY
   run grep -q 'let requested = false;' "${ui_file}"
   assert_success
 
+  run grep -q 'let userReachedBottom = false;' "${ui_file}"
+  assert_success
+
+  run grep -q 'activeController.displayedCount > displayedCount' "${ui_file}"
+  assert_success
+
   run grep -q 'button.dataset.hhsAutoLoadRequested' "${ui_file}"
   assert_failure
 
@@ -2375,13 +2387,22 @@ PY
   run grep -q 'const sentinel = loadMoreContainer || componentFrame' "${ui_file}"
   assert_success
 
+  run grep -q 'const bottomThreshold = 12;' "${ui_file}"
+  assert_success
+
+  run grep -q 'target.getBoundingClientRect' "${ui_file}"
+  assert_success
+
+  run grep -q 'rect.top <= viewportHeight - bottomThreshold' "${ui_file}"
+  assert_success
+
   run grep -q 'parentWindow.IntersectionObserver' "${ui_file}"
   assert_success
 
   run grep -q 'observer.observe(sentinel)' "${ui_file}"
   assert_success
 
-  run grep -q 'rootMargin: "0px 0px 240px 0px"' "${ui_file}"
+  run grep -q 'rootMargin: "0px", threshold: 0.25' "${ui_file}"
   assert_success
 
   run grep -q 'scrollTargets.forEach((target)' "${ui_file}"
@@ -2390,8 +2411,17 @@ PY
   run grep -q 'button.click()' "${ui_file}"
   assert_success
 
-  run grep -q 'pageHeight - 120' "${ui_file}"
+  run grep -q 'userReachedBottom = nearBottom()' "${ui_file}"
   assert_success
+
+  run grep -q 'parentWindow.__hhsSearchAutoLoadController' "${ui_file}"
+  assert_success
+
+  run grep -q 'delete parentWindow.__hhsSearchAutoLoadController' "${ui_file}"
+  assert_success
+
+  run grep -q 'pageHeight - 120' "${ui_file}"
+  assert_failure
 
   run grep -q 'f"Load more results ({displayed_count}/{total_count}) ..."' "${ui_file}"
   assert_success
@@ -2433,10 +2463,10 @@ PY
   run grep -q 'render_search_string_results(rows, query, text_filter)' "${ui_file}"
   assert_failure
 
-  run grep -q 'render_search_string_results(visible_rows, query, text_filter)' "${ui_file}"
+  run grep -q 'render_search_string_results(visible_rows, query, text_filter, total_count)' "${ui_file}"
   assert_success
 
-  run grep -q '<thead><tr><th>Path</th><th>Line</th><th>Match</th></tr></thead>' "${ui_file}"
+  run grep -q '<th>Path</th><th>Line</th><th>Match</th></tr></thead>' "${ui_file}"
   assert_success
 
   run grep -q 'return \["Path", "Size", "Modified"\]' "${ui_file}"
@@ -2772,6 +2802,12 @@ PY
   assert_success
 
   run grep -q '.hhs-search-result-path-link' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-search-result-index' "${css_file}"
+  assert_success
+
+  run grep -q 'min-width: 1ch' "${css_file}"
   assert_success
 
   run grep -q 'background: var(--hhs-theme-secondary-background-color)' "${css_file}"
@@ -7612,6 +7648,12 @@ assert namespace["normalize_search_terms"](
 assert namespace["clean_search_term_value"](None) == ""
 assert namespace["clean_search_term_value"]("None") == ""
 assert namespace["normalize_search_terms"](["None", None, "admin"], None) == ["admin"]
+namespace["st"].session_state["search_query"] = None
+term_cache["search_terms:history"] = {"terms": ["saridon", "admin"]}
+assert namespace["search_term_options"]() == ["saridon", "admin"]
+assert namespace["st"].session_state["search_query"] is None
+term_cache.clear()
+cache_writes.clear()
 namespace["st"].session_state["search_query"] = "admin"
 assert namespace["search_term_options"]() == ["admin"]
 assert namespace["remember_search_term"](" saridon ") == "saridon"
@@ -7751,6 +7793,15 @@ assert folder_rows == [
 assert namespace["search_result_headers"]("Files") == ["Path", "Size", "Modified"]
 assert namespace["search_result_headers"]("Folders") == ["Path", "Modified"]
 assert namespace["search_result_headers"]("Strings") == ["Path", "Line", "Match"]
+assert namespace["search_result_index_width"](0) == "1ch"
+assert namespace["search_result_index_width"](9) == "1ch"
+assert namespace["search_result_index_width"](100) == "3ch"
+assert namespace["search_result_index_header"](100) == (
+    '<th class="hhs-search-result-index" style="width: 3ch;"></th>'
+)
+assert namespace["search_result_index_cell"](12) == (
+    '<td class="hhs-search-result-index">12</td>'
+)
 link = namespace["search_result_path_link"](string_rows[0])
 assert 'class="hhs-search-result-path-link"' in link
 assert "hhs_open_search_result=%2Ftmp%2Fsearch+root%2Freport.txt" in link

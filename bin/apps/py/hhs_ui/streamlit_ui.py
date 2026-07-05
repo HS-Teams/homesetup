@@ -13570,18 +13570,40 @@ def search_result_path_link(row: dict[str, str]) -> str:
     )
 
 
+def search_result_index_width(total_count: int) -> str:
+    """Return the CSS width for the Search result index column."""
+    safe_total = max(1, int(total_count or 1))
+    return f"{len(str(safe_total))}ch"
+
+
+def search_result_index_header(total_count: int) -> str:
+    """Return the empty Search result index table header."""
+    width = html.escape(search_result_index_width(total_count), quote=True)
+    return f'<th class="hhs-search-result-index" style="width: {width};"></th>'
+
+
+def search_result_index_cell(index: int) -> str:
+    """Return one Search result index table cell."""
+    return f'<td class="hhs-search-result-index">{index}</td>'
+
+
 def render_search_string_results(
-    rows: list[dict[str, str]], query: str, text_filter: str = ""
+    rows: list[dict[str, str]],
+    query: str,
+    text_filter: str = "",
+    total_count: int = 0,
 ) -> None:
     """Render string Search results with highlighted matching text."""
     if not rows:
         st.caption("No search results.")
         return
     line_filter = query or text_filter
+    table_index_header = search_result_index_header(total_count or len(rows))
     table_rows = []
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
         table_rows.append(
             "<tr>"
+            f"{search_result_index_cell(index)}"
             f"<td>{search_result_path_link(row)}</td>"
             f"<td>{html.escape(row.get('Line', ''))}</td>"
             f"<td>{colorize_search_result_line(row.get('Match', ''), line_filter)}</td>"
@@ -13590,7 +13612,7 @@ def render_search_string_results(
     st.markdown(
         '<div class="hhs-search-results hhs-search-string-results">'
         "<table>"
-        "<thead><tr><th>Path</th><th>Line</th><th>Match</th></tr></thead>"
+        f"<thead><tr>{table_index_header}<th>Path</th><th>Line</th><th>Match</th></tr></thead>"
         f"<tbody>{''.join(table_rows)}</tbody>"
         "</table>"
         "</div>",
@@ -13598,16 +13620,22 @@ def render_search_string_results(
     )
 
 
-def render_search_path_results(rows: list[dict[str, str]], search_type: str) -> None:
+def render_search_path_results(
+    rows: list[dict[str, str]], search_type: str, total_count: int = 0
+) -> None:
     """Render file and folder Search results with clickable paths."""
     if not rows:
         st.caption("No search results.")
         return
     headers = search_result_headers(search_type)
+    table_index_header = search_result_index_header(total_count or len(rows))
     header_html = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
     table_rows = []
-    for row in rows:
-        row_cells = [f"<td>{search_result_path_link(row)}</td>"]
+    for index, row in enumerate(rows, start=1):
+        row_cells = [
+            search_result_index_cell(index),
+            f"<td>{search_result_path_link(row)}</td>",
+        ]
         if "Size" in headers:
             row_cells.append(f"<td>{html.escape(row.get('Size', ''))}</td>")
         row_cells.append(f"<td>{html.escape(row.get('Modified', ''))}</td>")
@@ -13615,7 +13643,7 @@ def render_search_path_results(rows: list[dict[str, str]], search_type: str) -> 
     st.markdown(
         '<div class="hhs-search-results hhs-search-string-results">'
         "<table>"
-        f"<thead><tr>{header_html}</tr></thead>"
+        f"<thead><tr>{table_index_header}{header_html}</tr></thead>"
         f"<tbody>{''.join(table_rows)}</tbody>"
         "</table>"
         "</div>",
@@ -13656,6 +13684,7 @@ def render_search_load_more(total_count: int) -> None:
         )
     )
     if visible_count >= total_count:
+        render_search_auto_load_more_cleanup()
         return
     displayed_count = min(visible_count, total_count)
     with st.container(key="search_load_more"):
@@ -13669,6 +13698,25 @@ def render_search_load_more(total_count: int) -> None:
     render_search_auto_load_more(displayed_count, total_count)
 
 
+def render_search_auto_load_more_cleanup() -> None:
+    """Detach browser-side Search auto loading when no hidden rows remain."""
+    components.html(
+        """
+        <script>
+          (() => {
+            const parentWindow = window.parent;
+            if (parentWindow.__hhsSearchAutoLoadCleanup) {
+              parentWindow.__hhsSearchAutoLoadCleanup();
+            }
+            delete parentWindow.__hhsSearchAutoLoadCleanup;
+            delete parentWindow.__hhsSearchAutoLoadController;
+          })();
+        </script>
+        """,
+        height=0,
+    )
+
+
 def render_search_auto_load_more(displayed_count: int, total_count: int) -> None:
     """Attach browser-side auto loading for Search results at page bottom."""
     render_token = json.dumps(f"{displayed_count}:{total_count}")
@@ -13678,10 +13726,21 @@ def render_search_auto_load_more(displayed_count: int, total_count: int) -> None
           (() => {
             const parentWindow = window.parent;
             const doc = parentWindow.document;
+            const renderToken = __HHS_SEARCH_AUTO_LOAD_TOKEN__;
+            const tokenParts = String(renderToken).split(":");
+            const displayedCount = Number.parseInt(tokenParts[0] || "0", 10) || 0;
+            const totalCount = Number.parseInt(tokenParts[1] || "0", 10) || 0;
+            const activeController = parentWindow.__hhsSearchAutoLoadController;
+            if (
+              activeController
+              && activeController.totalCount === totalCount
+              && activeController.displayedCount > displayedCount
+            ) {
+              return;
+            }
             if (parentWindow.__hhsSearchAutoLoadCleanup) {
               parentWindow.__hhsSearchAutoLoadCleanup();
             }
-            const renderToken = __HHS_SEARCH_AUTO_LOAD_TOKEN__;
             const buttonSelector = ".st-key-search_load_more_button button";
             const loadingMarkup = `
               <span class="hhs-search-load-more-preloader">
@@ -13690,9 +13749,11 @@ def render_search_auto_load_more(displayed_count: int, total_count: int) -> None
               </span>
             `;
             let requested = false;
+            let userReachedBottom = false;
             const componentFrame = window.frameElement;
             const loadMoreContainer = doc.querySelector(".st-key-search_load_more");
             const sentinel = loadMoreContainer || componentFrame;
+            const bottomThreshold = 12;
             const scrollCandidates = [
               parentWindow,
               doc,
@@ -13704,18 +13765,15 @@ def render_search_auto_load_more(displayed_count: int, total_count: int) -> None
               doc.querySelector(".stApp"),
             ].filter(Boolean);
             const scrollTargets = [...new Set(scrollCandidates)];
-            const elementNearBottom = (element) => {
-              if (element === parentWindow || element === doc) {
-                const page = doc.scrollingElement || doc.documentElement;
-                const scrollTop = parentWindow.scrollY || page.scrollTop || doc.body.scrollTop || 0;
-                const viewportHeight = parentWindow.innerHeight || page.clientHeight || 0;
-                const pageHeight = Math.max(page.scrollHeight, doc.body.scrollHeight);
-                return scrollTop + viewportHeight >= pageHeight - 120;
-              }
-              return element.scrollTop + element.clientHeight >= element.scrollHeight - 120;
-            };
             const nearBottom = () => {
-              return scrollTargets.some(elementNearBottom);
+              const target = doc.querySelector(buttonSelector) || sentinel;
+              if (!target || typeof target.getBoundingClientRect !== "function") {
+                return false;
+              }
+              const rect = target.getBoundingClientRect();
+              const viewportHeight =
+                parentWindow.innerHeight || doc.documentElement.clientHeight || 0;
+              return rect.top <= viewportHeight - bottomThreshold && rect.bottom >= bottomThreshold;
             };
             const renderLoading = (button) => {
               if (!button || button.dataset.hhsLoadMoreLoading === "true") {
@@ -13743,6 +13801,9 @@ def render_search_auto_load_more(displayed_count: int, total_count: int) -> None
               if (!button || button.disabled || requested) {
                 return;
               }
+              if (!force && !userReachedBottom) {
+                return;
+              }
               if (!force && !nearBottom()) {
                 return;
               }
@@ -13751,6 +13812,13 @@ def render_search_auto_load_more(displayed_count: int, total_count: int) -> None
               button.click();
             };
             const onScroll = () => {
+              userReachedBottom = nearBottom();
+              if (!userReachedBottom) {
+                return;
+              }
+              parentWindow.requestAnimationFrame(loadMore);
+            };
+            const onResize = () => {
               parentWindow.requestAnimationFrame(loadMore);
             };
             let observer = null;
@@ -13758,28 +13826,33 @@ def render_search_auto_load_more(displayed_count: int, total_count: int) -> None
             if (sentinel && parentWindow.IntersectionObserver) {
               observer = new parentWindow.IntersectionObserver(
                 (entries) => {
-                  if (entries.some((entry) => entry.isIntersecting)) {
+                  if (userReachedBottom && entries.some((entry) => entry.isIntersecting)) {
                     loadMore(true);
                   }
                 },
-                { root: null, rootMargin: "0px 0px 240px 0px", threshold: 0 }
+                { root: null, rootMargin: "0px", threshold: 0.25 }
               );
               observer.observe(sentinel);
             }
             scrollTargets.forEach((target) => {
               target.addEventListener("scroll", onScroll, { passive: true });
             });
-            parentWindow.addEventListener("resize", onScroll, { passive: true });
-            parentWindow.__hhsSearchAutoLoadCleanup = () => {
+            parentWindow.addEventListener("resize", onResize, { passive: true });
+            const cleanup = () => {
               if (observer) {
                 observer.disconnect();
               }
               scrollTargets.forEach((target) => {
                 target.removeEventListener("scroll", onScroll);
               });
-              parentWindow.removeEventListener("resize", onScroll);
+              parentWindow.removeEventListener("resize", onResize);
             };
-            parentWindow.setTimeout(loadMore, 150);
+            parentWindow.__hhsSearchAutoLoadCleanup = cleanup;
+            parentWindow.__hhsSearchAutoLoadController = {
+              cleanup,
+              displayedCount,
+              totalCount,
+            };
           })();
         </script>
         """.replace("__HHS_SEARCH_AUTO_LOAD_TOKEN__", render_token),
@@ -13907,7 +13980,7 @@ def remember_search_term(search_query: object) -> str:
 
 
 def search_term_options() -> list[str]:
-    """Return Search term select options including the current value."""
+    """Return Search term select options without selecting a value by default."""
     clean_query = clean_search_term_value(st.session_state.get("search_query", ""))
     if st.session_state.get("search_query") and not clean_query:
         st.session_state["search_query"] = None
@@ -14292,12 +14365,13 @@ def render_search_results(search_filter: str = "All", text_filter: str = "") -> 
         )
         rows = filter_search_rows(rows, search_filter, text_filter)
         visible_rows = visible_search_rows(rows)
+        total_count = len(rows)
         if search_type == "Strings":
-            render_search_string_results(visible_rows, query, text_filter)
-            render_search_load_more(len(rows))
+            render_search_string_results(visible_rows, query, text_filter, total_count)
+            render_search_load_more(total_count)
             return
-        render_search_path_results(visible_rows, search_type)
-        render_search_load_more(len(rows))
+        render_search_path_results(visible_rows, search_type, total_count)
+        render_search_load_more(total_count)
 
 
 def render_search_view() -> None:
@@ -14985,7 +15059,7 @@ def main() -> None:
         st.session_state.get("search_directories", []),
         str(st.session_state.get("search_path", "")),
     )
-    st.session_state.setdefault("search_query", "")
+    st.session_state.setdefault("search_query", None)
     st.session_state.setdefault("search_ignore_case", False)
     st.session_state.setdefault("search_words", False)
     st.session_state.setdefault("search_binary", False)
