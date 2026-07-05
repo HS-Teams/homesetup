@@ -802,6 +802,33 @@ PY
   run grep -q 'UI_COMMAND_DEFAULT_TIMEOUT_SECONDS = UI_COMMAND_LOCAL_TIMEOUT_SECONDS' "${constants_file}"
   assert_success
 
+  run grep -q '"search_query"' "${constants_file}"
+  assert_failure
+
+  run grep -q '"search_directories"' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_TERM_HISTORY_CACHE_KEY = "search_terms:history"' "${constants_file}"
+  assert_success
+
+  run grep -q '"search_ignore_case"' "${constants_file}"
+  assert_success
+
+  run grep -q '"search_words"' "${constants_file}"
+  assert_success
+
+  run grep -q '"search_binary"' "${constants_file}"
+  assert_success
+
+  run grep -q '"search_result_query"' "${constants_file}"
+  assert_failure
+
+  run grep -q '"search_result_path"' "${constants_file}"
+  assert_failure
+
+  run grep -q '"search_result_type"' "${constants_file}"
+  assert_failure
+
   run python3 - <<'PY'
 import ast
 from pathlib import Path
@@ -1449,6 +1476,11 @@ tokyo-night-css
     streamlit.session_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] = "TERMINAL"
     streamlit.session_state[ui.hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] = "Home"
     streamlit.session_state[ui.hhs_ui.SSH_RECONNECT_HOST_KEY] = "homeserver"
+    streamlit.session_state["search_directories"] = ["/tmp", "/var"]
+    streamlit.session_state["search_query"] = "admin"
+    streamlit.session_state["search_result_query"] = "admin"
+    streamlit.session_state["search_result_path"] = "/tmp"
+    streamlit.session_state["search_result_type"] = "Strings"
     ui.save_ui_state()
     saved_state = json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))
     assert saved_state["theme_selected"] == "tokyo-night"
@@ -1456,6 +1488,11 @@ tokyo-night-css
     assert saved_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] == "TERMINAL"
     assert saved_state[ui.hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] == "Home"
     assert saved_state[ui.hhs_ui.SSH_RECONNECT_HOST_KEY] == "homeserver"
+    assert saved_state["search_directories"] == ["/tmp", "/var"]
+    assert "search_query" not in saved_state
+    assert "search_result_query" not in saved_state
+    assert "search_result_path" not in saved_state
+    assert "search_result_type" not in saved_state
 
     streamlit.session_state.clear()
     ui.restore_ui_state()
@@ -1463,6 +1500,9 @@ tokyo-night-css
     assert streamlit.session_state[ui.hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] is True
     assert streamlit.session_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] == "TERMINAL"
     assert streamlit.session_state[ui.hhs_ui.SSH_RECONNECT_HOST_KEY] == "homeserver"
+    assert streamlit.session_state["search_directories"] == ["/tmp", "/var"]
+    assert "search_query" not in streamlit.session_state
+    assert "search_result_query" not in streamlit.session_state
     assert "tokyo-night-css" in ui.load_app_theme_css()
 
     config_options.clear()
@@ -1512,6 +1552,24 @@ PY
   assert_success
 
   run grep -q 'SEARCH_FILTERS = ("All", "Containing")' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_PAGE_SIZE = 20' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_SUBMIT_PRELOADER_DELAY_MS = 700' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_DIRECTORY_HISTORY_LIMIT = 20' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_TERM_HISTORY_LIMIT = 20' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_TERM_HISTORY_CACHE_KEY = "search_terms:history"' "${constants_file}"
+  assert_success
+
+  run grep -q 'SEARCH_TERM_HISTORY_TTL_SECONDS = UI_CACHE_LOW_CHANGE_TTL_SECONDS' "${constants_file}"
   assert_success
 
   run grep -q 'SSH_EXPLORER_COMPONENT_DIR = APP_DIR / "components/ssh_explorer"' "${constants_file}"
@@ -2101,9 +2159,13 @@ import sys
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 body = source.split("def render_search_filters", 1)[1].split("\ndef ", 1)[0]
 assert "render_table_filter_controls" not in body
-assert "[1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment=\"center\"" in body
+assert "[1.15, 3.0, 0.22, 0.22, 0.22, 0.22]" in body
+assert 'vertical_alignment="center"' in body
 assert "key=\"search_filter\"" in body
 assert "key=\"search_other_filter\"" in body
+assert 'render_search_option_toggle(\n                "search_ignore_case", "Aa", "Ignore case (-i)"' in body
+assert 'render_search_option_toggle("search_words", "", "Match words (-w)")' in body
+assert 'render_search_option_toggle("search_binary", "", "Search binary files (-b)")' in body
 assert "key=\"search_other_filter_clear\"" in body
 assert "width=\"stretch\"" in body
 PY
@@ -2121,7 +2183,7 @@ PY
   run grep -q 'st.columns(' "${ui_file}"
   assert_success
 
-  run grep -q '\[1.15, 3.0, 3.0, 0.22, 0.22\], vertical_alignment="center"' "${ui_file}"
+  run grep -q '\[1.15, 3.0, 3.0, 0.22, 0.22\], vertical_alignment="bottom"' "${ui_file}"
   assert_success
 
   run python3 - "${ui_file}" <<'PY'
@@ -2130,20 +2192,36 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 body = source.split("def render_search_controls", 1)[1].split("\ndef ", 1)[0]
+assert '[1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment="bottom"' in body
 assert (
-    'key="search_query",\n'
+    '"Kind",\n'
+    '                options=hhs_ui_constants.SEARCH_TYPES,\n'
+    '                key="search_type",'
+) in body
+assert (
+    '"Search terms",\n'
+    '                options=search_term_options(),\n'
+    '                index=None,\n'
+    '                key="search_query",\n'
     '                placeholder="Search for files, folders, or strings",\n'
-    '                label_visibility="collapsed",\n'
+    '                accept_new_options=True,\n'
+    '                on_change=submit_search_query,\n'
     '                width="stretch",'
 ) in body
 assert (
-    'key="search_path",\n'
-    '                label_visibility="collapsed",\n'
+    '"Search directory",\n'
+    '                options=search_directory_options(),\n'
+    '                key="search_path",\n'
+    '                on_change=handle_search_directory_change,\n'
     '                width="stretch",'
 ) in body
+assert 'st.text_input(\n                "Search terms"' not in body
+assert 'st.text_input(\n                "Search directory"' not in body
+assert 'label_visibility="collapsed"' not in body
 assert body.index('key="search_path_folder_picker_button"') < body.index(
     'key="search_submit_button"'
 )
+assert "render_search_submit_preloader_script()" in body
 PY
   assert_success
 
@@ -2155,6 +2233,51 @@ PY
 
   run grep -q 'if st.button("Search", key="search_submit_button"' "${ui_file}"
   assert_failure
+
+  run grep -q 'def render_search_submit_preloader_script' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.__hhsSearchSubmitPreloaderCleanup' "${ui_file}"
+  assert_success
+
+  run grep -q 'const buttonSelector = ".st-key-search_submit_button button"' "${ui_file}"
+  assert_success
+
+  run grep -q "const querySelector = \".st-key-search_query \\[role='combobox'\\], .st-key-search_query input\"" "${ui_file}"
+  assert_success
+
+  run grep -q "const pathSelector = \".st-key-search_path \\[role='combobox'\\], .st-key-search_path input\"" "${ui_file}"
+  assert_success
+
+  run grep -q 'delay_ms = int(hhs_ui_constants.SEARCH_SUBMIT_PRELOADER_DELAY_MS)' "${ui_file}"
+  assert_success
+
+  run grep -q 'const delayMs = ' "${ui_file}"
+  assert_success
+
+  run grep -q 'const clearPendingSearchOverlay = ()' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.__hhsSearchSubmitPreloaderDelayTimer' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.setTimeout(' "${ui_file}"
+  assert_success
+
+  run grep -q 'showOverlay(query, searchPath)' "${ui_file}"
+  assert_success
+
+  run grep -q 'doc.addEventListener("click", onClick, true)' "${ui_file}"
+  assert_success
+
+  run grep -q 'doc.addEventListener("keydown", onKeydown, true)' "${ui_file}"
+  assert_success
+
+  run grep -q 'event.key === "Enter"' "${ui_file}"
+  assert_success
+
+  run grep -q 'label.append("Searching for ", queryNode, " in ", pathNode)' "${ui_file}"
+  assert_success
 
   run grep -q 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-search.bash";' "${ui_file}"
   assert_success
@@ -2174,6 +2297,12 @@ PY
   run grep -q 'timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS' "${ui_file}"
   assert_success
 
+  run grep -q 'show_overlay=False' "${ui_file}"
+  assert_success
+
+  run grep -q 'clear_preloader()' "${ui_file}"
+  assert_success
+
   run grep -q 'def build_hhs_open_search_result_command' "${ui_file}"
   assert_success
 
@@ -2190,15 +2319,130 @@ PY
   assert_success
 
   run grep -q 'render_search_path_results(rows)' "${ui_file}"
+  assert_failure
+
+  run grep -q 'render_search_path_results(visible_rows, search_type)' "${ui_file}"
+  assert_success
+
+  run grep -q 'def visible_search_rows' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_search_load_more' "${ui_file}"
+  assert_success
+
+  run grep -q 'if visible_count >= total_count:' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_search_auto_load_more' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="search_load_more_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_search_auto_load_more(displayed_count, total_count)' "${ui_file}"
+  assert_success
+
+  run grep -q 'const buttonSelector = ".st-key-search_load_more_button button";' "${ui_file}"
+  assert_success
+
+  run grep -q 'const renderToken = ' "${ui_file}"
+  assert_success
+
+  run grep -q 'const loadingMarkup = `' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-search-load-more-preloader-spinner" aria-hidden="true"><' "${ui_file}"
+  assert_success
+
+  run grep -q 'Loading more results...' "${ui_file}"
+  assert_success
+
+  run grep -q 'button.innerHTML = loadingMarkup' "${ui_file}"
+  assert_success
+
+  run grep -q 'let requested = false;' "${ui_file}"
+  assert_success
+
+  run grep -q 'button.dataset.hhsAutoLoadRequested' "${ui_file}"
+  assert_failure
+
+  run grep -q 'const componentFrame = window.frameElement' "${ui_file}"
+  assert_success
+
+  run grep -q 'const loadMoreContainer = doc.querySelector(".st-key-search_load_more")' "${ui_file}"
+  assert_success
+
+  run grep -q 'const sentinel = loadMoreContainer || componentFrame' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.IntersectionObserver' "${ui_file}"
+  assert_success
+
+  run grep -q 'observer.observe(sentinel)' "${ui_file}"
+  assert_success
+
+  run grep -q 'rootMargin: "0px 0px 240px 0px"' "${ui_file}"
+  assert_success
+
+  run grep -q 'scrollTargets.forEach((target)' "${ui_file}"
+  assert_success
+
+  run grep -q 'button.click()' "${ui_file}"
+  assert_success
+
+  run grep -q 'pageHeight - 120' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"Load more results ({displayed_count}/{total_count}) ..."' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui_constants.SEARCH_PAGE_SIZE' "${ui_file}"
+  assert_success
+
+  run grep -q 'cache_delete_tag("search")' "${ui_file}"
+  assert_success
+
+  run grep -q 'ttl_seconds=hhs_ui.UI_CACHE_NORMAL_TTL_SECONDS' "${ui_file}"
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+submit_body = source.split("def submit_search_query", 1)[1].split("\ndef ", 1)[0]
+assert 'st.session_state["search_result_ignore_case"] = bool(' in submit_body
+assert 'st.session_state.get("search_ignore_case", False)' in submit_body
+assert 'st.session_state["search_result_words"] = bool(' in submit_body
+assert 'st.session_state.get("search_words", False)' in submit_body
+assert 'st.session_state["search_result_binary"] = bool(' in submit_body
+assert 'st.session_state.get("search_binary", False)' in submit_body
+
+results_body = source.split("def render_search_results", 1)[1].split("\ndef ", 1)[0]
+assert (
+    "build_hhs_search_command(\n"
+    "            search_type, query, search_path, ignore_case, words, binary"
+) in results_body
+assert (
+    "search_command_cache_key(\n"
+    "            search_type, query, search_path, ignore_case, words, binary"
+) in results_body
+PY
   assert_success
 
   run grep -q 'render_search_string_results(rows, query, text_filter)' "${ui_file}"
+  assert_failure
+
+  run grep -q 'render_search_string_results(visible_rows, query, text_filter)' "${ui_file}"
   assert_success
 
   run grep -q '<thead><tr><th>Path</th><th>Line</th><th>Match</th></tr></thead>' "${ui_file}"
   assert_success
 
-  run grep -q '<thead><tr><th>Path</th><th>Modified</th></tr></thead>' "${ui_file}"
+  run grep -q 'return \["Path", "Size", "Modified"\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'return \["Path", "Modified"\]' "${ui_file}"
   assert_success
 
   run grep -q '__hhs_search_file' "${ui_file}"
@@ -2434,7 +2678,46 @@ PY
   run grep -q '.st-key-search_submit_button button' "${css_file}"
   assert_success
 
+  run grep -q '.st-key-search_load_more_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_load_more {' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-search-load-more-preloader' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-search-load-more-preloader-spinner' "${css_file}"
+  assert_success
+
+  run grep -q 'animation: hhs-search-load-more-spin 0.8s linear infinite' "${css_file}"
+  assert_success
+
+  run grep -q '@keyframes hhs-search-load-more-spin' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-search-load-more-preloader-track' "${css_file}"
+  assert_failure
+
+  run grep -q 'hhs-search-load-more-slide' "${css_file}"
+  assert_failure
+
   run grep -q '.st-key-search_other_filter_clear button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_ignore_case_toggle_idle button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_ignore_case_toggle_selected button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_words_toggle_idle button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_binary_toggle_selected button' "${css_file}"
+  assert_success
+
+  run grep -q 'box-shadow: inset 0 0 0 1px var(--hhs-theme-primary-color)' "${css_file}"
   assert_success
 
   run grep -q '.st-key-search_submit_button {' "${css_file}"
@@ -2446,25 +2729,34 @@ PY
   run grep -q '.st-key-search_controls \[data-testid="stHorizontalBlock"\]' "${css_file}"
   assert_success
 
+  run grep -q 'align-items: end' "${css_file}"
+  assert_success
+
+  run grep -q '> div\[data-testid="stColumn"\]:nth-child(4)' "${css_file}"
+  assert_success
+
+  run grep -q '> div\[data-testid="stColumn"\]:nth-child(5)' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-bottom: 0.28rem' "${css_file}"
+  assert_success
+
   run grep -q '.st-key-search_filter_controls \[data-testid="stHorizontalBlock"\]' "${css_file}"
   assert_success
 
   run grep -q 'grid-template-columns: minmax(9rem, 1.15fr)' "${css_file}"
   assert_success
 
-  run grep -q 'grid-template-columns: max-content minmax(0, 3fr)' "${css_file}"
+  run grep -q 'grid-template-columns: max-content minmax(0, 1fr) 2rem 2rem 2rem 2rem' "${css_file}"
   assert_success
 
-  run grep -q 'grid-column: 2 / 5' "${css_file}"
+  run grep -q 'grid-column: 2' "${css_file}"
   assert_success
 
   run grep -q '.st-key-search_filter_controls \[role="radiogroup"\]\[aria-label$="filter"\]' "${css_file}"
   assert_success
 
   run grep -q 'overflow-x: visible' "${css_file}"
-  assert_success
-
-  run grep -q 'grid-column: 5' "${css_file}"
   assert_success
 
   run grep -q '.st-key-search_controls {' "${css_file}"
@@ -2476,10 +2768,19 @@ PY
   run grep -q '.st-key-search_results {' "${css_file}"
   assert_success
 
-  run grep -q '.hhs-search-string-results' "${css_file}"
+  run grep -q '.hhs-search-results' "${css_file}"
   assert_success
 
   run grep -q '.hhs-search-result-path-link' "${css_file}"
+  assert_success
+
+  run grep -q 'background: var(--hhs-theme-secondary-background-color)' "${css_file}"
+  assert_success
+
+  run grep -q 'border: 1px solid var(--hhs-theme-dataframe-border-color)' "${css_file}"
+  assert_success
+
+  run grep -q 'background: var(--hhs-theme-dataframe-header-background-color)' "${css_file}"
   assert_success
 
   run grep -q 'color: var(--hhs-primary)' "${css_file}"
@@ -4249,7 +4550,13 @@ PY
   run grep -q 'return hhs_ui.UI_COMMAND_LOCAL_TIMEOUT_SECONDS' "${ui_file}"
   assert_success
 
-  run grep -q 'effective_timeout = command_timeout_seconds(force_local=force_local)' "${ui_file}"
+  run grep -q 'def effective_command_timeout_seconds' "${ui_file}"
+  assert_success
+
+  run grep -q 'return max(1, int(timeout_seconds))' "${ui_file}"
+  assert_success
+
+  run grep -q 'effective_timeout = effective_command_timeout_seconds(' "${ui_file}"
   assert_success
 
   run grep -q 'except subprocess.TimeoutExpired' "${ui_file}"
@@ -4416,10 +4723,52 @@ PY
   run grep -q 'doc.body.appendChild(overlay)' "${ui_file}"
   assert_success
 
+  run grep -q 'doc.body.dataset.hhsCommandOverlayHidden = "false"' "${ui_file}"
+  assert_success
+
+  run grep -q 'const clearedAt = Number(parentWindow.__hhsCommandOverlayClearedAt || 0)' "${ui_file}"
+  assert_success
+
+  run grep -q 'createdAt <= clearedAt' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.__hhsCommandOverlayToken = overlayToken' "${ui_file}"
+  assert_success
+
+  run grep -q 'overlay.dataset.hhsOverlayToken = overlayToken' "${ui_file}"
+  assert_success
+
+  run grep -q 'overlay.dataset.hhsOverlayCreatedAt = String(createdAt)' "${ui_file}"
+  assert_success
+
   run grep -q 'def clear_preloader()' "${ui_file}"
   assert_success
 
   run grep -q 'clear_preloader()' "${ui_file}"
+  assert_success
+
+  run grep -q 'doc.body.dataset.hhsCommandOverlayHidden = "true"' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.__hhsCommandOverlayClearedAt = Date.now()' "${ui_file}"
+  assert_success
+
+  run grep -q 'const observer = new parentWindow.MutationObserver(remove_overlay)' "${ui_file}"
+  assert_success
+
+  run grep -q 'observer.observe(doc.body, { childList: true })' "${ui_file}"
+  assert_success
+
+  run grep -q 'overlayCreatedAt > clearedAt' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.setTimeout(remove_overlay, 50)' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.setTimeout(remove_overlay, 250)' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.setTimeout(remove_overlay, 1000)' "${ui_file}"
   assert_success
 
   run grep -q 'command_overlay_slot' "${ui_file}"
@@ -4480,7 +4829,10 @@ PY
   run grep -q 'components.html(' "${ui_file}"
   assert_success
 
-  run grep -q 'window.setInterval(render_elapsed, 1000)' "${ui_file}"
+  run grep -q 'parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(render_elapsed, 1000)' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout' "${ui_file}"
   assert_success
 
   run grep -q 'data-timeout-seconds' "${ui_file}"
@@ -4894,6 +5246,9 @@ PY
   run grep -q 'def cleanup_session_resources' "${ui_file}"
   assert_success
 
+  run grep -q 'def schedule_cleanup_session_resources' "${ui_file}"
+  assert_success
+
   run grep -q 'def store_ttyd_event' "${ui_file}"
   assert_success
 
@@ -4927,6 +5282,18 @@ PY
   run grep -q 'cleanup_all_registered_sessions' "${ui_file}"
   assert_success
 
+  run grep -q 'PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def process_resource_state' "${ui_file}"
+  assert_success
+
+  run grep -q 'def process_resource_registry' "${ui_file}"
+  assert_success
+
+  run grep -q 'schedule_cleanup_session_resources(token)' "${ui_file}"
+  assert_success
+
   run grep -q 'atexit.register(cleanup_all_registered_sessions)' "${ui_file}"
   assert_success
 
@@ -4943,6 +5310,43 @@ PY
   assert_success
 
   run grep -q 'start_new_session=True' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.__hhsTtydCleanupHandler' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.removeEventListener(' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+handler_body = ui_source.split("def handle_cleanup_request", 1)[1].split("\n    def ", 1)[0]
+assert handler_body.index("self.send_response(204)") < handler_body.index(
+    "schedule_cleanup_session_resources(token)"
+)
+schedule_body = ui_source.split("def schedule_cleanup_session_resources", 1)[1].split("\ndef ", 1)[0]
+assert "threading.Thread(" in schedule_body
+assert "daemon=True" in schedule_body
+state_body = ui_source.split("def process_resource_state", 1)[1].split("\ndef ", 1)[0]
+assert "setattr(sys, PROCESS_RESOURCE_STATE_KEY, state)" in state_body
+registry_body = ui_source.split("def process_resource_registry", 1)[1].split("\n\nTTYD_CLEANUP_REGISTRY", 1)[0]
+assert "state[key] = registry" in registry_body
+assert "process_resource_registry(\n    \"ttyd_cleanup_registry\"" in ui_source
+assert "process_resource_registry(\n    \"ttyd_event_registry\"" in ui_source
+ensure_body = ui_source.split("def ensure_ttyd_cleanup_server", 1)[1].split("\ndef ", 1)[0]
+assert "process_resource_state()" in ensure_body
+assert "ThreadingHTTPServer(" in ensure_body
+assert 'state["ttyd_cleanup_server"] = server' in ensure_body
+assert 'state["ttyd_cleanup_server_port"] = port' in ensure_body
+assert 'state["ttyd_cleanup_atexit_registered"] = True' in ensure_body
+browser_cleanup_body = ui_source.split("def render_browser_cleanup_script", 1)[1].split("\ndef ", 1)[0]
+assert browser_cleanup_body.index("removeEventListener(") < browser_cleanup_body.index(
+    "parentWindow.addEventListener(\"pagehide\", cleanup"
+)
+assert "parentWindow.__hhsTtydCleanupHandler = cleanup" in browser_cleanup_body
+PY
   assert_success
 
   run grep -q 'os.killpg(process_group, signal.SIGTERM)' "${ui_file}"
@@ -7015,6 +7419,18 @@ PY
 }
 
 @test "when reading UI cache then expired entries should not be written back during load" {
+  run grep -q 'key.startswith("search_terms:")' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ui_cache_preserved_on_clear_key' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui_constants.SEARCH_TERM_HISTORY_CACHE_KEY' "${ui_file}"
+  assert_success
+
+  run grep -q 'if ui_cache_preserved_on_clear_key(key)' "${ui_file}"
+  assert_success
+
   run python3 - "${ui_file}" <<'PY'
 import ast
 import sys
@@ -7109,6 +7525,7 @@ PY
 @test "when building Search commands then query type should choose the matching hhs helper" {
   run python3 - "${ui_file}" <<'PY'
 from pathlib import Path
+import hashlib
 import html
 import posixpath
 import re
@@ -7129,16 +7546,28 @@ namespace = {
     ),
     "hhs_ui_constants": types.SimpleNamespace(
         SEARCH_TYPES=("Files", "Folders", "Strings"),
+        SEARCH_DIRECTORY_HISTORY_LIMIT=3,
+        SEARCH_TERM_HISTORY_CACHE_KEY="search_terms:history",
+        SEARCH_TERM_HISTORY_LIMIT=3,
+        SEARCH_TERM_HISTORY_TTL_SECONDS=900,
+        SEARCH_PAGE_SIZE=20,
+        UI_CACHE_NORMAL_TTL_SECONDS=300,
         SEARCH_TYPE_LABELS={
             "Files": "Files",
             "Folders": "Folders",
             "Strings": "Strings",
         },
     ),
+    "st": types.SimpleNamespace(session_state={}),
     "html": html,
+    "hashlib": hashlib,
+    "safe_cache_tag": lambda value: value,
     "display_path_value": lambda value: value,
     "strip_ansi": lambda value: value,
     "ssh_explorer_mtime_text": lambda value: f"mtime:{value}",
+    "ssh_explorer_size_text": lambda value, kind: (
+        "2.0 KB" if value == "2048" and kind == "File" else f"{kind}:{value}"
+    ),
     "row_matches_text_filter": lambda row, value: value.lower() in " ".join(
         str(item).lower() for item in row.values()
     ),
@@ -7149,15 +7578,70 @@ namespace = {
     if text_filter
     else [],
 }
+term_cache = {}
+cache_writes = []
+
+def cache_get(key):
+    return term_cache.get(key)
+
+def cache_set(key, value, ttl_seconds):
+    cache_writes.append((key, value, ttl_seconds))
+    term_cache[key] = value
+
+namespace["cache_get"] = cache_get
+namespace["cache_set"] = cache_set
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
 submit_body = source.split("def submit_search_query", 1)[1].split("\ndef ", 1)[0]
 assert 'st.session_state["search_type"] =' not in submit_body
 assert 'st.session_state["search_result_type"] = search_type' in submit_body
+assert "query = remember_search_term(query)" in submit_body
+assert "search_path = remember_search_directory(search_path)" in submit_body
 assert namespace["normalized_search_type"]("Folders") == "Folders"
 assert namespace["normalized_search_type"]("Unknown") == "Files"
 assert namespace["search_glob_from_query"]("report") == "*report*"
 assert namespace["search_glob_from_query"]("*.md") == "*.md"
+assert namespace["normalize_search_directories"](
+    ["/tmp", " /var ", "/tmp", "", "/opt"],
+    "/home",
+) == ["/home", "/tmp", "/var"]
+assert namespace["normalize_search_terms"](
+    ["admin", " saridon ", "admin", "", "root"],
+    "needle",
+) == ["needle", "admin", "saridon"]
+assert namespace["clean_search_term_value"](None) == ""
+assert namespace["clean_search_term_value"]("None") == ""
+assert namespace["normalize_search_terms"](["None", None, "admin"], None) == ["admin"]
+namespace["st"].session_state["search_query"] = "admin"
+assert namespace["search_term_options"]() == ["admin"]
+assert namespace["remember_search_term"](" saridon ") == "saridon"
+assert term_cache["search_terms:history"]["terms"] == ["saridon"]
+assert cache_writes[-1] == (
+    "search_terms:history",
+    {"terms": ["saridon"]},
+    900,
+)
+assert namespace["remember_search_term"](" admin ") == "admin"
+assert term_cache["search_terms:history"]["terms"] == ["admin", "saridon"]
+assert namespace["remember_search_term"]("saridon") == "saridon"
+assert term_cache["search_terms:history"]["terms"] == ["saridon", "admin"]
+namespace["st"].session_state["search_query"] = "None"
+term_cache["search_terms:history"] = {"terms": ["None", "admin", None]}
+assert namespace["search_term_options"]() == ["admin"]
+assert namespace["st"].session_state["search_query"] is None
+assert namespace["remember_search_term"](None) == ""
+assert namespace["st"].session_state["search_query"] is None
+assert namespace["normalized_search_option_values"]("Files", True, True, True) == (
+    False,
+    False,
+    False,
+)
+assert namespace["normalized_search_option_values"]("Strings", True, False, True) == (
+    True,
+    False,
+    True,
+)
+assert namespace["search_string_option_flags"](True, True, True) == ["-i", "-w", "-b"]
 files_command = namespace["build_hhs_search_command"](
     "Files", "report", "/tmp/search root"
 )
@@ -7167,6 +7651,9 @@ folders_command = namespace["build_hhs_search_command"](
 strings_command = namespace["build_hhs_search_command"](
     "Strings", "needle value", "/tmp/search root"
 )
+strings_options_command = namespace["build_hhs_search_command"](
+    "Strings", "needle value", "/tmp/search root", True, True, True
+)
 for command in (files_command, folders_command, strings_command):
     assert 'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash";' in command
     assert 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-text.bash";' in command
@@ -7174,10 +7661,28 @@ for command in (files_command, folders_command, strings_command):
     assert "function __hhs_highlight() { cat -; };" in command
 assert "__hhs_search_file '/tmp/search root' '*report*'" in files_command
 assert "__HHS_SEARCH_RESULT__" in files_command
+assert "stat -c %s" in files_command
 assert "__hhs_search_dir '/tmp/search root' '*docs*'" in folders_command
 assert "__HHS_SEARCH_RESULT__" in folders_command
 assert strings_command.endswith("__hhs_search_string '/tmp/search root' 'needle value'")
+assert strings_options_command.endswith(
+    "__hhs_search_string '/tmp/search root' -i -w -b 'needle value'"
+)
 assert "__HHS_SEARCH_RESULT__" not in strings_command
+assert namespace["search_command_cache_key"]("Files", "*.mp4", "/tmp/search root") == (
+    "command_tag:search:"
+    + hashlib.md5(
+        "Files\n*.mp4\n/tmp/search root\nFalse\nFalse\nFalse".encode("utf-8")
+    ).hexdigest()
+)
+assert namespace["search_command_cache_key"](
+    "Strings", "needle", "/tmp/search root", True, True, True
+) == (
+    "command_tag:search:"
+    + hashlib.md5(
+        "Strings\nneedle\n/tmp/search root\nTrue\nTrue\nTrue".encode("utf-8")
+    ).hexdigest()
+)
 open_command = namespace["build_hhs_open_search_result_command"](
     "/tmp/search root/report.txt"
 )
@@ -7201,14 +7706,33 @@ assert string_rows == [
         "Path": "report.txt",
         "FullPath": "/tmp/search root/report.txt",
         "Modified": "",
+        "Size": "",
         "Line": "12",
         "LineNumber": "",
         "Match": "Alpha target line",
     }
 ]
+file_rows = namespace["parse_hhs_search_results"](
+    "Searching for files matching: [movie] in .\n"
+    "__HHS_SEARCH_RESULT__\t/tmp/search root/movie.mp4\t1710000000\t2048\n",
+    "Files",
+    "/tmp/search root",
+)
+assert file_rows == [
+    {
+        "Type": "File",
+        "Path": "movie.mp4",
+        "FullPath": "/tmp/search root/movie.mp4",
+        "Modified": "mtime:1710000000",
+        "Size": "2.0 KB",
+        "Line": "",
+        "LineNumber": "",
+        "Match": "",
+    }
+]
 folder_rows = namespace["parse_hhs_search_results"](
     "Searching for folders matching: [docs] in .\n"
-    "__HHS_SEARCH_RESULT__\t/tmp/search root/docs\t1710000000\n",
+    "__HHS_SEARCH_RESULT__\t/tmp/search root/docs\t1710000000\t\n",
     "Folders",
     "/tmp/search root",
 )
@@ -7218,18 +7742,25 @@ assert folder_rows == [
         "Path": "docs",
         "FullPath": "/tmp/search root/docs",
         "Modified": "mtime:1710000000",
+        "Size": "",
         "Line": "",
         "LineNumber": "",
         "Match": "",
     }
 ]
-assert namespace["search_result_headers"]("Files") == ["Path", "Modified"]
+assert namespace["search_result_headers"]("Files") == ["Path", "Size", "Modified"]
 assert namespace["search_result_headers"]("Folders") == ["Path", "Modified"]
 assert namespace["search_result_headers"]("Strings") == ["Path", "Line", "Match"]
 link = namespace["search_result_path_link"](string_rows[0])
 assert 'class="hhs-search-result-path-link"' in link
 assert "hhs_open_search_result=%2Ftmp%2Fsearch+root%2Freport.txt" in link
+assert 'title="/tmp/search root/report.txt"' in link
+assert 'data-hhs-open-path="/tmp/search root/report.txt"' in link
 assert ">report.txt</a>" in link
+rows = [{"Path": str(index)} for index in range(45)]
+assert len(namespace["visible_search_rows"](rows)) == 20
+namespace["increase_search_visible_count"]()
+assert len(namespace["visible_search_rows"](rows)) == 40
 assert namespace["search_loader_message"]("*.md", "/tmp/search root") == (
     "Searching for %primary_color%*.md%primary_color% "
     "in %secondary_color%/tmp/search root%secondary_color%"
