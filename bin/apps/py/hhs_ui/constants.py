@@ -155,6 +155,12 @@ SEARCH_TYPE_LABELS = {
     "Strings": "Strings",
 }
 SEARCH_FILTERS = ("All", "Containing")
+SEARCH_PAGE_SIZE = 20
+SEARCH_SUBMIT_PRELOADER_DELAY_MS = 700
+SEARCH_DIRECTORY_HISTORY_LIMIT = 20
+SEARCH_TERM_HISTORY_LIMIT = 20
+SEARCH_TERM_HISTORY_CACHE_KEY = "search_terms:history"
+SEARCH_TERM_HISTORY_TTL_SECONDS = UI_CACHE_LOW_CHANGE_TTL_SECONDS
 SSH_VIEWS = ("TUNNELS", "FILES")
 SSH_VIEW_LABELS = {
     "TUNNELS": " Tunnels",
@@ -250,14 +256,14 @@ PERSISTED_UI_KEYS = (
     "path_value_overrides",
     "service_filter",
     "service_other_filter",
+    "search_binary",
+    "search_directories",
     "search_filter",
+    "search_ignore_case",
     "search_other_filter",
     "search_path",
-    "search_query",
-    "search_result_path",
-    "search_result_query",
-    "search_result_type",
     "search_type",
+    "search_words",
     SSH_RECONNECT_HOST_KEY,
     "ssh_tunnel_filter",
     "ssh_tunnel_other_filter",

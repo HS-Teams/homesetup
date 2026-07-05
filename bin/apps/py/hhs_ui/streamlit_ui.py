@@ -63,10 +63,46 @@ import hhs_ui.constants as hhs_ui_constants
 hhs_ui_constants = importlib.reload(hhs_ui_constants)
 hhs_ui = importlib.reload(hhs_ui)
 
-TTYD_CLEANUP_REGISTRY: dict[str, dict[str, object]] = {}
-TTYD_EVENT_REGISTRY: dict[str, list[dict[str, object]]] = {}
-TTYD_CLEANUP_SERVER: ThreadingHTTPServer | None = None
-TTYD_CLEANUP_SERVER_PORT = 0
+PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"
+
+
+def process_resource_state() -> dict[str, object]:
+    """Return process-wide resources that must survive Streamlit reruns."""
+    state = getattr(sys, PROCESS_RESOURCE_STATE_KEY, None)
+    if not isinstance(state, dict):
+        state = {}
+        setattr(sys, PROCESS_RESOURCE_STATE_KEY, state)
+    return state
+
+
+def process_resource_registry(key: str) -> dict:
+    """Return a process-wide mutable registry by key."""
+    state = process_resource_state()
+    registry = state.get(key)
+    if not isinstance(registry, dict):
+        registry = {}
+        state[key] = registry
+    return registry
+
+
+TTYD_CLEANUP_REGISTRY: dict[str, dict[str, object]] = process_resource_registry(
+    "ttyd_cleanup_registry"
+)
+TTYD_EVENT_REGISTRY: dict[str, list[dict[str, object]]] = process_resource_registry(
+    "ttyd_event_registry"
+)
+_PROCESS_RESOURCE_STATE = process_resource_state()
+_PROCESS_TTYD_CLEANUP_SERVER = _PROCESS_RESOURCE_STATE.get("ttyd_cleanup_server")
+TTYD_CLEANUP_SERVER: ThreadingHTTPServer | None = (
+    _PROCESS_TTYD_CLEANUP_SERVER
+    if isinstance(_PROCESS_TTYD_CLEANUP_SERVER, ThreadingHTTPServer)
+    else None
+)
+TTYD_CLEANUP_SERVER_PORT = (
+    int(_PROCESS_RESOURCE_STATE.get("ttyd_cleanup_server_port") or 0)
+    if TTYD_CLEANUP_SERVER is not None
+    else 0
+)
 TTYD_EXIT_COMMANDS = {"exit", "logout"}
 
 
@@ -1311,12 +1347,31 @@ def render_preloader(
         "hhs-tab-loader hhs-tab-loader-transient" if transient else "hhs-tab-loader"
     )
     safe_timeout = int(timeout_seconds or command_timeout_seconds())
+    created_at_millis = int(time.time() * 1000)
+    overlay_token = secrets.token_hex(8)
     safe_message_html = loader_label_html(message)
     components.html(
         f"""
         <script>
           (() => {{
+            const parentWindow = window.parent;
             const doc = window.parent.document;
+            const createdAt = {created_at_millis};
+            const clearedAt = Number(parentWindow.__hhsCommandOverlayClearedAt || 0);
+            if (clearedAt && createdAt <= clearedAt) {{
+              return;
+            }}
+            if (parentWindow.__hhsCommandOverlayTimer) {{
+              parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
+              parentWindow.__hhsCommandOverlayTimer = null;
+            }}
+            if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
+              parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
+              parentWindow.__hhsCommandOverlayExpiryTimer = null;
+            }}
+            const overlayToken = {json.dumps(overlay_token)};
+            parentWindow.__hhsCommandOverlayToken = overlayToken;
+            doc.body.dataset.hhsCommandOverlayHidden = "false";
             const existing = doc.getElementById("hhs-command-overlay");
             if (existing) {{
               existing.remove();
@@ -1324,6 +1379,8 @@ def render_preloader(
             const overlay = doc.createElement("div");
             overlay.id = "hhs-command-overlay";
             overlay.className = {json.dumps(loader_class)};
+            overlay.dataset.hhsOverlayToken = overlayToken;
+            overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
             overlay.style.position = "fixed";
             overlay.style.inset = "0";
             overlay.style.width = "100vw";
@@ -1353,7 +1410,34 @@ def render_preloader(
             }}
             node.dataset.timerStarted = "true";
             const started_at = Date.now();
+            const remove_if_current = () => {{
+              const current = doc.getElementById("hhs-command-overlay");
+              if (
+                current &&
+                current.dataset.hhsOverlayToken === overlayToken &&
+                parentWindow.__hhsCommandOverlayToken === overlayToken
+              ) {{
+                current.remove();
+                doc.body.dataset.hhsCommandOverlayHidden = "true";
+                parentWindow.__hhsCommandOverlayClearedAt = Math.max(
+                  Number(parentWindow.__hhsCommandOverlayClearedAt || 0),
+                  Date.now()
+                );
+              }}
+              if (parentWindow.__hhsCommandOverlayTimer) {{
+                parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
+                parentWindow.__hhsCommandOverlayTimer = null;
+              }}
+              if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
+                parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
+                parentWindow.__hhsCommandOverlayExpiryTimer = null;
+              }}
+            }};
             const render_elapsed = () => {{
+              if (!doc.body.contains(overlay)) {{
+                remove_if_current();
+                return;
+              }}
               const elapsed_seconds = Math.max(0, Math.floor((Date.now() - started_at) / 1000));
               const timeout_seconds = Math.max(1, Number(node.dataset.timeoutSeconds || 1));
               const elapsed_ratio = elapsed_seconds / timeout_seconds;
@@ -1364,7 +1448,11 @@ def render_preloader(
               node.classList.toggle("hhs-loader-elapsed-danger", elapsed_ratio >= 0.6);
             }};
             render_elapsed();
-            window.setInterval(render_elapsed, 1000);
+            parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(render_elapsed, 1000);
+            parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout(
+              remove_if_current,
+              {max(1, safe_timeout + 2) * 1000}
+            );
           }})();
         </script>
         """,
@@ -1379,11 +1467,48 @@ def clear_preloader() -> None:
         """
         <script>
           (() => {
+            const parentWindow = window.parent;
             const doc = window.parent.document;
-            const overlay = doc.getElementById("hhs-command-overlay");
-            if (overlay) {
-              overlay.remove();
+            parentWindow.__hhsCommandOverlayClearedAt = Date.now();
+            parentWindow.__hhsCommandOverlayToken = "";
+            if (parentWindow.__hhsCommandOverlayTimer) {
+              parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
+              parentWindow.__hhsCommandOverlayTimer = null;
             }
+            if (parentWindow.__hhsCommandOverlayExpiryTimer) {
+              parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
+              parentWindow.__hhsCommandOverlayExpiryTimer = null;
+            }
+            doc.body.dataset.hhsCommandOverlayHidden = "true";
+            const remove_overlay = () => {
+              const overlay = doc.getElementById("hhs-command-overlay");
+              if (!overlay) {
+                return;
+              }
+              const overlayCreatedAt = Number(overlay.dataset.hhsOverlayCreatedAt || 0);
+              const clearedAt = Number(parentWindow.__hhsCommandOverlayClearedAt || 0);
+              if (clearedAt && overlayCreatedAt > clearedAt) {
+                return;
+              }
+              overlay.remove();
+            };
+            if (parentWindow.__hhsCommandOverlayClearObserver) {
+              parentWindow.__hhsCommandOverlayClearObserver.disconnect();
+              parentWindow.__hhsCommandOverlayClearObserver = null;
+            }
+            const observer = new parentWindow.MutationObserver(remove_overlay);
+            observer.observe(doc.body, { childList: true });
+            parentWindow.__hhsCommandOverlayClearObserver = observer;
+            remove_overlay();
+            parentWindow.setTimeout(remove_overlay, 50);
+            parentWindow.setTimeout(remove_overlay, 250);
+            parentWindow.setTimeout(remove_overlay, 1000);
+            parentWindow.setTimeout(() => {
+              observer.disconnect();
+              if (parentWindow.__hhsCommandOverlayClearObserver === observer) {
+                parentWindow.__hhsCommandOverlayClearObserver = null;
+              }
+            }, 2000);
           })();
         </script>
         """,
@@ -4717,6 +4842,20 @@ def cleanup_session_resources(token: str) -> None:
         clear_registered_ssh_connection()
 
 
+def schedule_cleanup_session_resources(token: str) -> None:
+    """Close browser-session resources without blocking the unload request."""
+    clean_token = token.strip()
+    if not clean_token:
+        return
+    thread = threading.Thread(
+        target=cleanup_session_resources,
+        args=(clean_token,),
+        name=f"hhs-ttyd-session-cleanup-{clean_token[:8]}",
+        daemon=True,
+    )
+    thread.start()
+
+
 def store_ttyd_event(token: str, event: dict[str, object]) -> None:
     """Store a ttyd browser event for later UI synchronization."""
     if not token:
@@ -4856,10 +4995,10 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
         """Close resources for the token provided in the request query string."""
         parsed_url = urllib.parse.urlparse(self.path)
         token = urllib.parse.parse_qs(parsed_url.query).get("token", [""])[0]
-        if token:
-            cleanup_session_resources(token)
         self.send_response(204)
         self.end_headers()
+        if token:
+            schedule_cleanup_session_resources(token)
 
     def handle_ttyd_event_request(self) -> None:
         """Store a ttyd event sent by the browser bridge."""
@@ -4891,17 +5030,29 @@ def ensure_ttyd_cleanup_server() -> int:
     global TTYD_CLEANUP_SERVER, TTYD_CLEANUP_SERVER_PORT
     if TTYD_CLEANUP_SERVER is not None:
         return TTYD_CLEANUP_SERVER_PORT
+    state = process_resource_state()
+    cached_server = state.get("ttyd_cleanup_server")
+    cached_port = int(state.get("ttyd_cleanup_server_port") or 0)
+    if cached_server is not None and cached_port > 0:
+        TTYD_CLEANUP_SERVER = cached_server
+        TTYD_CLEANUP_SERVER_PORT = cached_port
+        return TTYD_CLEANUP_SERVER_PORT
     server = ThreadingHTTPServer((hhs_ui.TTYD_HOST, 0), TtydCleanupRequestHandler)
     server.daemon_threads = True
+    port = int(server.server_address[1])
     TTYD_CLEANUP_SERVER = server
-    TTYD_CLEANUP_SERVER_PORT = int(server.server_address[1])
+    TTYD_CLEANUP_SERVER_PORT = port
+    state["ttyd_cleanup_server"] = server
+    state["ttyd_cleanup_server_port"] = port
     thread = threading.Thread(
         target=server.serve_forever,
         name="hhs-ttyd-cleanup",
         daemon=True,
     )
     thread.start()
-    atexit.register(cleanup_all_registered_sessions)
+    if not bool(state.get("ttyd_cleanup_atexit_registered", False)):
+        atexit.register(cleanup_all_registered_sessions)
+        state["ttyd_cleanup_atexit_registered"] = True
     return TTYD_CLEANUP_SERVER_PORT
 
 
@@ -4947,8 +5098,22 @@ def render_browser_cleanup_script() -> None:
           (() => {{
             const cleanupUrl = {cleanup_url!r};
             const parentWindow = window.parent;
-            if (parentWindow.__hhsTtydCleanupUrl === cleanupUrl) {{
+            if (
+              parentWindow.__hhsTtydCleanupUrl === cleanupUrl &&
+              parentWindow.__hhsTtydCleanupHandler
+            ) {{
               return;
+            }}
+            if (parentWindow.__hhsTtydCleanupHandler) {{
+              parentWindow.removeEventListener(
+                "pagehide",
+                parentWindow.__hhsTtydCleanupHandler
+              );
+              parentWindow.removeEventListener(
+                "beforeunload",
+                parentWindow.__hhsTtydCleanupHandler
+              );
+              parentWindow.__hhsTtydCleanupHandler = null;
             }}
             parentWindow.__hhsTtydCleanupUrl = cleanupUrl;
             const cleanup = () => {{
@@ -4973,6 +5138,7 @@ def render_browser_cleanup_script() -> None:
             }};
             parentWindow.addEventListener("pagehide", cleanup, {{ once: true }});
             parentWindow.addEventListener("beforeunload", cleanup, {{ once: true }});
+            parentWindow.__hhsTtydCleanupHandler = cleanup;
             if (!parentWindow.__hhsTtydEventListenerInstalled) {{
               parentWindow.__hhsTtydEventListenerInstalled = true;
               parentWindow.addEventListener("message", (event) => {{
@@ -6469,6 +6635,15 @@ def command_timeout_seconds(force_local: bool = False) -> int:
     return hhs_ui.UI_COMMAND_LOCAL_TIMEOUT_SECONDS
 
 
+def effective_command_timeout_seconds(
+    timeout_seconds: int | None = None, force_local: bool = False
+) -> int:
+    """Return an explicit timeout, or the selected host default when unset."""
+    if timeout_seconds is not None:
+        return max(1, int(timeout_seconds))
+    return command_timeout_seconds(force_local=force_local)
+
+
 def selected_ssh_host_is_connected(host: str | None = None) -> bool:
     """Return whether the selected host has an active UI-managed SSH connection."""
     host_name = (host if host is not None else selected_ssh_host()).strip()
@@ -6937,14 +7112,18 @@ def run_bash_command(
     force_local: bool = False,
     timeout_seconds: int | None = None,
     cache_tag: str = "default",
+    cache_key_override: str | None = None,
+    show_overlay: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run a Bash command with tagged command-result caching and a preloader."""
     remote_host = command_remote_host(force_local=force_local)
     command_to_run = effective_bash_command(command, force_local=force_local)
     selection_only_rerun = table_selection_rerun_in_progress()
-    show_command_overlay = not selection_only_rerun
-    effective_timeout = command_timeout_seconds(force_local=force_local)
-    cache_key = command_cache_key(command_to_run, cache_tag)
+    show_command_overlay = show_overlay and not selection_only_rerun
+    effective_timeout = effective_command_timeout_seconds(
+        timeout_seconds, force_local=force_local
+    )
+    cache_key = cache_key_override or command_cache_key(command_to_run, cache_tag)
     snapshot_value = (
         command_result_snapshot_get(cache_key) if selection_only_rerun else None
     )
@@ -7154,7 +7333,9 @@ def start_background_bash_command(
     stderr_file.close()
 
     remote_host = command_remote_host(force_local=force_local)
-    effective_timeout = command_timeout_seconds(force_local=force_local)
+    effective_timeout = effective_command_timeout_seconds(
+        timeout_seconds, force_local=force_local
+    )
     command_to_run = effective_bash_command(command, force_local=force_local)
     stdout_handle = Path(stdout_path).open("w", encoding="utf-8")
     stderr_handle = Path(stderr_path).open("w", encoding="utf-8")
@@ -7366,6 +7547,7 @@ def ui_cache_key_is_supported(key: object) -> bool:
     return (
         key.startswith("command_hash:")
         or key.startswith("command_tag:")
+        or key.startswith("search_terms:")
         or key == hhs_ui.UI_CACHE_SSH_CONNECTION_KEY
     )
 
@@ -7373,6 +7555,14 @@ def ui_cache_key_is_supported(key: object) -> bool:
 def ui_cache_metadata_key(key: str) -> bool:
     """Return whether a UI cache key stores non-expiring UI metadata."""
     return key.startswith("ui:")
+
+
+def ui_cache_preserved_on_clear_key(key: str) -> bool:
+    """Return whether a UI cache key should survive broad command-cache clears."""
+    return (
+        ui_cache_metadata_key(key)
+        or key == hhs_ui_constants.SEARCH_TERM_HISTORY_CACHE_KEY
+    )
 
 
 def prune_ui_cache_entries(
@@ -7595,7 +7785,7 @@ def cache_clear() -> None:
     metadata_cache = {
         key: value
         for key, value in load_ui_cache().items()
-        if ui_cache_metadata_key(key)
+        if ui_cache_preserved_on_clear_key(key)
     }
     save_ui_cache(metadata_cache)
     command_result_snapshot_clear()
@@ -13127,7 +13317,7 @@ def build_hhs_search_setup_command() -> str:
 
 
 def build_hhs_search_modified_results_command(search_command: str) -> str:
-    """Wrap a Search command so path results include modification timestamps."""
+    """Wrap a Search command so path results include metadata columns."""
     return (
         f"{search_command} | while IFS= read -r line; do "
         'case "${line}" in '
@@ -13136,14 +13326,53 @@ def build_hhs_search_modified_results_command(search_command: str) -> str:
         'if [ -e "${line}" ]; then '
         'if modified=$(stat -c %Y "${line}" 2>/dev/null); then :; '
         'else modified=$(stat -f %m "${line}" 2>/dev/null || printf "0"); fi; '
-        'else modified=0; fi; '
-        'printf "__HHS_SEARCH_RESULT__\\t%s\\t%s\\n" "${line}" "${modified}" ;; '
+        'if [ -f "${line}" ]; then '
+        'if size=$(stat -c %s "${line}" 2>/dev/null); then :; '
+        'else size=$(stat -f %z "${line}" 2>/dev/null || printf ""); fi; '
+        'else size=""; fi; '
+        'else modified=0; size=""; fi; '
+        'printf "__HHS_SEARCH_RESULT__\\t%s\\t%s\\t%s\\n" "${line}" "${modified}" "${size}" ;; '
         "esac; "
         "done"
     )
 
 
-def build_hhs_search_command(search_type: str, query: str, search_path: str) -> str:
+def normalized_search_option_values(
+    search_type: str,
+    ignore_case: bool = False,
+    words: bool = False,
+    binary: bool = False,
+) -> tuple[bool, bool, bool]:
+    """Return Search option flags that apply to the selected Search type."""
+    if normalized_search_type(search_type) != "Strings":
+        return (False, False, False)
+    return (bool(ignore_case), bool(words), bool(binary))
+
+
+def search_string_option_flags(
+    ignore_case: bool = False,
+    words: bool = False,
+    binary: bool = False,
+) -> list[str]:
+    """Return __hhs_search_string option flags for selected Search toggles."""
+    flags: list[str] = []
+    if ignore_case:
+        flags.append("-i")
+    if words:
+        flags.append("-w")
+    if binary:
+        flags.append("-b")
+    return flags
+
+
+def build_hhs_search_command(
+    search_type: str,
+    query: str,
+    search_path: str,
+    ignore_case: bool = False,
+    words: bool = False,
+    binary: bool = False,
+) -> str:
     """Build the HomeSetup search command for the selected Search type."""
     setup_command = build_hhs_search_setup_command()
     search_root = shlex.quote(search_path.strip() or ".")
@@ -13153,10 +13382,42 @@ def build_hhs_search_command(search_type: str, query: str, search_path: str) -> 
         search_command = f"{setup_command}__hhs_search_dir {search_root} {safe_glob}"
         return build_hhs_search_modified_results_command(search_command)
     if search_type == "Strings":
-        return f"{setup_command}__hhs_search_string {search_root} {safe_query}"
+        option_values = normalized_search_option_values(
+            search_type, ignore_case, words, binary
+        )
+        option_args = " ".join(
+            shlex.quote(flag) for flag in search_string_option_flags(*option_values)
+        )
+        if option_args:
+            option_args = f" {option_args}"
+        return f"{setup_command}__hhs_search_string {search_root}{option_args} {safe_query}"
     safe_glob = shlex.quote(search_glob_from_query(query))
     search_command = f"{setup_command}__hhs_search_file {search_root} {safe_glob}"
     return build_hhs_search_modified_results_command(search_command)
+
+
+def search_command_cache_key(
+    search_type: str,
+    query: str,
+    search_path: str,
+    ignore_case: bool = False,
+    words: bool = False,
+    binary: bool = False,
+) -> str:
+    """Return the tagged MD5 command cache key for one Search execution."""
+    option_values = normalized_search_option_values(
+        search_type, ignore_case, words, binary
+    )
+    key_material = "\n".join(
+        (
+            normalized_search_type(search_type),
+            query.strip(),
+            search_path.strip(),
+            *(str(value) for value in option_values),
+        )
+    )
+    search_hash = hashlib.md5(key_material.encode("utf-8")).hexdigest()
+    return f"command_tag:{safe_cache_tag('search')}:{search_hash}"
 
 
 def build_hhs_open_search_result_command(path: str) -> str:
@@ -13236,16 +13497,19 @@ def parse_hhs_search_results(
             "Path": clean_line,
             "FullPath": search_full_path(clean_line, search_path),
             "Modified": "",
+            "Size": "",
             "Line": "",
             "LineNumber": "",
             "Match": "",
         }
         if clean_line.startswith("__HHS_SEARCH_RESULT__\t"):
-            parts = clean_line.split("\t", 2)
-            if len(parts) == 3:
+            parts = clean_line.split("\t", 3)
+            if len(parts) >= 3:
                 row["Path"] = search_relative_path(parts[1], search_path)
                 row["FullPath"] = search_full_path(parts[1], search_path)
                 row["Modified"] = ssh_explorer_mtime_text(parts[2])
+                if len(parts) == 4 and search_type == "Files":
+                    row["Size"] = ssh_explorer_size_text(parts[3], "File")
             rows.append(row)
             continue
         if search_type == "Strings":
@@ -13294,11 +13558,14 @@ def colorize_search_result_line(value: str, text_filter: str = "") -> str:
 def search_result_path_link(row: dict[str, str]) -> str:
     """Return a clickable Search result path link."""
     display_path = display_path_value(row.get("Path", ""))
-    full_path = str(row.get("FullPath") or row.get("Path") or "").strip()
+    link_path = str(row.get("FullPath") or row.get("Path") or "").strip()
+    full_path = posixpath.normpath(link_path) if link_path else ""
     query = urllib.parse.urlencode({hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM: full_path})
     safe_display_path = html.escape(display_path)
+    safe_full_path = html.escape(full_path, quote=True)
     return (
-        f'<a class="hhs-search-result-path-link" href="?{query}" target="_self">'
+        f'<a class="hhs-search-result-path-link" href="?{query}" target="_self" '
+        f'title="{safe_full_path}" data-hhs-open-path="{safe_full_path}">'
         f"{safe_display_path}</a>"
     )
 
@@ -13331,23 +13598,24 @@ def render_search_string_results(
     )
 
 
-def render_search_path_results(rows: list[dict[str, str]]) -> None:
+def render_search_path_results(rows: list[dict[str, str]], search_type: str) -> None:
     """Render file and folder Search results with clickable paths."""
     if not rows:
         st.caption("No search results.")
         return
+    headers = search_result_headers(search_type)
+    header_html = "".join(f"<th>{html.escape(header)}</th>" for header in headers)
     table_rows = []
     for row in rows:
-        table_rows.append(
-            "<tr>"
-            f"<td>{search_result_path_link(row)}</td>"
-            f"<td>{html.escape(row.get('Modified', ''))}</td>"
-            "</tr>"
-        )
+        row_cells = [f"<td>{search_result_path_link(row)}</td>"]
+        if "Size" in headers:
+            row_cells.append(f"<td>{html.escape(row.get('Size', ''))}</td>")
+        row_cells.append(f"<td>{html.escape(row.get('Modified', ''))}</td>")
+        table_rows.append(f"<tr>{''.join(row_cells)}</tr>")
     st.markdown(
         '<div class="hhs-search-results hhs-search-string-results">'
         "<table>"
-        "<thead><tr><th>Path</th><th>Modified</th></tr></thead>"
+        f"<thead><tr>{header_html}</tr></thead>"
         f"<tbody>{''.join(table_rows)}</tbody>"
         "</table>"
         "</div>",
@@ -13355,10 +13623,176 @@ def render_search_path_results(rows: list[dict[str, str]]) -> None:
     )
 
 
+def increase_search_visible_count() -> None:
+    """Increase the number of visible Search results by one page."""
+    visible_count = int(
+        st.session_state.get(
+            "search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE
+        )
+    )
+    st.session_state["search_visible_count"] = (
+        visible_count + hhs_ui_constants.SEARCH_PAGE_SIZE
+    )
+
+
+def visible_search_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return the Search rows currently visible for incremental rendering."""
+    visible_count = int(
+        st.session_state.get(
+            "search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE
+        )
+    )
+    if visible_count < hhs_ui_constants.SEARCH_PAGE_SIZE:
+        visible_count = hhs_ui_constants.SEARCH_PAGE_SIZE
+    st.session_state["search_visible_count"] = visible_count
+    return rows[:visible_count]
+
+
+def render_search_load_more(total_count: int) -> None:
+    """Render the Search load-more control when hidden rows remain."""
+    visible_count = int(
+        st.session_state.get(
+            "search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE
+        )
+    )
+    if visible_count >= total_count:
+        return
+    displayed_count = min(visible_count, total_count)
+    with st.container(key="search_load_more"):
+        st.button(
+            f"Load more results ({displayed_count}/{total_count}) ...",
+            key="search_load_more_button",
+            help="Load more search results",
+            on_click=increase_search_visible_count,
+            width="stretch",
+        )
+    render_search_auto_load_more(displayed_count, total_count)
+
+
+def render_search_auto_load_more(displayed_count: int, total_count: int) -> None:
+    """Attach browser-side auto loading for Search results at page bottom."""
+    render_token = json.dumps(f"{displayed_count}:{total_count}")
+    components.html(
+        """
+        <script>
+          (() => {
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            if (parentWindow.__hhsSearchAutoLoadCleanup) {
+              parentWindow.__hhsSearchAutoLoadCleanup();
+            }
+            const renderToken = __HHS_SEARCH_AUTO_LOAD_TOKEN__;
+            const buttonSelector = ".st-key-search_load_more_button button";
+            const loadingMarkup = `
+              <span class="hhs-search-load-more-preloader">
+                <span class="hhs-search-load-more-preloader-spinner" aria-hidden="true"></span>
+                <span class="hhs-search-load-more-preloader-label">Loading more results...</span>
+              </span>
+            `;
+            let requested = false;
+            const componentFrame = window.frameElement;
+            const loadMoreContainer = doc.querySelector(".st-key-search_load_more");
+            const sentinel = loadMoreContainer || componentFrame;
+            const scrollCandidates = [
+              parentWindow,
+              doc,
+              doc.scrollingElement,
+              doc.documentElement,
+              doc.body,
+              doc.querySelector("[data-testid='stAppViewContainer']"),
+              doc.querySelector("[data-testid='stMain']"),
+              doc.querySelector(".stApp"),
+            ].filter(Boolean);
+            const scrollTargets = [...new Set(scrollCandidates)];
+            const elementNearBottom = (element) => {
+              if (element === parentWindow || element === doc) {
+                const page = doc.scrollingElement || doc.documentElement;
+                const scrollTop = parentWindow.scrollY || page.scrollTop || doc.body.scrollTop || 0;
+                const viewportHeight = parentWindow.innerHeight || page.clientHeight || 0;
+                const pageHeight = Math.max(page.scrollHeight, doc.body.scrollHeight);
+                return scrollTop + viewportHeight >= pageHeight - 120;
+              }
+              return element.scrollTop + element.clientHeight >= element.scrollHeight - 120;
+            };
+            const nearBottom = () => {
+              return scrollTargets.some(elementNearBottom);
+            };
+            const renderLoading = (button) => {
+              if (!button || button.dataset.hhsLoadMoreLoading === "true") {
+                return;
+              }
+              button.dataset.hhsLoadMoreLoading = "true";
+              button.setAttribute("aria-busy", "true");
+              button.innerHTML = loadingMarkup;
+            };
+            const bindButton = () => {
+              const button = doc.querySelector(buttonSelector);
+              if (!button) {
+                return null;
+              }
+              if (button.dataset.hhsLoadMoreBound !== renderToken) {
+                delete button.dataset.hhsLoadMoreLoading;
+                button.removeAttribute("aria-busy");
+                button.dataset.hhsLoadMoreBound = renderToken;
+                button.addEventListener("click", () => renderLoading(button), { once: true });
+              }
+              return button;
+            };
+            const loadMore = (force = false) => {
+              const button = bindButton();
+              if (!button || button.disabled || requested) {
+                return;
+              }
+              if (!force && !nearBottom()) {
+                return;
+              }
+              requested = true;
+              renderLoading(button);
+              button.click();
+            };
+            const onScroll = () => {
+              parentWindow.requestAnimationFrame(loadMore);
+            };
+            let observer = null;
+            bindButton();
+            if (sentinel && parentWindow.IntersectionObserver) {
+              observer = new parentWindow.IntersectionObserver(
+                (entries) => {
+                  if (entries.some((entry) => entry.isIntersecting)) {
+                    loadMore(true);
+                  }
+                },
+                { root: null, rootMargin: "0px 0px 240px 0px", threshold: 0 }
+              );
+              observer.observe(sentinel);
+            }
+            scrollTargets.forEach((target) => {
+              target.addEventListener("scroll", onScroll, { passive: true });
+            });
+            parentWindow.addEventListener("resize", onScroll, { passive: true });
+            parentWindow.__hhsSearchAutoLoadCleanup = () => {
+              if (observer) {
+                observer.disconnect();
+              }
+              scrollTargets.forEach((target) => {
+                target.removeEventListener("scroll", onScroll);
+              });
+              parentWindow.removeEventListener("resize", onScroll);
+            };
+            parentWindow.setTimeout(loadMore, 150);
+          })();
+        </script>
+        """.replace("__HHS_SEARCH_AUTO_LOAD_TOKEN__", render_token),
+        height=0,
+    )
+
+
 def search_result_headers(search_type: str) -> list[str]:
     """Return visible Search result table columns for one Search type."""
     if search_type == "Strings":
         return ["Path", "Line", "Match"]
+    if search_type == "Files":
+        return ["Path", "Size", "Modified"]
     return ["Path", "Modified"]
 
 
@@ -13370,21 +13804,169 @@ def search_loader_message(query: str, search_path: str) -> str:
     )
 
 
+def clean_recent_search_value(value: object) -> str:
+    """Return a Search history value without converting None into text."""
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def clean_search_term_value(value: object) -> str:
+    """Return a Search term value, excluding Streamlit's empty selection marker."""
+    clean_value = clean_recent_search_value(value)
+    return "" if clean_value == "None" else clean_value
+
+
+def normalize_recent_search_values(
+    values: object,
+    current_value: object = "",
+    limit: int = 20,
+    cleaner: Callable[[object], str] = clean_recent_search_value,
+) -> list[str]:
+    """Return de-duplicated recent Search values with the current value first."""
+    value_list = values if isinstance(values, list) else []
+    candidates = [current_value, *value_list]
+    normalized: list[str] = []
+    for candidate in candidates:
+        clean_candidate = cleaner(candidate)
+        if clean_candidate and clean_candidate not in normalized:
+            normalized.append(clean_candidate)
+        if len(normalized) >= limit:
+            break
+    return normalized
+
+
+def normalize_search_directories(
+    directories: object,
+    current_directory: str = "",
+) -> list[str]:
+    """Return de-duplicated Search directories with the current directory first."""
+    return normalize_recent_search_values(
+        directories,
+        current_directory,
+        hhs_ui_constants.SEARCH_DIRECTORY_HISTORY_LIMIT,
+    )
+
+
+def normalize_search_terms(terms: object, current_term: str = "") -> list[str]:
+    """Return de-duplicated Search terms with the current term first."""
+    return normalize_recent_search_values(
+        terms,
+        current_term,
+        hhs_ui_constants.SEARCH_TERM_HISTORY_LIMIT,
+        clean_search_term_value,
+    )
+
+
+def remember_search_directory(search_path: object) -> str:
+    """Store one Search directory in recent history and return its clean value."""
+    clean_path = (
+        clean_recent_search_value(search_path) or footer_working_directory() or "."
+    )
+    st.session_state["search_path"] = clean_path
+    st.session_state["search_directories"] = normalize_search_directories(
+        st.session_state.get("search_directories", []),
+        clean_path,
+    )
+    return clean_path
+
+
+def search_directory_options() -> list[str]:
+    """Return Search directory select options including the current value."""
+    remember_search_directory(st.session_state.get("search_path", ""))
+    return list(st.session_state.get("search_directories", []))
+
+
+def handle_search_directory_change() -> None:
+    """Persist the selected Search directory and update recent directories."""
+    remember_search_directory(st.session_state.get("search_path", ""))
+    save_ui_state()
+
+
+def cached_search_terms() -> list[str]:
+    """Return recent Search terms from the TTL-backed UI cache."""
+    cached_value = cache_get(hhs_ui_constants.SEARCH_TERM_HISTORY_CACHE_KEY)
+    terms = cached_value.get("terms", []) if cached_value else []
+    return normalize_search_terms(terms)
+
+
+def remember_search_term(search_query: object) -> str:
+    """Store one Search term in recent history and return its clean value."""
+    clean_query = clean_search_term_value(search_query)
+    if not clean_query:
+        if "search_query" in st.session_state:
+            st.session_state["search_query"] = None
+        return ""
+    st.session_state["search_query"] = clean_query
+    cache_set(
+        hhs_ui_constants.SEARCH_TERM_HISTORY_CACHE_KEY,
+        {"terms": normalize_search_terms(cached_search_terms(), clean_query)},
+        hhs_ui_constants.SEARCH_TERM_HISTORY_TTL_SECONDS,
+    )
+    return clean_query
+
+
+def search_term_options() -> list[str]:
+    """Return Search term select options including the current value."""
+    clean_query = clean_search_term_value(st.session_state.get("search_query", ""))
+    if st.session_state.get("search_query") and not clean_query:
+        st.session_state["search_query"] = None
+    return normalize_search_terms(
+        cached_search_terms(),
+        clean_query,
+    )
+
+
+def toggle_search_option(state_key: str) -> None:
+    """Toggle one boolean Search option and persist the form state."""
+    st.session_state[state_key] = not bool(st.session_state.get(state_key, False))
+    save_ui_state()
+
+
+def render_search_option_toggle(
+    state_key: str, glyph: str, help_text: str, disabled: bool = False
+) -> None:
+    """Render one glyph Search option toggle with pressed-state styling."""
+    selected = bool(st.session_state.get(state_key, False))
+    selected_token = "selected" if selected else "idle"
+    st.button(
+        glyph,
+        key=f"{state_key}_toggle_{selected_token}",
+        help=help_text,
+        on_click=toggle_search_option,
+        args=(state_key,),
+        disabled=disabled,
+        width="stretch",
+    )
+
+
 def submit_search_query() -> None:
     """Persist the Search form values that should be executed."""
-    query = str(st.session_state.get("search_query", "")).strip()
-    search_path = str(st.session_state.get("search_path", "")).strip()
+    query = clean_search_term_value(st.session_state.get("search_query", ""))
+    search_path = clean_recent_search_value(st.session_state.get("search_path", ""))
     if not query:
         st.session_state["search_result_query"] = ""
         push_floating_status("Enter a search query before searching.", "warn")
         return
+    query = remember_search_term(query)
     if not search_path:
         search_path = footer_working_directory() or "."
-        st.session_state["search_path"] = search_path
+    search_path = remember_search_directory(search_path)
     search_type = normalized_search_type(st.session_state.get("search_type"))
     st.session_state["search_result_type"] = search_type
     st.session_state["search_result_path"] = search_path
     st.session_state["search_result_query"] = query
+    st.session_state["search_result_ignore_case"] = bool(
+        st.session_state.get("search_ignore_case", False)
+    )
+    st.session_state["search_result_words"] = bool(
+        st.session_state.get("search_words", False)
+    )
+    st.session_state["search_result_binary"] = bool(
+        st.session_state.get("search_binary", False)
+    )
+    st.session_state["search_visible_count"] = hhs_ui_constants.SEARCH_PAGE_SIZE
+    cache_delete_tag("search")
     save_ui_state()
 
 
@@ -13392,29 +13974,32 @@ def render_search_controls() -> None:
     """Render the Search controls in one compact row."""
     with st.container(key="search_controls"):
         kind_column, term_column, path_column, picker_column, search_column = (
-            st.columns([1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment="center")
+            st.columns([1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment="bottom")
         )
         with kind_column:
             st.selectbox(
-                "Search type",
+                "Kind",
                 options=hhs_ui_constants.SEARCH_TYPES,
                 key="search_type",
                 format_func=search_type_label,
-                label_visibility="collapsed",
             )
         with term_column:
-            st.text_input(
-                "Search query",
+            st.selectbox(
+                "Search terms",
+                options=search_term_options(),
+                index=None,
                 key="search_query",
                 placeholder="Search for files, folders, or strings",
-                label_visibility="collapsed",
+                accept_new_options=True,
+                on_change=submit_search_query,
                 width="stretch",
             )
         with path_column:
-            st.text_input(
-                "Search path",
+            st.selectbox(
+                "Search directory",
+                options=search_directory_options(),
                 key="search_path",
-                label_visibility="collapsed",
+                on_change=handle_search_directory_change,
                 width="stretch",
             )
         with picker_column:
@@ -13434,13 +14019,200 @@ def render_search_controls() -> None:
                 on_click=submit_search_query,
                 width="stretch",
             )
+    render_search_submit_preloader_script()
+
+
+def render_search_submit_preloader_script() -> None:
+    """Attach a delayed browser-side preloader for Search submit."""
+    timeout_seconds = int(hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS)
+    delay_ms = int(hhs_ui_constants.SEARCH_SUBMIT_PRELOADER_DELAY_MS)
+    components.html(
+        f"""
+        <script>
+          (() => {{
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            if (parentWindow.__hhsSearchSubmitPreloaderCleanup) {{
+              parentWindow.__hhsSearchSubmitPreloaderCleanup();
+            }}
+            const buttonSelector = ".st-key-search_submit_button button";
+            const querySelector = ".st-key-search_query [role='combobox'], .st-key-search_query input";
+            const pathSelector = ".st-key-search_path [role='combobox'], .st-key-search_path input";
+            const timeoutSeconds = {timeout_seconds};
+            const delayMs = {delay_ms};
+            const clearOverlayTimers = () => {{
+              if (parentWindow.__hhsCommandOverlayTimer) {{
+                parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
+                parentWindow.__hhsCommandOverlayTimer = null;
+              }}
+              if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
+                parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
+                parentWindow.__hhsCommandOverlayExpiryTimer = null;
+              }}
+            }};
+            const clearPendingSearchOverlay = () => {{
+              if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
+                parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
+                parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
+              }}
+              const overlay = doc.getElementById("hhs-command-overlay");
+              if (
+                overlay &&
+                String(overlay.dataset.hhsOverlayToken || "").startsWith("search-submit-")
+              ) {{
+                overlay.remove();
+                doc.body.dataset.hhsCommandOverlayHidden = "true";
+                parentWindow.__hhsCommandOverlayClearedAt = Date.now();
+                parentWindow.__hhsCommandOverlayToken = "";
+                clearOverlayTimers();
+              }}
+            }};
+            const searchValue = (selector) => {{
+              const node = doc.querySelector(selector);
+              if (!node) {{
+                return "";
+              }}
+              if ("value" in node) {{
+                return String(node.value || "").trim();
+              }}
+              return String(node.textContent || "").trim();
+            }};
+            const renderElapsed = (overlay, startedAt) => {{
+              const node = overlay.querySelector(".hhs-tab-loader-elapsed");
+              if (!node) {{
+                return;
+              }}
+              const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+              const elapsedRatio = elapsedSeconds / Math.max(1, timeoutSeconds);
+              const minutes = Math.floor(elapsedSeconds / 60);
+              const seconds = String(elapsedSeconds % 60).padStart(2, "0");
+              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
+              node.classList.toggle("hhs-loader-elapsed-warning", elapsedRatio >= 0.3 && elapsedRatio < 0.6);
+              node.classList.toggle("hhs-loader-elapsed-danger", elapsedRatio >= 0.6);
+            }};
+            const showOverlay = (query, searchPath) => {{
+              if (!query) {{
+                return;
+              }}
+              clearOverlayTimers();
+              const createdAt = Date.now();
+              const overlayToken = `search-submit-${{createdAt}}`;
+              parentWindow.__hhsCommandOverlayToken = overlayToken;
+              doc.body.dataset.hhsCommandOverlayHidden = "false";
+              const existing = doc.getElementById("hhs-command-overlay");
+              if (existing) {{
+                existing.remove();
+              }}
+              const overlay = doc.createElement("div");
+              overlay.id = "hhs-command-overlay";
+              overlay.className = "hhs-tab-loader hhs-tab-loader-transient";
+              overlay.dataset.hhsOverlayToken = overlayToken;
+              overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
+              overlay.style.position = "fixed";
+              overlay.style.inset = "0";
+              overlay.style.width = "100vw";
+              overlay.style.height = "100dvh";
+              overlay.style.display = "flex";
+              overlay.style.alignItems = "center";
+              overlay.style.justifyContent = "center";
+              overlay.style.zIndex = "999999";
+              overlay.innerHTML = `
+                <div class="hhs-tab-loader-panel">
+                  <span class="hhs-tab-loader-spinner"></span>
+                  <span class="hhs-tab-loader-copy">
+                    <span class="hhs-tab-loader-label"></span>
+                    <span class="hhs-tab-loader-elapsed" data-timeout-seconds="${{timeoutSeconds}}">
+                      time elapsed: 0m:00s
+                    </span>
+                  </span>
+                </div>
+              `;
+              const label = overlay.querySelector(".hhs-tab-loader-label");
+              if (label) {{
+                const queryNode = doc.createElement("span");
+                queryNode.className = "hhs-loader-primary";
+                queryNode.textContent = query;
+                const pathNode = doc.createElement("span");
+                pathNode.className = "hhs-loader-secondary";
+                pathNode.textContent = searchPath;
+                label.append("Searching for ", queryNode, " in ", pathNode);
+              }}
+              doc.body.appendChild(overlay);
+              renderElapsed(overlay, createdAt);
+              parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(
+                () => renderElapsed(overlay, createdAt),
+                1000
+              );
+              parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout(
+                () => {{
+                  const current = doc.getElementById("hhs-command-overlay");
+                  if (current && current.dataset.hhsOverlayToken === overlayToken) {{
+                    current.remove();
+                    doc.body.dataset.hhsCommandOverlayHidden = "true";
+                  }}
+                  clearOverlayTimers();
+                }},
+                Math.max(1, timeoutSeconds + 2) * 1000
+              );
+            }};
+            const scheduleOverlay = () => {{
+              const query = searchValue(querySelector);
+              if (!query) {{
+                return;
+              }}
+              const searchPath = searchValue(pathSelector) || "current directory";
+              if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
+                parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
+              }}
+              parentWindow.__hhsSearchSubmitPreloaderDelayTimer = parentWindow.setTimeout(
+                () => showOverlay(query, searchPath),
+                delayMs
+              );
+            }};
+            const onClick = (event) => {{
+              if (event.target && event.target.closest(buttonSelector)) {{
+                scheduleOverlay();
+              }}
+            }};
+            const onKeydown = (event) => {{
+              if (
+                event.key === "Enter" &&
+                event.target &&
+                event.target.closest(".st-key-search_query")
+              ) {{
+                scheduleOverlay();
+              }}
+            }};
+            doc.addEventListener("click", onClick, true);
+            doc.addEventListener("keydown", onKeydown, true);
+            parentWindow.__hhsSearchSubmitPreloaderCleanup = () => {{
+              doc.removeEventListener("click", onClick, true);
+              doc.removeEventListener("keydown", onKeydown, true);
+              clearPendingSearchOverlay();
+            }};
+          }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def render_search_filters() -> tuple[str, str]:
     """Render Search result filters and return selected filter values."""
     with st.container(key="search_filter_controls"):
-        filter_column, other_filter_column, _spacer_column, _action_column, clear_column = (
-            st.columns([1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment="center")
+        (
+            filter_column,
+            other_filter_column,
+            ignore_case_column,
+            words_column,
+            binary_column,
+            clear_column,
+        ) = (
+            st.columns(
+                [1.15, 3.0, 0.22, 0.22, 0.22, 0.22],
+                vertical_alignment="center",
+            )
         )
         with filter_column:
             selected_filter = st.radio(
@@ -13462,16 +14234,24 @@ def render_search_filters() -> tuple[str, str]:
                     placeholder="Type result filter text",
                     width="stretch",
                 )
-            with clear_column:
-                st.button(
-                    "",
-                    key="search_other_filter_clear",
-                    help="Clear filter text",
-                    on_click=clear_table_other_filter,
-                    args=("search_other_filter",),
-                    disabled=not bool(str(other_filter)),
-                    width="stretch",
-                )
+        with ignore_case_column:
+            render_search_option_toggle(
+                "search_ignore_case", "Aa", "Ignore case (-i)"
+            )
+        with words_column:
+            render_search_option_toggle("search_words", "", "Match words (-w)")
+        with binary_column:
+            render_search_option_toggle("search_binary", "", "Search binary files (-b)")
+        with clear_column:
+            st.button(
+                "",
+                key="search_other_filter_clear",
+                help="Clear filter text",
+                on_click=clear_table_other_filter,
+                args=("search_other_filter",),
+                disabled=not bool(str(other_filter)),
+                width="stretch",
+            )
         return selected_filter, other_filter
 
 
@@ -13482,13 +14262,23 @@ def render_search_results(search_filter: str = "All", text_filter: str = "") -> 
     query = str(st.session_state.get("search_result_query", "")).strip()
     if not query:
         return
+    ignore_case = bool(st.session_state.get("search_result_ignore_case", False))
+    words = bool(st.session_state.get("search_result_words", False))
+    binary = bool(st.session_state.get("search_result_binary", False))
     result = run_bash_command(
-        build_hhs_search_command(search_type, query, search_path),
+        build_hhs_search_command(
+            search_type, query, search_path, ignore_case, words, binary
+        ),
         search_loader_message(query, search_path),
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        ttl_seconds=hhs_ui.UI_CACHE_NORMAL_TTL_SECONDS,
         timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
         cache_tag="search",
+        cache_key_override=search_command_cache_key(
+            search_type, query, search_path, ignore_case, words, binary
+        ),
+        show_overlay=False,
     )
+    clear_preloader()
     with st.container(key="search_results"):
         if result.returncode != 0:
             st.error(clean_command_status_message(result.stderr or result.stdout))
@@ -13501,10 +14291,13 @@ def render_search_results(search_filter: str = "All", text_filter: str = "") -> 
             ),
         )
         rows = filter_search_rows(rows, search_filter, text_filter)
+        visible_rows = visible_search_rows(rows)
         if search_type == "Strings":
-            render_search_string_results(rows, query, text_filter)
+            render_search_string_results(visible_rows, query, text_filter)
+            render_search_load_more(len(rows))
             return
-        render_search_path_results(rows)
+        render_search_path_results(visible_rows, search_type)
+        render_search_load_more(len(rows))
 
 
 def render_search_view() -> None:
@@ -14187,7 +14980,15 @@ def main() -> None:
     st.session_state.setdefault("search_path", footer_working_directory())
     if not str(st.session_state.get("search_path", "")).strip():
         st.session_state["search_path"] = footer_working_directory() or "."
+    st.session_state.setdefault("search_directories", [])
+    st.session_state["search_directories"] = normalize_search_directories(
+        st.session_state.get("search_directories", []),
+        str(st.session_state.get("search_path", "")),
+    )
     st.session_state.setdefault("search_query", "")
+    st.session_state.setdefault("search_ignore_case", False)
+    st.session_state.setdefault("search_words", False)
+    st.session_state.setdefault("search_binary", False)
     st.session_state.setdefault("search_result_type", st.session_state["search_type"])
     st.session_state["search_result_type"] = normalized_search_type(
         st.session_state.get("search_result_type")
@@ -14196,10 +14997,16 @@ def main() -> None:
     if not str(st.session_state.get("search_result_path", "")).strip():
         st.session_state["search_result_path"] = st.session_state["search_path"]
     st.session_state.setdefault("search_result_query", "")
+    st.session_state.setdefault("search_result_ignore_case", False)
+    st.session_state.setdefault("search_result_words", False)
+    st.session_state.setdefault("search_result_binary", False)
     st.session_state.setdefault("search_filter", "All")
     if st.session_state["search_filter"] not in hhs_ui.SEARCH_FILTERS:
         st.session_state["search_filter"] = "All"
     st.session_state.setdefault("search_other_filter", "")
+    st.session_state.setdefault(
+        "search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE
+    )
     st.session_state.setdefault("ssh_view", "TUNNELS")
     if st.session_state["ssh_view"] not in hhs_ui.SSH_VIEWS:
         st.session_state["ssh_view"] = "TUNNELS"

@@ -180,6 +180,13 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 .st-key-path_folder_picker_button button,
 .st-key-search_other_filter_clear button,
 .st-key-search_path_folder_picker_button button,
+.st-key-search_load_more_button button,
+.st-key-search_ignore_case_toggle_idle button,
+.st-key-search_ignore_case_toggle_selected button,
+.st-key-search_words_toggle_idle button,
+.st-key-search_words_toggle_selected button,
+.st-key-search_binary_toggle_idle button,
+.st-key-search_binary_toggle_selected button,
 .st-key-search_submit_button button {
   align-items: center;
   border-radius: 4px;
@@ -196,9 +203,63 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 
 .st-key-search_path_folder_picker_button,
 .st-key-search_other_filter_clear,
+.st-key-search_ignore_case_toggle_idle,
+.st-key-search_ignore_case_toggle_selected,
+.st-key-search_words_toggle_idle,
+.st-key-search_words_toggle_selected,
+.st-key-search_binary_toggle_idle,
+.st-key-search_binary_toggle_selected,
 .st-key-search_submit_button {
   min-width: 2rem;
   width: 2rem;
+}
+
+.st-key-search_ignore_case_toggle_selected button,
+.st-key-search_words_toggle_selected button,
+.st-key-search_binary_toggle_selected button {
+  background: color-mix(in srgb, var(--hhs-theme-primary-color) 24%, transparent) !important;
+  border-color: var(--hhs-theme-primary-color) !important;
+  color: var(--hhs-theme-primary-color) !important;
+  box-shadow: inset 0 0 0 1px var(--hhs-theme-primary-color);
+}
+
+.st-key-search_load_more_button button {
+  padding: 0 0.85rem;
+  width: 100%;
+}
+
+.st-key-search_load_more {
+  margin-top: var(--hhs-element-std-gap) !important;
+}
+
+.hhs-search-load-more-preloader {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  justify-content: center;
+  width: 100%;
+}
+
+.hhs-search-load-more-preloader-spinner {
+  animation: hhs-search-load-more-spin 0.8s linear infinite;
+  color: var(--hhs-theme-primary-color);
+  display: inline-block;
+  line-height: 1;
+}
+
+.hhs-search-load-more-preloader-label {
+  color: var(--hhs-theme-text-color);
+  white-space: nowrap;
+}
+
+@keyframes hhs-search-load-more-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .st-key-search_controls {
@@ -206,7 +267,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 }
 
 .st-key-search_controls [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]) {
-  align-items: center;
+  align-items: end;
   display: grid !important;
   gap: var(--hhs-element-std-gap) !important;
   grid-template-columns: minmax(9rem, 1.15fr) minmax(0, 3fr) minmax(0, 3fr) 2rem 2rem;
@@ -216,7 +277,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   align-items: center;
   display: grid !important;
   gap: var(--hhs-element-std-gap) !important;
-  grid-template-columns: max-content minmax(0, 3fr) minmax(0, 3fr) 2rem 2rem;
+  grid-template-columns: max-content minmax(0, 1fr) 2rem 2rem 2rem 2rem;
 }
 
 .st-key-search_controls [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
@@ -228,6 +289,15 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   width: auto !important;
 }
 
+.st-key-search_controls
+  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"]:nth-child(4),
+.st-key-search_controls
+  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"]:nth-child(5) {
+  margin-bottom: 0.28rem;
+}
+
 .st-key-search_filter_controls {
   margin-top: var(--hhs-element-std-gap) !important;
 }
@@ -235,22 +305,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 .st-key-search_filter_controls
   [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
   > div[data-testid="stColumn"]:nth-child(2) {
-  grid-column: 2 / 5;
-}
-
-.st-key-search_filter_controls
-  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
-  > div[data-testid="stColumn"]:nth-child(3),
-.st-key-search_filter_controls
-  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
-  > div[data-testid="stColumn"]:nth-child(4) {
-  display: none;
-}
-
-.st-key-search_filter_controls
-  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
-  > div[data-testid="stColumn"]:nth-child(5) {
-  grid-column: 5;
+  grid-column: 2;
 }
 
 .st-key-search_filter_controls [role="radiogroup"][aria-label$="filter"] {
@@ -266,8 +321,9 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   margin-top: var(--hhs-element-std-gap) !important;
 }
 
-.hhs-search-string-results {
-  border: 1px solid var(--hhs-theme-border-color);
+.hhs-search-results {
+  background: var(--hhs-theme-secondary-background-color);
+  border: 1px solid var(--hhs-theme-dataframe-border-color);
   border-radius: var(--hhs-theme-base-radius);
   color: var(--hhs-primary);
   overflow: auto;
@@ -286,26 +342,37 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   text-decoration: underline;
 }
 
-.hhs-search-string-results table {
+.hhs-search-results table {
+  background: transparent;
   border-collapse: collapse;
+  color: var(--hhs-primary);
   width: 100%;
 }
 
-.hhs-search-string-results th,
-.hhs-search-string-results td {
-  border-bottom: 1px solid var(--hhs-theme-border-color);
-  border-right: 1px solid var(--hhs-theme-border-color);
+.hhs-search-results th,
+.hhs-search-results td {
+  border-bottom: 1px solid var(--hhs-theme-dataframe-border-color);
+  border-right: 1px solid var(--hhs-theme-dataframe-border-color);
   padding: 0.45rem 0.65rem;
   text-align: left;
   vertical-align: top;
 }
 
-.hhs-search-string-results th:last-child,
-.hhs-search-string-results td:last-child {
+.hhs-search-results th {
+  background: var(--hhs-theme-dataframe-header-background-color);
+  color: var(--hhs-markdown-table-header);
+}
+
+.hhs-search-results td {
+  color: var(--hhs-primary);
+}
+
+.hhs-search-results th:last-child,
+.hhs-search-results td:last-child {
   border-right: 0;
 }
 
-.hhs-search-string-results tr:last-child td {
+.hhs-search-results tr:last-child td {
   border-bottom: 0;
 }
 
