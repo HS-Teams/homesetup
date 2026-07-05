@@ -422,6 +422,7 @@ setup() {
 import re
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -431,13 +432,21 @@ namespace = {
     "re": re,
     "subprocess": subprocess,
     "strip_ansi": lambda value: value,
+    "homesetup_home": lambda: Path(".").resolve(),
+    "lru_cache": lru_cache,
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
+motd_fragments = namespace["homesetup_motd_fragment_groups"]()[0]
+rendered_motd = f"[Linux-ubuntu/bash] {' root '.join(motd_fragments)} v1.9.19 "
+assert namespace["remote_command_motd_line_is_boundary"](
+    rendered_motd
+)
 noisy_stdout = (
     "[bash] HomeSetup is starting...\n"
+    "dynamic shell setup output\n"
     "\n"
-    "[Linux-ubuntu/bash]   Welcome root to HomeSetup v1.9.19 \n"
+    f"{rendered_motd}\n"
     "\n"
     "GNU bash, version 5.2.21(1)-release\n"
 )
@@ -4137,12 +4146,10 @@ component = Path("bin/apps/py/hhs_ui/components/ssh_explorer/index.html").read_t
 controls = component[
     component.index("function createTransferControls") : component.index("function resizeFrame")
 ]
-assert controls.index('""') < controls.index('""') < controls.index('""')
+assert controls.index('""') < controls.index('""') < controls.index('""')
 assert controls.index('"﬋"') < controls.index('""')
-assert '"﬌"' in controls
-assert '"﬋"' in controls
-assert '""' not in controls
-assert '""' not in controls
+assert '""' in controls
+assert '""' in controls
 PY
   assert_success
 
@@ -4158,7 +4165,7 @@ PY
   run grep -q 'Streamlit.setComponentValue' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
   assert_success
 
-  run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
   assert_success
 
   run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
@@ -5525,21 +5532,34 @@ PY
   run python3 - "${ui_file}" <<'PY'
 import re
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def terminal_output_line_is_noise(")
 end = source.index("def strip_ansi(")
+motd_start = source.index("def homesetup_motd_template(")
+motd_end = source.index("def strip_remote_command_motd_block(")
 namespace = {
     "re": re,
     "strip_ansi": lambda value: value,
     "strip_ssh_shared_connection_notice": lambda value: value,
+    "homesetup_home": lambda: Path(".").resolve(),
+    "lru_cache": lru_cache,
 }
-exec("from __future__ import annotations\n" + source[start:end], namespace)
+exec(
+    "from __future__ import annotations\n"
+    + source[motd_start:motd_end]
+    + "\n"
+    + source[start:end],
+    namespace,
+)
+motd_fragments = namespace["homesetup_motd_fragment_groups"]()[0]
+rendered_motd = f"[Linux-ubuntu/bash] {' root '.join(motd_fragments)} v1.9.18 "
 
 stdout = (
     "[bash] HomeSetup is starting...\n"
-    "[Linux-ubuntu/bash]   Welcome root to HomeSetup v1.9.18 \n"
+    f"{rendered_motd}\n"
     "Shell option expand_aliases set to on \n"
     "Shell option checkwinsize set to on \n"
     "bash: cd: /etc/gabiroba: No such file or directory\n"
@@ -6857,7 +6877,7 @@ LOGS
   run grep -q '""' "${ui_file}"
   assert_success
 
-  run grep -q '""' "${ui_file}"
+  run grep -q '"﬌"' "${ui_file}"
   assert_success
 
   run grep -q '"ﰸ"' "${ui_file}"
@@ -6866,7 +6886,7 @@ LOGS
   run grep -q '" Parent"' "${ui_file}"
   assert_failure
 
-  run grep -q '"label": " Select"' "${ui_file}"
+  run grep -q '"label": "﬌ Select"' "${ui_file}"
   assert_failure
 
   run grep -q 'buttons=()' "${ui_file}"

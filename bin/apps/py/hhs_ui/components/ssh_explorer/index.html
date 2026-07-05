@@ -681,7 +681,7 @@
           }, "create_folder")
         );
         transfer.appendChild(
-          createTransferButton("", "Open parent directory", false, () => {
+          createTransferButton("", "Open parent directory", false, () => {
             sendCommand("parent", activeExplorerPanel(), "");
           }, "parent")
         );
@@ -692,7 +692,7 @@
         );
         transfer.appendChild(
           createTransferButton(
-            "﬌",
+            "",
             "Copy selected local item to remote",
             disabled || localSelectionCount === 0,
             () => sendCommand("copy_to_remote", "local"),
@@ -701,7 +701,7 @@
         );
         transfer.appendChild(
           createTransferButton(
-            "﬋",
+            "",
             "Copy selected remote item to local",
             disabled || remoteSelectionCount === 0,
             () => sendCommand("copy_to_local", "remote"),

@@ -1998,7 +1998,7 @@ def render_path_picker_dialog() -> bool:
                 width="stretch",
             )
             st.button(
-                "",
+                "﬌",
                 key="folder_picker_select_button",
                 help="Select",
                 on_click=apply_folder_picker_selection_and_dismiss,
@@ -5188,7 +5188,7 @@ def terminal_output_line_is_noise(line: str) -> bool:
         return True
     if clean_line.startswith("[bash] HomeSetup is starting"):
         return True
-    if "Welcome " in clean_line and " to HomeSetup v" in clean_line:
+    if remote_command_motd_line_is_boundary(clean_line):
         return True
     if re.fullmatch(r"Shell option \S+ set to (?:on|off)", clean_line):
         return True
@@ -6782,13 +6782,121 @@ def remote_command_startup_line_is_noise(line: str) -> bool:
         return False
     if clean_line.startswith("[bash] HomeSetup is starting"):
         return True
-    if "Welcome " in clean_line and " to HomeSetup v" in clean_line:
+    if remote_command_motd_line_is_boundary(clean_line):
         return True
     return bool(re.fullmatch(r"Shell option \S+ set to (?:on|off)", clean_line))
 
 
+@lru_cache(maxsize=1)
+def homesetup_motd_template() -> str:
+    """Return the local HomeSetup MOTD template text."""
+    try:
+        return (homesetup_home() / ".MOTD").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def skip_shell_expansion(value: str, index: int) -> int:
+    """Return the index after a shell expansion that starts at index."""
+    if value.startswith("${", index):
+        end_index = value.find("}", index + 2)
+        return len(value) if end_index < 0 else end_index + 1
+    if value.startswith("$(", index):
+        depth = 1
+        current_index = index + 2
+        quote = ""
+        escaped = False
+        while current_index < len(value):
+            character = value[current_index]
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif quote:
+                if character == quote:
+                    quote = ""
+            elif character in {"'", '"'}:
+                quote = character
+            elif value.startswith("$(", current_index):
+                depth += 1
+                current_index += 1
+            elif character == ")":
+                depth -= 1
+                if depth == 0:
+                    return current_index + 1
+            current_index += 1
+        return len(value)
+    match = re.match(r"\$[A-Za-z_][A-Za-z0-9_]*", value[index:])
+    if match:
+        return index + len(match.group(0))
+    return index
+
+
+def motd_literal_template_text(template: str) -> str:
+    """Return MOTD template text with shell expansions replaced by separators."""
+    value = re.sub(r"\\[ \t]*\r?\n", " ", template)
+    output: list[str] = []
+    index = 0
+    while index < len(value):
+        if value[index] == "$":
+            next_index = skip_shell_expansion(value, index)
+            if next_index > index:
+                output.append("\0")
+                index = next_index
+                continue
+        output.append(value[index])
+        index += 1
+    return "".join(output)
+
+
+def motd_template_fragment_groups(template: str) -> tuple[tuple[str, ...], ...]:
+    """Return stable literal fragment groups from one MOTD template."""
+    groups: list[tuple[str, ...]] = []
+    literal_template = motd_literal_template_text(template)
+    for line in literal_template.splitlines():
+        fragments = []
+        for fragment in line.split("\0"):
+            clean_fragment = re.sub(r"[^A-Za-z0-9._ -]+", " ", fragment)
+            clean_fragment = re.sub(r"\s+", " ", clean_fragment).strip()
+            if len(clean_fragment) >= 3 and re.search(r"[A-Za-z]", clean_fragment):
+                fragments.append(clean_fragment)
+        if fragments:
+            groups.append(tuple(fragments))
+    return tuple(groups)
+
+
+def homesetup_motd_fragment_groups() -> tuple[tuple[str, ...], ...]:
+    """Return stable literal fragment groups from the local HomeSetup MOTD."""
+    return motd_template_fragment_groups(homesetup_motd_template())
+
+
+def remote_command_motd_line_is_boundary(line: str) -> bool:
+    """Return whether a remote command line is the HomeSetup MOTD boundary."""
+    clean_line = re.sub(r"\s+", " ", strip_ansi(line)).strip()
+    if not clean_line:
+        return False
+    return any(
+        all(fragment in clean_line for fragment in group)
+        for group in homesetup_motd_fragment_groups()
+    )
+
+
+def strip_remote_command_motd_block(value: str) -> str:
+    """Return remote command output after the leading HomeSetup MOTD block."""
+    lines = value.splitlines(keepends=True)
+    for index, line in enumerate(lines[:20]):
+        if not remote_command_motd_line_is_boundary(line):
+            continue
+        remaining_lines = lines[index + 1 :]
+        while remaining_lines and not strip_ansi(remaining_lines[0]).strip():
+            remaining_lines = remaining_lines[1:]
+        return "".join(remaining_lines)
+    return value
+
+
 def strip_remote_command_startup_chatter(value: str) -> str:
     """Return remote command output without HomeSetup shell startup chatter."""
+    value = strip_remote_command_motd_block(value)
     output_lines: list[str] = []
     removed_chatter = False
     for line in value.splitlines(keepends=True):
@@ -8109,7 +8217,9 @@ def monitor_metric_job_name(metric: str) -> str:
 
 def monitor_metric_command(metric: str) -> str:
     """Return the command used to load one process monitor metric."""
-    return build_process_monitor_command(metric, normalized_monitor_process_top_n(metric))
+    return build_process_monitor_command(
+        metric, normalized_monitor_process_top_n(metric)
+    )
 
 
 def cached_monitor_metric_result(
@@ -11826,7 +11936,9 @@ def render_monitor_disk_chart() -> None:
         key=lambda row: float(row["Bytes"]),
         reverse=True,
     )
-    display_directory = monitor_disk_display_directory(selected_directory, result.stdout)
+    display_directory = monitor_disk_display_directory(
+        selected_directory, result.stdout
+    )
     for row in rows:
         row["Label"] = relative_disk_usage_path(str(row["Path"]), display_directory)
     if not rows:
@@ -12425,7 +12537,9 @@ def normalize_local_explorer_path(path_value: str, base_path: str | None = None)
     return str((base_directory / path).resolve())
 
 
-def normalize_remote_explorer_path(path_value: str, base_path: str | None = None) -> str:
+def normalize_remote_explorer_path(
+    path_value: str, base_path: str | None = None
+) -> str:
     """Return a normalized remote explorer path from a possibly relative path."""
     raw_path = str(path_value or ".").strip() or "."
     if raw_path.startswith("/") or raw_path.startswith("~"):
@@ -12462,8 +12576,7 @@ def create_local_explorer_folder(local_path: str) -> None:
 def remote_explorer_target_assignment(remote_path: str) -> str:
     """Return shell lines that resolve an explorer path into target."""
     safe_path = shlex.quote(remote_path.strip() or ssh_explorer_remote_default_path())
-    return textwrap.dedent(
-        f"""
+    return textwrap.dedent(f"""
         raw_target={safe_path}
         case "${{raw_target}}" in
           "~") target=${{HOME:-.}} ;;
@@ -12471,14 +12584,12 @@ def remote_explorer_target_assignment(remote_path: str) -> str:
           *) target="${{raw_target}}" ;;
         esac
         [ -n "${{target}}" ] || target=.
-        """
-    ).strip()
+        """).strip()
 
 
 def build_remote_explorer_listing_command(remote_path: str) -> str:
     """Build a portable remote shell command that lists one directory."""
-    return textwrap.dedent(
-        f"""
+    return textwrap.dedent(f"""
         {remote_explorer_target_assignment(remote_path)}
         if [ ! -d "${{target}}" ]; then
           target=${{HOME:-.}}
@@ -12510,20 +12621,17 @@ def build_remote_explorer_listing_command(remote_path: str) -> str:
           fi
           printf "${{file_row}}" "${{kind}}" "${{name}}" "${{size}}" "${{modified}}" "${{entry}}"
         done
-        """
-    ).strip()
+        """).strip()
 
 
 def build_remote_explorer_create_folder_command(remote_path: str) -> str:
     """Build a remote shell command that creates the requested folder path."""
-    return textwrap.dedent(
-        f"""
+    return textwrap.dedent(f"""
         {remote_explorer_target_assignment(remote_path)}
         mkdir -p "${{target}}" || exit 1
         abs_dir=$(cd "${{target}}" && pwd -P) || exit 1
         printf '__HHS_CREATED_DIR__\\t%s\\n' "${{abs_dir}}"
-        """
-    ).strip()
+        """).strip()
 
 
 def parse_remote_explorer_created_dir(output: str) -> str:
@@ -12770,8 +12878,7 @@ def build_scp_to_local_command(
 
 def build_recoverable_delete_command(paths: list[str]) -> str:
     """Build a command that moves paths to a recoverable trash location."""
-    return textwrap.dedent(
-        f"""
+    return textwrap.dedent(f"""
         {shell_array_assignment("targets", paths)}
         if [ "${{#targets[@]}}" -eq 0 ]; then
           printf '%s\\n' 'No files selected.'
@@ -12833,8 +12940,7 @@ def build_recoverable_delete_command(paths: list[str]) -> str:
         else
           trash_with_freedesktop "${{targets[@]}}"
         fi
-        """
-    ).strip()
+        """).strip()
 
 
 def start_ssh_explorer_transfer(command: str, description: str) -> None:
@@ -12893,9 +12999,7 @@ def ssh_explorer_delete_name(panel: str, path: str) -> str:
 def ssh_explorer_delete_message(panel: str, paths: list[str]) -> str:
     """Return the confirmation message for selected explorer delete targets."""
     names = [
-        ssh_explorer_delete_name(panel, path)
-        for path in paths
-        if str(path).strip()
+        ssh_explorer_delete_name(panel, path) for path in paths if str(path).strip()
     ]
     target_names = ", ".join(names) if names else "selected item(s)"
     return f"Are you sure you want to delete {target_names}?"
@@ -13322,7 +13426,7 @@ def build_hhs_search_modified_results_command(search_command: str) -> str:
         f"{search_command} | while IFS= read -r line; do "
         'case "${line}" in '
         '""|Searching\\ for*) printf "%s\\n" "${line}" ;; '
-        '*) '
+        "*) "
         'if [ -e "${line}" ]; then '
         'if modified=$(stat -c %Y "${line}" 2>/dev/null); then :; '
         'else modified=$(stat -f %m "${line}" 2>/dev/null || printf "0"); fi; '
@@ -13654,9 +13758,7 @@ def render_search_path_results(
 def increase_search_visible_count() -> None:
     """Increase the number of visible Search results by one page."""
     visible_count = int(
-        st.session_state.get(
-            "search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE
-        )
+        st.session_state.get("search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE)
     )
     st.session_state["search_visible_count"] = (
         visible_count + hhs_ui_constants.SEARCH_PAGE_SIZE
@@ -13666,9 +13768,7 @@ def increase_search_visible_count() -> None:
 def visible_search_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     """Return the Search rows currently visible for incremental rendering."""
     visible_count = int(
-        st.session_state.get(
-            "search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE
-        )
+        st.session_state.get("search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE)
     )
     if visible_count < hhs_ui_constants.SEARCH_PAGE_SIZE:
         visible_count = hhs_ui_constants.SEARCH_PAGE_SIZE
@@ -13679,9 +13779,7 @@ def visible_search_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
 def render_search_load_more(total_count: int) -> None:
     """Render the Search load-more control when hidden rows remain."""
     visible_count = int(
-        st.session_state.get(
-            "search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE
-        )
+        st.session_state.get("search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE)
     )
     if visible_count >= total_count:
         render_search_auto_load_more_cleanup()
@@ -14281,11 +14379,9 @@ def render_search_filters() -> tuple[str, str]:
             words_column,
             binary_column,
             clear_column,
-        ) = (
-            st.columns(
-                [1.15, 3.0, 0.22, 0.22, 0.22, 0.22],
-                vertical_alignment="center",
-            )
+        ) = st.columns(
+            [1.15, 3.0, 0.22, 0.22, 0.22, 0.22],
+            vertical_alignment="center",
         )
         with filter_column:
             selected_filter = st.radio(
@@ -14308,13 +14404,13 @@ def render_search_filters() -> tuple[str, str]:
                     width="stretch",
                 )
         with ignore_case_column:
-            render_search_option_toggle(
-                "search_ignore_case", "Aa", "Ignore case (-i)"
-            )
+            render_search_option_toggle("search_ignore_case", "Aa", "Ignore case (-i)")
         with words_column:
             render_search_option_toggle("search_words", "", "Match words (-w)")
         with binary_column:
-            render_search_option_toggle("search_binary", "", "Search binary files (-b)")
+            render_search_option_toggle(
+                "search_binary", "", "Search binary files (-b)"
+            )
         with clear_column:
             st.button(
                 "",

@@ -421,8 +421,16 @@ function command_not_found_handle() {
   return 127
 }
 
-# Print HomeSetup MOTDs
 echo -en "\033[H\033[J"
+
+# Print System MOTDs
+if [[ -s /run/motd.dynamic ]]; then
+    cat /run/motd.dynamic        # Ubuntu/Debian with update-motd
+elif [[ -s /etc/motd ]]; then
+    cat /etc/motd                # RHEL, CentOS, Fedora, macOS, etc.
+fi
+
+# HomeSetup MOTDs
 if [[ -d "${HHS_MOTD_DIR}" ]]; then
   all=$(find "${HHS_MOTD_DIR}" -type f | sort | uniq)
   for motd in ${all}; do
@@ -430,12 +438,6 @@ if [[ -d "${HHS_MOTD_DIR}" ]]; then
   done
 fi
 
-# Print System MOTDs after HomeSetup's
-if [[ -s /run/motd.dynamic ]]; then
-    cat /run/motd.dynamic        # Ubuntu/Debian with update-motd
-elif [[ -s /etc/motd ]]; then
-    cat /etc/motd                # RHEL, CentOS, Fedora, macOS, etc.
-fi
 
 # -----------------------------------------------------------------------------------
 # Finalization
