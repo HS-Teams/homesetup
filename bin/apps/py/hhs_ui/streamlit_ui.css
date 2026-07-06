@@ -1272,11 +1272,13 @@ div[class*="_other_filter_clear"] button p {
 [role="radiogroup"][aria-label$="filter"] {
   align-items: center;
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 0.85rem;
+  max-width: 100%;
+  min-width: 0;
   min-height: 2rem;
-  overflow-x: auto;
-  white-space: nowrap;
+  overflow-x: visible;
+  white-space: normal;
 }
 
 [role="radiogroup"][aria-label$="filter"] label {

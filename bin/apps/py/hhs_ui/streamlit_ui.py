@@ -152,6 +152,7 @@ def shell_version_command() -> str:
 
 RUN_SHELL = resolve_run_shell()
 os.environ[hhs_ui_constants.RUN_SHELL_ENV_KEY] = RUN_SHELL
+HHS_PATHS_RAW_ENTRY_MARKER = "__HHS_UI_PATH_ENTRY__"
 SHOPT_DESCRIPTIONS = {
     "assoc_expand_once": "Suppresses repeated evaluation of associative array subscripts.",
     "autocd": "Runs a directory name as if it were the argument to cd.",
@@ -2843,20 +2844,32 @@ def monitor_disk_directory_is_hhs_home_token(directory: object) -> bool:
     return str(directory or "").strip() in {"${HHS_HOME}", "$HHS_HOME"}
 
 
-def normalized_monitor_top_n(value: object) -> int:
-    """Return a valid monitor Top N value."""
+def normalized_top_n(value: object) -> int:
+    """Return a valid Top N value using the shared default."""
+    if isinstance(value, bool):
+        return hhs_ui_constants.DEFAULT_TOP_N
     try:
         top_n = int(value)
     except (TypeError, ValueError):
-        return 10
-    if top_n < 1 or top_n > 100:
-        return 10
+        return hhs_ui_constants.DEFAULT_TOP_N
+    if top_n < hhs_ui_constants.MIN_TOP_N or top_n > hhs_ui_constants.MAX_TOP_N:
+        return hhs_ui_constants.DEFAULT_TOP_N
     return top_n
+
+
+def normalized_monitor_top_n(value: object) -> int:
+    """Return a valid monitor Top N value."""
+    return normalized_top_n(value)
+
+
+def normalized_history_stats_top_n(value: object) -> int:
+    """Return a valid History Stats Top N value."""
+    return normalized_top_n(value)
 
 
 def normalized_monitor_disk_top_n(value: object) -> int:
     """Return a valid monitor disk Top N value."""
-    return normalized_monitor_top_n(value)
+    return normalized_top_n(value)
 
 
 def monitor_process_top_n_state_key(metric: str) -> str:
@@ -4550,7 +4563,7 @@ def render_table_controls_panel(
 
 
 def clear_table_other_filter(other_key: str) -> None:
-    """Clear a typed Other table filter and persist the updated UI state."""
+    """Clear a typed table text filter and persist the updated UI state."""
     st.session_state[other_key] = ""
     save_ui_state()
 
@@ -4561,7 +4574,7 @@ def render_table_filter_controls(
     other_key: str,
     columns: list[float],
     index: int = 0,
-    other_options: tuple[str, ...] = ("Other", "Others"),
+    other_options: tuple[str, ...] = ("Other", "Others", "Containing"),
     placeholder: str = "Type filter text",
 ) -> tuple[str, str]:
     """Render normalized table filter controls and return the selected filter text."""
@@ -4600,6 +4613,18 @@ def render_table_filter_controls(
                 width="content",
             )
     return selected_filter, other_filter
+
+
+def normalized_table_filter_selection(
+    value: object, options: tuple[str, ...], default: str = "All"
+) -> str:
+    """Return a valid table filter selection while migrating legacy text labels."""
+    selected_value = str(value or "").strip()
+    if selected_value in {"Other", "Others"} and "Containing" in options:
+        selected_value = "Containing"
+    if selected_value not in options:
+        return default
+    return selected_value
 
 
 def render_env_add_controls() -> None:
@@ -9033,14 +9058,63 @@ def complete_monitor_process_list_refresh() -> subprocess.CompletedProcess[str] 
     )
 
 
+def build_hhs_env_environment_command() -> str:
+    """Build a non-interactive shell prefix that loads HomeSetup environment values."""
+    return (
+        'export HHS_HOME="${HHS_HOME:-${HOME}/HomeSetup}"; '
+        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
+        'export HHS_MY_OS="${HHS_MY_OS:-$(uname -s)}"; '
+        'export HHS_MY_SHELL="${HHS_MY_SHELL:-${SHELL##*/}}"; '
+        'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")"; '
+        'export HHS_LOG_DIR="${HHS_LOG_DIR:-${HHS_DIR}/log}"; '
+        'export HHS_CACHE_DIR="${HHS_CACHE_DIR:-${HHS_DIR}/cache}"; '
+        'export HHS_LOG_FILE="${HHS_LOG_FILE:-${HHS_LOG_DIR}/streamlit-ui-shell.log}"; '
+        'export HHS_SETUP_FILE="${HHS_SETUP_FILE:-${HHS_DIR}/.homesetup.toml}"; '
+        'export HHS_PATHS_FILE="${HHS_PATHS_FILE:-${HHS_DIR}/.path}"; '
+        'export HHS_VENV_PATH="${HHS_VENV_PATH:-${HHS_DIR}/venv}"; '
+        'mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}" "${HHS_CACHE_DIR}"; '
+        'if [[ -s "${HHS_SETUP_FILE}" ]]; then '
+        'while IFS= read -r hhs_pref; do '
+        'if [[ "${hhs_pref}" =~ ^([a-zA-Z0-9_.]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then '
+        'hhs_key="$(tr "[:lower:]." "[:upper:]_" <<<"${BASH_REMATCH[1]}")"; '
+        'hhs_val="${BASH_REMATCH[2]//\\"/}"; hhs_val="${hhs_val//\\\'/}"; '
+        'case "$(tr "[:lower:]" "[:upper:]" <<<"${hhs_val}")" in TRUE) hhs_val=1 ;; FALSE) hhs_val="" ;; esac; '
+        'export "${hhs_key}=${hhs_val}"; '
+        "fi; "
+        'done < "${HHS_SETUP_FILE}"; '
+        "fi; "
+        "unset HHS_ACTIVE_DOTFILES; "
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_colors.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_icons.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_env.bash"; '
+        '[[ -s "${HHS_ENV_FILE}" ]] && source "${HHS_ENV_FILE}"; '
+        'if [[ "${HHS_PYTHON_VENV_ENABLED:-}" == "1" && -s "${HHS_VENV_PATH}/bin/activate" ]]; then '
+        'source "${HHS_VENV_PATH}/bin/activate" >/dev/null 2>&1 || true; '
+        "fi; "
+        'for hhs_path in "${HOME}/bin" "${HOME}/.local/bin" '
+        '"${HHS_DIR}/bin" "${HHS_HOME}/tests/bats/bats-core/bin"; do '
+        '[[ -d "${hhs_path}" ]] && PATH="${PATH}:${hhs_path}"; '
+        "done; "
+        'if [[ -f "${HHS_PATHS_FILE}" ]]; then '
+        'while IFS= read -r hhs_path; do '
+        '[[ -n "${hhs_path}" ]] && PATH="${hhs_path}:${PATH}"; '
+        'done < <(grep . "${HHS_PATHS_FILE}" | grep -v -e "^$"); '
+        "fi; "
+        '[[ -d "${HHS_VENV_PATH}/bin" ]] && PATH="${HHS_VENV_PATH}/bin:${PATH}"; '
+        "PATH=\"$(awk -v RS=: 'NF && !seen[$0]++ {"
+        'printf "%s%s", sep, $0; sep=":"'
+        "}' <<<\"${PATH}\")\"; "
+        "export PATH; "
+    )
+
+
 def build_hhs_envs_command(prefix_filter: str | None) -> str:
     """Build the Bash command used to run the __hhs_envs HomeSetup function."""
-    filter_arg = f' "{prefix_filter}"' if prefix_filter else ""
+    filter_arg = f" {shlex.quote(prefix_filter)}" if prefix_filter else ""
     return (
-        'export HHS_DIR="${HHS_DIR}"; '
-        'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")"; '
-        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
-        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
+        build_hhs_env_environment_command()
+        + 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
         f"__hhs_envs{filter_arg}"
     )
 
@@ -9066,9 +9140,8 @@ def build_hhs_env_action_command(operation: str, name: str, value: str = "") -> 
     else:
         action_args = f"-a {shlex.quote(f'{name}={value}')}"
     return (
-        'export HHS_DIR="${HHS_DIR}"; '
-        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
-        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
+        build_hhs_env_environment_command()
+        + 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
         f"__hhs_envs {action_args}"
     )
 
@@ -9462,7 +9535,10 @@ def build_hhs_history_dirs_command() -> str:
 
 def build_hhs_history_stats_command(top_n: int = 10) -> str:
     """Build the Bash command used to run the __hhs_hist_stats HomeSetup function."""
-    safe_top_n = max(1, min(int(top_n), 100))
+    safe_top_n = max(
+        hhs_ui_constants.MIN_TOP_N,
+        min(int(top_n), hhs_ui_constants.MAX_TOP_N),
+    )
     return (
         'export HHS_DIR="${HHS_DIR}"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
@@ -9474,7 +9550,10 @@ def build_hhs_history_stats_command(top_n: int = 10) -> str:
 def build_hhs_disk_usage_command(directory: str, top_n: int = 10) -> str:
     """Build the Bash command used to run the __hhs_du HomeSetup function."""
     hhs_home = homesetup_home()
-    safe_top_n = max(1, min(int(top_n), 100))
+    safe_top_n = max(
+        hhs_ui_constants.MIN_TOP_N,
+        min(int(top_n), hhs_ui_constants.MAX_TOP_N),
+    )
     expanded_directory = expand_monitor_disk_directory(directory)
     directory_arg = (
         '"${HHS_HOME}"'
@@ -9492,7 +9571,10 @@ def build_hhs_disk_usage_command(directory: str, top_n: int = 10) -> str:
 
 def build_process_monitor_command(metric: str, top_n: int = 10) -> str:
     """Build the shell command used to load process monitor data."""
-    safe_top_n = max(1, min(int(top_n), 100))
+    safe_top_n = max(
+        hhs_ui_constants.MIN_TOP_N,
+        min(int(top_n), hhs_ui_constants.MAX_TOP_N),
+    )
     sort_keys = hhs_ui.TOP_PROCESS_SORT_KEYS.get(
         metric, hhs_ui.TOP_PROCESS_SORT_KEYS["CPU"]
     )
@@ -9687,13 +9769,49 @@ def build_ollama_delete_model_command(model_name: str) -> str:
     return f"ollama rm {shlex.quote(model_name)}"
 
 
+def build_hhs_path_environment_command() -> str:
+    """Build the shell prefix that reconstructs the HomeSetup PATH environment."""
+    return (
+        'export HHS_HOME="${HHS_HOME:-${HOME}/HomeSetup}"; '
+        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
+        'export HHS_PATHS_FILE="${HHS_PATHS_FILE:-${HHS_DIR}/.path}"; '
+        'export HHS_VENV_PATH="${HHS_VENV_PATH:-${HHS_DIR}/venv}"; '
+        'for hhs_path in "${HOME}/bin" "${HOME}/.local/bin" '
+        '"${HHS_DIR}/bin" "${HHS_HOME}/tests/bats/bats-core/bin"; do '
+        '[[ -d "${hhs_path}" ]] && PATH="${PATH}:${hhs_path}"; '
+        "done; "
+        'if [[ -f "${HHS_PATHS_FILE}" ]]; then '
+        'while IFS= read -r hhs_path; do '
+        '[[ -n "${hhs_path}" ]] && PATH="${hhs_path}:${PATH}"; '
+        'done < <(grep . "${HHS_PATHS_FILE}" | grep -v -e "^$"); '
+        "fi; "
+        '[[ -d "${HHS_VENV_PATH}/bin" ]] && PATH="${HHS_VENV_PATH}/bin:${PATH}"; '
+        "PATH=\"$(awk -v RS=: 'NF && !seen[$0]++ {"
+        'printf "%s%s", sep, $0; sep=":"'
+        "}' <<<\"${PATH}\")\"; "
+        "export PATH; "
+    )
+
+
+def build_hhs_paths_raw_entries_command() -> str:
+    """Build the shell suffix that emits parse-safe PATH entries for the UI."""
+    return (
+        'printf "\\n"; '
+        'while IFS= read -r hhs_path; do '
+        f'printf "{HHS_PATHS_RAW_ENTRY_MARKER}\\t%s\\n" "${{hhs_path}}"; '
+        'done < <(printf "%s\\n" "${PATH}" | tr ":" "\\n")'
+    )
+
+
 def build_hhs_paths_command() -> str:
     """Build the Bash command used to run the __hhs_paths HomeSetup function."""
     return (
-        'export HHS_DIR="${HHS_DIR}"; '
+        build_hhs_path_environment_command()
+        + 'export HHS_DIR="${HHS_DIR}"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-paths.bash"; '
-        "__hhs_paths"
+        "__hhs_paths; "
+        + build_hhs_paths_raw_entries_command()
     )
 
 
@@ -9710,7 +9828,8 @@ def build_hhs_path_action_command(
     else:
         action_args = f"-a {safe_path}"
     return (
-        'export HHS_DIR="${HHS_DIR}"; '
+        build_hhs_path_environment_command()
+        + 'export HHS_DIR="${HHS_DIR}"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-paths.bash"; '
         f"__hhs_paths {action_args}"
@@ -10052,7 +10171,7 @@ def env_filter_pattern(env_filter: str, other_filter: str = "") -> str | None:
     """Return the __hhs_envs filter pattern for the selected UI filter."""
     if env_filter == "HHS":
         return "^HHS_"
-    if env_filter == "Other":
+    if env_filter in ("Other", "Containing"):
         clean_filter = other_filter.strip()
         return clean_filter or None
     return None
@@ -10085,7 +10204,7 @@ def filter_tool_rows(
         return [row for row in rows if home_tool_is_not_found(row)]
     if tools_filter == "Aliased":
         return [row for row in rows if home_tool_is_aliased(row)]
-    if tools_filter == "Other":
+    if tools_filter in ("Other", "Containing"):
         return [row for row in rows if row_matches_text_filter(row, other_filter)]
     return rows
 
@@ -10098,7 +10217,7 @@ def filter_shopt_rows(
         return [row for row in rows if row.get("State") == "ON"]
     if shopt_filter == "OFF":
         return [row for row in rows if row.get("State") == "OFF"]
-    if shopt_filter == "Other":
+    if shopt_filter in ("Other", "Containing"):
         return [row for row in rows if row_matches_text_filter(row, other_filter)]
     return rows
 
@@ -10109,14 +10228,14 @@ def path_row_matches_filter(
     """Return whether a PATH row matches the selected UI filter."""
     if path_filter == "All":
         return True
-    searchable_name = row.get("Name", "").lower()
+    searchable_origin = row.get("Origin", "").lower()
     if path_filter == "Shell":
-        return "shell" in searchable_name
+        return "shell" in searchable_origin
     if path_filter == "Private":
-        return "private" in searchable_name
+        return "private" in searchable_origin
     if path_filter == "Custom":
-        return "custom" in searchable_name
-    if path_filter == "Other":
+        return "custom" in searchable_origin
+    if path_filter in ("Other", "Containing"):
         return row_matches_text_filter(row, other_filter)
     return True
 
@@ -10135,8 +10254,8 @@ def filter_path_rows(
 def filter_rows_by_text(
     rows: list[dict[str, str]], list_filter: str, text_filter: str = ""
 ) -> list[dict[str, str]]:
-    """Return rows that match the selected All/Other filter."""
-    if list_filter not in ("Other", "Others"):
+    """Return rows that match the selected all/text filter."""
+    if list_filter not in ("Other", "Others", "Containing"):
         return rows
     return [row for row in rows if row_matches_text_filter(row, text_filter)]
 
@@ -10151,7 +10270,7 @@ def filter_service_rows(
         return [row for row in rows if service_is_up(row)]
     if service_filter in ("Down", "Stopped"):
         return [row for row in rows if service_is_down(row)]
-    if service_filter == "Other":
+    if service_filter in ("Other", "Containing"):
         return [row for row in rows if row_matches_text_filter(row, text_filter)]
     return rows
 
@@ -10162,7 +10281,7 @@ def filter_process_rows(
     text_filter: str = "",
 ) -> list[dict[str, str]]:
     """Return process rows matching the selected process status filter."""
-    if process_filter == "Other":
+    if process_filter in ("Other", "Containing"):
         return [row for row in rows if row_matches_text_filter(row, text_filter)]
     if process_filter == "All":
         return rows
@@ -10715,7 +10834,7 @@ def filter_ssh_tunnel_rows(
 ) -> list[dict[str, str]]:
     """Return SSH tunnel rows matching the selected displayed Kind filter."""
     clean_filter = text_filter.strip().lower()
-    if tunnel_filter == "Other":
+    if tunnel_filter in ("Other", "Containing"):
         return [
             row
             for row in rows
@@ -10964,8 +11083,16 @@ def path_types(output: str) -> list[str]:
     return types
 
 
-def path_entries() -> list[str]:
-    """Return current PATH entries for the Streamlit process."""
+def path_entries(output: str = "") -> list[str]:
+    """Return PATH entries emitted by __hhs_paths or fall back to the UI process."""
+    entries = []
+    marker_prefix = f"{HHS_PATHS_RAW_ENTRY_MARKER}\t"
+    for line in strip_ansi(output).splitlines():
+        clean_line = line.rstrip("\r")
+        if clean_line.startswith(marker_prefix):
+            entries.append(clean_line[len(marker_prefix) :])
+    if entries:
+        return entries
     return [entry for entry in os.environ.get("PATH", "").split(":") if entry]
 
 
@@ -10974,10 +11101,10 @@ def parse_hhs_paths(output: str) -> list[dict[str, str]]:
     sources = path_sources(output)
     types = path_types(output)
     rows = []
-    for index, path_entry in enumerate(path_entries()):
+    for index, path_entry in enumerate(path_entries(output)):
         source = sources[index] if index < len(sources) else "PATH entry"
         path_type = types[index] if index < len(types) else ""
-        rows.append({"Type": path_type, "Name": source, "Value": path_entry})
+        rows.append({"Type": path_type, "Origin": source, "Path Value": path_entry})
     return rows
 
 
@@ -11348,7 +11475,7 @@ def apply_path_value_overrides(rows: list[dict[str, str]]) -> list[dict[str, str
     return [
         {
             **row,
-            "Value": str(overrides.get(row["Value"], row["Value"])),
+            "Path Value": str(overrides.get(row["Path Value"], row["Path Value"])),
         }
         for row in rows
     ]
@@ -11750,15 +11877,15 @@ def render_path_rows(rows: list[dict[str, str]]) -> None:
         key=path_table_key(),
         height=hhs_ui.PATH_TABLE_HEIGHT,
         width=hhs_ui.PATH_TABLE_WIDTH,
-        selected_label=lambda row, _index: f"Selected: {row['Name']}",
+        selected_label=lambda row, _index: f"Selected: {row['Origin']}",
         selected_editable=True,
         selected_edit_key=lambda _row, index: path_value_editor_key(index),
-        selected_edit_value=lambda row, _index: row["Value"],
+        selected_edit_value=lambda row, _index: row["Path Value"],
         selected_edit_label="Selected PATH value",
         selected_edit_max_chars=int(hhs_ui.COMMAND_COLUMNS),
         selected_edit_on_change=apply_selected_path_editor_value,
         selected_edit_args=lambda row, index: (
-            row["Value"],
+            row["Path Value"],
             path_value_editor_key(index),
         ),
         selected_edit_folder_picker=True,
@@ -11769,7 +11896,7 @@ def render_path_rows(rows: list[dict[str, str]]) -> None:
                 "glyph": "",
                 "key_prefix": "path_delete_button",
                 "on_click": apply_path_delete,
-                "args": lambda row, _index: (row["Value"],),
+                "args": lambda row, _index: (row["Path Value"],),
             },
         ],
     )
@@ -12551,6 +12678,9 @@ def render_history_directories_table() -> None:
 
 def render_history_stats_chart() -> None:
     """Render command history stats using __hhs_hist_stats."""
+    st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(
+        st.session_state.get("history_stats_top_n")
+    )
     label_col, input_col, spacer_col = st.columns(
         [0.55, 0.7, 2.75], vertical_alignment="center"
     )
@@ -12561,8 +12691,8 @@ def render_history_stats_chart() -> None:
     with input_col:
         top_n = st.number_input(
             "Top N",
-            min_value=1,
-            max_value=100,
+            min_value=hhs_ui_constants.MIN_TOP_N,
+            max_value=hhs_ui_constants.MAX_TOP_N,
             step=1,
             key="history_stats_top_n",
             label_visibility="collapsed",
@@ -12643,8 +12773,8 @@ def render_monitor_disk_chart() -> None:
     with top_input_col:
         st.number_input(
             "Top N",
-            min_value=1,
-            max_value=100,
+            min_value=hhs_ui_constants.MIN_TOP_N,
+            max_value=hhs_ui_constants.MAX_TOP_N,
             step=1,
             key="monitor_disk_top_n_input",
             label_visibility="collapsed",
@@ -12743,8 +12873,8 @@ def render_process_monitor_chart(metric: str) -> None:
     with top_input_col:
         st.number_input(
             "Top N",
-            min_value=1,
-            max_value=100,
+            min_value=hhs_ui_constants.MIN_TOP_N,
+            max_value=hhs_ui_constants.MAX_TOP_N,
             step=1,
             key=top_n_input_key,
             label_visibility="collapsed",
@@ -12988,7 +13118,6 @@ def render_monitor_logs_panel() -> None:
                 "monitor_log_filter",
                 "monitor_log_other_filter",
                 hhs_ui.TWO_OPTION_FILTER_COLUMNS,
-                other_options=("Containing",),
                 placeholder="Type log filter text",
             )
         return (
@@ -16070,19 +16199,26 @@ def main() -> None:
     st.session_state.setdefault("home_tools_filter", "All")
     if st.session_state["home_tools_filter"] == "Not Found":
         st.session_state["home_tools_filter"] = "Not Installed"
-    if st.session_state["home_tools_filter"] not in hhs_ui.HOME_TOOLS_FILTERS:
-        st.session_state["home_tools_filter"] = "All"
+    st.session_state["home_tools_filter"] = normalized_table_filter_selection(
+        st.session_state["home_tools_filter"], hhs_ui.HOME_TOOLS_FILTERS
+    )
     st.session_state.setdefault("home_tools_other_filter", "")
     st.session_state.setdefault("home_tools_table_reset_counter", 0)
     st.session_state.setdefault("home_shopts_filter", "All")
-    if st.session_state["home_shopts_filter"] not in hhs_ui.SHOPTS_FILTERS:
-        st.session_state["home_shopts_filter"] = "All"
+    st.session_state["home_shopts_filter"] = normalized_table_filter_selection(
+        st.session_state["home_shopts_filter"], hhs_ui.SHOPTS_FILTERS
+    )
     st.session_state.setdefault("home_shopts_other_filter", "")
     st.session_state.setdefault(hhs_ui.HOME_SHOPTS_TABLE_RESET_COUNTER_KEY, 0)
     st.session_state.setdefault("home_tool_action_execute_pending", None)
     st.session_state.setdefault("config_view", "ENV")
     if st.session_state["config_view"] not in hhs_ui.CONFIG_VIEWS:
         st.session_state["config_view"] = "ENV"
+    st.session_state.setdefault("env_filter", "All")
+    st.session_state["env_filter"] = normalized_table_filter_selection(
+        st.session_state["env_filter"], hhs_ui.ENV_FILTERS
+    )
+    st.session_state.setdefault("env_other_filter", "")
     st.session_state.setdefault("history_view", "COMMANDS")
     if st.session_state["history_view"] not in hhs_ui.HISTORY_VIEWS:
         st.session_state["history_view"] = "COMMANDS"
@@ -16125,17 +16261,20 @@ def main() -> None:
     if st.session_state["ssh_view"] not in hhs_ui.SSH_VIEWS:
         st.session_state["ssh_view"] = "TUNNELS"
     st.session_state.setdefault("ssh_tunnel_filter", "All")
-    if st.session_state["ssh_tunnel_filter"] not in hhs_ui.SSH_TUNNEL_FILTERS:
-        st.session_state["ssh_tunnel_filter"] = "All"
+    st.session_state["ssh_tunnel_filter"] = normalized_table_filter_selection(
+        st.session_state["ssh_tunnel_filter"], hhs_ui.SSH_TUNNEL_FILTERS
+    )
     st.session_state.setdefault("ssh_tunnel_other_filter", "")
     st.session_state.setdefault("monitor_process_filter", "All")
     st.session_state.setdefault("monitor_process_other_filter", "")
     monitor_process_filter = str(st.session_state["monitor_process_filter"]).strip()
     if not monitor_process_filter:
         st.session_state["monitor_process_filter"] = "All"
+    elif monitor_process_filter in ("Other", "Others"):
+        st.session_state["monitor_process_filter"] = "Containing"
     elif monitor_process_filter not in hhs_ui.PROCESS_FILTERS:
         st.session_state["monitor_process_other_filter"] = monitor_process_filter
-        st.session_state["monitor_process_filter"] = "Other"
+        st.session_state["monitor_process_filter"] = "Containing"
     st.session_state.setdefault(
         "monitor_disk_directory", monitor_default_disk_directory()
     )
@@ -16146,52 +16285,58 @@ def main() -> None:
         st.session_state["monitor_disk_directory"],
     )
     synchronize_monitor_disk_directory_with_host()
-    st.session_state.setdefault("monitor_disk_top_n", 10)
     st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
         st.session_state.get("monitor_disk_top_n")
     )
     for metric in ("CPU", "MEM"):
         top_n_key = monitor_process_top_n_state_key(metric)
-        st.session_state.setdefault(top_n_key, 10)
         st.session_state[top_n_key] = normalized_monitor_top_n(
             st.session_state.get(top_n_key)
         )
     st.session_state.setdefault("monitor_log_file", "")
     st.session_state.setdefault("monitor_log_filter", "All")
-    if st.session_state["monitor_log_filter"] not in hhs_ui.LOG_FILTERS:
-        st.session_state["monitor_log_filter"] = "All"
+    st.session_state["monitor_log_filter"] = normalized_table_filter_selection(
+        st.session_state["monitor_log_filter"], hhs_ui.LOG_FILTERS
+    )
     st.session_state.setdefault("monitor_log_other_filter", "")
     st.session_state.setdefault("monitor_log_level", "ALL_LEVELS")
     st.session_state["monitor_log_level"] = selected_monitor_log_level()
     st.session_state.setdefault("monitor_logs_tail", True)
     st.session_state.setdefault("alias_filter", "All")
-    if st.session_state["alias_filter"] not in hhs_ui.LIST_FILTERS:
-        st.session_state["alias_filter"] = "All"
+    st.session_state["alias_filter"] = normalized_table_filter_selection(
+        st.session_state["alias_filter"], hhs_ui.LIST_FILTERS
+    )
     st.session_state.setdefault("path_filter", "All")
-    if st.session_state["path_filter"] not in hhs_ui.PATH_FILTERS:
-        st.session_state["path_filter"] = "All"
+    st.session_state["path_filter"] = normalized_table_filter_selection(
+        st.session_state["path_filter"], hhs_ui.PATH_FILTERS
+    )
     st.session_state.setdefault("dirs_filter", "All")
-    if st.session_state["dirs_filter"] not in hhs_ui.LIST_FILTERS:
-        st.session_state["dirs_filter"] = "All"
+    st.session_state["dirs_filter"] = normalized_table_filter_selection(
+        st.session_state["dirs_filter"], hhs_ui.LIST_FILTERS
+    )
     st.session_state.setdefault("cmds_filter", "All")
-    if st.session_state["cmds_filter"] not in hhs_ui.LIST_FILTERS:
-        st.session_state["cmds_filter"] = "All"
+    st.session_state["cmds_filter"] = normalized_table_filter_selection(
+        st.session_state["cmds_filter"], hhs_ui.LIST_FILTERS
+    )
     st.session_state.setdefault("service_filter", "All")
     if st.session_state["service_filter"] == "Started":
         st.session_state["service_filter"] = "Up"
     elif st.session_state["service_filter"] == "Stopped":
         st.session_state["service_filter"] = "Down"
-    if st.session_state["service_filter"] not in hhs_ui.SERVICE_FILTERS:
-        st.session_state["service_filter"] = "All"
-    st.session_state.setdefault("history_commands_filter", "All")
-    if st.session_state["history_commands_filter"] not in hhs_ui.HISTORY_FILTERS:
-        st.session_state["history_commands_filter"] = "All"
-    st.session_state.setdefault("history_directories_filter", "All")
-    if st.session_state["history_directories_filter"] not in hhs_ui.HISTORY_FILTERS:
-        st.session_state["history_directories_filter"] = "All"
-    st.session_state.setdefault("history_stats_top_n", 10)
-    if not isinstance(st.session_state["history_stats_top_n"], int):
-        st.session_state["history_stats_top_n"] = 10
+    st.session_state["service_filter"] = normalized_table_filter_selection(
+        st.session_state["service_filter"], hhs_ui.SERVICE_FILTERS
+    )
+    for history_filter_key in (
+        "history_commands_filter",
+        "history_directories_filter",
+    ):
+        st.session_state.setdefault(history_filter_key, "All")
+        st.session_state[history_filter_key] = normalized_table_filter_selection(
+            st.session_state[history_filter_key], hhs_ui.HISTORY_FILTERS
+        )
+    st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(
+        st.session_state.get("history_stats_top_n")
+    )
     execute_pending_dialog_callback()
     apply_pending_folder_picker_selection()
     render_sidebar()

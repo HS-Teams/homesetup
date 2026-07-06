@@ -47,6 +47,9 @@ UI_COMMAND_DISK_TIMEOUT_SECONDS = 45
 UI_COMMAND_SERVICE_ACTION_TIMEOUT_SECONDS = 180
 UI_COMMAND_LONG_ACTION_TIMEOUT_SECONDS = 1800
 UI_COMMAND_MODEL_DOWNLOAD_TIMEOUT_SECONDS = 3600
+DEFAULT_TOP_N = 10
+MIN_TOP_N = 1
+MAX_TOP_N = 100
 UPDATER_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
 FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
@@ -166,16 +169,16 @@ SSH_VIEW_LABELS = {
     "TUNNELS": " Tunnels",
     "FILES": " Explorer",
 }
-SSH_TUNNEL_FILTERS = ("All", "Reachable", "Other")
-ENV_FILTERS = ("All", "HHS", "Other")
-LIST_FILTERS = ("All", "Other")
-HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Aliased", "Other")
+SSH_TUNNEL_FILTERS = ("All", "Reachable", "Containing")
+ENV_FILTERS = ("All", "HHS", "Containing")
+LIST_FILTERS = ("All", "Containing")
+HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Aliased", "Containing")
 LOG_FILTERS = ("All", "Containing")
-HISTORY_FILTERS = ("All", "Others")
-PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")
-PROCESS_FILTERS = ("All", "Active", "Inactive", "Ghost", "Other")
-SERVICE_FILTERS = ("All", "Up", "Down", "Other")
-SHOPTS_FILTERS = ("All", "ON", "OFF", "Other")
+HISTORY_FILTERS = ("All", "Containing")
+PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Containing")
+PROCESS_FILTERS = ("All", "Active", "Inactive", "Ghost", "Containing")
+SERVICE_FILTERS = ("All", "Up", "Down", "Containing")
+SHOPTS_FILTERS = ("All", "ON", "OFF", "Containing")
 LOG_LEVELS = (
     "ALL_LEVELS",
     "CRITICAL",

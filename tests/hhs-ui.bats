@@ -885,6 +885,7 @@ PY
 
   run python3 - <<'PY'
 import ast
+import types
 from pathlib import Path
 
 tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
@@ -1617,10 +1618,19 @@ PY
   run grep -q '"FILES": " Explorer"' "${constants_file}"
   assert_success
 
-  run grep -q 'SSH_TUNNEL_FILTERS = ("All", "Reachable", "Other")' "${constants_file}"
+  run grep -q 'SSH_TUNNEL_FILTERS = ("All", "Reachable", "Containing")' "${constants_file}"
   assert_success
 
   run grep -q 'SEARCH_FILTERS = ("All", "Containing")' "${constants_file}"
+  assert_success
+
+  run grep -q 'HISTORY_FILTERS = ("All", "Containing")' "${constants_file}"
+  assert_success
+
+  run grep -q 'ENV_FILTERS = ("All", "HHS", "Containing")' "${constants_file}"
+  assert_success
+
+  run grep -q 'LIST_FILTERS = ("All", "Containing")' "${constants_file}"
   assert_success
 
   run grep -q 'SEARCH_PAGE_SIZE = 20' "${constants_file}"
@@ -1936,7 +1946,7 @@ PY
   run grep -q '"home_tools_filter"' "${ui_file}"
   assert_success
 
-  run grep -q 'HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Aliased", "Other")' "${constants_file}"
+  run grep -q 'HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Aliased", "Containing")' "${constants_file}"
   assert_success
 
   run grep -q 'HOME_TOOLS_FILTERS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
@@ -1957,7 +1967,7 @@ PY
   run grep -q '"home_tools_other_filter"' "${ui_file}"
   assert_success
 
-  run grep -q 'SHOPTS_FILTERS = ("All", "ON", "OFF", "Other")' "${constants_file}"
+  run grep -q 'SHOPTS_FILTERS = ("All", "ON", "OFF", "Containing")' "${constants_file}"
   assert_success
 
   run grep -q 'SHOPTS_FILTERS' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
@@ -2079,6 +2089,25 @@ PY
 
   run grep -q '.st-key-ssh_tunnel_filter \[role="radiogroup"\]' "${css_file}"
   assert_failure
+
+  run python3 - "${css_file}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(
+    r'^\[role="radiogroup"\]\[aria-label\$="filter"\]\s*\{(?P<body>[^}]*)\}',
+    source,
+    flags=re.MULTILINE,
+)
+assert match is not None
+body = match.group("body")
+assert "flex-wrap: wrap" in body
+assert "overflow-x: visible" in body
+assert "overflow-x: auto" not in body
+PY
+  assert_success
 
   run grep -q '.st-key-home_shopts_other_filter input' "${css_file}"
   assert_success
@@ -3162,7 +3191,28 @@ PY
   run grep -q 'def normalized_monitor_disk_top_n' "${ui_file}"
   assert_success
 
+  run grep -q 'def normalized_history_stats_top_n' "${ui_file}"
+  assert_success
+
+  run grep -q 'DEFAULT_TOP_N = 10' "${constants_file}"
+  assert_success
+
+  run grep -q 'MIN_TOP_N = 1' "${constants_file}"
+  assert_success
+
+  run grep -q 'MAX_TOP_N = 100' "${constants_file}"
+  assert_success
+
   run grep -q 'def normalized_monitor_top_n' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["history_stats_top_n"\] = normalized_history_stats_top_n' "${ui_file}"
+  assert_success
+
+  run grep -q 'min_value=hhs_ui_constants.MIN_TOP_N' "${ui_file}"
+  assert_success
+
+  run grep -q 'max_value=hhs_ui_constants.MAX_TOP_N' "${ui_file}"
   assert_success
 
   run grep -q '"monitor_cpu_top_n"' "${constants_file}"
@@ -3222,10 +3272,10 @@ PY
   run grep -q 'No CPU usage above 0.0% found.' "${ui_file}"
   assert_success
 
-  run grep -q 'SERVICE_FILTERS = ("All", "Up", "Down", "Other")' "${constants_file}"
+  run grep -q 'SERVICE_FILTERS = ("All", "Up", "Down", "Containing")' "${constants_file}"
   assert_success
 
-  run grep -q 'PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Other")' "${constants_file}"
+  run grep -q 'PATH_FILTERS = ("All", "Shell", "Private", "Custom", "Containing")' "${constants_file}"
   assert_success
 
   run python3 - <<'PY'
@@ -3311,13 +3361,21 @@ functions = {
     for node in tree.body
     if isinstance(node, ast.FunctionDef)
 }
-namespace = {}
+namespace = {
+    "hhs_ui_constants": types.SimpleNamespace(
+        DEFAULT_TOP_N=10,
+        MIN_TOP_N=1,
+        MAX_TOP_N=100,
+    )
+}
 exec(
     "from __future__ import annotations\n"
     + "\n\n".join(
         functions[name]
         for name in (
+            "normalized_top_n",
             "normalized_monitor_top_n",
+            "normalized_history_stats_top_n",
             "normalized_monitor_disk_top_n",
             "monitor_process_top_n_state_key",
             "monitor_process_top_n_input_key",
@@ -3326,10 +3384,20 @@ exec(
     namespace,
 )
 
+assert namespace["normalized_top_n"](None) == 10
+assert namespace["normalized_top_n"](True) == 10
+assert namespace["normalized_top_n"](False) == 10
+assert namespace["normalized_top_n"]("0") == 10
+assert namespace["normalized_top_n"]("101") == 10
+assert namespace["normalized_top_n"]("25") == 25
 assert namespace["normalized_monitor_top_n"](None) == 10
+assert namespace["normalized_monitor_top_n"](True) == 10
 assert namespace["normalized_monitor_top_n"]("0") == 10
 assert namespace["normalized_monitor_top_n"]("101") == 10
 assert namespace["normalized_monitor_top_n"]("25") == 25
+assert namespace["normalized_history_stats_top_n"](None) == 10
+assert namespace["normalized_history_stats_top_n"](True) == 10
+assert namespace["normalized_history_stats_top_n"]("25") == 25
 assert namespace["normalized_monitor_disk_top_n"]("12") == 12
 assert namespace["monitor_process_top_n_state_key"]("CPU") == "monitor_cpu_top_n"
 assert namespace["monitor_process_top_n_state_key"]("MEM") == "monitor_mem_top_n"
@@ -3422,6 +3490,85 @@ PID USER PR NI VIRT RES SHR S %CPU %MEM TIME+ COMMAND
     "MEM",
 )
 assert [row["Command"] for row in mem_rows] == ["systemd"], mem_rows
+PY
+  assert_success
+}
+
+@test "when initializing Top N controls then defaults should be ten" {
+  run grep -q 'DEFAULT_TOP_N = 10' "${constants_file}"
+  assert_success
+
+  run grep -q 'MIN_TOP_N = 1' "${constants_file}"
+  assert_success
+
+  run grep -q 'MAX_TOP_N = 100' "${constants_file}"
+  assert_success
+
+  run python3 - <<'PY'
+import ast
+import types
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+tree = ast.parse(source)
+source_lines = source.splitlines()
+functions = {
+    node.name: "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
+}
+namespace = {
+    "hhs_ui_constants": types.SimpleNamespace(
+        DEFAULT_TOP_N=10,
+        MIN_TOP_N=1,
+        MAX_TOP_N=100,
+    )
+}
+exec(
+    "from __future__ import annotations\n"
+    + "\n\n".join(
+        functions[name]
+        for name in (
+            "normalized_top_n",
+            "normalized_monitor_top_n",
+            "normalized_history_stats_top_n",
+            "normalized_monitor_disk_top_n",
+        )
+    ),
+    namespace,
+)
+
+assert namespace["normalized_top_n"](None) == 10
+assert namespace["normalized_top_n"](True) == 10
+assert namespace["normalized_top_n"](False) == 10
+assert namespace["normalized_top_n"]("0") == 10
+assert namespace["normalized_top_n"]("101") == 10
+assert namespace["normalized_top_n"]("25") == 25
+assert namespace["normalized_monitor_top_n"](None) == 10
+assert namespace["normalized_monitor_top_n"](True) == 10
+assert namespace["normalized_monitor_disk_top_n"](False) == 10
+assert namespace["normalized_history_stats_top_n"](True) == 10
+assert namespace["normalized_history_stats_top_n"]("25") == 25
+
+main_body = source.split("def main()", 1)[1].split('if __name__ == "__main__"', 1)[0]
+assert 'st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(' in main_body
+assert 'st.session_state[top_n_key] = normalized_monitor_top_n(' in main_body
+assert 'st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(' in main_body
+
+history_body = source.split("def render_history_stats_chart()", 1)[1].split("\ndef ", 1)[0]
+assert history_body.index(
+    'st.session_state["history_stats_top_n"] = normalized_history_stats_top_n('
+) < history_body.index("st.number_input(")
+assert source.count("min_value=hhs_ui_constants.MIN_TOP_N") >= 3
+assert source.count("max_value=hhs_ui_constants.MAX_TOP_N") >= 3
+for function_name in (
+    "build_hhs_history_stats_command",
+    "build_hhs_disk_usage_command",
+    "build_process_monitor_command",
+):
+    function_body = functions[function_name]
+    assert "hhs_ui_constants.MIN_TOP_N" in function_body
+    assert "hhs_ui_constants.MAX_TOP_N" in function_body
 PY
   assert_success
 }
@@ -4478,6 +4625,9 @@ assert namespace["filter_ssh_tunnel_rows"](filter_rows, "PostgreSQL") == [
     filter_rows[0]
 ]
 assert namespace["filter_ssh_tunnel_rows"](filter_rows, "Other", "http") == [
+    filter_rows[1]
+]
+assert namespace["filter_ssh_tunnel_rows"](filter_rows, "Containing", "http") == [
     filter_rows[1]
 ]
 assert namespace["filter_ssh_tunnel_rows"](filter_rows, "Other", "localhost") == []
@@ -6359,7 +6509,7 @@ PY
   run grep -q 'PROCESS_LIST_LINE_PATTERN' "${constants_file}"
   assert_success
 
-  run grep -q 'PROCESS_FILTERS = ("All", "Active", "Inactive", "Ghost", "Other")' "${constants_file}"
+  run grep -q 'PROCESS_FILTERS = ("All", "Active", "Inactive", "Ghost", "Containing")' "${constants_file}"
   assert_success
 
   run grep -q 'PROCESS_FILTER_COLUMNS = \[2.65, 1.35\]' "${constants_file}"
@@ -6469,6 +6619,7 @@ assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Active")] 
 assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Ghost")] == ["1002"]
 assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Inactive")] == ["1003"]
 assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Other", "stale")] == ["1002"]
+assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Containing", "stale")] == ["1002"]
 assert namespace["filter_process_rows"](rows, "All") == rows
 PY
   assert_success
@@ -6540,6 +6691,9 @@ PY
   assert_success
 
   run grep -q 'other_options=("Containing",)' "${ui_file}"
+  assert_failure
+
+  run grep -q 'other_options: tuple\[str, ...\] = ("Other", "Others", "Containing")' "${ui_file}"
   assert_success
 
   run grep -q '"monitor_log_filter"' "${ui_file}"
@@ -6890,6 +7044,15 @@ LOGS
   assert_success
 
   run grep -q 'f"__hhs_paths {action_args}"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_path_environment_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_hhs_paths_raw_entries_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'HHS_PATHS_RAW_ENTRY_MARKER' "${ui_file}"
   assert_success
 
   run grep -q 'action_args = f"-a {safe_path}"' "${ui_file}"
@@ -7645,6 +7808,138 @@ PY
   assert_success
 }
 
+@test "when building ENV rows then the command should load HomeSetup shell environment" {
+  run python3 - "${ui_file}" "${BATS_TEST_TMPDIR}" "${HHS_REPO_DIR}" <<'PY'
+import os
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+tmp_dir = Path(sys.argv[2])
+repo_dir = Path(sys.argv[3])
+start = source.index("def build_hhs_env_environment_command()")
+end = source.index("def run_hhs_envs(")
+namespace = {"shlex": shlex}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+hhs_dir = tmp_dir / "hhs-env-command"
+home_dir = tmp_dir / "home"
+custom_bin = hhs_dir / "custom-bin"
+hhs_dir.mkdir(parents=True, exist_ok=True)
+home_dir.mkdir(parents=True, exist_ok=True)
+custom_bin.mkdir(parents=True, exist_ok=True)
+(hhs_dir / ".env").write_text(
+    'export HHS_UI_TEST_ENV="from-env-file"\n',
+    encoding="utf-8",
+)
+(hhs_dir / ".path").write_text(f"{custom_bin}\n", encoding="utf-8")
+(hhs_dir / ".homesetup.toml").write_text(
+    "hhs_python_venv_enabled = false\n",
+    encoding="utf-8",
+)
+
+command = namespace["build_hhs_envs_command"]("^HHS_UI_TEST_ENV$|^PATH$")
+assert 'source "${HHS_HOME}/dotfiles/bash/bash_env.bash";' in command
+assert '[[ -s "${HHS_ENV_FILE}" ]] && source "${HHS_ENV_FILE}";' in command
+assert 'HHS_PATHS_FILE' in command
+
+result = subprocess.run(
+    ["bash", "--noprofile", "--norc", "-c", command],
+    env={
+        "HOME": str(home_dir),
+        "HHS_HOME": str(repo_dir),
+        "HHS_DIR": str(hhs_dir),
+        "PATH": "/usr/bin:/bin",
+        "TERM": "xterm-256color",
+        "COLUMNS": "260",
+    },
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    timeout=30,
+    check=False,
+)
+assert result.returncode == 0, result.stderr or result.stdout
+assert "HHS_UI_TEST_ENV" in result.stdout, result.stdout
+assert "from-env-file" in result.stdout, result.stdout
+assert str(custom_bin) in result.stdout, result.stdout
+PY
+  assert_success
+}
+
+@test "when parsing command-backed config rows then non-PATH parsers should not read process environment" {
+  run python3 - "${ui_file}" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+tree = ast.parse(source)
+parser_names = {
+    "parse_hhs_envs",
+    "parse_hhs_dirs",
+    "parse_hhs_commands",
+    "parse_hhs_aliases",
+}
+parsers = {
+    node.name: node
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef) and node.name in parser_names
+}
+assert set(parsers) == parser_names, parsers
+for name, node in parsers.items():
+    body = ast.unparse(node)
+    assert "os.environ" not in body, (name, body)
+    assert "getenv" not in body, (name, body)
+PY
+  assert_success
+}
+
+@test "when parsing PATH rows then command output should provide path values" {
+  run python3 - "${ui_file}" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def path_sources(")
+end = source.index("def env_widget_key_fragment(")
+namespace = {
+    "HHS_PATHS_RAW_ENTRY_MARKER": "__HHS_UI_PATH_ENTRY__",
+    "hhs_ui": SimpleNamespace(
+        PATH_SOURCE_PATTERN=re.compile(r"(?:|=>)\s+(.*)$"),
+        PATH_TYPE_PATTERN=re.compile(r"^(\S+)\s+"),
+    ),
+    "os": os,
+    "strip_ansi": lambda value: value,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+os.environ["PATH"] = "/wrong/streamlit/path:/another/wrong/path"
+output = "\n".join(
+    (
+        " /truncated/custom................................  Custom path",
+        " /truncated/shell.................................  Shell export",
+        "__HHS_UI_PATH_ENTRY__\t/actual/custom/path",
+        "__HHS_UI_PATH_ENTRY__\t/actual/shell/path",
+    )
+)
+rows = namespace["parse_hhs_paths"](output)
+assert [row["Path Value"] for row in rows] == [
+    "/actual/custom/path",
+    "/actual/shell/path",
+], rows
+assert [row["Origin"] for row in rows] == ["Custom path", "Shell export"], rows
+assert list(rows[0]) == ["Type", "Origin", "Path Value"], rows
+assert namespace["path_entries"]("") == ["/wrong/streamlit/path", "/another/wrong/path"]
+PY
+  assert_success
+}
+
 @test "when rendering table rows then path values are visually abbreviated with env vars" {
   run python3 - "${ui_file}" <<'PY'
 import os
@@ -7823,6 +8118,7 @@ functions = {
     node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
 }
 filter_controls = functions["render_table_filter_controls"]
+normalizer = functions["normalized_table_filter_selection"]
 
 radio_calls = [
     call
@@ -7837,6 +8133,8 @@ on_change = keywords["on_change"]
 assert isinstance(on_change, ast.Name)
 assert on_change.id == "save_ui_state"
 assert "handle_monitor_disk_top_n_change" not in ast.unparse(filter_controls)
+assert "Containing" in ast.unparse(filter_controls)
+assert "Containing" in ast.unparse(normalizer)
 PY
   assert_success
 }
@@ -7868,6 +8166,9 @@ namespace = {
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
+assert namespace["env_filter_pattern"]("Containing", "PATH") == "PATH"
+assert namespace["env_filter_pattern"]("Other", "PATH") == "PATH"
+
 rows = [
     {"Name": "ollama", "Value": "Up"},
     {"Name": "postgres", "Value": "Down"},
@@ -7875,9 +8176,28 @@ rows = [
 ]
 assert namespace["filter_rows_by_text"](rows, "All", "post") == rows
 assert namespace["filter_rows_by_text"](rows, "Other", "post") == [rows[1]]
+assert namespace["filter_rows_by_text"](rows, "Others", "post") == [rows[1]]
+assert namespace["filter_rows_by_text"](rows, "Containing", "post") == [rows[1]]
 assert namespace["filter_service_rows"](rows, "Up", "") == [rows[0]]
 assert namespace["filter_service_rows"](rows, "Down", "") == [rows[1]]
 assert namespace["filter_service_rows"](rows, "Other", "custom") == [rows[2]]
+assert namespace["filter_service_rows"](rows, "Containing", "custom") == [rows[2]]
+
+shopt_rows = [
+    {"Name": "cdspell", "State": "ON"},
+    {"Name": "histappend", "State": "OFF"},
+]
+assert namespace["filter_shopt_rows"](shopt_rows, "ON", "") == [shopt_rows[0]]
+assert namespace["filter_shopt_rows"](shopt_rows, "OFF", "") == [shopt_rows[1]]
+assert namespace["filter_shopt_rows"](shopt_rows, "Containing", "spell") == [shopt_rows[0]]
+
+path_rows = [
+    {"Origin": "Shell", "Path Value": "/bin"},
+    {"Origin": "Custom", "Path Value": "/opt/tool"},
+]
+assert namespace["filter_path_rows"](path_rows, "Shell", "") == [path_rows[0]]
+assert namespace["filter_path_rows"](path_rows, "Custom", "") == [path_rows[1]]
+assert namespace["filter_path_rows"](path_rows, "Containing", "tool") == [path_rows[1]]
 
 tool_rows = [
     {"Tool": "git", "Status": "Installed"},
@@ -7890,6 +8210,7 @@ assert namespace["filter_tool_rows"](tool_rows, "Installed", "") == [tool_rows[0
 assert namespace["filter_tool_rows"](tool_rows, "Not Installed", "") == tool_rows[1:3]
 assert namespace["filter_tool_rows"](tool_rows, "Aliased", "") == [tool_rows[3]]
 assert namespace["filter_tool_rows"](tool_rows, "Other", "node") == [tool_rows[2]]
+assert namespace["filter_tool_rows"](tool_rows, "Containing", "node") == [tool_rows[2]]
 PY
   assert_success
 }
