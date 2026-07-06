@@ -222,13 +222,40 @@ setup() {
   run grep -q -- '--server.port "${HHS_STREAMLIT_UI_PORT}"' "${ui_plugin_file}"
   assert_success
 
+  run grep -q -- '--server.address 127.0.0.1' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q -- '--browser.serverAddress localhost' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q -- '--browser.serverPort "${HHS_STREAMLIT_UI_PORT}"' "${ui_plugin_file}"
+  assert_success
+
   run grep -q 'STREAMLIT_BROWSER_GATHER_USAGE_STATS="false"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'STREAMLIT_SERVER_ADDRESS="127.0.0.1"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'STREAMLIT_BROWSER_SERVER_ADDRESS="localhost"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'STREAMLIT_BROWSER_SERVER_PORT="${HHS_STREAMLIT_UI_PORT}"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'HHS_STREAMLIT_UI_OWNER="${owner_token}"' "${ui_plugin_file}"
   assert_success
 
   run grep -q -- '--browser.gatherUsageStats false' "${ui_plugin_file}"
   assert_success
 
   run grep -q "'--browser.gatherUsageStats'," "${HHS_REPO_DIR}/gradle/streamlit.gradle"
+  assert_success
+
+  run grep -q "'--browser.serverAddress'," "${HHS_REPO_DIR}/gradle/streamlit.gradle"
+  assert_success
+
+  run grep -q "'--browser.serverPort'," "${HHS_REPO_DIR}/gradle/streamlit.gradle"
   assert_success
 
   run grep -A1 "'--browser.gatherUsageStats'," "${HHS_REPO_DIR}/gradle/streamlit.gradle"
@@ -238,6 +265,18 @@ setup() {
   assert_success
 
   run grep -q 'gatherUsageStats = false' "${HHS_REPO_DIR}/.streamlit/config.toml"
+  assert_success
+
+  run grep -q 'address = "127.0.0.1"' "${HHS_REPO_DIR}/.streamlit/config.toml"
+  assert_success
+
+  run grep -q 'serverAddress = "localhost"' "${HHS_REPO_DIR}/.streamlit/config.toml"
+  assert_success
+
+  run grep -q 'enableCORS = true' "${HHS_REPO_DIR}/.streamlit/config.toml"
+  assert_success
+
+  run grep -q 'enableXsrfProtection = true' "${HHS_REPO_DIR}/.streamlit/config.toml"
   assert_success
 
   run grep -q 'PYTHONPATH="${HHS_HOME}/bin/apps/py:${PYTHONPATH:-}"' "${ui_plugin_file}"
@@ -256,6 +295,64 @@ setup() {
   assert_success
 
   run grep -q 'ui_port_pids' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'HHS_STREAMLIT_UI_PROCESS_FILE="${HHS_STREAMLIT_UI_PROCESS_FILE:-${HHS_DIR}/.streamlit-ui.processes}"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'record_ui_process "${pid}" "${owner_token}"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'defunct' "${ui_plugin_file}"
+  assert_failure
+
+  run grep -q "ui_process_tree""_pids" "${ui_plugin_file}"
+  assert_failure
+
+  run grep -q 'is_owned_ui_pid "${pid}"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'is_python_or_streamlit_pid "${pid}"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'def is_python_or_streamlit_pid' "${ui_plugin_file}"
+  assert_failure
+
+  run grep -q '^function is_python_or_streamlit_pid()' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q '^function validate_safe_streamlit_args()' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'validate_safe_streamlit_args "$@"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q "launch""ctl" "${ui_plugin_file}"
+  assert_failure
+
+  run grep -q "hhs-ui-""codex" "${ui_plugin_file}"
+  assert_failure
+
+  run grep -q "stop_legacy_ui_""respawner" "${ui_plugin_file}"
+  assert_failure
+
+  run python3 - "${ui_plugin_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = source.split("function start_ui()", 1)[1].split("\n# @purpose:", 1)[0]
+command = body.split('nohup python3 -m streamlit run "${STREAMLIT_UI}"', 1)[1].split('pid=$!', 1)[0]
+arg_index = command.rindex('"$@"')
+assert command.index("--server.address 127.0.0.1") < arg_index
+assert command.index('--browser.serverAddress localhost') < arg_index
+launch_body = source.split("function launch_ui()", 1)[1].split("\n# @purpose:", 1)[0]
+assert "validate_ui_runtime" in launch_body
+assert "if is_ui_running; then" in launch_body
+PY
+  assert_success
+
+  run grep -q 'known_pids="$(ui_known_pids)"' "${ui_plugin_file}"
   assert_success
 
   run grep -q '\[\[ "$1" == "execute" \]\] && shift' "${ui_plugin_file}"
@@ -332,11 +429,154 @@ setup() {
     function __hhs_open() { printf "open:%s\n" "$1"; }
     source "${3}"
     function is_ui_running() { return 0; }
+    function is_managed_ui_running() { return 0; }
     start_ui
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
   assert_success
   assert_output --partial 'HomeSetup UI is already running'
   assert_output --partial 'HomeSetup UI is running at http://localhost:28501'
+}
+
+@test "when starting UI with an unmanaged listener then plugin should leave it alone" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { return 0; }
+    function __hhs_open() { printf "open:%s\n" "$1"; }
+    function kill() {
+      [[ "$1" == "-0" ]] && return 0
+      printf "kill:%s\n" "$*" >&2
+      return 0
+    }
+    printf "%s\n" "12345 old-token" > "${HHS_DIR}/.streamlit-ui.processes"
+    source "${3}"
+    function is_ui_running() { return 0; }
+    function ui_port_pids() { printf "99999\n"; }
+    start_ui
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_failure
+  assert_output --partial 'Port 28501 is already in use by a process not started by the UI plugin.'
+  refute_output --partial 'kill:'
+  refute_output --partial 'open:'
+}
+
+@test "when starting UI then protected Streamlit network options cannot be overridden" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { return 0; }
+    function __hhs_open() { return 0; }
+    source "${3}"
+    function is_ui_running() { return 1; }
+    start_ui --server.address 0.0.0.0
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_failure
+  assert_output --partial 'Protected Streamlit option is managed by HomeSetup UI and cannot be overridden: --server.address'
+
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { return 0; }
+    function __hhs_open() { return 0; }
+    source "${3}"
+    function is_ui_running() { return 1; }
+    start_ui --server.enableXsrfProtection=false
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_failure
+  assert_output --partial 'Protected Streamlit option is managed by HomeSetup UI and cannot be overridden: --server.enableXsrfProtection'
+}
+
+@test "when validating owned UI process then PID must be Python or Streamlit" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { return 0; }
+    function __hhs_open() { return 0; }
+    function kill() {
+      [[ "$1" == "-0" ]] && return 0
+      return 1
+    }
+    printf "%s\n" "12345 token-a" > "${HHS_DIR}/.streamlit-ui.pid"
+    source "${3}"
+    function ui_pid_args() {
+      printf "python3 -m streamlit run %s --server.port %s --server.address 127.0.0.1\n" "${STREAMLIT_UI}" "${HHS_STREAMLIT_UI_PORT}"
+    }
+    function ui_pid_env() { printf "HHS_STREAMLIT_UI_OWNER=token-a\n"; }
+    function ui_pid_command_name() { printf "node\n"; }
+    is_owned_ui_pid 12345 && printf "bad-owned\n" || printf "bad-rejected\n"
+    function ui_pid_command_name() { printf "python3\n"; }
+    is_owned_ui_pid 12345 && printf "python-owned\n" || printf "python-rejected\n"
+    function ui_pid_command_name() { printf "streamlit\n"; }
+    is_owned_ui_pid 12345 && printf "streamlit-owned\n" || printf "streamlit-rejected\n"
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_line --index 0 'bad-rejected'
+  assert_line --index 1 'python-owned'
+  assert_line --index 2 'streamlit-owned'
 }
 
 @test "when restarting UI then launch path opens the browser after stop" {
@@ -372,7 +612,60 @@ setup() {
   assert_output --partial 'HomeSetup UI is running at http://localhost:28501'
 }
 
-@test "when stopping UI then listener PID on configured port is included" {
+@test "when stopping UI then recorded plugin process IDs are killed" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { [[ "$1" == "lsof" ]] && return 1; return 0; }
+    function __hhs_open() { return 0; }
+    killed=""
+    function kill() {
+      if [[ "$1" == "-0" ]]; then
+        [[ " ${killed} " != *" $2 "* ]]
+        return
+      fi
+      printf "kill:%s\n" "$1"
+      killed="${killed} $1"
+      return 0
+    }
+    printf "%s\n" "12345 token-a" > "${HHS_DIR}/.streamlit-ui.pid"
+    printf "%s\n" "12345 token-a" "23456 token-b" > "${HHS_DIR}/.streamlit-ui.processes"
+    source "${3}"
+    function is_ui_running() { return 1; }
+    function ui_pids() { return 0; }
+    function ui_port_pids() { printf "99999\n"; }
+    function is_owned_ui_pid() {
+      [[ "$1" =~ ^(12345|23456)$ ]] && [[ " ${killed} " != *" $1 "* ]]
+    }
+    stop_ui
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_output --partial 'Stopping HomeSetup UI process 12345'
+  assert_output --partial 'Stopping HomeSetup UI process 23456'
+  assert_output --partial 'kill:12345'
+  assert_output --partial 'kill:23456'
+  refute_output --partial 'kill:99999'
+  [[ ! -e "${BATS_TEST_TMPDIR}/hhs/.streamlit-ui.pid" ]]
+  [[ ! -e "${BATS_TEST_TMPDIR}/hhs/.streamlit-ui.processes" ]]
+}
+
+@test "when stopping UI with only an unmanaged listener then plugin should not kill it" {
   run bash --noprofile --norc -c '
     export APP_NAME="hhs"
     export HHS_HOME="${1}"
@@ -395,23 +688,20 @@ setup() {
     function __hhs_has() { [[ "$1" == "lsof" ]] && return 1; return 0; }
     function __hhs_open() { return 0; }
     function kill() {
-      if [[ "$1" == "-0" ]]; then
-        return 0
-      fi
-      printf "kill:%s\n" "$1"
-      UI_RUNNING="0"
+      printf "kill:%s\n" "$*" >&2
       return 0
     }
     source "${3}"
-    function is_ui_running() { [[ "${UI_RUNNING:-1}" == "1" ]]; }
-    function ui_pids() { return 0; }
-    function ui_port_pids() { printf "12345\n"; }
+    function is_ui_running() { return 0; }
+    function ui_pids() { printf "88888\n"; }
+    function ui_port_pids() { printf "99999\n"; }
     stop_ui
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
   assert_success
-  assert_output --partial 'Stopping HomeSetup UI process 12345'
-  assert_output --partial 'kill:12345'
+  assert_output --partial 'Leaving it running'
+  refute_output --partial 'kill:'
 }
+
 
 # TC - 6
 @test "when remote SSH command closes then Streamlit UI should clear stale connection state" {
@@ -917,7 +1207,6 @@ PY
 
   run python3 - <<'PY'
 import ast
-import types
 from pathlib import Path
 
 tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
@@ -1118,10 +1407,12 @@ assert 'def footer_cache_clear_menu_markup' in ui_source
 assert 'def render_footer_cache_clear_menu_script' in ui_source
 assert '<details class="hhs-footer-cache-clear-menu">' in ui_source
 assert '<summary class="hhs-footer-cache-clear-trigger"' in ui_source
-assert '<form class="hhs-footer-cache-clear-form" method="get">' in ui_source
-assert '<button type="submit">OK</button>' in ui_source
-assert 'form.querySelector(\'input[type="checkbox"]:checked\')' in ui_source
-assert 'event.preventDefault()' in ui_source
+assert '<form class="hhs-footer-cache-clear-form" method="get">' not in ui_source
+assert '<div class="hhs-footer-cache-clear-panel" data-clear-param="{clear_param}">' in ui_source
+assert '<button type="button">OK</button>' in ui_source
+assert 'panel.querySelectorAll(\'input[type="checkbox"][data-param]:checked\')' in ui_source
+assert 'params.set(panel.dataset.clearParam, "1")' in ui_source
+assert 'window.parent.location.search = params.toString()' in ui_source
 assert 'menu.removeAttribute("open")' in ui_source
 assert 'render_footer_cache_clear_menu_script()' in ui_source
 assert 'href="{cache_clear_url}"' not in ui_source
@@ -1293,10 +1584,10 @@ status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_
 shell_group_block = re.search(r"\.hhs-footer-shell-group\s*\{([^}]*)\}", base_css).group(1)
 cache_menu_block = re.search(r"\.hhs-footer-cache-clear-menu\s*\{([^}]*)\}", base_css).group(1)
 cache_trigger_block = re.search(r"\.hhs-footer-cache-clear-trigger\s*\{([^}]*)\}", base_css).group(1)
-cache_form_block = re.search(r"^\.hhs-footer-cache-clear-form\s*\{([^}]*)\}", base_css, re.M).group(1)
-cache_form_label_block = re.search(r"\.hhs-footer-cache-clear-form label\s*\{([^}]*)\}", base_css).group(1)
-cache_form_checkbox_block = re.search(r"\.hhs-footer-cache-clear-form input\[type=\"checkbox\"\]\s*\{([^}]*)\}", base_css).group(1)
-cache_form_button_block = re.search(r"\.hhs-footer-cache-clear-form button\s*\{([^}]*)\}", base_css).group(1)
+cache_panel_block = re.search(r"^\.hhs-footer-cache-clear-panel\s*\{([^}]*)\}", base_css, re.M).group(1)
+cache_panel_label_block = re.search(r"\.hhs-footer-cache-clear-panel label\s*\{([^}]*)\}", base_css).group(1)
+cache_panel_checkbox_block = re.search(r"\.hhs-footer-cache-clear-panel input\[type=\"checkbox\"\]\s*\{([^}]*)\}", base_css).group(1)
+cache_panel_button_block = re.search(r"\.hhs-footer-cache-clear-panel button\s*\{([^}]*)\}", base_css).group(1)
 block_container_block = re.search(r"\.block-container\s*\{([^}]*)\}", base_css).group(1)
 main_block_gap_block = re.search(r"\[data-testid=\"stMainBlockContainer\"\] > \[data-testid=\"stVerticalBlock\"\],[^{]+\{([^}]*)\}", base_css).group(1)
 active_view_block = re.search(r"\.st-key-active_view\s*\{([^}]*)\}", base_css).group(1)
@@ -1319,7 +1610,8 @@ assert ".hhs-footer-shell-status" in base_css
 assert ".hhs-footer-shell-group" in base_css
 assert ".hhs-footer-cache-clear-menu" in base_css
 assert ".hhs-footer-cache-clear-trigger" in base_css
-assert ".hhs-footer-cache-clear-form" in base_css
+assert ".hhs-footer-cache-clear-form" not in base_css
+assert ".hhs-footer-cache-clear-panel" in base_css
 assert ".st-key-footer_cache_clear_button" not in base_css
 assert ".hhs-footer-remote-status" in base_css
 assert ".hhs-footer-status-group" in base_css
@@ -1344,20 +1636,20 @@ assert ".hhs-footer-cache-clear-button" not in base_css
 assert ".hhs-footer-cache-clear-trigger:hover" in base_css
 assert "bottom: calc(var(--hhs-footer-guard-height) + 0.7rem)" in base_css
 assert "right: 1rem" in base_css
-assert "background: var(--hhs-theme-secondary-background-color)" in cache_form_block
-assert "box-shadow: 0 1rem 2rem" in cache_form_block
-assert "gap: var(--hhs-element-std-gap)" in cache_form_block
-assert "position: fixed" in cache_form_block
-assert "width: min(22rem, calc(100vw - 2rem)) !important" in cache_form_block
-assert "width: 100%" in cache_form_label_block
-assert "min-height: 2.25rem" in cache_form_label_block
-assert "accent-color: var(--hhs-theme-primary-color)" in cache_form_checkbox_block
-assert "height: 1rem" in cache_form_checkbox_block
-assert "background: transparent" in cache_form_button_block
-assert "height: 2.25rem" in cache_form_button_block
-assert "width: 100%" in cache_form_button_block
-assert ".hhs-footer-cache-clear-form label:hover" in base_css
-assert ".hhs-footer-cache-clear-form button:hover" in base_css
+assert "background: var(--hhs-theme-secondary-background-color)" in cache_panel_block
+assert "box-shadow: 0 1rem 2rem" in cache_panel_block
+assert "gap: var(--hhs-element-std-gap)" in cache_panel_block
+assert "position: fixed" in cache_panel_block
+assert "width: min(22rem, calc(100vw - 2rem)) !important" in cache_panel_block
+assert "width: 100%" in cache_panel_label_block
+assert "min-height: 2.25rem" in cache_panel_label_block
+assert "accent-color: var(--hhs-theme-primary-color)" in cache_panel_checkbox_block
+assert "height: 1rem" in cache_panel_checkbox_block
+assert "background: transparent" in cache_panel_button_block
+assert "height: 2.25rem" in cache_panel_button_block
+assert "width: 100%" in cache_panel_button_block
+assert ".hhs-footer-cache-clear-panel label:hover" in base_css
+assert ".hhs-footer-cache-clear-panel button:hover" in base_css
 assert 'div[role="dialog"]:has(.hhs-shell-version-output)' in base_css
 assert ".hhs-shell-version-output" in base_css
 assert "max-height: 88dvh" in base_css
@@ -1475,8 +1767,9 @@ assert "z-index: calc(var(--hhs-modal-scrim-z-index) - 1) !important" in base_cs
 assert "z-index: var(--hhs-modal-z-index) !important" in base_css
 assert "z-index: var(--hhs-command-overlay-z-index)" in base_css
 main_body = ui_source.split("def main()", 1)[1].split('if __name__ == "__main__"', 1)[0]
-assert main_body.index("render_footer()") < main_body.index("render_floating_status()")
-assert main_body.index("render_floating_status()") < main_body.index("render_folder_picker_dialog()")
+assert main_body.index("render_footer_status_fragment()") < main_body.index(
+    "render_folder_picker_dialog()"
+)
 assert main_body.index("render_folder_picker_dialog()") < main_body.index("render_browser_cleanup_script()")
 assert "color: var(--hhs-warning)" in base_css
 assert ".hhs-footer-spacer" not in base_css
@@ -2289,6 +2582,12 @@ PY
   run grep -q 'with st.expander("Search", expanded=True):' "${ui_file}"
   assert_success
 
+  run grep -q 'def render_search_panel' "${ui_file}"
+  assert_success
+
+  run grep -q '@st.fragment()' "${ui_file}"
+  assert_success
+
   run grep -q 'st.container(key="search_results")' "${ui_file}"
   assert_success
 
@@ -2308,15 +2607,26 @@ import sys
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 body = source.split("def render_search_filters", 1)[1].split("\ndef ", 1)[0]
 assert "render_table_filter_controls" not in body
+assert "return selected_filter" not in body
 assert "[1.15, 3.0, 0.22, 0.22, 0.22, 0.22]" in body
 assert 'vertical_alignment="center"' in body
 assert "key=\"search_filter\"" in body
 assert "key=\"search_other_filter\"" in body
-assert 'render_search_option_toggle(\n                "search_ignore_case", "Aa", "Ignore case (-i)"' in body
-assert 'render_search_option_toggle("search_words", "", "Match words (-w)")' in body
-assert 'render_search_option_toggle("search_binary", "", "Search binary files (-b)")' in body
+for expected_toggle in (
+    '"search_ignore_case", "Aa", "Ignore case (-i)"',
+    '"search_words", "", "Match words (-w)"',
+    '"search_binary", "", "Search binary files (-b)"',
+):
+    assert expected_toggle in body
 assert "key=\"search_other_filter_clear\"" in body
 assert "width=\"stretch\"" in body
+panel_decorator = source[: source.index("def render_search_panel")].rstrip().splitlines()[-1]
+assert panel_decorator == "@st.fragment()"
+panel_body = source.split("def render_search_panel", 1)[1].split("\ndef ", 1)[0]
+assert "render_search_controls()" in panel_body
+assert "render_search_filters()" in panel_body
+assert "render_search_results()" in panel_body
+assert "search_filter, search_text_filter" not in panel_body
 PY
   assert_success
 
@@ -2628,6 +2938,8 @@ assert 'st.session_state["search_result_binary"] = bool(' in submit_body
 assert 'st.session_state.get("search_binary", False)' in submit_body
 
 results_body = source.split("def render_search_results", 1)[1].split("\ndef ", 1)[0]
+assert "search_filter = selected_search_result_filter()" in results_body
+assert "text_filter = selected_search_result_text_filter()" in results_body
 assert (
     "build_hhs_search_command(\n"
     "            search_type, query, search_path, ignore_case, words, binary"
@@ -2809,6 +3121,7 @@ PY
 
   run python3 - <<'PY'
 import ast
+import types
 from pathlib import Path
 
 tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
@@ -3281,7 +3594,7 @@ PY
   run grep -q '"ssh_files"' "${ui_file}"
   assert_success
 
-  run grep -q 'return 10' "${ui_file}"
+  run grep -q 'return hhs_ui_constants.DEFAULT_TOP_N' "${ui_file}"
   assert_success
 
   run grep -q 'key="monitor_disk_top_n_input"' "${ui_file}"
@@ -3305,7 +3618,10 @@ PY
   run grep -q 'for metric in ("CPU", "MEM"):' "${ui_file}"
   assert_success
 
-  run grep -q 'build_process_monitor_command(metric, normalized_monitor_process_top_n(metric))' "${ui_file}"
+  run grep -q 'def monitor_metric_command' "${ui_file}"
+  assert_success
+
+  run grep -q 'normalized_monitor_process_top_n(metric)' "${ui_file}"
   assert_success
 
   run grep -q 'process_monitor_chart_rows(result.stdout, metric, applied_top_n)' "${ui_file}"
@@ -3355,6 +3671,7 @@ namespace = {
             r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
         ),
     ),
+    "hhs_ui_constants": SimpleNamespace(MIN_TOP_N=1, MAX_TOP_N=100),
     "os": os,
     "re": re,
     "shlex": shlex,
@@ -3402,6 +3719,7 @@ PY
 
   run python3 - <<'PY'
 import ast
+import types
 from pathlib import Path
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
@@ -5727,31 +6045,38 @@ ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
 disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
 connect_index = main_body.index("execute_pending_ssh_connection()")
-updater_index = main_body.index("execute_due_updater_check()")
 ssh_dialog_index = main_body.index("render_ssh_connection_dialog()")
 ai_initialize_index = main_body.index("initialize_ollama_service_availability()")
 ai_refresh_index = main_body.index("update_ollama_service_availability_refresh()")
 active_view_validation_index = main_body.index('if st.session_state["active_view"] not in main_views():')
 footer_actions_index = main_body.index("handle_footer_actions()")
+updater_status_index = main_body.index("render_background_job_status(UPDATER_UPDATE_JOB)")
 shell_dialog_index = main_body.index("render_footer_shell_version_dialog()")
 cleanup_index = main_body.index("render_browser_cleanup_script()")
 sidebar_index = main_body.index("render_sidebar()")
 main_view_index = main_body.index("render_main_view()")
-footer_index = main_body.index("render_footer()")
+footer_index = main_body.index("render_footer_status_fragment()")
 client_status_index = main_body.index("render_footer_client_error_bridge_script()")
-drain_status_index = main_body.index("drain_footer_status_log_records()")
-floating_status_index = main_body.index("render_floating_status()")
 assert main_body.index("install_footer_status_log_handler()") < main_body.index(
     "selected_theme = persisted_theme_name()"
 )
 assert 'st.session_state.setdefault("updater_check_context", "local")' in main_body
 assert 'st.session_state.setdefault("updater_check_started_context", "")' in main_body
 assert 'st.session_state.setdefault("updater_remote_checked_context", "")' in main_body
-assert disconnect_index < connect_index < updater_index < ssh_dialog_index
+assert "execute_due_updater_check()" not in main_body
+assert disconnect_index < connect_index < ssh_dialog_index
 assert ssh_dialog_index < ai_initialize_index < ai_refresh_index < active_view_validation_index
-assert active_view_validation_index < footer_actions_index < shell_dialog_index
+assert active_view_validation_index < footer_actions_index < updater_status_index < shell_dialog_index
 assert shell_dialog_index < sidebar_index < main_view_index
-assert footer_index < client_status_index < drain_status_index < floating_status_index < cleanup_index
+assert footer_index < client_status_index < cleanup_index
+footer_status_body = ui_source.split("def render_footer_status_fragment", 1)[1].split("\ndef ", 1)[0]
+footer_status_decorator = ui_source[: ui_source.index("def render_footer_status_fragment")].rstrip().splitlines()[-1]
+assert footer_status_decorator == '@st.fragment(run_every="5s")'
+assert 'execute_due_updater_check()' in footer_status_body
+assert 'drain_footer_status_log_records()' in footer_status_body
+assert 'render_footer()' in footer_status_body
+assert 'render_floating_status()' in footer_status_body
+assert 'parallel=True' not in footer_status_body
 assert "class FooterStatusLogHandler(logging.Handler)" in ui_source
 assert "logging.captureWarnings(True)" in ui_source
 assert "def drain_footer_status_log_records(" in ui_source
@@ -7275,9 +7600,30 @@ LOGS
   assert_failure
 
   run grep -q 'buttons=()' "${ui_file}"
+  assert_failure
+
+  run grep -q 'st.container(key="hhs_path_picker_overlay")' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.container(key="hhs_path_picker_panel")' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_path_picker_body' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="folder_picker_header_close_button"' "${ui_file}"
   assert_success
 
   run grep -q '.st-key-folder_picker_select_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-folder_picker_header_close_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-hhs_path_picker_overlay' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-hhs_path_picker_panel' "${css_file}"
   assert_success
 
   run grep -q '.st-key-folder_picker_action_grid,' "${css_file}"
@@ -7442,6 +7788,8 @@ table_functions = (
     "render_aliases_table",
 )
 for function_name in table_functions:
+    decorator = source[: source.index(f"def {function_name}")].rstrip().splitlines()[-1]
+    assert decorator == "@st.fragment()", function_name
     body = source.split(f"def {function_name}", 1)[1].split("\ndef ", 1)[0]
     assert "st.error(" not in body, function_name
     assert "if result.returncode != 0:" not in body, function_name
@@ -7634,6 +7982,7 @@ namespace = {
         UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS=30,
     ),
     "st": types.SimpleNamespace(session_state=session_state),
+    "rerun_streamlit_app": lambda: None,
     "connected_ssh_host": lambda: host,
     "run_bash_command": run_bash_command,
     "strip_ansi": lambda value: value,
@@ -7644,18 +7993,17 @@ namespace = {
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
 dialog_body = source.split("def render_path_picker_dialog", 1)[1].split("\ndef ", 1)[0]
-assert "dialog_rendered = pop_dialog(" in dialog_body
-assert dialog_body.index("dialog_rendered = pop_dialog(") < dialog_body.rindex(
-    "clear_preloader()"
-)
+assert "dialog_rendered = pop_dialog(" not in dialog_body
+assert 'st.container(key="hhs_path_picker_overlay")' in dialog_body
+assert 'st.container(key="hhs_path_picker_panel")' in dialog_body
+assert 'key="folder_picker_header_close_button"' in dialog_body
+assert "return True" in dialog_body
 assert dialog_body.index("prepare_path_picker_dialog_listing(mode)") < dialog_body.index(
-    "dialog_rendered = pop_dialog("
+    'st.container(key="hhs_path_picker_overlay")'
 )
-render_body = dialog_body.split("def render_body", 1)[1].split(
-    "dialog_rendered = pop_dialog", 1
-)[0]
-assert "current_directory = folder_picker_browsing_directory()" in dialog_body
-assert "sync_folder_picker_child_selection(child_directories)" in dialog_body
+render_body = source.split("def render_path_picker_body", 1)[1].split("\ndef ", 1)[0]
+assert "current_directory = folder_picker_browsing_directory()" in render_body
+assert "sync_folder_picker_child_selection(child_directories)" in render_body
 assert render_body.index(
     "current_directory = folder_picker_browsing_directory()"
 ) < render_body.index("path_picker_child_paths(")
@@ -7672,8 +8020,9 @@ assert render_body.index("st.selectbox(") < render_body.index("st.checkbox(")
 assert namespace["path_picker_uses_remote"]()
 assert namespace["remote_path_picker_default_directory"]() == "$HOME"
 assert namespace["request_path_picker"]("search_path", "", "folder") is None
-assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
-assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
+assert session_state["_hhs_folder_picker_current_dir"] == "$HOME"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "$HOME"
+assert commands == []
 children = namespace["path_picker_child_paths"]("$HOME", "folder", False)
 assert children == ["/home/root/app"]
 assert len(commands) == 1
@@ -7685,8 +8034,8 @@ assert children == ["/home/root/app"]
 assert len(commands) == 1
 
 assert namespace["request_path_picker"]("search_path", "/srv", "folder") is None
-assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
-assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
+assert session_state["_hhs_folder_picker_current_dir"] == "/srv"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/srv"
 
 command_count = len(commands)
 session_state["_hhs_folder_picker_mode"] = "folder"
@@ -7697,6 +8046,12 @@ session_state["_hhs_folder_picker_selected_dir"] = "/home/root/app"
 namespace["open_folder_picker_selected_directory"]()
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/app"
+assert "_hhs_folder_picker_selected_dir" not in session_state
+assert "_hhs_folder_picker_path_kinds" not in session_state
+assert len(commands) == command_count
+children = namespace["path_picker_child_paths"]("/home/root/app", "folder", False)
+assert children == ["/home/root/app/logs", "/home/root/app/tmp"]
+namespace["sync_folder_picker_child_selection"](children)
 assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app/logs"
 assert session_state["_hhs_folder_picker_path_kinds"]["/home/root/app/logs"] == "Dir"
 assert len(commands) == command_count + 1
@@ -7723,7 +8078,7 @@ assert len(commands) == command_count + 1
 session_state["_hhs_folder_picker_selected_dir"] = "/home/root/app"
 namespace["open_folder_picker_selected_directory"]()
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
-assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app/logs"
+assert "_hhs_folder_picker_selected_dir" not in session_state
 assert len(commands) == command_count + 1
 
 session_state["_hhs_folder_picker_mode"] = "file"
@@ -7798,6 +8153,9 @@ exec("from __future__ import annotations\n" + source[start:end], namespace)
 namespace["open_folder_picker_selected_directory"]()
 assert session_state["_hhs_folder_picker_current_dir"] == str(apps.resolve())
 assert session_state["_hhs_folder_picker_current_dir_input"] == str(apps.resolve())
+assert "_hhs_folder_picker_selected_dir" not in session_state
+children = namespace["path_picker_child_paths"](str(apps.resolve()), "folder", False)
+namespace["sync_folder_picker_child_selection"](children)
 assert session_state["_hhs_folder_picker_selected_dir"] == str(alpha.resolve())
 
 session_state["_hhs_folder_picker_current_dir"] = str(home)

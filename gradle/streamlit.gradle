@@ -161,6 +161,10 @@ tasks.register('startUi') {
         streamlitPortValue,
         '--server.headless',
         'true',
+        '--browser.serverAddress',
+        'localhost',
+        '--browser.serverPort',
+        streamlitPortValue,
         '--browser.gatherUsageStats',
         'false'
     )

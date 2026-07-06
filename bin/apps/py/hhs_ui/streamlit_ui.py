@@ -2173,13 +2173,18 @@ def request_path_picker(
     st.session_state.pop("_hhs_folder_picker_path_kinds", None)
     clear_folder_picker_listing_cache()
     prune_folder_picker_child_selection_widget_keys()
-    if path_picker_uses_remote():
-        child_paths = path_picker_child_paths(
-            start_directory,
-            picker_mode,
-            bool(st.session_state.get("_hhs_folder_picker_include_dot_folders", False)),
-        )
-        sync_folder_picker_child_selection(child_paths)
+    rerun_streamlit_app()
+
+
+def rerun_streamlit_app() -> None:
+    """Request a full Streamlit app rerun from callbacks and fragments."""
+    rerun = getattr(st, "rerun", None)
+    if not callable(rerun):
+        return
+    try:
+        rerun(scope="app")
+    except TypeError:
+        rerun()
 
 
 def request_folder_picker(
@@ -2288,16 +2293,12 @@ def folder_picker_browsing_directory() -> str:
 
 
 def refresh_folder_picker_current_children() -> None:
-    """Load and select children for the current path picker directory."""
+    """Queue a child-list refresh for the current path picker directory."""
     current_directory = folder_picker_browsing_directory()
     st.session_state["_hhs_folder_picker_current_dir"] = current_directory
-    include_dot_folders = bool(
-        st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
-    )
-    child_paths = path_picker_child_paths(
-        current_directory, path_picker_mode(), include_dot_folders
-    )
-    sync_folder_picker_child_selection(child_paths)
+    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+    st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+    prune_folder_picker_child_selection_widget_keys()
 
 
 def prepare_path_picker_dialog_listing(mode: str) -> None:
@@ -2313,7 +2314,7 @@ def prepare_path_picker_dialog_listing(mode: str) -> None:
 
 
 def set_folder_picker_current_directory(
-    directory: str, load_children: bool = True
+    directory: str, load_children: bool = False
 ) -> None:
     """Set the folder picker current directory."""
     selected_directory = (
@@ -2349,26 +2350,17 @@ def apply_folder_picker_typed_directory() -> None:
         current_directory = path_picker_current_directory(selected_path, mode)
         st.session_state["_hhs_folder_picker_current_dir"] = current_directory
         st.session_state["_hhs_folder_picker_current_dir_input"] = selected_path
-        include_dot_folders = bool(
-            st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
-        )
-        child_paths = path_picker_child_paths(
-            current_directory, mode, include_dot_folders
-        )
-        sync_folder_picker_child_selection(child_paths)
+        st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+        st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+        prune_folder_picker_child_selection_widget_keys()
         return
     selected_path = path_picker_start_path(typed_path, mode)
     current_directory = path_picker_current_directory(selected_path, mode)
     st.session_state["_hhs_folder_picker_current_dir"] = current_directory
     st.session_state["_hhs_folder_picker_current_dir_input"] = selected_path
-    include_dot_folders = bool(
-        st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
-    )
-    child_directories = path_picker_child_paths(
-        current_directory, mode, include_dot_folders
-    )
-    clear_preloader()
-    sync_folder_picker_child_selection(child_directories)
+    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+    st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+    prune_folder_picker_child_selection_widget_keys()
 
 
 def open_folder_picker_parent() -> None:
@@ -2424,19 +2416,17 @@ def apply_folder_picker_selection() -> None:
 
 
 def apply_folder_picker_selection_and_dismiss() -> None:
-    """Assign the selected folder and dismiss the folder picker dialog."""
+    """Assign the selected folder and close the folder picker overlay."""
     apply_folder_picker_selection()
-    dismiss_streamlit_dialog()
 
 
 def cancel_folder_picker_and_dismiss() -> None:
-    """Close the folder picker dialog without changing the target input."""
+    """Close the folder picker overlay without changing the target input."""
     close_folder_picker()
-    dismiss_streamlit_dialog()
 
 
 def render_path_picker_dialog() -> bool:
-    """Render the reusable single path picker dialog when requested."""
+    """Render the reusable path picker as a styled page overlay."""
     if not st.session_state.get("_hhs_folder_picker_open"):
         return False
 
@@ -2445,115 +2435,137 @@ def render_path_picker_dialog() -> bool:
     option_label = "Files" if mode == "file" else "Folders"
     empty_caption = "No files or folders." if mode == "file" else "No child folders."
     prepare_path_picker_dialog_listing(mode)
+    title = "Select file" if mode == "file" else "Select folder"
 
-    def render_body() -> None:
-        """Render the visual path picker controls."""
-        current_directory = folder_picker_browsing_directory()
-        st.session_state["_hhs_folder_picker_current_dir"] = current_directory
-        include_dot_folders = bool(
-            st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
-        )
-        child_directories = path_picker_child_paths(
-            current_directory, mode, include_dot_folders
-        )
-        sync_folder_picker_child_selection(child_directories)
-        clear_preloader()
-        st.text_input(
-            selected_label,
-            key="_hhs_folder_picker_current_dir_input",
-            on_change=apply_folder_picker_typed_directory,
-        )
-        selected_widget_key = folder_picker_child_selection_widget_key(
-            current_directory, mode, include_dot_folders
-        )
-        prune_folder_picker_child_selection_widget_keys(selected_widget_key)
-        selected_directory = str(
-            st.session_state.get("_hhs_folder_picker_selected_dir", "")
-        )
-        if child_directories:
-            if selected_directory not in child_directories:
-                selected_directory = child_directories[0]
-            if st.session_state.get(selected_widget_key) not in child_directories:
-                st.session_state[selected_widget_key] = selected_directory
-        else:
-            st.session_state.pop("_hhs_folder_picker_selected_dir", None)
-            st.session_state.pop(selected_widget_key, None)
-        selectbox_kwargs: dict[str, object] = {
-            "key": selected_widget_key,
-            "format_func": path_picker_label,
-            "placeholder": empty_caption,
-            "disabled": not bool(child_directories),
-        }
-        if not child_directories:
-            selectbox_kwargs["index"] = None
-        selected_directory = st.selectbox(
-            option_label,
-            child_directories,
-            **selectbox_kwargs,
-        )
-        if selected_directory:
-            st.session_state["_hhs_folder_picker_selected_dir"] = selected_directory
-        st.checkbox(
-            "Include .dot-folders",
-            key="_hhs_folder_picker_include_dot_folders",
-            value=False,
-            on_change=refresh_folder_picker_current_children,
-        )
-        with st.container(key="folder_picker_action_grid"):
-            (
-                _left_spacer,
-                parent_column,
-                open_column,
-                select_column,
-                cancel_column,
-                _right_spacer,
-            ) = st.columns(
-                [1.0, 0.12, 0.12, 0.12, 0.12, 1.0],
-                gap="small",
-                vertical_alignment="center",
+    with st.container(key="hhs_path_picker_overlay"):
+        with st.container(key="hhs_path_picker_panel"):
+            title_col, close_col = st.columns(
+                [1.0, 0.08], vertical_alignment="center"
             )
-            with parent_column:
+            with title_col:
+                st.markdown(
+                    f'<h2 class="hhs-path-picker-title">{html.escape(title)}</h2>',
+                    unsafe_allow_html=True,
+                )
+            with close_col:
                 st.button(
-                    "",
-                    key="folder_picker_parent_button",
-                    help="Parent",
-                    on_click=open_folder_picker_parent,
+                    "×",
+                    key="folder_picker_header_close_button",
+                    help="Close",
+                    on_click=close_folder_picker,
                     width="content",
                 )
-            with open_column:
-                st.button(
-                    "",
-                    key="folder_picker_open_button",
-                    help="Open",
-                    disabled=not bool(child_directories),
-                    on_click=open_folder_picker_selected_directory,
-                    width="content",
-                )
-            with select_column:
-                st.button(
-                    "﬌",
-                    key="folder_picker_select_button",
-                    help="Select",
-                    on_click=apply_folder_picker_selection_and_dismiss,
-                    width="content",
-                )
-            with cancel_column:
-                st.button(
-                    "ﰸ",
-                    key="folder_picker_cancel_button",
-                    help="Cancel",
-                    on_click=cancel_folder_picker_and_dismiss,
-                    width="content",
-                )
-
-    dialog_rendered = pop_dialog(
-        title="Select file" if path_picker_mode() == "file" else "Select folder",
-        body=render_body,
-        buttons=(),
-        close_callback=close_folder_picker,
-    )
+            render_path_picker_body(
+                mode,
+                selected_label,
+                option_label,
+                empty_caption,
+            )
     clear_preloader()
-    return dialog_rendered
+    return True
+
+
+def render_path_picker_body(
+    mode: str,
+    selected_label: str,
+    option_label: str,
+    empty_caption: str,
+) -> None:
+    """Render the path picker controls inside the styled overlay."""
+    current_directory = folder_picker_browsing_directory()
+    st.session_state["_hhs_folder_picker_current_dir"] = current_directory
+    include_dot_folders = bool(
+        st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
+    )
+    child_directories = path_picker_child_paths(
+        current_directory, mode, include_dot_folders
+    )
+    sync_folder_picker_child_selection(child_directories)
+    st.text_input(
+        selected_label,
+        key="_hhs_folder_picker_current_dir_input",
+        on_change=apply_folder_picker_typed_directory,
+    )
+    selected_widget_key = folder_picker_child_selection_widget_key(
+        current_directory, mode, include_dot_folders
+    )
+    prune_folder_picker_child_selection_widget_keys(selected_widget_key)
+    selected_directory = str(st.session_state.get("_hhs_folder_picker_selected_dir", ""))
+    if child_directories:
+        if selected_directory not in child_directories:
+            selected_directory = child_directories[0]
+        if st.session_state.get(selected_widget_key) not in child_directories:
+            st.session_state[selected_widget_key] = selected_directory
+    else:
+        st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+        st.session_state.pop(selected_widget_key, None)
+    selectbox_kwargs: dict[str, object] = {
+        "key": selected_widget_key,
+        "format_func": path_picker_label,
+        "placeholder": empty_caption,
+        "disabled": not bool(child_directories),
+    }
+    if not child_directories:
+        selectbox_kwargs["index"] = None
+    selected_directory = st.selectbox(
+        option_label,
+        child_directories,
+        **selectbox_kwargs,
+    )
+    if selected_directory:
+        st.session_state["_hhs_folder_picker_selected_dir"] = selected_directory
+    st.checkbox(
+        "Include .dot-folders",
+        key="_hhs_folder_picker_include_dot_folders",
+        value=False,
+        on_change=refresh_folder_picker_current_children,
+    )
+    with st.container(key="folder_picker_action_grid"):
+        (
+            _left_spacer,
+            parent_column,
+            open_column,
+            select_column,
+            cancel_column,
+            _right_spacer,
+        ) = st.columns(
+            [1.0, 0.12, 0.12, 0.12, 0.12, 1.0],
+            gap="small",
+            vertical_alignment="center",
+        )
+        with parent_column:
+            st.button(
+                "",
+                key="folder_picker_parent_button",
+                help="Parent",
+                on_click=open_folder_picker_parent,
+                width="content",
+            )
+        with open_column:
+            st.button(
+                "",
+                key="folder_picker_open_button",
+                help="Open",
+                disabled=not bool(child_directories),
+                on_click=open_folder_picker_selected_directory,
+                width="content",
+            )
+        with select_column:
+            st.button(
+                "﬌",
+                key="folder_picker_select_button",
+                help="Select",
+                on_click=apply_folder_picker_selection_and_dismiss,
+                width="content",
+            )
+        with cancel_column:
+            st.button(
+                "ﰸ",
+                key="folder_picker_cancel_button",
+                help="Cancel",
+                on_click=cancel_folder_picker_and_dismiss,
+                width="content",
+            )
 
 
 def render_folder_picker_dialog() -> bool:
@@ -3616,7 +3628,7 @@ def render_footer_client_error_bridge_script() -> None:
 
 
 def footer_cache_clear_menu_markup() -> str:
-    """Return the native HTML footer cleanup menu."""
+    """Return the native HTML footer cleanup menu without form semantics."""
     clear_param = html.escape(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM, quote=True)
     app_cache_param = html.escape(
         hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM,
@@ -3637,47 +3649,54 @@ def footer_cache_clear_menu_markup() -> str:
                  aria-label="Clear application cache">
           <span class="hhs-footer-cache-refresh-glyph">♻</span>
         </summary>
-        <form class="hhs-footer-cache-clear-form" method="get">
-          <input type="hidden" name="{clear_param}" value="1">
+        <div class="hhs-footer-cache-clear-panel" data-clear-param="{clear_param}">
           <label>
-            <input type="checkbox" name="{app_cache_param}" value="1">
+            <input type="checkbox" data-param="{app_cache_param}">
             <span>Clear application cache</span>
           </label>
           <label>
-            <input type="checkbox" name="{app_states_param}" value="1">
+            <input type="checkbox" data-param="{app_states_param}">
             <span>Clear application states</span>
           </label>
           <label>
-            <input type="checkbox" name="{ai_history_param}" value="1">
+            <input type="checkbox" data-param="{ai_history_param}">
             <span>Clear AI history</span>
           </label>
-          <button type="submit">OK</button>
-        </form>
+          <button type="button">OK</button>
+        </div>
       </details>
     """.strip()
 
 
 def render_footer_cache_clear_menu_script() -> None:
-    """Close the native footer cleanup menu locally when no option is selected."""
+    """Submit footer cleanup choices without creating a browser form."""
     render_script_html(
         """
         <script>
           (() => {
             const doc = window.parent.document;
-            const form = doc.querySelector(".hhs-footer-cache-clear-form");
-            if (!form || form.dataset.emptySubmitGuard === "true") {
+            const panel = doc.querySelector(".hhs-footer-cache-clear-panel");
+            if (!panel || panel.dataset.clickHandlerInstalled === "true") {
               return;
             }
-            form.dataset.emptySubmitGuard = "true";
-            form.addEventListener("submit", (event) => {
-              if (form.querySelector('input[type="checkbox"]:checked')) {
+            panel.dataset.clickHandlerInstalled = "true";
+            panel.querySelector("button")?.addEventListener("click", () => {
+              const checkedOptions = Array.from(
+                panel.querySelectorAll('input[type="checkbox"][data-param]:checked')
+              );
+              const menu = panel.closest(".hhs-footer-cache-clear-menu");
+              if (!checkedOptions.length) {
+                if (menu) {
+                  menu.removeAttribute("open");
+                }
                 return;
               }
-              event.preventDefault();
-              const menu = form.closest(".hhs-footer-cache-clear-menu");
-              if (menu) {
-                menu.removeAttribute("open");
-              }
+              const params = new URLSearchParams(window.parent.location.search);
+              params.set(panel.dataset.clearParam, "1");
+              checkedOptions.forEach((option) => {
+                params.set(option.dataset.param, "1");
+              });
+              window.parent.location.search = params.toString();
             });
           })();
         </script>
@@ -3756,6 +3775,15 @@ def render_footer() -> None:
         """)
     if shell_name:
         render_footer_cache_clear_menu_script()
+
+
+@st.fragment(run_every="5s")
+def render_footer_status_fragment() -> None:
+    """Poll updater/status state and render the footer status area."""
+    execute_due_updater_check()
+    drain_footer_status_log_records()
+    render_footer()
+    render_floating_status()
 
 
 def query_param_requested(name: str) -> bool:
@@ -12715,6 +12743,7 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
         return
 
 
+@st.fragment()
 def render_envs_table() -> None:
     """Render environment variables using __hhs_envs."""
 
@@ -12749,6 +12778,7 @@ def render_envs_table() -> None:
     render_env_rows(rows)
 
 
+@st.fragment()
 def render_paths_table() -> None:
     """Render PATH entries using __hhs_paths."""
 
@@ -12781,6 +12811,7 @@ def render_paths_table() -> None:
     render_path_rows(filter_path_rows(rows, path_filter, other_filter))
 
 
+@st.fragment()
 def render_dirs_table() -> None:
     """Render saved directories using __hhs_load_dir."""
 
@@ -12815,6 +12846,7 @@ def render_dirs_table() -> None:
     )
 
 
+@st.fragment()
 def render_cmds_table() -> None:
     """Render saved commands using __hhs_command."""
 
@@ -12849,6 +12881,7 @@ def render_cmds_table() -> None:
     )
 
 
+@st.fragment()
 def render_aliases_table() -> None:
     """Render custom aliases using __hhs_aliases."""
     complete_aliases_list_refresh()
@@ -15760,8 +15793,23 @@ def render_search_submit_preloader_script() -> None:
     )
 
 
-def render_search_filters() -> tuple[str, str]:
-    """Render Search result filters and return selected filter values."""
+def selected_search_result_filter() -> str:
+    """Return the active Search result table filter from Session State."""
+    selected_filter = str(st.session_state.get("search_filter", "All") or "All")
+    if selected_filter not in hhs_ui.SEARCH_FILTERS:
+        return "All"
+    return selected_filter
+
+
+def selected_search_result_text_filter() -> str:
+    """Return the active Search result text filter from Session State."""
+    if selected_search_result_filter() != "Containing":
+        return ""
+    return str(st.session_state.get("search_other_filter", "") or "")
+
+
+def render_search_filters() -> None:
+    """Render Search result filters and store selections in Session State."""
     with st.container(key="search_filter_controls"):
         (
             filter_column,
@@ -15813,11 +15861,12 @@ def render_search_filters() -> tuple[str, str]:
                 disabled=not bool(str(other_filter)),
                 width="stretch",
             )
-        return selected_filter, other_filter
 
 
-def render_search_results(search_filter: str = "All", text_filter: str = "") -> None:
+def render_search_results() -> None:
     """Render the Search results table for the submitted query."""
+    search_filter = selected_search_result_filter()
+    text_filter = selected_search_result_text_filter()
     search_type = normalized_search_type(st.session_state.get("search_result_type"))
     search_path = str(st.session_state.get("search_result_path", "")).strip()
     query = str(st.session_state.get("search_result_query", "")).strip()
@@ -15862,6 +15911,15 @@ def render_search_results(search_filter: str = "All", text_filter: str = "") -> 
         render_search_load_more(total_count)
 
 
+@st.fragment()
+def render_search_panel() -> None:
+    """Render Search controls and results with Session State communication."""
+    with st.expander("Search", expanded=True):
+        render_search_controls()
+        render_search_filters()
+    render_search_results()
+
+
 def render_search_view() -> None:
     """Render the HomeSetup Search view."""
     st.markdown(
@@ -15872,10 +15930,7 @@ def render_search_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    with st.expander("Search", expanded=True):
-        render_search_controls()
-        search_filter, search_text_filter = render_search_filters()
-    render_search_results(search_filter, search_text_filter)
+    render_search_panel()
 
 
 def render_ai_models_result() -> subprocess.CompletedProcess[str] | None:
@@ -16501,7 +16556,6 @@ def main() -> None:
         return
     if execute_pending_ssh_connection():
         return
-    execute_due_updater_check()
     if render_ssh_connection_dialog():
         return
     initialize_ollama_service_availability()
@@ -16662,11 +16716,9 @@ def main() -> None:
     render_main_view()
     render_combobox_vt100_shortcuts_script()
     render_path_picker_open_preloader_script()
-    render_footer()
+    render_footer_status_fragment()
     render_footer_client_error_bridge_script()
     install_footer_status_log_handler()
-    drain_footer_status_log_records()
-    render_floating_status()
     render_folder_picker_dialog()
     render_browser_cleanup_script()
 

@@ -1,2 +1,8 @@
+[server]
+address = "127.0.0.1"
+enableCORS = true
+enableXsrfProtection = true
+
 [browser]
+serverAddress = "localhost"
 gatherUsageStats = false
