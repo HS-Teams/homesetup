@@ -1995,6 +1995,41 @@ def stop_path_picker_listing_jobs() -> None:
     """Stop any in-flight remote path picker listing jobs."""
     stop_background_jobs_with_state_prefix(path_picker_listing_job_state_prefix())
     st.session_state.pop("_hhs_folder_picker_listing_loading_job", None)
+    st.session_state.pop("_hhs_folder_picker_pending_dir", None)
+
+
+def folder_picker_pending_directory() -> str:
+    """Return the remote directory currently being loaded without promoting it."""
+    return str(st.session_state.get("_hhs_folder_picker_pending_dir", "")).strip()
+
+
+def folder_picker_visible_child_paths() -> list[str]:
+    """Return the last child paths rendered by the picker."""
+    raw_paths = st.session_state.get("_hhs_folder_picker_visible_child_paths", [])
+    if not isinstance(raw_paths, list):
+        return []
+    return [str(path) for path in raw_paths if str(path).strip()]
+
+
+def remember_folder_picker_visible_child_paths(child_paths: list[str]) -> None:
+    """Remember the child paths currently visible in the picker."""
+    st.session_state["_hhs_folder_picker_visible_child_paths"] = list(child_paths)
+
+
+def queue_folder_picker_directory_load(directory: str) -> None:
+    """Queue a remote picker directory load without changing the visible listing."""
+    selected_directory = (
+        normalize_remote_path_picker_path(directory)
+        if path_picker_uses_remote()
+        else folder_picker_start_directory(directory)
+    )
+    if not selected_directory:
+        return
+    if not path_picker_uses_remote():
+        set_folder_picker_current_directory(selected_directory)
+        return
+    stop_path_picker_listing_jobs()
+    st.session_state["_hhs_folder_picker_pending_dir"] = selected_directory
 
 
 def folder_picker_listing_cache() -> dict[str, dict[str, object]]:
@@ -2147,6 +2182,50 @@ def remote_path_picker_child_paths(
     return []
 
 
+def load_pending_remote_path_picker_directory(
+    mode: str = "folder", include_dot_folders: bool = False
+) -> bool:
+    """Start or complete a pending remote directory load for the picker."""
+    pending_directory = folder_picker_pending_directory()
+    if not pending_directory:
+        return False
+    cached_listing = cached_remote_path_picker_listing(
+        pending_directory, mode, include_dot_folders
+    )
+    if cached_listing is not None:
+        st.session_state.pop("_hhs_folder_picker_pending_dir", None)
+        st.session_state.pop("_hhs_folder_picker_listing_loading_job", None)
+        child_paths = apply_remote_path_picker_listing(*cached_listing)
+        remember_folder_picker_visible_child_paths(child_paths)
+        sync_folder_picker_child_selection(child_paths)
+        return True
+    job_name = path_picker_listing_job_name(pending_directory, mode, include_dot_folders)
+    completed_paths = complete_remote_path_picker_listing_job(
+        job_name, pending_directory, mode, include_dot_folders
+    )
+    if completed_paths is not None:
+        st.session_state.pop("_hhs_folder_picker_pending_dir", None)
+        remember_folder_picker_visible_child_paths(completed_paths)
+        sync_folder_picker_child_selection(completed_paths)
+        return True
+    st.session_state["_hhs_folder_picker_listing_loading_job"] = job_name
+    if not background_job_is_running(job_name):
+        start_background_bash_command(
+            job_name,
+            build_remote_path_picker_listing_command(
+                pending_directory, mode, include_dot_folders
+            ),
+            PATH_PICKER_LISTING_LOADER_MESSAGE,
+            timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+            metadata={
+                "directory": pending_directory,
+                "mode": "file" if mode == "file" else "folder",
+                "include_dot_folders": bool(include_dot_folders),
+            },
+        )
+    return False
+
+
 def folder_picker_child_directories(
     directory: str, include_dot_folders: bool = False
 ) -> list[str]:
@@ -2255,6 +2334,7 @@ def request_path_picker(
     st.session_state.setdefault("_hhs_folder_picker_include_dot_folders", False)
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
     st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+    st.session_state.pop("_hhs_folder_picker_visible_child_paths", None)
     stop_path_picker_listing_jobs()
     clear_folder_picker_listing_cache()
     prune_folder_picker_child_selection_widget_keys()
@@ -2284,6 +2364,7 @@ def close_folder_picker() -> None:
     st.session_state.pop("_hhs_folder_picker_owner_context", None)
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
     st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+    st.session_state.pop("_hhs_folder_picker_visible_child_paths", None)
     stop_path_picker_listing_jobs()
     clear_folder_picker_listing_cache()
     prune_folder_picker_child_selection_widget_keys()
@@ -2370,6 +2451,9 @@ def folder_picker_browsing_directory() -> str:
 def refresh_folder_picker_current_children() -> None:
     """Queue a child-list refresh for the current path picker directory."""
     current_directory = folder_picker_browsing_directory()
+    if path_picker_uses_remote():
+        queue_folder_picker_directory_load(current_directory)
+        return
     st.session_state["_hhs_folder_picker_current_dir"] = current_directory
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
     st.session_state.pop("_hhs_folder_picker_path_kinds", None)
@@ -2380,11 +2464,15 @@ def prepare_path_picker_dialog_listing(mode: str) -> None:
     """Load the current remote picker listing before mounting the dialog."""
     if not path_picker_uses_remote():
         return
-    current_directory = folder_picker_browsing_directory()
     include_dot_folders = bool(
         st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
     )
+    if folder_picker_pending_directory():
+        load_pending_remote_path_picker_directory(mode, include_dot_folders)
+        return
+    current_directory = folder_picker_browsing_directory()
     child_paths = path_picker_child_paths(current_directory, mode, include_dot_folders)
+    remember_folder_picker_visible_child_paths(child_paths)
     sync_folder_picker_child_selection(child_paths)
 
 
@@ -2418,6 +2506,9 @@ def apply_folder_picker_typed_directory() -> None:
     typed_path = str(st.session_state.get("_hhs_folder_picker_current_dir_input", ""))
     mode = path_picker_mode()
     if mode == "folder":
+        if path_picker_uses_remote():
+            queue_folder_picker_directory_load(typed_path)
+            return
         set_folder_picker_current_directory(typed_path)
         return
     if path_picker_uses_remote():
@@ -2444,9 +2535,7 @@ def open_folder_picker_parent() -> None:
         current_directory = normalize_remote_path_picker_path(
             str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
         )
-        set_folder_picker_current_directory(
-            remote_path_picker_parent_path(current_directory),
-        )
+        queue_folder_picker_directory_load(remote_path_picker_parent_path(current_directory))
         return
     current_directory = Path(
         folder_picker_start_directory(
@@ -2469,7 +2558,7 @@ def open_folder_picker_selected_directory() -> None:
         if path_picker_mode() == "file" and selected_kind == "File":
             st.session_state["_hhs_folder_picker_current_dir_input"] = selected_path
             return
-        set_folder_picker_current_directory(selected_path)
+        queue_folder_picker_directory_load(selected_path)
         return
     selected_entry = Path(selected_path)
     if path_picker_mode() == "file" and selected_entry.is_file():
@@ -2554,15 +2643,19 @@ def render_path_picker_body(
     include_dot_folders = bool(
         st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
     )
-    child_directories = path_picker_child_paths(
-        current_directory, mode, include_dot_folders
-    )
     loading_job_name = str(
         st.session_state.get("_hhs_folder_picker_listing_loading_job", "")
     )
     loading_children = bool(
         loading_job_name and background_job_is_running(loading_job_name)
     )
+    if loading_children and folder_picker_pending_directory():
+        child_directories = folder_picker_visible_child_paths()
+    else:
+        child_directories = path_picker_child_paths(
+            current_directory, mode, include_dot_folders
+        )
+        remember_folder_picker_visible_child_paths(child_directories)
     sync_folder_picker_child_selection(child_directories)
     if loading_children:
         render_path_picker_listing_loader(loading_job_name)
@@ -2591,7 +2684,7 @@ def render_path_picker_body(
         "placeholder": PATH_PICKER_LISTING_LOADER_MESSAGE
         if loading_children
         else empty_caption,
-        "disabled": not bool(child_directories),
+        "disabled": loading_children or not bool(child_directories),
     }
     if not child_directories:
         selectbox_kwargs["index"] = None
@@ -2606,6 +2699,7 @@ def render_path_picker_body(
         "Include .dot-folders",
         key="_hhs_folder_picker_include_dot_folders",
         value=False,
+        disabled=loading_children,
         on_change=refresh_folder_picker_current_children,
     )
     with st.container(key="folder_picker_action_grid"):
@@ -14885,23 +14979,88 @@ def build_hhs_open_search_result_command(path: str) -> str:
     )
 
 
+def search_result_download_name(path: str) -> str:
+    """Return the local filename for a downloaded remote Search result."""
+    clean_name = posixpath.basename(str(path).rstrip("/")).strip()
+    return clean_name or "search-result"
+
+
+def create_search_result_download_dir() -> Path:
+    """Create a local temp directory for one downloaded remote Search result."""
+    return Path(tempfile.mkdtemp(prefix="hhs-search-open-"))
+
+
+def search_result_download_path(remote_path: str, download_dir: Path) -> Path:
+    """Return the expected local path for one downloaded remote Search result."""
+    return download_dir / search_result_download_name(remote_path)
+
+
+def build_download_remote_search_result_command(
+    remote_path: str, download_dir: Path, host: str
+) -> str:
+    """Build a local scp command that downloads one remote Search result."""
+    return build_scp_to_local_command(remote_path, str(download_dir), host)
+
+
+def open_local_search_result_path(path: str) -> None:
+    """Open one local Search result path through the HomeSetup generic opener."""
+    result = run_bash_command(
+        build_hhs_open_search_result_command(path),
+        f"Opening {path}",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        cache_tag="search",
+    )
+    if result.returncode != 0:
+        error_message = clean_command_status_message(result.stderr or result.stdout)
+        push_floating_status(
+            error_message or f"Unable to open {path}.",
+            "error",
+        )
+        return
+    push_floating_status(f"Opened {path}.", "info")
+
+
+def open_remote_search_result_path(path: str, host: str) -> None:
+    """Download one remote Search result to a temp dir and open it locally."""
+    download_dir = create_search_result_download_dir()
+    local_path = search_result_download_path(path, download_dir)
+    push_floating_status(f"Downloading remote result {path}.", "info")
+    download_result = run_bash_command(
+        build_download_remote_search_result_command(path, download_dir, host),
+        f"Downloading {path}",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        cache_tag="search",
+    )
+    if download_result.returncode != 0:
+        error_message = clean_command_status_message(
+            download_result.stderr or download_result.stdout
+        )
+        push_floating_status(
+            error_message or f"Unable to download remote result {path}.",
+            "error",
+        )
+        return
+    push_floating_status(f"Downloaded remote result to {local_path}.", "info")
+    push_floating_status(f"Opening downloaded result {local_path}.", "info")
+    open_local_search_result_path(str(local_path))
+
+
 def open_search_result_path(path: str) -> None:
     """Open one Search result path through the HomeSetup generic opener."""
     clean_path = path.strip()
     if not clean_path:
         return
-    result = run_bash_command(
-        build_hhs_open_search_result_command(clean_path),
-        f"Opening {clean_path}",
-        ttl_seconds=0,
-        use_cache=False,
-        cache_tag="search",
-    )
-    if result.returncode != 0:
-        push_floating_status(
-            clean_command_status_message(result.stderr or result.stdout),
-            "error",
-        )
+    host = connected_ssh_host()
+    if host:
+        open_remote_search_result_path(clean_path, host)
+        return
+    push_floating_status(f"Opening {clean_path}.", "info")
+    open_local_search_result_path(clean_path)
 
 
 def search_relative_path(path: str, search_path: str) -> str:

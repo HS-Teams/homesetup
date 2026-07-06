@@ -7674,13 +7674,22 @@ LOGS
   run grep -q 'else empty_caption' "${ui_file}"
   assert_success
 
-  run grep -q 'disabled": not bool(child_directories)' "${ui_file}"
+  run grep -q 'loading_children or not bool(child_directories)' "${ui_file}"
   assert_success
 
   run grep -q 'st.caption(empty_caption)' "${ui_file}"
   assert_failure
 
   run grep -q 'def folder_picker_browsing_directory' "${ui_file}"
+  assert_success
+
+  run grep -q 'def queue_folder_picker_directory_load' "${ui_file}"
+  assert_success
+
+  run grep -q 'def load_pending_remote_path_picker_directory' "${ui_file}"
+  assert_success
+
+  run grep -q 'def folder_picker_visible_child_paths' "${ui_file}"
   assert_success
 
   run grep -q 'PATH_PICKER_LISTING_JOB_PREFIX = "path_picker_listing"' "${ui_file}"
@@ -8253,7 +8262,7 @@ assert "st.caption(empty_caption)" not in render_body
 assert "PATH_PICKER_LISTING_LOADER_MESSAGE" in render_body
 assert "render_path_picker_listing_loader(loading_job_name)" in render_body
 assert "disabled=loading_children" in render_body
-assert '"disabled": not bool(child_directories)' in render_body
+assert "loading_children or not bool(child_directories)" in render_body
 assert render_body.index("st.selectbox(") < render_body.index("st.checkbox(")
 assert namespace["path_picker_uses_remote"]()
 assert namespace["remote_path_picker_default_directory"]() == "$HOME"
@@ -8277,6 +8286,7 @@ assert commands[0][1]["description"] == "Loading directories and files..."
 assert commands[0][1]["timeout_seconds"] == 30
 children = namespace["path_picker_child_paths"]("$HOME", "folder", False)
 assert children == ["/home/root/app"]
+namespace["remember_folder_picker_visible_child_paths"](children)
 assert len(commands) == 1
 assert "_hhs_folder_picker_listing_loading_job" not in session_state
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
@@ -8296,18 +8306,24 @@ session_state["_hhs_folder_picker_current_dir"] = "/home/root"
 session_state["_hhs_folder_picker_current_dir_input"] = "/home/root"
 session_state["_hhs_folder_picker_path_kinds"] = {"/home/root/app": "Dir"}
 session_state["_hhs_folder_picker_selected_dir"] = "/home/root/app"
+namespace["remember_folder_picker_visible_child_paths"](["/home/root/app"])
 namespace["open_folder_picker_selected_directory"]()
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
+assert session_state["_hhs_folder_picker_pending_dir"] == "/home/root/app"
+assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app"
+assert session_state["_hhs_folder_picker_path_kinds"] == {"/home/root/app": "Dir"}
+assert len(commands) == command_count
+assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is False
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
+assert namespace["folder_picker_visible_child_paths"]() == ["/home/root/app"]
+assert len(commands) == command_count + 1
+assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is True
+assert "_hhs_folder_picker_pending_dir" not in session_state
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/app"
-assert "_hhs_folder_picker_selected_dir" not in session_state
-assert "_hhs_folder_picker_path_kinds" not in session_state
-assert len(commands) == command_count
-children = namespace["path_picker_child_paths"]("/home/root/app", "folder", False)
-assert children == []
-assert len(commands) == command_count + 1
-children = namespace["path_picker_child_paths"]("/home/root/app", "folder", False)
+children = namespace["folder_picker_visible_child_paths"]()
 assert children == ["/home/root/app/logs", "/home/root/app/tmp"]
-namespace["sync_folder_picker_child_selection"](children)
 assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app/logs"
 assert session_state["_hhs_folder_picker_path_kinds"]["/home/root/app/logs"] == "Dir"
 assert len(commands) == command_count + 1
@@ -8328,14 +8344,22 @@ namespace["sync_folder_picker_child_selection"]([])
 assert "_hhs_folder_picker_selected_dir" not in session_state
 
 namespace["open_folder_picker_parent"]()
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/app"
+assert session_state["_hhs_folder_picker_pending_dir"] == "/home/root"
+assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is False
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
+assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is True
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
-assert len(commands) == command_count + 1
+assert len(commands) == command_count + 2
 session_state["_hhs_folder_picker_selected_dir"] = "/home/root/app"
 namespace["open_folder_picker_selected_directory"]()
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
+assert session_state["_hhs_folder_picker_pending_dir"] == "/home/root/app"
+assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is True
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
-assert "_hhs_folder_picker_selected_dir" not in session_state
-assert len(commands) == command_count + 1
+assert len(commands) == command_count + 2
 
 session_state["_hhs_folder_picker_mode"] = "file"
 session_state["_hhs_folder_picker_current_dir"] = "/home/root"
@@ -9069,6 +9093,7 @@ namespace = {
         SEARCH_TERM_HISTORY_TTL_SECONDS=900,
         SEARCH_PAGE_SIZE=20,
         UI_CACHE_NORMAL_TTL_SECONDS=300,
+        UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS=30,
         SEARCH_TYPE_LABELS={
             "Files": "Files",
             "Folders": "Folders",
@@ -9084,6 +9109,9 @@ namespace = {
     "display_path_value": lambda value: value,
     "footer_working_directory": lambda: "/work/current",
     "connected_ssh_host": lambda: namespace.get("connected_host", ""),
+    "build_scp_to_local_command": lambda remote_path, local_dir, host: (
+        f"scp-download {host} {remote_path} {local_dir}"
+    ),
     "run_bash_command": lambda command, *args, **kwargs: remote_commands.append(
         (command, kwargs)
     )
@@ -9094,6 +9122,7 @@ namespace = {
         "",
     ),
     "push_floating_status": lambda message, level: statuses.append((message, level)),
+    "clean_command_status_message": lambda value: str(value).strip(),
     "cache_delete_tag": lambda tag: deleted_cache_tags.append(tag),
     "save_ui_state": lambda: None,
     "strip_ansi": lambda value: value,
@@ -9304,6 +9333,67 @@ open_command = namespace["build_hhs_open_search_result_command"](
 )
 assert 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash";' in open_command
 assert "__hhs_open '/tmp/search root/report.txt'" in open_command
+assert (
+    namespace["search_result_download_name"]("/tmp/search root/report.txt")
+    == "report.txt"
+)
+assert namespace["search_result_download_name"]("/") == "search-result"
+assert (
+    str(
+        namespace["search_result_download_path"](
+            "/remote/report.txt",
+            Path("/tmp/hhs-open"),
+        )
+    )
+    == "/tmp/hhs-open/report.txt"
+)
+
+namespace["create_search_result_download_dir"] = lambda: Path(
+    "/tmp/hhs-search-open"
+)
+remote_commands.clear()
+statuses.clear()
+namespace["connected_host"] = ""
+namespace["open_search_result_path"]("/tmp/search root/report.txt")
+assert remote_commands[-1][0].endswith("__hhs_open '/tmp/search root/report.txt'")
+assert remote_commands[-1][1]["force_local"] is True
+assert statuses == [
+    ("Opening /tmp/search root/report.txt.", "info"),
+    ("Opened /tmp/search root/report.txt.", "info"),
+]
+
+remote_commands.clear()
+statuses.clear()
+namespace["connected_host"] = "remote-box"
+namespace["open_search_result_path"]("/remote/report.txt")
+assert (
+    remote_commands[0][0]
+    == "scp-download remote-box /remote/report.txt /tmp/hhs-search-open"
+)
+assert remote_commands[0][1]["force_local"] is True
+assert remote_commands[0][1]["timeout_seconds"] == 30
+assert remote_commands[1][0].endswith("__hhs_open /tmp/hhs-search-open/report.txt")
+assert remote_commands[1][1]["force_local"] is True
+assert statuses == [
+    ("Downloading remote result /remote/report.txt.", "info"),
+    ("Downloaded remote result to /tmp/hhs-search-open/report.txt.", "info"),
+    ("Opening downloaded result /tmp/hhs-search-open/report.txt.", "info"),
+    ("Opened /tmp/hhs-search-open/report.txt.", "info"),
+]
+
+def failing_open_command(command, *args, **kwargs):
+    remote_commands.append((command, kwargs))
+    return subprocess.CompletedProcess(["search-open"], 1, "", "download failed")
+
+namespace["run_bash_command"] = failing_open_command
+remote_commands.clear()
+statuses.clear()
+namespace["open_search_result_path"]("/remote/missing.txt")
+assert len(remote_commands) == 1
+assert statuses == [
+    ("Downloading remote result /remote/missing.txt.", "info"),
+    ("download failed", "error"),
+]
 assert namespace["search_relative_path"](
     "/tmp/search root/docs/report.txt", "/tmp/search root"
 ) == "docs/report.txt"
