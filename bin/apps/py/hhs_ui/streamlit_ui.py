@@ -25,6 +25,7 @@ import hashlib
 import html
 import importlib
 import json
+import logging
 import os
 import posixpath
 import re
@@ -64,6 +65,8 @@ hhs_ui_constants = importlib.reload(hhs_ui_constants)
 hhs_ui = importlib.reload(hhs_ui)
 
 PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"
+FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY = "footer_status_log_handler"
+FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY = "footer_status_log_records"
 
 
 def process_resource_state() -> dict[str, object]:
@@ -83,6 +86,63 @@ def process_resource_registry(key: str) -> dict:
         registry = {}
         state[key] = registry
     return registry
+
+
+class FooterStatusLogHandler(logging.Handler):
+    """Capture logged warnings and errors for the footer status bar."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Append one formatted warning or error record to process storage."""
+        if record.levelno < logging.WARNING:
+            return
+        try:
+            message = self.format(record).strip()
+            if not message:
+                return
+            registry = process_resource_registry(FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY)
+            records = registry.setdefault("records", [])
+            if not isinstance(records, list):
+                records = []
+                registry["records"] = records
+            records.append(
+                {
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "message": message,
+                }
+            )
+            del records[: -hhs_ui_constants.FLOATING_STATUS_QUEUE_LIMIT]
+        except Exception:
+            return
+
+
+def install_footer_status_log_handler() -> None:
+    """Install one footer status log handler on runtime warning/error loggers."""
+    registry = process_resource_registry(FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY)
+    handler = registry.get("handler")
+    if not isinstance(handler, FooterStatusLogHandler):
+        handler = FooterStatusLogHandler()
+        handler.setLevel(logging.WARNING)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        registry["handler"] = handler
+
+    logging.captureWarnings(True)
+    logger_names = {
+        name
+        for name, logger in logging.Logger.manager.loggerDict.items()
+        if name == "py.warnings"
+        or name == "streamlit"
+        or (name.startswith("streamlit.") and isinstance(logger, logging.Logger))
+    }
+    logger_names.update(("", "py.warnings", "streamlit"))
+    for logger_name in logger_names:
+        logger = logging.getLogger(logger_name)
+        if not any(
+            isinstance(existing_handler, FooterStatusLogHandler)
+            for existing_handler in logger.handlers
+        ):
+            logger.addHandler(handler)
+    registry["installed"] = True
 
 
 TTYD_CLEANUP_REGISTRY: dict[str, dict[str, object]] = process_resource_registry(
@@ -622,6 +682,17 @@ def restore_reconnect_view_state(snapshot: dict[str, object]) -> None:
         st.session_state[key] = value
 
 
+def render_script_html(
+    body: str,
+    *,
+    height: int | None = None,
+    width: int | str | None = None,
+) -> None:
+    """Render trusted in-app JavaScript without deprecated component HTML."""
+    del height, width
+    st.html(body, unsafe_allow_javascript=True)
+
+
 def close_document_view() -> None:
     """Close the document view and restore the previous main view."""
     previous_view = st.session_state.get(hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY, "Home")
@@ -635,7 +706,7 @@ def close_document_view() -> None:
 
 def render_terminal_back_button_cleanup_script() -> None:
     """Attach browser-side ttyd iframe cleanup to the document Back button."""
-    components.html(
+    render_script_html(
         """
         <script>
           (() => {
@@ -1291,7 +1362,7 @@ def loader_label_html(message: str) -> str:
 
 def render_command_loader_timer(loader_id: str) -> None:
     """Start the elapsed-time updater for one in-flow command loader."""
-    components.html(
+    render_script_html(
         f"""
         <script>
           (() => {{
@@ -1351,7 +1422,7 @@ def render_preloader(
     created_at_millis = int(time.time() * 1000)
     overlay_token = secrets.token_hex(8)
     safe_message_html = loader_label_html(message)
-    components.html(
+    render_script_html(
         f"""
         <script>
           (() => {{
@@ -1464,7 +1535,7 @@ def render_preloader(
 
 def clear_preloader() -> None:
     """Remove the browser-level command overlay."""
-    components.html(
+    render_script_html(
         """
         <script>
           (() => {
@@ -1532,7 +1603,7 @@ def render_theme_reload_overlay() -> None:
     safe_theme_name = theme_name.strip() or hhs_ui.APP_THEME_CSS_FILE.stem
     st.session_state["theme_reload_pending"] = False
     render_preloader(f"Loading theme {safe_theme_name}", transient=False)
-    components.html(
+    render_script_html(
         """
         <script>
           window.setTimeout(() => {
@@ -1562,6 +1633,7 @@ def close_all_dialogs() -> None:
     """Close every Streamlit dialog or inline confirmation controlled by this UI."""
     st.session_state.pop("_hhs_dialog_pending_callback", None)
     st.session_state.pop("_hhs_dialog_button_dismissal", None)
+    st.session_state.pop("_hhs_dialog_dismiss_requested", None)
     st.session_state["ai_clear_chat_pending"] = False
     st.session_state["ai_model_select_pending"] = None
     st.session_state["ai_model_delete_pending"] = None
@@ -1622,6 +1694,30 @@ def handle_dialog_button_click(
     dismiss_streamlit_dialog()
 
 
+def render_pending_streamlit_dialog_dismiss() -> None:
+    """Render a queued browser-side dialog dismiss script during normal dialog flow."""
+    if not st.session_state.pop("_hhs_dialog_dismiss_requested", False):
+        return
+    render_script_html(
+        """
+        <script>
+          const doc = window.parent.document;
+          const dialog = doc.querySelector('[data-testid="stDialog"], [role="dialog"]');
+          const close_button = dialog?.querySelector('button[aria-label="Close"]');
+          if (close_button) {
+            close_button.click();
+          } else {
+            doc.dispatchEvent(new KeyboardEvent("keydown", {
+              bubbles: true,
+              cancelable: true,
+              key: "Escape"
+            }));
+          }
+        </script>
+        """
+    )
+
+
 def handle_dialog_dismiss(callback: Callable[[], None] | None = None) -> None:
     """Run native dialog-dismiss cleanup unless dismissal came from a dialog button."""
     if st.session_state.pop("_hhs_dialog_button_dismissal", False):
@@ -1670,6 +1766,7 @@ def pop_dialog(
     @st.dialog(title, dismissible=dismissible, on_dismiss=on_dismiss)
     def render_dialog() -> None:
         """Render the configured dialog content and deferred-action buttons."""
+        render_pending_streamlit_dialog_dismiss()
         if body:
             body()
         elif message:
@@ -2468,7 +2565,7 @@ def render_path_picker_open_preloader_script() -> None:
     """Attach a browser-side preloader to remote path picker open buttons."""
     timeout_seconds = int(hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS)
     remote_picker_enabled = "true" if connected_ssh_host() else "false"
-    components.html(
+    render_script_html(
         f"""
         <script>
           (() => {{
@@ -2583,7 +2680,7 @@ def render_path_picker_open_preloader_script() -> None:
 
 def render_combobox_vt100_shortcuts_script() -> None:
     """Attach readline-style keyboard shortcuts to editable combobox inputs."""
-    components.html(
+    render_script_html(
         """
         <script>
           (() => {
@@ -3287,6 +3384,135 @@ def render_floating_status() -> None:
     )
 
 
+def drain_footer_status_log_records() -> None:
+    """Move captured warning/error log records into the floating status queue."""
+    registry = process_resource_registry(FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY)
+    records = registry.get("records")
+    if not isinstance(records, list) or not records:
+        return
+    registry["records"] = []
+    seen_messages: set[str] = set()
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        message = clean_command_status_message(str(record.get("message", "")))
+        if not message or message in seen_messages:
+            continue
+        seen_messages.add(message)
+        level = str(record.get("level", "")).upper()
+        kind = "error" if level in {"ERROR", "CRITICAL"} else "warn"
+        push_floating_status(message, kind)
+
+
+def render_footer_client_error_bridge_script() -> None:
+    """Mirror client-side Streamlit errors and alerts into the footer status UI."""
+    render_script_html(
+        """
+        <script>
+          (() => {
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            if (!doc?.body || parentWindow.__hhsFooterErrorBridgeInstalled) {
+              return;
+            }
+            parentWindow.__hhsFooterErrorBridgeInstalled = true;
+
+            const normalize = (value) => String(value ?? "").replace(/\\s+/g, " ").trim();
+            const recentMessages = new Map();
+
+            const remember = (message) => {
+              const now = Date.now();
+              for (const [knownMessage, createdAt] of recentMessages.entries()) {
+                if (now - createdAt > 10000) {
+                  recentMessages.delete(knownMessage);
+                }
+              }
+              if (recentMessages.has(message)) {
+                return false;
+              }
+              recentMessages.set(message, now);
+              return true;
+            };
+
+            const showStatus = (message, kind = "error") => {
+              const cleanMessage = normalize(message);
+              if (!cleanMessage || !remember(cleanMessage)) {
+                return;
+              }
+              doc.getElementById("hhs-client-floating-status")?.remove();
+              const status = doc.createElement("div");
+              status.id = "hhs-client-floating-status";
+              status.className = `hhs-floating-status hhs-floating-status-kind-${kind}`;
+              status.style.setProperty("--hhs-floating-status-timeout", "8s");
+
+              const glyph = doc.createElement("span");
+              glyph.className = "hhs-floating-status-glyph";
+              glyph.textContent = kind === "error" ? "" : "";
+
+              const text = doc.createElement("span");
+              text.className = "hhs-floating-status-message";
+              text.textContent = cleanMessage;
+
+              status.append(glyph, text);
+              doc.body.append(status);
+              parentWindow.clearTimeout(parentWindow.__hhsFooterErrorBridgeTimer);
+              parentWindow.__hhsFooterErrorBridgeTimer = parentWindow.setTimeout(() => {
+                status.remove();
+              }, 9000);
+            };
+
+            const scanAlerts = () => {
+              doc.querySelectorAll('[data-testid="stAlert"]').forEach((alert) => {
+                const message = normalize(alert.textContent);
+                const mirrorsError = [
+                  /missing submit button/i,
+                  /warning/i,
+                  /exception/i,
+                  /traceback/i,
+                  /error/i,
+                  /failed/i,
+                  /unable/i,
+                  /not found/i,
+                  /cannot/i,
+                  /can't/i,
+                ].some((pattern) => pattern.test(message));
+                if (!message || !mirrorsError) {
+                  return;
+                }
+                const kind = /warning|missing submit button/i.test(message)
+                  ? "warn"
+                  : "error";
+                showStatus(message, kind);
+              });
+            };
+
+            const observer = new MutationObserver(scanAlerts);
+            observer.observe(doc.body, {
+              childList: true,
+              subtree: true,
+              characterData: true,
+            });
+            scanAlerts();
+
+            const originalConsoleError = parentWindow.console.error.bind(
+              parentWindow.console
+            );
+            parentWindow.console.error = (...args) => {
+              showStatus(args.map(normalize).filter(Boolean).join(" "), "error");
+              originalConsoleError(...args);
+            };
+            parentWindow.addEventListener("error", (event) => {
+              showStatus(event.message, "error");
+            });
+            parentWindow.addEventListener("unhandledrejection", (event) => {
+              showStatus(event.reason?.message || event.reason, "error");
+            });
+          })();
+        </script>
+        """
+    )
+
+
 def footer_cache_clear_menu_markup() -> str:
     """Return the native HTML footer cleanup menu."""
     clear_param = html.escape(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM, quote=True)
@@ -3331,7 +3557,7 @@ def footer_cache_clear_menu_markup() -> str:
 
 def render_footer_cache_clear_menu_script() -> None:
     """Close the native footer cleanup menu locally when no option is selected."""
-    components.html(
+    render_script_html(
         """
         <script>
           (() => {
@@ -3651,7 +3877,6 @@ def render_home_view() -> None:
     home_view = st.segmented_control(
         "Home view",
         options=hhs_ui.HOME_VIEWS,
-        default=st.session_state["home_view"],
         format_func=home_view_label,
         key="home_view",
         label_visibility="collapsed",
@@ -4292,7 +4517,7 @@ def remember_table_selection(key: str | None, selection_state: object) -> None:
 def scroll_to_table_selection_content(anchor_key: str) -> None:
     """Scroll the browser viewport to the bottom of a selected table row component."""
     selector = f'div[class*="st-key-{anchor_key}"]'
-    components.html(
+    render_script_html(
         f"""
         <script>
           const selector = {selector!r};
@@ -4578,6 +4803,9 @@ def render_table_filter_controls(
     placeholder: str = "Type filter text",
 ) -> tuple[str, str]:
     """Render normalized table filter controls and return the selected filter text."""
+    if key not in st.session_state or st.session_state.get(key) not in options:
+        safe_index = max(0, min(index, len(options) - 1))
+        st.session_state[key] = options[safe_index] if options else ""
     filter_col, other_filter_col, clear_filter_col = st.columns(
         [*columns, 0.18], vertical_alignment="center", gap="small"
     )
@@ -4586,7 +4814,7 @@ def render_table_filter_controls(
             "Table filter",
             options,
             horizontal=True,
-            index=index,
+            index=None,
             key=key,
             label_visibility="collapsed",
             on_change=save_ui_state,
@@ -5499,7 +5727,7 @@ def render_ttyd_terminal_frame(ttyd_url: str) -> None:
         """,
         unsafe_allow_html=True,
     )
-    components.html(
+    render_script_html(
         f"""
         <script>
           (() => {{
@@ -5567,7 +5795,7 @@ def render_ttyd_terminal_frame(ttyd_url: str) -> None:
 
 def render_ttyd_terminal_frame_cleanup_script() -> None:
     """Remove the browser-persistent ttyd iframe when Terminal is inactive."""
-    components.html(
+    render_script_html(
         """
         <script>
           (() => {
@@ -5860,7 +6088,7 @@ def render_browser_cleanup_script() -> None:
     token = update_browser_cleanup_registration()
     port = ensure_ttyd_cleanup_server()
     cleanup_url = f"http://{hhs_ui.TTYD_HOST}:{port}/cleanup?token={token}"
-    components.html(
+    render_script_html(
         f"""
         <script>
           (() => {{
@@ -7944,26 +8172,8 @@ def close_ssh_connection_dialog() -> None:
 
 
 def dismiss_streamlit_dialog() -> None:
-    """Dismiss the currently mounted Streamlit dialog in the browser."""
-    components.html(
-        """
-        <script>
-          const doc = window.parent.document;
-          const dialog = doc.querySelector('[data-testid="stDialog"], [role="dialog"]');
-          const close_button = dialog?.querySelector('button[aria-label="Close"]');
-          if (close_button) {
-            close_button.click();
-          } else {
-            doc.dispatchEvent(new KeyboardEvent("keydown", {
-              bubbles: true,
-              cancelable: true,
-              key: "Escape"
-            }));
-          }
-        </script>
-        """,
-        height=0,
-    )
+    """Queue dismissal of the currently mounted Streamlit dialog."""
+    st.session_state["_hhs_dialog_dismiss_requested"] = True
 
 
 def render_ssh_connection_dialog() -> bool:
@@ -11775,7 +11985,7 @@ def apply_alias_add_form_value() -> None:
 def scroll_to_env_value_editor(editor_key: str) -> None:
     """Scroll the browser viewport to the selected environment value editor."""
     selector = f'div[class*="st-key-{editor_key}"] textarea'
-    components.html(
+    render_script_html(
         f"""
         <script>
           const selector = {selector!r};
@@ -11795,7 +12005,7 @@ def scroll_to_env_value_editor(editor_key: str) -> None:
 
 def scroll_to_ai_model_actions(anchor_id: str) -> None:
     """Scroll the browser viewport to the selected AI model action buttons."""
-    components.html(
+    render_script_html(
         f"""
         <script>
           const anchor_id = {anchor_id!r};
@@ -13204,7 +13414,6 @@ def render_configs_view() -> None:
     config_view = st.segmented_control(
         "Configuration view",
         options=hhs_ui.CONFIG_VIEWS,
-        default=st.session_state["config_view"],
         format_func=config_view_label,
         key="config_view",
         label_visibility="collapsed",
@@ -14187,7 +14396,6 @@ def render_ssh_view() -> None:
     ssh_view = st.segmented_control(
         "SSH view",
         options=hhs_ui.SSH_VIEWS,
-        default=st.session_state["ssh_view"],
         format_func=ssh_view_label,
         key="ssh_view",
         label_visibility="collapsed",
@@ -14218,7 +14426,6 @@ def render_history_view() -> None:
     history_view = st.segmented_control(
         "History view",
         options=hhs_ui.HISTORY_VIEWS,
-        default=st.session_state["history_view"],
         format_func=history_view_label,
         key="history_view",
         label_visibility="collapsed",
@@ -14246,7 +14453,6 @@ def render_monitor_view() -> None:
     monitor_view = st.segmented_control(
         "Monitor view",
         options=hhs_ui.MONITOR_VIEWS,
-        default=st.session_state["monitor_view"],
         format_func=monitor_view_label,
         key="monitor_view",
         label_visibility="collapsed",
@@ -14697,7 +14903,7 @@ def render_search_load_more(total_count: int) -> None:
 
 def render_search_auto_load_more_cleanup() -> None:
     """Detach browser-side Search auto loading when no hidden rows remain."""
-    components.html(
+    render_script_html(
         """
         <script>
           (() => {
@@ -14717,7 +14923,7 @@ def render_search_auto_load_more_cleanup() -> None:
 def render_search_auto_load_more(displayed_count: int, total_count: int) -> None:
     """Attach browser-side auto loading for Search results at page bottom."""
     render_token = json.dumps(f"{displayed_count}:{total_count}")
-    components.html(
+    render_script_html(
         """
         <script>
           (() => {
@@ -15264,7 +15470,7 @@ def render_search_submit_preloader_script() -> None:
     """Attach a delayed browser-side preloader for Search submit."""
     timeout_seconds = int(hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS)
     delay_ms = int(hhs_ui_constants.SEARCH_SUBMIT_PRELOADER_DELAY_MS)
-    components.html(
+    render_script_html(
         f"""
         <script>
           (() => {{
@@ -15462,6 +15668,7 @@ def render_search_filters() -> tuple[str, str]:
                 "Table filter",
                 hhs_ui.SEARCH_FILTERS,
                 horizontal=True,
+                index=None,
                 key="search_filter",
                 label_visibility="collapsed",
                 on_change=save_ui_state,
@@ -16012,7 +16219,6 @@ def render_ai_view() -> None:
     ai_view = st.segmented_control(
         "AI view",
         options=hhs_ui.AI_VIEWS,
-        default=st.session_state["ai_view"],
         format_func=ai_view_label,
         key="ai_view",
         label_visibility="collapsed",
@@ -16071,6 +16277,7 @@ def render_main_view() -> None:
         "View",
         visible_views,
         horizontal=True,
+        index=None,
         key="active_view",
         label_visibility="collapsed",
         format_func=main_view_label,
@@ -16096,6 +16303,7 @@ def render_main_view() -> None:
 
 def main() -> None:
     """Configure and render the HomeSetup Streamlit UI."""
+    install_footer_status_log_handler()
     selected_theme = persisted_theme_name()
     configure_app_font_theme(selected_theme)
     st.set_page_config(
@@ -16115,7 +16323,6 @@ def main() -> None:
     st.session_state.setdefault("footer_shell_version_dialog_title", "")
     st.session_state.setdefault("footer_shell_version_output", "")
     render_styles()
-    execute_due_updater_check()
     if st.session_state.get("theme_reload_pending"):
         render_theme_reload_overlay()
     st.session_state.setdefault("active_view", "Home")
@@ -16183,6 +16390,7 @@ def main() -> None:
         return
     if execute_pending_ssh_connection():
         return
+    execute_due_updater_check()
     if render_ssh_connection_dialog():
         return
     initialize_ollama_service_availability()
@@ -16344,6 +16552,9 @@ def main() -> None:
     render_combobox_vt100_shortcuts_script()
     render_path_picker_open_preloader_script()
     render_footer()
+    render_footer_client_error_bridge_script()
+    install_footer_status_log_handler()
+    drain_footer_status_log_records()
     render_floating_status()
     render_folder_picker_dialog()
     render_browser_cleanup_script()

@@ -42,7 +42,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} {check|update|stamp} [options]
       -v | --version             : Display current plugin version.
 
     arguments:
-      check                      : Fetch the last_update timestamp and report if HomeSetup needs to update.
+      check [--force]            : Check for updates when due, or force a repository check.
       update                     : Check for updates and apply them.
       stamp                      : Stamp the next auto-update check for 7 days ahead.
 
@@ -94,7 +94,7 @@ function execute() {
   \shopt -s nocasematch
   case "${cmd}" in
     check)
-      update_check
+      update_check "${args[@]}"
     ;;
     update)
       update_hhs
@@ -123,17 +123,23 @@ refresh_hhs_version() {
 
 # @purpose: Check whether the repository version is greater than installed version.
 is_updated() {
+  local curr_ver repo_ver_part
+
   IFS='.'
   read -r -a curr_versions <<<"${HHS_VERSION}"
   read -r -a repo_versions <<<"${repo_ver}"
   IFS="${OLDIFS}"
-  for idx in "${!repo_versions[@]}"; do
-    if [[ ${repo_versions[idx]} -gt ${curr_versions[idx]} ]]; then
+  for idx in 0 1 2; do
+    curr_ver=$((10#${curr_versions[idx]:-0}))
+    repo_ver_part=$((10#${repo_versions[idx]:-0}))
+    if [[ ${repo_ver_part} -gt ${curr_ver} ]]; then
       echo ''
       echo -e "${ORANGE}Updates Available: ${NC}"
       echo -e "  => Repository: ${GREEN}v${repo_ver}${NC}, Yours: ${RED}v${HHS_VERSION}${NC}"
       echo ''
       return 1
+    elif [[ ${repo_ver_part} -lt ${curr_ver} ]]; then
+      break
     fi
   done
 
@@ -146,7 +152,7 @@ is_updated() {
 # @purpose: Check the current HomeSetup installation and look for updates.
 update_hhs() {
 
-  local repo_ver re ai_enabled
+  local repo_ver re ai_enabled mode="${1:-}"
   local VERSION_URL='https://raw.githubusercontent.com/HS-Teams/homesetup/master/.VERSION'
 
   refresh_hhs_version
@@ -158,6 +164,7 @@ update_hhs() {
 
     if [[ ${repo_ver} =~ $re ]]; then
       if ! is_updated "${repo_ver}"; then
+        [[ "${mode}" == "--check-only" ]] && return 0
         read -r -n 1 -sp "${YELLOW}Do you want to install the updates now (y/[n])? " ANS
         [[ -n "$ANS" ]] && echo "${ANS}${NC}"
         if [[ "${ANS}" =~ ^[yY]$ ]]; then
@@ -207,13 +214,29 @@ do_update() {
 
 # @purpose: Fetch the last_update timestamp and check if HomeSetup needs to be updated.
 update_check() {
+  local force=0 last_update=0 ret_val=0
 
-  if [[ $(date "+%s%S") -ge $(grep . "${HHS_DIR}"/.last_update) ]]; then
-    update_hhs
-    return $?
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -f | --force)
+        force=1
+        ;;
+      *)
+        usage 1 "Invalid ${PLUGIN_NAME} check option: \"$1\" !"
+        ;;
+    esac
+    shift
+  done
+
+  last_update="$(grep -m 1 . "${HHS_DIR}"/.last_update 2>/dev/null || printf '0')"
+  [[ "${last_update}" =~ ^[0-9]+$ ]] || last_update=0
+
+  if [[ ${force} -eq 1 || $(date "+%s%S") -ge ${last_update} ]]; then
+    update_hhs --check-only
+    ret_val=$?
+    [[ ${ret_val} -eq 0 ]] && stamp_next_update &>/dev/null
+    return ${ret_val}
   fi
-
-  stamp_next_update
 
   return 0
 }

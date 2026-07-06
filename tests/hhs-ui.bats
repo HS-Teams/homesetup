@@ -5109,8 +5109,11 @@ PY
   run grep -q 'time.sleep(0.1)' "${ui_file}"
   assert_success
 
-  run grep -q 'components.html(' "${ui_file}"
+  run grep -q 'render_script_html(' "${ui_file}"
   assert_success
+
+  run grep -q 'components.html(' "${ui_file}"
+  assert_failure
 
   run grep -q 'overlay.style.zIndex = "1000010"' "${ui_file}"
   assert_success
@@ -5235,6 +5238,9 @@ PY
   run grep -q 'def handle_dialog_button_click' "${ui_file}"
   assert_success
 
+  run grep -q 'def render_pending_streamlit_dialog_dismiss' "${ui_file}"
+  assert_success
+
   run grep -q 'def handle_dialog_dismiss' "${ui_file}"
   assert_success
 
@@ -5257,6 +5263,25 @@ PY
   assert_success
 
   run grep -q 'dismiss_streamlit_dialog()' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_pending_streamlit_dialog_dismiss()' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.session_state\["_hhs_dialog_dismiss_requested"\] = True' "${ui_file}"
+  assert_success
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+callback_body = source.split("def handle_dialog_button_click", 1)[1].split("\ndef ", 1)[0]
+dismiss_body = source.split("def dismiss_streamlit_dialog", 1)[1].split("\ndef ", 1)[0]
+assert "render_script_html(" not in callback_body
+assert "st.html(" not in callback_body
+assert "render_script_html(" not in dismiss_body
+assert "st.html(" not in dismiss_body
+PY
   assert_success
 
   run grep -q 'close_callback=close_home_tool_action_dialog' "${ui_file}"
@@ -5651,6 +5676,7 @@ ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
 disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
 connect_index = main_body.index("execute_pending_ssh_connection()")
+updater_index = main_body.index("execute_due_updater_check()")
 ssh_dialog_index = main_body.index("render_ssh_connection_dialog()")
 ai_initialize_index = main_body.index("initialize_ollama_service_availability()")
 ai_refresh_index = main_body.index("update_ollama_service_availability_refresh()")
@@ -5661,15 +5687,25 @@ cleanup_index = main_body.index("render_browser_cleanup_script()")
 sidebar_index = main_body.index("render_sidebar()")
 main_view_index = main_body.index("render_main_view()")
 footer_index = main_body.index("render_footer()")
+client_status_index = main_body.index("render_footer_client_error_bridge_script()")
+drain_status_index = main_body.index("drain_footer_status_log_records()")
 floating_status_index = main_body.index("render_floating_status()")
+assert main_body.index("install_footer_status_log_handler()") < main_body.index(
+    "selected_theme = persisted_theme_name()"
+)
 assert 'st.session_state.setdefault("updater_check_context", "local")' in main_body
 assert 'st.session_state.setdefault("updater_check_started_context", "")' in main_body
 assert 'st.session_state.setdefault("updater_remote_checked_context", "")' in main_body
-assert disconnect_index < connect_index < ssh_dialog_index
+assert disconnect_index < connect_index < updater_index < ssh_dialog_index
 assert ssh_dialog_index < ai_initialize_index < ai_refresh_index < active_view_validation_index
 assert active_view_validation_index < footer_actions_index < shell_dialog_index
 assert shell_dialog_index < sidebar_index < main_view_index
-assert footer_index < floating_status_index < cleanup_index
+assert footer_index < client_status_index < drain_status_index < floating_status_index < cleanup_index
+assert "class FooterStatusLogHandler(logging.Handler)" in ui_source
+assert "logging.captureWarnings(True)" in ui_source
+assert "def drain_footer_status_log_records(" in ui_source
+assert "def render_footer_client_error_bridge_script(" in ui_source
+assert "Missing Submit Button" in ui_source or "missing submit button" in ui_source
 PY
   assert_success
 
@@ -8893,4 +8929,33 @@ PY
 
   run grep -q '<style>' "${css_file}"
   assert_failure
+}
+
+# TC - 20
+@test "when rendering keyed widgets then session state should not also be passed as defaults" {
+  run grep -q 'default=st.session_state' "${ui_file}"
+  assert_failure
+
+  run grep -q 'value=st.session_state' "${ui_file}"
+  assert_failure
+
+  run grep -q 'index=.*session_state' "${ui_file}"
+  assert_failure
+
+  run python3 - <<'PY'
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+body = source.split("def render_table_filter_controls", 1)[1].split("\ndef ", 1)[0]
+assert "st.session_state[key] = options[safe_index]" in body
+assert "index=None" in body
+assert "index=index" not in body
+search_filter_body = source.split("def render_search_filters", 1)[1].split("\ndef ", 1)[0]
+assert "key=\"search_filter\"" in search_filter_body
+assert "index=None" in search_filter_body
+main_view_body = source.split("def render_main_view", 1)[1].split("\ndef ", 1)[0]
+assert "key=\"active_view\"" in main_view_body
+assert "index=None" in main_view_body
+PY
+  assert_success
 }
