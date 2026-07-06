@@ -197,6 +197,20 @@ setup() {
   assert_success
 }
 
+@test "when loading Streamlit UI imports then package reloads should not run at startup" {
+  run grep -q '^import hhs_ui$' "${ui_file}"
+  assert_success
+
+  run grep -q '^import hhs_ui.constants as hhs_ui_constants$' "${ui_file}"
+  assert_success
+
+  run grep -q 'import importlib' "${ui_file}"
+  assert_failure
+
+  run grep -q 'importlib.reload' "${ui_file}"
+  assert_failure
+}
+
 # TC - 5
 @test "when launching HomeSetup UI then plugin should use the configured Streamlit UI port" {
   run grep -q 'HHS_STREAMLIT_UI_PORT:-18501' "${HHS_REPO_DIR}/dotfiles/bash/hhsrc.bash"
@@ -206,6 +220,24 @@ setup() {
   assert_success
 
   run grep -q -- '--server.port "${HHS_STREAMLIT_UI_PORT}"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'STREAMLIT_BROWSER_GATHER_USAGE_STATS="false"' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q -- '--browser.gatherUsageStats false' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q "'--browser.gatherUsageStats'," "${HHS_REPO_DIR}/gradle/streamlit.gradle"
+  assert_success
+
+  run grep -A1 "'--browser.gatherUsageStats'," "${HHS_REPO_DIR}/gradle/streamlit.gradle"
+  assert_line --partial "'false'"
+
+  run grep -q "STREAMLIT_BROWSER_GATHER_USAGE_STATS', 'false'" "${HHS_REPO_DIR}/gradle/streamlit.gradle"
+  assert_success
+
+  run grep -q 'gatherUsageStats = false' "${HHS_REPO_DIR}/.streamlit/config.toml"
   assert_success
 
   run grep -q 'PYTHONPATH="${HHS_HOME}/bin/apps/py:${PYTHONPATH:-}"' "${ui_plugin_file}"
@@ -1031,11 +1063,26 @@ assert 'class="hhs-footer-glyph"></span>' in ui_source
 assert 'Connected to remote  {connected_host_display}' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
 homesetup_version_body = ui_source.split("def homesetup_version", 1)[1].split("\ndef ", 1)[0]
-assert 'run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)' in homesetup_version_body
-assert 'st.session_state["footer_hhs_version_cache_loaded"] = True' in homesetup_version_body
-assert 'parse_rows_cached("env", result.stdout, parse_hhs_envs)' in homesetup_version_body
-assert 'complete_cached_background_command(' in homesetup_version_body
-assert 'cached_background_command_result(command, "env")' in homesetup_version_body
+remember_homesetup_version_body = ui_source.split("def remember_footer_homesetup_version", 1)[1].split("\ndef ", 1)[0]
+local_homesetup_version_body = ui_source.split("def local_homesetup_version", 1)[1].split("\ndef ", 1)[0]
+start_footer_version_body = ui_source.split("def start_footer_homesetup_version_refresh", 1)[1].split("\ndef ", 1)[0]
+complete_footer_version_body = ui_source.split("def complete_footer_homesetup_version_refresh", 1)[1].split("\ndef ", 1)[0]
+assert "context = footer_version_context()" in homesetup_version_body
+assert "command = build_homesetup_version_command()" in homesetup_version_body
+assert "cached_background_command_result(\n        command, FOOTER_VERSION_CACHE_TAG" in homesetup_version_body
+assert "start_footer_homesetup_version_refresh(command, context)" in homesetup_version_body
+assert "run_hhs_envs(" not in homesetup_version_body
+assert 'return version or "loading"' in local_homesetup_version_body
+assert "background_command_metadata(command, FOOTER_VERSION_CACHE_TAG)" in start_footer_version_body
+assert "force_local=True" not in start_footer_version_body
+assert "record_footer_homesetup_version_error(context, result)" in complete_footer_version_body
+assert "clear_disconnected_ssh_host" not in complete_footer_version_body
+assert 'st.session_state["footer_hhs_version_cache_loaded"] = True' in remember_homesetup_version_body
+assert "fallback_footer_homesetup_version(context)" in homesetup_version_body
+assert 'def build_homesetup_version_command' in ui_source
+assert 'FOOTER_VERSION_OUTPUT_MARKER' in ui_source
+assert 'def parse_homesetup_version_output' in ui_source
+assert 'def record_footer_homesetup_version_error' in ui_source
 assert 'hhs_ui.VERSION' not in homesetup_version_body
 constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
 init_source = Path("bin/apps/py/hhs_ui/__init__.py").read_text()
@@ -1147,6 +1194,7 @@ shell_output_index = footer_actions_body.index('st.session_state["footer_shell_v
 shell_title_index = footer_actions_body.index('st.session_state["footer_shell_version_dialog_title"] = "Shell version"')
 assert shell_result_index < shell_output_index < shell_title_index
 assert 'cache_delete_tag("env")' in footer_actions_body
+assert "cache_delete_tag(FOOTER_VERSION_CACHE_TAG)" in footer_actions_body
 assert 'st.session_state["footer_hhs_version_cache_loaded"] = False' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in footer_actions_body
@@ -1379,6 +1427,12 @@ assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key
 assert '.st-key-home_view [data-baseweb="button-group"]' in base_css
 assert '.st-key-ssh_view [data-baseweb="button-group"]' in base_css
 assert "padding-right: var(--hhs-streamlit-toolbar-guard-width)" in active_view_tabs_block
+assert '.st-key-active_view [role="radiogroup"] label input[type="radio"]' in base_css
+assert 'appearance: none !important' in base_css
+assert '.st-key-active_view [role="radiogroup"] label [data-testid="stRadioIcon"]' in base_css
+assert '.st-key-active_view [role="radiogroup"] li::marker' in base_css
+assert '.st-key-active_view [data-testid="stRadioOption"] > div > div:first-child' in base_css
+assert '.st-key-active_view [data-testid="stRadioOption"] > div > div:first-child > div:first-child' in base_css
 assert '[data-testid="stToolbar"]' in base_css
 assert '[data-testid="stDecoration"]' in base_css
 assert '[data-testid="stStatusWidget"]' in base_css
@@ -1687,17 +1741,14 @@ PY
   run grep -q 'return f"{ssh_config_hostname(clean_host)}:{ssh_config_port(clean_host)}"' "${ui_file}"
   assert_success
 
-  run grep -q 'import importlib' "${ui_file}"
-  assert_success
-
   run grep -q 'import hhs_ui.constants as hhs_ui_constants' "${ui_file}"
   assert_success
 
-  run grep -q 'hhs_ui_constants = importlib.reload(hhs_ui_constants)' "${ui_file}"
-  assert_success
+  run grep -q 'import importlib' "${ui_file}"
+  assert_failure
 
-  run grep -q 'hhs_ui = importlib.reload(hhs_ui)' "${ui_file}"
-  assert_success
+  run grep -q 'importlib.reload' "${ui_file}"
+  assert_failure
 
   run grep -q '"Home": " System"' "${constants_file}"
   assert_success
@@ -8815,7 +8866,10 @@ PY
   run grep -q 'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")";' "${ui_file}"
   assert_success
 
-  run grep -q 'run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)' "${ui_file}"
+  run grep -q 'build_homesetup_version_command()' "${ui_file}"
+  assert_success
+
+  run grep -q 'FOOTER_VERSION_CACHE_TAG = "footer_version"' "${ui_file}"
   assert_success
 
   run grep -q 'st.session_state.setdefault("footer_hhs_version_cache_loaded", False)' "${ui_file}"

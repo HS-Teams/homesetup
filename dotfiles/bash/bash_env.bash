@@ -54,6 +54,8 @@ else
   if [[ "Darwin" == "$(uname -s)" ]]; then
     # Hide the annoying warning about zsh
     export BASH_SILENCE_DEPRECATION_WARNING=${BASH_SILENCE_DEPRECATION_WARNING:-1}
+    # Disable Streamlit usage stats gathering
+    export STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
     # OS Release - Darwin
     export HHS_MY_OS_RELEASE="$(sw_vers -productName)"
     export HHS_MY_OS_PACKMAN='brew'

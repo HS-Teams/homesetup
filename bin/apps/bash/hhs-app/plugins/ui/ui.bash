@@ -235,10 +235,12 @@ function start_ui() {
   ui_log="$(get_ui_log)"
   mkdir -p "${HHS_LOG_DIR}"
   echo -e "${YELLOW}Starting HomeSetup UI on port ${HHS_STREAMLIT_UI_PORT}...${NC}"
-  PYTHONPATH="${HHS_HOME}/bin/apps/py:${PYTHONPATH:-}" \
+  STREAMLIT_BROWSER_GATHER_USAGE_STATS="false" \
+    PYTHONPATH="${HHS_HOME}/bin/apps/py:${PYTHONPATH:-}" \
     nohup python3 -m streamlit run "${STREAMLIT_UI}" \
     --server.port "${HHS_STREAMLIT_UI_PORT}" \
     --server.headless true \
+    --browser.gatherUsageStats false \
     "$@" >"${ui_log}" 2>&1 &
   pid=$!
   printf '%s\n' "${pid}" > "${pid_file}"

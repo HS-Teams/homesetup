@@ -151,7 +151,7 @@ tasks.register('startUi') {
       throw new GradleException('Streamlit executable not found. Install Streamlit or set STREAMLIT_BIN to the executable path.')
     }
 
-    Process process = new ProcessBuilder(
+    ProcessBuilder streamlitProcessBuilder = new ProcessBuilder(
         streamlitExecutablePath,
         'run',
         streamlitScriptFile.absolutePath,
@@ -160,8 +160,14 @@ tasks.register('startUi') {
         '--server.port',
         streamlitPortValue,
         '--server.headless',
-        'true'
+        'true',
+        '--browser.gatherUsageStats',
+        'false'
     )
+
+    streamlitProcessBuilder.environment().put('STREAMLIT_BROWSER_GATHER_USAGE_STATS', 'false')
+
+    Process process = streamlitProcessBuilder
         .directory(rootDir)
         .redirectErrorStream(true)
         .redirectOutput(ProcessBuilder.Redirect.appendTo(streamlitLogFilePath))

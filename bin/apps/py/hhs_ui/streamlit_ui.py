@@ -23,7 +23,6 @@ import csv
 import atexit
 import hashlib
 import html
-import importlib
 import json
 import logging
 import os
@@ -60,9 +59,6 @@ from streamlit import config as st_config
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import hhs_ui
 import hhs_ui.constants as hhs_ui_constants
-
-hhs_ui_constants = importlib.reload(hhs_ui_constants)
-hhs_ui = importlib.reload(hhs_ui)
 
 PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"
 FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY = "footer_status_log_handler"
@@ -213,6 +209,8 @@ def shell_version_command() -> str:
 RUN_SHELL = resolve_run_shell()
 os.environ[hhs_ui_constants.RUN_SHELL_ENV_KEY] = RUN_SHELL
 HHS_PATHS_RAW_ENTRY_MARKER = "__HHS_UI_PATH_ENTRY__"
+FOOTER_VERSION_CACHE_TAG = "footer_version"
+FOOTER_VERSION_OUTPUT_MARKER = "__HHS_UI_VERSION__"
 SHOPT_DESCRIPTIONS = {
     "assoc_expand_once": "Suppresses repeated evaluation of associative array subscripts.",
     "autocd": "Runs a directory name as if it were the argument to cd.",
@@ -291,6 +289,7 @@ SSH_CONNECT_JOB = "ssh_connect"
 SSH_DISCONNECT_JOB = "ssh_disconnect"
 SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"
 HOST_SWITCH_CACHE_TAGS = (
+    FOOTER_VERSION_CACHE_TAG,
     "env",
     "services",
     "monitor_disk",
@@ -301,6 +300,7 @@ HOST_SWITCH_BACKGROUND_JOBS = (
     SSH_CONNECT_JOB,
     SSH_DISCONNECT_JOB,
     SSH_FILE_TRANSFER_JOB,
+    FOOTER_VERSION_JOB,
     SERVICE_LIST_JOB,
     SERVICE_ACTION_JOB,
     MONITOR_CPU_JOB,
@@ -2866,39 +2866,141 @@ def render_combobox_vt100_shortcuts_script() -> None:
     )
 
 
-def homesetup_version(refresh_cache: bool = False) -> str:
-    """Return the cached HomeSetup product version from the shell environment."""
-    if refresh_cache:
-        result = run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)
-        if result.returncode == 0:
-            st.session_state["footer_hhs_version_cache_loaded"] = True
-            for row in parse_rows_cached("env", result.stdout, parse_hhs_envs):
-                if row["Name"] == "HHS_VERSION" and row["Value"]:
-                    return row["Value"]
+def footer_version_context() -> str:
+    """Return the command context used by the footer HomeSetup version probe."""
+    return connected_ssh_host() or "local"
 
-    command = build_hhs_envs_command("^HHS_VERSION$")
-    complete_cached_background_command(
-        FOOTER_VERSION_JOB,
-        "footer_hhs_version_error",
-        "Unable to load HomeSetup version.",
+
+def local_homesetup_version() -> str:
+    """Return the local HomeSetup version without issuing shell or SSH commands."""
+    version = os.environ.get("HHS_VERSION", "").strip()
+    if version:
+        return version
+    try:
+        version = (homesetup_home() / ".VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        version = ""
+    return version or "loading"
+
+
+def parse_homesetup_version_output(output: str) -> str:
+    """Return the marker-delimited HomeSetup version from command output."""
+    clean_output = strip_ansi(output or "").replace("\r", "")
+    marker_index = clean_output.rfind(FOOTER_VERSION_OUTPUT_MARKER)
+    if marker_index < 0:
+        return ""
+    marker_output = clean_output[marker_index + len(FOOTER_VERSION_OUTPUT_MARKER) :]
+    return marker_output.splitlines()[0].strip()
+
+
+def remember_footer_homesetup_version(version: str, context: str) -> str:
+    """Store the last known footer HomeSetup version for the active context."""
+    clean_version = version.strip()
+    if not clean_version:
+        return ""
+    st.session_state["footer_hhs_version"] = clean_version
+    st.session_state["footer_hhs_version_context"] = context
+    st.session_state["footer_hhs_version_error"] = ""
+    st.session_state["footer_hhs_version_cache_loaded"] = True
+    return clean_version
+
+
+def fallback_footer_homesetup_version(context: str) -> str:
+    """Return the best available footer HomeSetup version while refresh is pending."""
+    if st.session_state.get("footer_hhs_version_context") == context:
+        version = str(st.session_state.get("footer_hhs_version", "")).strip()
+        if version:
+            return version
+    return local_homesetup_version()
+
+
+def footer_homesetup_version_retry_allowed(context: str) -> bool:
+    """Return whether a failed footer version refresh can be retried now."""
+    if st.session_state.get("footer_hhs_version_error_context") != context:
+        return True
+    try:
+        failed_at = float(st.session_state.get("footer_hhs_version_error_at", 0.0))
+    except (TypeError, ValueError):
+        failed_at = 0.0
+    retry_seconds = max(60, int(hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS))
+    return failed_at <= 0.0 or time.time() - failed_at >= retry_seconds
+
+
+def record_footer_homesetup_version_error(
+    context: str, result: subprocess.CompletedProcess[str]
+) -> None:
+    """Remember a failed footer version refresh without clearing SSH state."""
+    st.session_state["footer_hhs_version_error_context"] = context
+    st.session_state["footer_hhs_version_error_at"] = time.time()
+    st.session_state["footer_hhs_version_error"] = clean_command_status_message(
+        result.stderr or result.stdout or "Unable to load HomeSetup version."
     )
-    result, fresh_cache = cached_background_command_result(command, "env")
-    if result is not None and result.returncode == 0:
-        st.session_state["footer_hhs_version_cache_loaded"] = True
-        for row in parse_rows_cached("env", result.stdout, parse_hhs_envs):
-            if row["Name"] == "HHS_VERSION" and row["Value"]:
-                return row["Value"]
+    st.session_state["footer_hhs_version_cache_loaded"] = True
 
-    if not fresh_cache and not background_job_is_running(FOOTER_VERSION_JOB):
-        start_cached_background_command(
-            FOOTER_VERSION_JOB,
-            command,
-            "Loading HomeSetup version",
-            "env",
-            hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
-            hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        )
-    return os.environ.get("HHS_VERSION", "unknown")
+
+def complete_footer_homesetup_version_refresh(context: str) -> str:
+    """Complete one footer version background refresh for the active context."""
+    completed = background_job_result(FOOTER_VERSION_JOB)
+    if completed is None:
+        return ""
+    result, metadata = completed
+    completed_context = str(metadata.get("footer_version_context", "") or context)
+    version = parse_homesetup_version_output(result.stdout or "")
+    if result.returncode == 0 and version:
+        cache_background_command_result(metadata, result)
+        if completed_context == context:
+            return remember_footer_homesetup_version(version, completed_context)
+        return ""
+    if completed_context == context:
+        record_footer_homesetup_version_error(context, result)
+    return ""
+
+
+def start_footer_homesetup_version_refresh(command: str, context: str) -> None:
+    """Start a host-aware footer version refresh in the background."""
+    metadata = {
+        **background_command_metadata(command, FOOTER_VERSION_CACHE_TAG),
+        "ttl_seconds": hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        "footer_version_context": context,
+    }
+    start_background_bash_command(
+        FOOTER_VERSION_JOB,
+        command,
+        "Loading HomeSetup version",
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        metadata=metadata,
+    )
+
+
+def homesetup_version(refresh_cache: bool = False) -> str:
+    """Return the cached HomeSetup product version for the active command host."""
+    context = footer_version_context()
+    command = build_homesetup_version_command()
+    if st.session_state.get("footer_hhs_version_context") != context:
+        st.session_state["footer_hhs_version_cache_loaded"] = False
+
+    completed_version = complete_footer_homesetup_version_refresh(context)
+    if completed_version:
+        return completed_version
+
+    if refresh_cache:
+        cache_delete_command(command, FOOTER_VERSION_CACHE_TAG)
+
+    result, fresh_cache = cached_background_command_result(
+        command, FOOTER_VERSION_CACHE_TAG
+    )
+    if result is not None and result.returncode == 0:
+        version = parse_homesetup_version_output(result.stdout or "")
+        if version:
+            return remember_footer_homesetup_version(version, context)
+
+    if (
+        not fresh_cache
+        and not background_job_is_running(FOOTER_VERSION_JOB)
+        and footer_homesetup_version_retry_allowed(context)
+    ):
+        start_footer_homesetup_version_refresh(command, context)
+    return fallback_footer_homesetup_version(context)
 
 
 def homesetup_home() -> Path:
@@ -3808,6 +3910,7 @@ def handle_footer_actions() -> None:
             st.session_state["updater_check_context"] = updater_context
             st.session_state["updater_remote_checked_context"] = updater_context
             cache_delete_tag("env")
+            cache_delete_tag(FOOTER_VERSION_CACHE_TAG)
             st.session_state["footer_hhs_version_cache_loaded"] = False
             save_ui_state()
             push_floating_status("HomeSetup update command completed.", "info")
@@ -9326,6 +9429,14 @@ def build_hhs_envs_command(prefix_filter: str | None) -> str:
         build_hhs_env_environment_command()
         + 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
         f"__hhs_envs{filter_arg}"
+    )
+
+
+def build_homesetup_version_command() -> str:
+    """Build the lightweight command used to print the HomeSetup product version."""
+    return (
+        build_hhs_env_environment_command()
+        + f'printf "{FOOTER_VERSION_OUTPUT_MARKER}%s\\n" "${{HHS_VERSION}}"'
     )
 
 

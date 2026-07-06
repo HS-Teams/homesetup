@@ -691,8 +691,40 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
   overflow: visible;
 }
 
-.st-key-active_view [role="radiogroup"] label > div:first-child {
-  display: none;
+.st-key-active_view [role="radiogroup"] ul,
+.st-key-active_view [role="radiogroup"] li {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.st-key-active_view [role="radiogroup"] li::marker {
+  content: "" !important;
+}
+
+.st-key-active_view [role="radiogroup"] label input[type="radio"] {
+  appearance: none !important;
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  opacity: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  width: 0 !important;
+}
+
+.st-key-active_view [data-testid="stRadioOption"] > div > div:first-child {
+  gap: 0 !important;
+}
+
+.st-key-active_view [role="radiogroup"] label > div:first-child,
+.st-key-active_view [role="radiogroup"] label input[type="radio"] + div,
+.st-key-active_view [role="radiogroup"] label input[type="radio"] + span,
+.st-key-active_view [role="radiogroup"] label [data-testid="stRadioIcon"],
+.st-key-active_view [role="radiogroup"] label [class*="RadioIcon"],
+.st-key-active_view [data-testid="stRadioOption"] > div > div:first-child > div:first-child {
+  display: none !important;
 }
 
 .hhs-view-heading {
