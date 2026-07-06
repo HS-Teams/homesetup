@@ -2910,7 +2910,7 @@ PY
   assert_success
 
   run grep -q 'show_overlay=False' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'clear_preloader()' "${ui_file}"
   assert_success
@@ -7671,7 +7671,7 @@ LOGS
   run grep -q '"key": selected_widget_key' "${ui_file}"
   assert_success
 
-  run grep -q 'placeholder": empty_caption' "${ui_file}"
+  run grep -q 'else empty_caption' "${ui_file}"
   assert_success
 
   run grep -q 'disabled": not bool(child_directories)' "${ui_file}"
@@ -7681,6 +7681,24 @@ LOGS
   assert_failure
 
   run grep -q 'def folder_picker_browsing_directory' "${ui_file}"
+  assert_success
+
+  run grep -q 'PATH_PICKER_LISTING_JOB_PREFIX = "path_picker_listing"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def path_picker_listing_job_name' "${ui_file}"
+  assert_success
+
+  run grep -q 'start_background_bash_command(' "${ui_file}"
+  assert_success
+
+  run grep -q 'def render_path_picker_listing_loader' "${ui_file}"
+  assert_success
+
+  run grep -q 'poll_background_job_completion(job_name)' "${ui_file}"
+  assert_success
+
+  run grep -q 'stop_path_picker_listing_jobs()' "${ui_file}"
   assert_success
 
   run grep -q 'rerun_after_folder_picker_navigation()' "${ui_file}"
@@ -7852,10 +7870,10 @@ LOGS
   assert_success
 
   run grep -q '.st-key-folder_picker_open_button button' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q '.st-key-folder_picker_parent_button button' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q '_hhs_folder_picker_include_dot_folders' "${ui_file}"
   assert_success
@@ -8094,7 +8112,8 @@ PY
 }
 
 @test "when connected over SSH then reusable path picker should list remote paths" {
-  run python3 - "${ui_file}" <<'PY'
+	run python3 - "${ui_file}" <<'PY'
+import hashlib
 import os
 import posixpath
 import shlex
@@ -8110,6 +8129,8 @@ end = source.index("def homesetup_version(")
 host = "remote-box"
 statuses = []
 commands = []
+jobs = {}
+stopped_prefixes = []
 session_state = {
     "_hhs_folder_picker_mode": "file",
     "_hhs_folder_picker_current_dir": "/home/root",
@@ -8118,6 +8139,9 @@ session_state = {
 
 def run_bash_command(command, *args, **kwargs):
     commands.append((command, kwargs))
+    return path_picker_result(command)
+
+def path_picker_result(command):
     if "raw_target=/home/root/app" in command:
         return subprocess.CompletedProcess(
             ["ssh"],
@@ -8140,8 +8164,38 @@ def run_bash_command(command, *args, **kwargs):
         "",
     )
 
+def background_job_state_key(job_name):
+    return f"_hhs_background_job_{job_name}"
+
+def start_background_bash_command(
+    job_name, command, description, timeout_seconds, force_local=False, metadata=None
+):
+    commands.append(
+        (
+            command,
+            {
+                "description": description,
+                "timeout_seconds": timeout_seconds,
+                "metadata": metadata or {},
+            },
+        )
+    )
+    jobs[job_name] = (path_picker_result(command), metadata or {})
+    return True
+
+def background_job_result(job_name):
+    return jobs.pop(job_name, None)
+
+def background_job_is_running(job_name):
+    return job_name in jobs
+
+def stop_background_jobs_with_state_prefix(state_key_prefix):
+    stopped_prefixes.append(state_key_prefix)
+    jobs.clear()
+
 namespace = {
     "Path": Path,
+    "hashlib": hashlib,
     "os": os,
     "posixpath": posixpath,
     "shlex": shlex,
@@ -8156,9 +8210,16 @@ namespace = {
         FOOTER_REMOTE_WORKING_DIR_KEY="footer_remote_cwd",
         UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS=30,
     ),
+    "PATH_PICKER_LISTING_JOB_PREFIX": "path_picker_listing",
+    "PATH_PICKER_LISTING_LOADER_MESSAGE": "Loading directories and files...",
     "st": types.SimpleNamespace(session_state=session_state),
     "connected_ssh_host": lambda: host,
     "run_bash_command": run_bash_command,
+    "background_job_state_key": background_job_state_key,
+    "start_background_bash_command": start_background_bash_command,
+    "background_job_result": background_job_result,
+    "background_job_is_running": background_job_is_running,
+    "stop_background_jobs_with_state_prefix": stop_background_jobs_with_state_prefix,
     "strip_ansi": lambda value: value,
     "push_floating_status": lambda message, level: statuses.append((message, level)),
     "clean_command_status_message": lambda value: str(value).strip(),
@@ -8189,7 +8250,9 @@ assert render_body.index(
     "sync_folder_picker_child_selection(child_directories)"
 ) < render_body.index("st.text_input(")
 assert "st.caption(empty_caption)" not in render_body
-assert '"placeholder": empty_caption' in render_body
+assert "PATH_PICKER_LISTING_LOADER_MESSAGE" in render_body
+assert "render_path_picker_listing_loader(loading_job_name)" in render_body
+assert "disabled=loading_children" in render_body
 assert '"disabled": not bool(child_directories)' in render_body
 assert render_body.index("st.selectbox(") < render_body.index("st.checkbox(")
 assert namespace["path_picker_uses_remote"]()
@@ -8205,9 +8268,17 @@ assert session_state["_hhs_folder_picker_current_dir"] == "$HOME"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "$HOME"
 assert commands == []
 children = namespace["path_picker_child_paths"]("$HOME", "folder", False)
+assert children == []
+assert len(commands) == 1
+loading_job = session_state["_hhs_folder_picker_listing_loading_job"]
+assert loading_job.startswith("path_picker_listing_")
+assert "raw_target='$HOME'" in commands[0][0]
+assert commands[0][1]["description"] == "Loading directories and files..."
+assert commands[0][1]["timeout_seconds"] == 30
+children = namespace["path_picker_child_paths"]("$HOME", "folder", False)
 assert children == ["/home/root/app"]
 assert len(commands) == 1
-assert "raw_target='$HOME'" in commands[0][0]
+assert "_hhs_folder_picker_listing_loading_job" not in session_state
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
 children = namespace["path_picker_child_paths"]("/home/root", "folder", False)
@@ -8231,6 +8302,9 @@ assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/app"
 assert "_hhs_folder_picker_selected_dir" not in session_state
 assert "_hhs_folder_picker_path_kinds" not in session_state
 assert len(commands) == command_count
+children = namespace["path_picker_child_paths"]("/home/root/app", "folder", False)
+assert children == []
+assert len(commands) == command_count + 1
 children = namespace["path_picker_child_paths"]("/home/root/app", "folder", False)
 assert children == ["/home/root/app/logs", "/home/root/app/tmp"]
 namespace["sync_folder_picker_child_selection"](children)
@@ -8267,9 +8341,9 @@ session_state["_hhs_folder_picker_mode"] = "file"
 session_state["_hhs_folder_picker_current_dir"] = "/home/root"
 session_state["_hhs_folder_picker_current_dir_input"] = "/home/root/readme.md"
 children = namespace["path_picker_child_paths"]("/home/root", "file", False)
+assert children == []
+children = namespace["path_picker_child_paths"]("/home/root", "file", False)
 assert children == ["/home/root/app", "/home/root/readme.md"]
-assert commands[-1][1]["show_overlay"] is False
-assert commands[-1][1]["cache_tag"] == "path_picker"
 assert commands[-1][1]["timeout_seconds"] == 30
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/readme.md"
@@ -8283,6 +8357,7 @@ assert "raw_target=/home/root" in commands[-1][0]
 assert statuses == []
 namespace["close_folder_picker"]()
 assert "_hhs_folder_picker_owner_context" not in session_state
+assert stopped_prefixes
 PY
   assert_success
 }
@@ -8968,6 +9043,16 @@ import urllib.parse
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
 start = source.index("def search_type_label(")
 end = source.index("def render_ai_models_result(")
+
+def fragment(*args, **kwargs):
+    if args and callable(args[0]) and len(args) == 1 and not kwargs:
+        return args[0]
+
+    def decorator(func):
+        return func
+
+    return decorator
+
 namespace = {
     "posixpath": posixpath,
     "re": re,
@@ -8990,7 +9075,7 @@ namespace = {
             "Strings": "Strings",
         },
     ),
-    "st": types.SimpleNamespace(session_state={}),
+    "st": types.SimpleNamespace(session_state={}, fragment=fragment),
     "Path": Path,
     "os": os,
     "html": html,

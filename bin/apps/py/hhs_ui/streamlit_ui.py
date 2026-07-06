@@ -288,6 +288,8 @@ FOOTER_WORKING_DIR_JOB = "footer_working_dir"
 SSH_CONNECT_JOB = "ssh_connect"
 SSH_DISCONNECT_JOB = "ssh_disconnect"
 SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"
+PATH_PICKER_LISTING_JOB_PREFIX = "path_picker_listing"
+PATH_PICKER_LISTING_LOADER_MESSAGE = "Loading directories and files..."
 HOST_SWITCH_CACHE_TAGS = (
     FOOTER_VERSION_CACHE_TAG,
     "env",
@@ -1975,6 +1977,26 @@ def clear_folder_picker_listing_cache() -> None:
     st.session_state.pop("_hhs_folder_picker_listing_cache", None)
 
 
+def path_picker_listing_job_name(
+    directory: str, mode: str = "folder", include_dot_folders: bool = False
+) -> str:
+    """Return the background job name for one remote path picker listing."""
+    cache_key = remote_path_picker_listing_cache_key(directory, mode, include_dot_folders)
+    digest = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()[:16]
+    return f"{PATH_PICKER_LISTING_JOB_PREFIX}_{digest}"
+
+
+def path_picker_listing_job_state_prefix() -> str:
+    """Return the Streamlit state prefix for all remote path picker listing jobs."""
+    return background_job_state_key(PATH_PICKER_LISTING_JOB_PREFIX)
+
+
+def stop_path_picker_listing_jobs() -> None:
+    """Stop any in-flight remote path picker listing jobs."""
+    stop_background_jobs_with_state_prefix(path_picker_listing_job_state_prefix())
+    st.session_state.pop("_hhs_folder_picker_listing_loading_job", None)
+
+
 def folder_picker_listing_cache() -> dict[str, dict[str, object]]:
     """Return the dialog-local remote path picker listing cache."""
     cache = st.session_state.get("_hhs_folder_picker_listing_cache")
@@ -2059,6 +2081,37 @@ def apply_remote_path_picker_listing(
     return [path for _kind, path in entries]
 
 
+def complete_remote_path_picker_listing_job(
+    job_name: str, directory: str, mode: str = "folder", include_dot_folders: bool = False
+) -> list[str] | None:
+    """Complete one remote path picker listing job, caching successful output."""
+    completed = background_job_result(job_name)
+    if completed is None:
+        return None
+    result, metadata = completed
+    requested_directory = str(metadata.get("directory", "") or directory)
+    picker_mode = "file" if str(metadata.get("mode", "") or mode) == "file" else "folder"
+    include_hidden = bool(metadata.get("include_dot_folders", include_dot_folders))
+    if st.session_state.get("_hhs_folder_picker_listing_loading_job") == job_name:
+        st.session_state.pop("_hhs_folder_picker_listing_loading_job", None)
+    if result.returncode != 0:
+        push_floating_status(
+            clean_command_status_message(result.stderr or result.stdout),
+            "error",
+        )
+        current_directory = normalize_remote_path_picker_path(requested_directory)
+        remember_remote_path_picker_listing(
+            requested_directory, current_directory, [], picker_mode, include_hidden
+        )
+        apply_remote_path_picker_listing(current_directory, [])
+        return []
+    current_directory, entries = parse_remote_path_picker_listing(result.stdout)
+    remember_remote_path_picker_listing(
+        requested_directory, current_directory, entries, picker_mode, include_hidden
+    )
+    return apply_remote_path_picker_listing(current_directory, entries)
+
+
 def remote_path_picker_child_paths(
     directory: str, mode: str = "folder", include_dot_folders: bool = False
 ) -> list[str]:
@@ -2069,31 +2122,29 @@ def remote_path_picker_child_paths(
         directory, mode, include_dot_folders
     )
     if cached_listing is not None:
+        st.session_state.pop("_hhs_folder_picker_listing_loading_job", None)
         return apply_remote_path_picker_listing(*cached_listing)
-    result = run_bash_command(
-        build_remote_path_picker_listing_command(directory, mode, include_dot_folders),
-        "Loading directories and files...",
-        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
-        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
-        cache_tag="path_picker",
-        show_overlay=False,
+    job_name = path_picker_listing_job_name(directory, mode, include_dot_folders)
+    completed_paths = complete_remote_path_picker_listing_job(
+        job_name, directory, mode, include_dot_folders
     )
-    if result.returncode != 0:
-        push_floating_status(
-            clean_command_status_message(result.stderr or result.stdout),
-            "error",
-        )
-        current_directory = normalize_remote_path_picker_path(directory)
-        remember_remote_path_picker_listing(
-            directory, current_directory, [], mode, include_dot_folders
-        )
-        apply_remote_path_picker_listing(current_directory, [])
+    if completed_paths is not None:
+        return completed_paths
+    st.session_state["_hhs_folder_picker_listing_loading_job"] = job_name
+    if background_job_is_running(job_name):
         return []
-    current_directory, entries = parse_remote_path_picker_listing(result.stdout)
-    remember_remote_path_picker_listing(
-        directory, current_directory, entries, mode, include_dot_folders
+    start_background_bash_command(
+        job_name,
+        build_remote_path_picker_listing_command(directory, mode, include_dot_folders),
+        PATH_PICKER_LISTING_LOADER_MESSAGE,
+        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        metadata={
+            "directory": directory,
+            "mode": "file" if mode == "file" else "folder",
+            "include_dot_folders": bool(include_dot_folders),
+        },
     )
-    return apply_remote_path_picker_listing(current_directory, entries)
+    return []
 
 
 def folder_picker_child_directories(
@@ -2120,6 +2171,7 @@ def path_picker_child_paths(
     """Return readable child paths for a folder or file picker."""
     if path_picker_uses_remote():
         return remote_path_picker_child_paths(directory, mode, include_dot_folders)
+    st.session_state.pop("_hhs_folder_picker_listing_loading_job", None)
     if mode == "folder":
         return folder_picker_child_directories(directory, include_dot_folders)
     current_directory = Path(folder_picker_start_directory(directory))
@@ -2203,6 +2255,7 @@ def request_path_picker(
     st.session_state.setdefault("_hhs_folder_picker_include_dot_folders", False)
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
     st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+    stop_path_picker_listing_jobs()
     clear_folder_picker_listing_cache()
     prune_folder_picker_child_selection_widget_keys()
 
@@ -2231,6 +2284,7 @@ def close_folder_picker() -> None:
     st.session_state.pop("_hhs_folder_picker_owner_context", None)
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
     st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+    stop_path_picker_listing_jobs()
     clear_folder_picker_listing_cache()
     prune_folder_picker_child_selection_widget_keys()
 
@@ -2503,10 +2557,19 @@ def render_path_picker_body(
     child_directories = path_picker_child_paths(
         current_directory, mode, include_dot_folders
     )
+    loading_job_name = str(
+        st.session_state.get("_hhs_folder_picker_listing_loading_job", "")
+    )
+    loading_children = bool(
+        loading_job_name and background_job_is_running(loading_job_name)
+    )
     sync_folder_picker_child_selection(child_directories)
+    if loading_children:
+        render_path_picker_listing_loader(loading_job_name)
     st.text_input(
         selected_label,
         key="_hhs_folder_picker_current_dir_input",
+        disabled=loading_children,
         on_change=apply_folder_picker_typed_directory,
     )
     selected_widget_key = folder_picker_child_selection_widget_key(
@@ -2525,7 +2588,9 @@ def render_path_picker_body(
     selectbox_kwargs: dict[str, object] = {
         "key": selected_widget_key,
         "format_func": path_picker_label,
-        "placeholder": empty_caption,
+        "placeholder": PATH_PICKER_LISTING_LOADER_MESSAGE
+        if loading_children
+        else empty_caption,
         "disabled": not bool(child_directories),
     }
     if not child_directories:
@@ -2561,6 +2626,7 @@ def render_path_picker_body(
                 "",
                 key="folder_picker_parent_button",
                 help="Parent",
+                disabled=loading_children,
                 on_click=open_folder_picker_parent,
                 width="content",
             )
@@ -2569,7 +2635,7 @@ def render_path_picker_body(
                 "",
                 key="folder_picker_open_button",
                 help="Open",
-                disabled=not bool(child_directories),
+                disabled=loading_children or not bool(child_directories),
                 on_click=open_folder_picker_selected_directory,
                 width="content",
             )
@@ -2578,6 +2644,7 @@ def render_path_picker_body(
                 "﬌",
                 key="folder_picker_select_button",
                 help="Select",
+                disabled=loading_children,
                 on_click=apply_folder_picker_selection_and_dismiss,
                 width="content",
             )
@@ -2589,6 +2656,23 @@ def render_path_picker_body(
                 on_click=cancel_folder_picker_and_dismiss,
                 width="content",
             )
+
+
+def render_path_picker_listing_loader(job_name: str) -> None:
+    """Render an in-dialog loader while a remote path picker listing runs."""
+    job = background_job_state(job_name)
+    if not job:
+        return
+    try:
+        started_at = float(job.get("started_at", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        started_at = 0.0
+    render_command_loader(
+        PATH_PICKER_LISTING_LOADER_MESSAGE,
+        started_at or None,
+        int(background_job_timeout_seconds(job) or command_timeout_seconds()),
+    )
+    poll_background_job_completion(job_name)
 
 
 def render_folder_picker_dialog(owner_context: str = "") -> bool:
@@ -2612,8 +2696,6 @@ def render_path_picker_open_preloader_script() -> None:
             const enabled = {remote_picker_enabled};
             const buttonSelector = [
               '[class*="st-key-"][class*="_folder_picker_button"] button',
-              ".st-key-folder_picker_open_button button",
-              ".st-key-folder_picker_parent_button button",
             ].join(", ");
             const timeoutSeconds = {timeout_seconds};
             const clearOverlayTimers = () => {{
@@ -9041,6 +9123,7 @@ def clear_cached_ui_data_preserving_state(show_status: bool = True) -> None:
     """Clear cached command data while preserving UI selections and metadata."""
     stop_background_jobs(CACHE_CLEAR_BACKGROUND_JOBS)
     stop_background_jobs_with_state_prefix(background_job_state_key("cached_"))
+    stop_path_picker_listing_jobs()
     cache_clear()
     st.session_state["footer_hhs_version_cache_loaded"] = False
     for state_key in list(st.session_state):
@@ -9053,6 +9136,7 @@ def clear_cached_ui_data_preserving_state(show_status: bool = True) -> None:
 def expire_host_scoped_command_state() -> None:
     """Expire command data and jobs that belong to the previous execution host."""
     stop_background_jobs(HOST_SWITCH_BACKGROUND_JOBS)
+    stop_path_picker_listing_jobs()
     for cache_tag in HOST_SWITCH_CACHE_TAGS:
         cache_delete_tag(cache_tag)
     clear_render_caches()
@@ -15346,7 +15430,6 @@ def remote_environment_values(variable_names: list[str]) -> dict[str, str]:
         "Resolving remote environment...",
         timeout_seconds=10,
         cache_tag="system",
-        show_overlay=False,
     )
     values = parse_remote_environment_values(result.stdout if result.returncode == 0 else "")
     st.session_state[cache_key] = values
@@ -15911,7 +15994,6 @@ def render_search_results() -> None:
         cache_key_override=search_command_cache_key(
             search_type, query, search_path, ignore_case, words, binary
         ),
-        show_overlay=False,
     )
     clear_preloader()
     with st.container(key="search_results"):
