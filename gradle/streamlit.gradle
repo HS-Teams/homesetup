@@ -39,8 +39,14 @@ def resolveExecutable = { String commandName, String envVarName = null, List<Str
 def streamlitScriptFile = file("$rootDir/bin/apps/py/hhs_ui/streamlit_ui.py")
 def streamlitPidFilePath = file("$buildDir/streamlit/streamlit.pid")
 def streamlitLogFilePath = file("$buildDir/streamlit/streamlit.log")
+def streamlitStartupThemeFile = file("$rootDir/bin/apps/py/hhs_ui/startup_theme.py")
 def streamlitHostValue = '127.0.0.1'
 def streamlitPortValue = '18501'
+def pythonExecutablePath = resolveExecutable(
+    'python3',
+    'PYTHON_BIN',
+    ['/opt/homebrew/bin/python3', '/usr/local/bin/python3']
+)
 def streamlitExecutablePath = resolveExecutable(
     'streamlit',
     'STREAMLIT_BIN',
@@ -53,6 +59,7 @@ ext {
   streamlitLogFile = streamlitLogFilePath
   streamlitHost = streamlitHostValue
   streamlitPort = streamlitPortValue
+  pythonExecutable = pythonExecutablePath
   streamlitExecutable = streamlitExecutablePath
 }
 
@@ -124,6 +131,40 @@ def runningStreamlitProcesses = {
   }
 }
 
+def streamlitStartupThemeArgs = {
+  if (!streamlitStartupThemeFile.exists()) {
+    return []
+  }
+
+  try {
+    ProcessBuilder themeProcessBuilder = new ProcessBuilder(
+        pythonExecutablePath,
+        streamlitStartupThemeFile.absolutePath
+    )
+    Map<String, String> environment = themeProcessBuilder.environment()
+    environment.put('HHS_HOME', rootDir.absolutePath)
+    if (!(environment.get('HHS_DIR') ?: '').trim()) {
+      environment.put('HHS_DIR', rootDir.absolutePath)
+    }
+    Process process = themeProcessBuilder
+        .directory(rootDir)
+        .redirectError(ProcessBuilder.Redirect.DISCARD)
+        .start()
+    if (!process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
+      process.destroyForcibly()
+      return []
+    }
+    if (process.exitValue() != 0) {
+      return []
+    }
+    return process.inputStream.getText('UTF-8').readLines().findAll { String line ->
+      line.trim()
+    }
+  } catch (Exception ignored) {
+    return []
+  }
+}
+
 /**
  * Starts the local Streamlit UI server.
  */
@@ -151,7 +192,7 @@ tasks.register('startUi') {
       throw new GradleException('Streamlit executable not found. Install Streamlit or set STREAMLIT_BIN to the executable path.')
     }
 
-    ProcessBuilder streamlitProcessBuilder = new ProcessBuilder(
+    List<String> streamlitArgs = [
         streamlitExecutablePath,
         'run',
         streamlitScriptFile.absolutePath,
@@ -167,7 +208,9 @@ tasks.register('startUi') {
         streamlitPortValue,
         '--browser.gatherUsageStats',
         'false'
-    )
+    ] + streamlitStartupThemeArgs()
+
+    ProcessBuilder streamlitProcessBuilder = new ProcessBuilder(streamlitArgs)
 
     streamlitProcessBuilder.environment().put('STREAMLIT_BROWSER_GATHER_USAGE_STATS', 'false')
 

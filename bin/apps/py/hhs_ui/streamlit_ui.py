@@ -2153,6 +2153,35 @@ def path_picker_label(path_value: str) -> str:
     return path.name or str(path)
 
 
+def folder_picker_owner_context_for_target(target_key: str) -> str:
+    """Return the fragment owner that should render a picker target key."""
+    target = str(target_key or "")
+    if target == "search_path" or target.startswith("search_"):
+        return "search"
+    if target.startswith("path_") or target.startswith(
+        f"{hhs_ui.PATH_VALUE_EDITOR_KEY_PREFIX}_"
+    ):
+        return "path"
+    if target.startswith("dir_") or target.startswith(
+        f"{hhs_ui.DIR_VALUE_EDITOR_KEY_PREFIX}_"
+    ):
+        return "dir"
+    return ""
+
+
+def folder_picker_owner_context() -> str:
+    """Return the current picker owner context, if any."""
+    return str(st.session_state.get("_hhs_folder_picker_owner_context", "") or "")
+
+
+def folder_picker_owner_matches(owner_context: str) -> bool:
+    """Return whether a picker render location owns the open picker."""
+    active_owner = folder_picker_owner_context()
+    if owner_context:
+        return active_owner == owner_context
+    return not active_owner
+
+
 def request_path_picker(
     target_key: str,
     fallback_value: str = "",
@@ -2166,6 +2195,9 @@ def request_path_picker(
     st.session_state["_hhs_folder_picker_open"] = True
     st.session_state["_hhs_folder_picker_mode"] = picker_mode
     st.session_state["_hhs_folder_picker_target_key"] = target_key
+    st.session_state["_hhs_folder_picker_owner_context"] = (
+        folder_picker_owner_context_for_target(target_key)
+    )
     st.session_state["_hhs_folder_picker_current_dir"] = start_directory
     st.session_state["_hhs_folder_picker_current_dir_input"] = start_path
     st.session_state.setdefault("_hhs_folder_picker_include_dot_folders", False)
@@ -2173,18 +2205,6 @@ def request_path_picker(
     st.session_state.pop("_hhs_folder_picker_path_kinds", None)
     clear_folder_picker_listing_cache()
     prune_folder_picker_child_selection_widget_keys()
-    rerun_streamlit_app()
-
-
-def rerun_streamlit_app() -> None:
-    """Request a full Streamlit app rerun from callbacks and fragments."""
-    rerun = getattr(st, "rerun", None)
-    if not callable(rerun):
-        return
-    try:
-        rerun(scope="app")
-    except TypeError:
-        rerun()
 
 
 def request_folder_picker(
@@ -2208,6 +2228,7 @@ def close_folder_picker() -> None:
     st.session_state["_hhs_folder_picker_open"] = False
     st.session_state.pop("_hhs_folder_picker_mode", None)
     st.session_state.pop("_hhs_folder_picker_target_key", None)
+    st.session_state.pop("_hhs_folder_picker_owner_context", None)
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
     st.session_state.pop("_hhs_folder_picker_path_kinds", None)
     clear_folder_picker_listing_cache()
@@ -2425,9 +2446,11 @@ def cancel_folder_picker_and_dismiss() -> None:
     close_folder_picker()
 
 
-def render_path_picker_dialog() -> bool:
+def render_path_picker_dialog(owner_context: str = "") -> bool:
     """Render the reusable path picker as a styled page overlay."""
     if not st.session_state.get("_hhs_folder_picker_open"):
+        return False
+    if not folder_picker_owner_matches(owner_context):
         return False
 
     mode = path_picker_mode()
@@ -2568,9 +2591,9 @@ def render_path_picker_body(
             )
 
 
-def render_folder_picker_dialog() -> bool:
+def render_folder_picker_dialog(owner_context: str = "") -> bool:
     """Render the reusable path picker dialog when requested."""
-    return render_path_picker_dialog()
+    return render_path_picker_dialog(owner_context)
 
 
 def render_path_picker_open_preloader_script() -> None:
@@ -12793,6 +12816,7 @@ def render_paths_table() -> None:
         )
 
     path_filter, other_filter = render_table_controls_panel(render_path_controls)
+    render_folder_picker_dialog("path")
     result = render_cached_command_result(
         build_hhs_paths_command(),
         "Loading PATH entries",
@@ -12826,6 +12850,7 @@ def render_dirs_table() -> None:
         )
 
     dirs_filter, other_filter = render_table_controls_panel(render_dir_controls)
+    render_folder_picker_dialog("dir")
     result = render_cached_command_result(
         build_hhs_dirs_command(),
         "Loading saved directories",
@@ -15917,6 +15942,7 @@ def render_search_panel() -> None:
     with st.expander("Search", expanded=True):
         render_search_controls()
         render_search_filters()
+    render_folder_picker_dialog("search")
     render_search_results()
 
 

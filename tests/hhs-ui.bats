@@ -279,6 +279,12 @@ setup() {
   run grep -q 'enableXsrfProtection = true' "${HHS_REPO_DIR}/.streamlit/config.toml"
   assert_success
 
+  run grep -q '\[theme\]' "${HHS_REPO_DIR}/.streamlit/config.toml"
+  assert_success
+
+  run grep -q 'backgroundColor = "#282a36"' "${HHS_REPO_DIR}/.streamlit/config.toml"
+  assert_success
+
   run grep -q 'PYTHONPATH="${HHS_HOME}/bin/apps/py:${PYTHONPATH:-}"' "${ui_plugin_file}"
   assert_success
 
@@ -327,6 +333,24 @@ setup() {
   run grep -q 'validate_safe_streamlit_args "$@"' "${ui_plugin_file}"
   assert_success
 
+  run grep -q '^function streamlit_theme_args()' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'startup_theme.py' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q '"${theme_args\[@\]}"' "${ui_plugin_file}"
+  assert_success
+
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/startup_theme.py"
+  assert_success
+
+  run grep -q 'def streamlit_theme_args' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/startup_theme.py"
+  assert_success
+
+  run grep -q 'streamlitStartupThemeArgs()' "${HHS_REPO_DIR}/gradle/streamlit.gradle"
+  assert_success
+
   run grep -q "launch""ctl" "${ui_plugin_file}"
   assert_failure
 
@@ -346,6 +370,7 @@ command = body.split('nohup python3 -m streamlit run "${STREAMLIT_UI}"', 1)[1].s
 arg_index = command.rindex('"$@"')
 assert command.index("--server.address 127.0.0.1") < arg_index
 assert command.index('--browser.serverAddress localhost') < arg_index
+assert command.index('"${theme_args[@]}"') < arg_index
 launch_body = source.split("function launch_ui()", 1)[1].split("\n# @purpose:", 1)[0]
 assert "validate_ui_runtime" in launch_body
 assert "if is_ui_running; then" in launch_body
@@ -357,6 +382,42 @@ PY
 
   run grep -q '\[\[ "$1" == "execute" \]\] && shift' "${ui_plugin_file}"
   assert_success
+}
+
+@test "when starting HomeSetup UI then persisted theme is passed to Streamlit startup" {
+  run bash --noprofile --norc -c '
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
+    export HHS_LOG_DIR="${2}/log"
+    mkdir -p "${HHS_DIR}/cache" "${HHS_LOG_DIR}"
+    printf "%s\n" "{\"theme_selected\":\"homesetup\"}" > "${HHS_DIR}/cache/.streamlit-ui-state"
+    source "${3}"
+    streamlit_theme_args
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_output --partial '--theme.base'
+  assert_output --partial '--theme.primaryColor'
+  assert_output --partial '#2563eb'
+  assert_output --partial '--theme.backgroundColor'
+  assert_output --partial '#0f172a'
+  assert_output --partial '--theme.showWidgetBorder'
+  assert_output --partial 'true'
+  refute_output --partial '#282a36'
+
+  run bash --noprofile --norc -c '
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/fallback-hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
+    export HHS_LOG_DIR="${2}/fallback-log"
+    mkdir -p "${HHS_DIR}/cache" "${HHS_LOG_DIR}"
+    printf "%s\n" "{\"theme_selected\":\"missing-theme\"}" > "${HHS_DIR}/cache/.streamlit-ui-state"
+    source "${3}"
+    streamlit_theme_args
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_output --partial '--theme.backgroundColor'
+  assert_output --partial '#282a36'
 }
 
 @test "when executing UI plugin commands then lifecycle subcommands route explicitly" {
@@ -471,7 +532,8 @@ PY
     start_ui
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
   assert_failure
-  assert_output --partial 'Port 28501 is already in use by a process not started by the UI plugin.'
+  assert_output --partial 'Port 28501 is in use by a process [PID=99999] not started by the UI plugin.'
+  assert_output --partial 'Cannot start HomeSetup UI.'
   refute_output --partial 'kill:'
   refute_output --partial 'open:'
 }
@@ -568,15 +630,23 @@ PY
     function ui_pid_env() { printf "HHS_STREAMLIT_UI_OWNER=token-a\n"; }
     function ui_pid_command_name() { printf "node\n"; }
     is_owned_ui_pid 12345 && printf "bad-owned\n" || printf "bad-rejected\n"
+    function ui_pid_command_name() { printf "Python\n"; }
+    is_owned_ui_pid 12345 && printf "mac-python-owned\n" || printf "mac-python-rejected\n"
     function ui_pid_command_name() { printf "python3\n"; }
     is_owned_ui_pid 12345 && printf "python-owned\n" || printf "python-rejected\n"
     function ui_pid_command_name() { printf "streamlit\n"; }
     is_owned_ui_pid 12345 && printf "streamlit-owned\n" || printf "streamlit-rejected\n"
+    rm -f "${HHS_DIR}/.streamlit-ui.pid"
+    function ui_pid_command_name() { printf "Python\n"; }
+    function ui_pid_env() { printf "HHS_STREAMLIT_UI_OWNER=hhs-ui.123.456.789\n"; }
+    is_owned_ui_pid 12345 && printf "env-owned\n" || printf "env-rejected\n"
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
   assert_success
   assert_line --index 0 'bad-rejected'
-  assert_line --index 1 'python-owned'
-  assert_line --index 2 'streamlit-owned'
+  assert_line --index 1 'mac-python-owned'
+  assert_line --index 2 'python-owned'
+  assert_line --index 3 'streamlit-owned'
+  assert_line --index 4 'env-owned'
 }
 
 @test "when restarting UI then launch path opens the browser after stop" {
@@ -665,6 +735,58 @@ PY
   [[ ! -e "${BATS_TEST_TMPDIR}/hhs/.streamlit-ui.processes" ]]
 }
 
+@test "when stopping UI then an owned port listener is recovered from its environment token" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      return "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { [[ "$1" == "lsof" ]] && return 1; return 0; }
+    function __hhs_open() { return 0; }
+    killed=""
+    function kill() {
+      if [[ "$1" == "-0" ]]; then
+        [[ " ${killed} " != *" $2 "* ]]
+        return
+      fi
+      printf "kill:%s\n" "$1"
+      killed="${killed} $1"
+      return 0
+    }
+    source "${3}"
+    function is_ui_running() { return 0; }
+    function ui_port_pids() { printf "34567\n"; }
+    function ui_pid_command_name() { printf "Python\n"; }
+    function ui_pid_args() {
+      printf "Python -m streamlit run %s --server.port %s --server.address 127.0.0.1\n" \
+        "${STREAMLIT_UI}" \
+        "${HHS_STREAMLIT_UI_PORT}"
+    }
+    function ui_pid_env() {
+      printf "HHS_STREAMLIT_UI_OWNER=hhs-ui.345.67.89\n"
+    }
+    stop_ui
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_output --partial 'Stopping HomeSetup UI process 34567'
+  assert_output --partial 'kill:34567'
+  assert_output --partial 'HomeSetup UI stopped.'
+}
+
 @test "when stopping UI with only an unmanaged listener then plugin should not kill it" {
   run bash --noprofile --norc -c '
     export APP_NAME="hhs"
@@ -688,6 +810,7 @@ PY
     function __hhs_has() { [[ "$1" == "lsof" ]] && return 1; return 0; }
     function __hhs_open() { return 0; }
     function kill() {
+      [[ "$1" == "-0" ]] && return 0
       printf "kill:%s\n" "$*" >&2
       return 0
     }
@@ -698,7 +821,7 @@ PY
     stop_ui
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
   assert_success
-  assert_output --partial 'Leaving it running'
+  assert_output --partial 'Port 28501 is in use by a process [PID=99999] not started by the UI plugin. Leaving it running.'
   refute_output --partial 'kill:'
 }
 
@@ -7611,6 +7734,27 @@ LOGS
   run grep -q 'def render_path_picker_body' "${ui_file}"
   assert_success
 
+  run grep -q 'def folder_picker_owner_context_for_target' "${ui_file}"
+  assert_success
+
+  run grep -q 'def folder_picker_owner_matches' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_folder_picker_dialog("path")' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_folder_picker_dialog("dir")' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_folder_picker_dialog("search")' "${ui_file}"
+  assert_success
+
+  run grep -q 'rerun_streamlit_app' "${ui_file}"
+  assert_failure
+
+  run grep -q 'st.rerun(scope="app")' "${ui_file}"
+  assert_failure
+
   run grep -q 'key="folder_picker_header_close_button"' "${ui_file}"
   assert_success
 
@@ -7623,7 +7767,34 @@ LOGS
   run grep -q '.st-key-hhs_path_picker_overlay' "${css_file}"
   assert_success
 
+  run grep -q 'align-items: center !important' "${css_file}"
+  assert_success
+
+  run grep -q 'justify-content: center !important' "${css_file}"
+  assert_success
+
+  run grep -q 'min-height: 100dvh !important' "${css_file}"
+  assert_success
+
+  run grep -q 'width: 100vw !important' "${css_file}"
+  assert_success
+
+  run grep -q 'margin: auto !important' "${css_file}"
+  assert_success
+
   run grep -q '.st-key-hhs_path_picker_panel' "${css_file}"
+  assert_success
+
+  run grep -q 'left: 50% !important' "${css_file}"
+  assert_success
+
+  run grep -q 'position: fixed !important' "${css_file}"
+  assert_success
+
+  run grep -q 'top: 50% !important' "${css_file}"
+  assert_success
+
+  run grep -q 'transform: translate(-50%, -50%) !important' "${css_file}"
   assert_success
 
   run grep -q '.st-key-folder_picker_action_grid,' "${css_file}"
@@ -7976,13 +8147,16 @@ namespace = {
     "shlex": shlex,
     "subprocess": subprocess,
     "textwrap": textwrap,
-    "hhs_ui": types.SimpleNamespace(UI_CACHE_REALTIME_TTL_SECONDS=1),
+    "hhs_ui": types.SimpleNamespace(
+        DIR_VALUE_EDITOR_KEY_PREFIX="dir_selected_value",
+        PATH_VALUE_EDITOR_KEY_PREFIX="path_selected_value",
+        UI_CACHE_REALTIME_TTL_SECONDS=1,
+    ),
     "hhs_ui_constants": types.SimpleNamespace(
         FOOTER_REMOTE_WORKING_DIR_KEY="footer_remote_cwd",
         UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS=30,
     ),
     "st": types.SimpleNamespace(session_state=session_state),
-    "rerun_streamlit_app": lambda: None,
     "connected_ssh_host": lambda: host,
     "run_bash_command": run_bash_command,
     "strip_ansi": lambda value: value,
@@ -7994,6 +8168,7 @@ exec("from __future__ import annotations\n" + source[start:end], namespace)
 
 dialog_body = source.split("def render_path_picker_dialog", 1)[1].split("\ndef ", 1)[0]
 assert "dialog_rendered = pop_dialog(" not in dialog_body
+assert "folder_picker_owner_matches(owner_context)" in dialog_body
 assert 'st.container(key="hhs_path_picker_overlay")' in dialog_body
 assert 'st.container(key="hhs_path_picker_panel")' in dialog_body
 assert 'key="folder_picker_header_close_button"' in dialog_body
@@ -8019,7 +8194,13 @@ assert '"disabled": not bool(child_directories)' in render_body
 assert render_body.index("st.selectbox(") < render_body.index("st.checkbox(")
 assert namespace["path_picker_uses_remote"]()
 assert namespace["remote_path_picker_default_directory"]() == "$HOME"
+assert namespace["folder_picker_owner_context_for_target"]("search_path") == "search"
+assert namespace["folder_picker_owner_context_for_target"]("path_add_value") == "path"
+assert namespace["folder_picker_owner_context_for_target"]("path_selected_value_0") == "path"
+assert namespace["folder_picker_owner_context_for_target"]("dir_add_value") == "dir"
+assert namespace["folder_picker_owner_context_for_target"]("dir_selected_value_0") == "dir"
 assert namespace["request_path_picker"]("search_path", "", "folder") is None
+assert session_state["_hhs_folder_picker_owner_context"] == "search"
 assert session_state["_hhs_folder_picker_current_dir"] == "$HOME"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "$HOME"
 assert commands == []
@@ -8034,6 +8215,7 @@ assert children == ["/home/root/app"]
 assert len(commands) == 1
 
 assert namespace["request_path_picker"]("search_path", "/srv", "folder") is None
+assert session_state["_hhs_folder_picker_owner_context"] == "search"
 assert session_state["_hhs_folder_picker_current_dir"] == "/srv"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "/srv"
 
@@ -8099,6 +8281,8 @@ assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/read
 assert namespace["selected_folder_picker_path"]() == "/home/root/readme.md"
 assert "raw_target=/home/root" in commands[-1][0]
 assert statuses == []
+namespace["close_folder_picker"]()
+assert "_hhs_folder_picker_owner_context" not in session_state
 PY
   assert_success
 }
@@ -8142,6 +8326,10 @@ namespace = {
     "shlex": shlex,
     "subprocess": subprocess,
     "textwrap": textwrap,
+    "hhs_ui": types.SimpleNamespace(
+        DIR_VALUE_EDITOR_KEY_PREFIX="dir_selected_value",
+        PATH_VALUE_EDITOR_KEY_PREFIX="path_selected_value",
+    ),
     "st": types.SimpleNamespace(
         session_state=session_state,
     ),

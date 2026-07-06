@@ -15,16 +15,17 @@
 PLUGIN_NAME="ui"
 
 # Current HomeSetup UI plugin version.
-VERSION="0.0.4"
+VERSION="0.0.5"
 
 # Namespace cleanup.
 UNSETS=(
   help version cleanup execute get_ui_url get_ui_log get_ui_pid_file is_ui_running
   get_ui_process_registry_file open_ui ui_pids ui_port_pids ui_recorded_processes ui_recorded_pids
-  ui_process_token ui_pid_command_name ui_pid_args ui_pid_env is_python_or_streamlit_pid
-  is_owned_ui_pid ui_known_pids ui_tracked_processes_alive is_managed_ui_running new_ui_owner_token
-  record_ui_process cleanup_ui_process_files status_ui stop_ui validate_safe_streamlit_args start_ui
-  restart_ui launch_ui validate_ui_runtime
+  ui_process_token ui_pid_command_name ui_pid_args ui_pid_env ui_pid_owner_env_token
+  is_python_or_streamlit_pid is_owned_ui_pid ui_known_pids ui_tracked_processes_alive
+  is_managed_ui_running new_ui_owner_token
+  record_ui_process cleanup_ui_process_files ui_port_owner_pid unmanaged_ui_port_message status_ui stop_ui
+  validate_safe_streamlit_args streamlit_theme_args start_ui restart_ui launch_ui validate_ui_runtime
 )
 
 # Streamlit UI application path.
@@ -194,12 +195,23 @@ function ui_pid_env() {
   ps eww -p "$1" 2>/dev/null || true
 }
 
+# @purpose: Print the HomeSetup UI owner token exported in a process environment.
+function ui_pid_owner_env_token() {
+  ui_pid_env "$1" | tr '[:space:]' '\n' | awk -F= '
+    $1 == "HHS_STREAMLIT_UI_OWNER" && $2 ~ /^hhs-ui\./ {
+      print $2
+      exit
+    }
+  '
+}
+
 # @purpose: Check whether a PID belongs to a Python or Streamlit process.
 function is_python_or_streamlit_pid() {
   local command_name first_arg pid_args
 
   command_name="$(ui_pid_command_name "$1")"
   if [[ -n "${command_name}" ]]; then
+    command_name="$(printf '%s' "${command_name}" | tr '[:upper:]' '[:lower:]')"
     [[ "${command_name}" =~ ^(python([0-9]+(\.[0-9]+)*)?|streamlit)$ ]]
     return
   fi
@@ -207,6 +219,7 @@ function is_python_or_streamlit_pid() {
   pid_args="$(ui_pid_args "$1")"
   first_arg="${pid_args%%[[:space:]]*}"
   first_arg="${first_arg##*/}"
+  first_arg="$(printf '%s' "${first_arg}" | tr '[:upper:]' '[:lower:]')"
   [[ "${first_arg}" =~ ^(python([0-9]+(\.[0-9]+)*)?|streamlit)$ ]]
 }
 
@@ -216,8 +229,6 @@ function is_owned_ui_pid() {
 
   pid="$1"
   [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
-  token="$(ui_process_token "${pid}")"
-  [[ -n "${token}" ]] || return 1
   kill -0 "${pid}" 2>/dev/null || return 1
   is_python_or_streamlit_pid "${pid}" || return 1
 
@@ -227,12 +238,18 @@ function is_owned_ui_pid() {
   [[ "${args}" == *"--server.address 127.0.0.1"* ]] || return 1
 
   env="$(ui_pid_env "${pid}")"
+  token="$(ui_process_token "${pid}")"
+  [[ -n "${token}" ]] || token="$(ui_pid_owner_env_token "${pid}")"
+  [[ -n "${token}" ]] || return 1
   [[ "${env}" == *"HHS_STREAMLIT_UI_OWNER=${token}"* ]] || return 1
 }
 
 # @purpose: Print every HomeSetup Streamlit UI process ID recorded by the launcher.
 function ui_known_pids() {
-  ui_recorded_pids | awk '/^[0-9]+$/ && !seen[$1]++'
+  {
+    ui_recorded_pids
+    ui_port_pids
+  } | awk '/^[0-9]+$/ && !seen[$1]++'
 }
 
 # @purpose: Check whether any tracked HomeSetup Streamlit UI process is still alive.
@@ -291,6 +308,32 @@ function cleanup_ui_process_files() {
   rm -f "$(get_ui_pid_file)" "$(get_ui_process_registry_file)" 2>/dev/null || true
 }
 
+# @purpose: Print the first process ID listening on the HomeSetup Streamlit UI port.
+function ui_port_owner_pid() {
+  local port_pid
+
+  while IFS= read -r port_pid; do
+    [[ "${port_pid}" =~ ^[0-9]+$ ]] || continue
+    printf '%s\n' "${port_pid}"
+    return 0
+  done < <(ui_port_pids)
+
+  return 1
+}
+
+# @purpose: Format a diagnostic message for an unmanaged HomeSetup Streamlit UI port listener.
+function unmanaged_ui_port_message() {
+  local pid suffix
+
+  suffix="${1:-}"
+  pid="$(ui_port_owner_pid || true)"
+  [[ -z "${pid}" ]] && pid="unknown"
+  printf 'Port %s is in use by a process [PID=%s] not started by the UI plugin.%s\n' \
+    "${HHS_STREAMLIT_UI_PORT}" \
+    "${pid}" \
+    "${suffix}"
+}
+
 # @purpose: Open the HomeSetup Streamlit UI in the default browser.
 function open_ui() {
   local url
@@ -316,7 +359,7 @@ function status_ui() {
       echo -e "${GREEN}HomeSetup UI is running at ${BLUE}${url}${NC}"
     fi
   elif is_ui_running; then
-    echo -e "${YELLOW}Port ${HHS_STREAMLIT_UI_PORT} is in use by a process not started by the UI plugin.${NC}"
+    echo -e "${YELLOW}$(unmanaged_ui_port_message)${NC}"
   else
     echo -e "${YELLOW}HomeSetup UI is stopped on port ${HHS_STREAMLIT_UI_PORT}.${NC}"
   fi
@@ -338,7 +381,7 @@ function stop_ui() {
 
   if [[ "${found}" -eq 0 ]]; then
     if is_ui_running; then
-      echo -e "${YELLOW}Port ${HHS_STREAMLIT_UI_PORT} is in use by a process not started by the UI plugin. Leaving it running.${NC}"
+      echo -e "${YELLOW}$(unmanaged_ui_port_message " Leaving it running.")${NC}"
       cleanup_ui_process_files
       return 0
     fi
@@ -385,9 +428,23 @@ function validate_safe_streamlit_args() {
   done
 }
 
+# @purpose: Print Streamlit CLI theme arguments for the persisted HomeSetup UI theme.
+function streamlit_theme_args() {
+  local theme_helper
+
+  theme_helper="${HHS_HOME}/bin/apps/py/hhs_ui/startup_theme.py"
+  [[ -s "${theme_helper}" ]] || return 0
+
+  HHS_HOME="${HHS_HOME}" \
+    HHS_DIR="${HHS_DIR}" \
+    HHS_CACHE_DIR="${HHS_CACHE_DIR:-${HHS_DIR}/cache}" \
+    python3 "${theme_helper}" 2>/dev/null || true
+}
+
 # @purpose: Start the HomeSetup Streamlit UI server in the background.
 function start_ui() {
-  local owner_token pid ui_log
+  local owner_token pid theme_arg ui_log
+  local -a theme_args=()
 
   if is_ui_running; then
     if is_managed_ui_running; then
@@ -395,11 +452,14 @@ function start_ui() {
       open_ui
       return 0
     fi
-    quit 2 "Port ${HHS_STREAMLIT_UI_PORT} is already in use by a process not started by the UI plugin."
+    quit 2 "$(unmanaged_ui_port_message " Cannot start HomeSetup UI.")"
   fi
 
   validate_ui_runtime
   validate_safe_streamlit_args "$@"
+  while IFS= read -r theme_arg; do
+    [[ -n "${theme_arg}" ]] && theme_args+=("${theme_arg}")
+  done < <(streamlit_theme_args)
   ui_log="$(get_ui_log)"
   mkdir -p "${HHS_LOG_DIR}" "$(dirname "$(get_ui_process_registry_file)")"
   owner_token="$(new_ui_owner_token)"
@@ -417,6 +477,7 @@ function start_ui() {
     --browser.serverAddress localhost \
     --browser.serverPort "${HHS_STREAMLIT_UI_PORT}" \
     --browser.gatherUsageStats false \
+    "${theme_args[@]}" \
     "$@" >"${ui_log}" 2>&1 &
   pid=$!
   record_ui_process "${pid}" "${owner_token}"
@@ -448,7 +509,7 @@ function launch_ui() {
       open_ui
       quit 0
     fi
-    quit 2 "Port ${HHS_STREAMLIT_UI_PORT} is already in use by a process not started by the UI plugin."
+    quit 2 "$(unmanaged_ui_port_message " Cannot open HomeSetup UI.")"
   fi
 
   start_ui "$@"

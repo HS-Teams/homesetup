@@ -473,17 +473,21 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 }
 
 .st-key-hhs_path_picker_overlay {
-  align-items: center;
+  align-items: center !important;
   background: color-mix(in srgb, #000 54%, transparent);
+  box-sizing: border-box;
   display: flex !important;
-  inset: 0;
-  justify-content: center;
+  inset: 0 !important;
+  justify-content: center !important;
+  min-height: 100dvh !important;
   padding: min(5dvh, 3rem) 1rem;
   position: fixed !important;
+  width: 100vw !important;
   z-index: var(--hhs-modal-z-index) !important;
 }
 
 .st-key-hhs_path_picker_overlay > [data-testid="stVerticalBlock"] {
+  margin: auto !important;
   width: min(46rem, calc(100vw - 2rem)) !important;
 }
 
@@ -494,9 +498,13 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
   box-sizing: border-box;
   color: var(--hhs-theme-text-color);
+  left: 50% !important;
   max-height: calc(100dvh - 2rem);
   overflow: auto;
   padding: 1.6rem;
+  position: fixed !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
   width: min(46rem, calc(100vw - 2rem)) !important;
 }
 
