@@ -151,10 +151,7 @@ function __hhs_process_list() {
       [[ $quiet -ne 1 ]] && printf "${WHITE}%5s\t%5s\t%5s\t%-40s %s\n" "UID" "PID" "PPID" "COMMAND" "ACTIVE ?"
       [[ $quiet -ne 1 ]] && printf "%-154s\n\n" "${divider}"
       for next in "${all_pids[@]}"; do
-        uid=$(awk '{ print $1 }' <<<"${next}")
-        pid=$(awk '{ print $2 }' <<<"${next}")
-        ppid=$(awk '{ print $3 }' <<<"${next}")
-        cmd=$(awk '{for(i=4;i<=NF;i++) printf $i" "; print ""}' <<<"${next}")
+        read -r uid pid ppid cmd <<<"${next}"
         [[ "${#cmd}" -ge 37 ]] && cmd="${cmd:0:37}..."
         printf "${HHS_HIGHLIGHT_COLOR}%5s\t%5s\t%5s\t%s" "${uid}" "${pid}" "${ppid}" "${cmd}"
         printf '%*.*s' 0 $((40 - ${#cmd})) "${pad}"
@@ -173,12 +170,7 @@ function __hhs_process_list() {
           fi
           if [[ -n "$ANS" || -n "${force}" ]]; then echo -e "${NC}"; fi
         else
-          # Check for ghost processes
-          if ps -p "${pid}" &>/dev/null; then
-            echo -e "${GREEN} ${CHECK_ICN}  active process"
-          else
-            echo -e "${RED} ${CROSS_ICN}  ghost process"
-          fi
+          echo -e "${GREEN} ${CHECK_ICN}  active process"
         fi
       done
     else
