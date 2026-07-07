@@ -1210,6 +1210,9 @@ PY
   run grep -q 'color: var(--hhs-theme-text-color)' "${css_file}"
   assert_success
 
+  run grep -q -- '--hhs-theme-text-muted-color: var(--hhs-comment, var(--hhs-theme-text-color))' "${css_file}"
+  assert_success
+
   run grep -q 'position: fixed' "${css_file}"
   assert_success
 
@@ -3504,6 +3507,9 @@ PY
   run grep -q '.hhs-search-result-index' "${css_file}"
   assert_success
 
+  run grep -q 'color: var(--hhs-theme-text-muted-color)' "${css_file}"
+  assert_success
+
   run grep -q 'min-width: 1ch' "${css_file}"
   assert_success
 
@@ -4154,8 +4160,10 @@ history_body = source.split("def render_history_stats_chart()", 1)[1].split("\nd
 assert history_body.index(
     'st.session_state["history_stats_top_n"] = normalized_history_stats_top_n('
 ) < history_body.index("st.number_input(")
+assert "width=150" in history_body
 assert source.count("min_value=hhs_ui_constants.MIN_TOP_N") >= 3
 assert source.count("max_value=hhs_ui_constants.MAX_TOP_N") >= 3
+assert source.count("width=150") >= 3
 for function_name in (
     "build_hhs_history_stats_command",
     "build_hhs_disk_usage_command",
@@ -6280,8 +6288,26 @@ PY
   run grep -q 'cleanup_all_registered_sessions' "${ui_file}"
   assert_success
 
-  run grep -q 'PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"' "${ui_file}"
+  run grep -q 'PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"' "${constants_file}"
   assert_success
+
+  run grep -q 'hhs_ui_constants.PROCESS_RESOURCE_STATE_KEY' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui_constants.FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui_constants.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui.PROCESS_RESOURCE_STATE_KEY' "${ui_file}"
+  assert_failure
+
+  run grep -q 'hhs_ui.FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY' "${ui_file}"
+  assert_failure
+
+  run grep -q 'hhs_ui.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY' "${ui_file}"
+  assert_failure
 
   run grep -q 'def process_resource_state' "${ui_file}"
   assert_success
@@ -6328,7 +6354,7 @@ schedule_body = ui_source.split("def schedule_cleanup_session_resources", 1)[1].
 assert "threading.Thread(" in schedule_body
 assert "daemon=True" in schedule_body
 state_body = ui_source.split("def process_resource_state", 1)[1].split("\ndef ", 1)[0]
-assert "setattr(sys, PROCESS_RESOURCE_STATE_KEY, state)" in state_body
+assert "setattr(sys, hhs_ui_constants.PROCESS_RESOURCE_STATE_KEY, state)" in state_body
 registry_body = ui_source.split("def process_resource_registry", 1)[1].split("\n\nTTYD_CLEANUP_REGISTRY", 1)[0]
 assert "state[key] = registry" in registry_body
 assert "process_resource_registry(\n    \"ttyd_cleanup_registry\"" in ui_source
@@ -7259,6 +7285,18 @@ PY
   run grep -q '"monitor_process_other_filter"' "${constants_file}"
   assert_success
 
+  run grep -q 'normalize_persisted_table_text_filter_states(' "${ui_file}"
+  assert_success
+
+  run grep -q 'key.endswith("_other_filter")' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs_ui_constants.PERSISTED_UI_KEYS' "${ui_file}"
+  assert_success
+
+  run grep -q 'UI_STATE_KEYS' "${ui_file}"
+  assert_failure
+
   run grep -q 'def build_hhs_process_list_command' "${ui_file}"
   assert_success
 
@@ -7268,10 +7306,103 @@ PY
   run grep -q '__hhs_process_list' "${ui_file}"
   assert_success
 
+  run python3 - "${HHS_REPO_DIR}/bin/hhs-functions/bash/hhs-sys-utils.bash" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = source.split("function __hhs_process_list()", 1)[1].split("\n}", 1)[0]
+assert 'read -r uid pid ppid cmd <<<"${next}"' in body
+assert 'ps -p "${pid}"' not in body
+assert "uid=$(awk" not in body
+assert "pid=$(awk" not in body
+assert "ppid=$(awk" not in body
+assert "cmd=$(awk" not in body
+PY
+  assert_success
+
   run grep -q '__hhs_process_kill -f' "${ui_file}"
   assert_success
 
   run grep -q 'def render_monitor_processes_panel' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="monitor_disk_controls"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key=f"monitor_{metric.lower()}_controls"' "${ui_file}"
+  assert_success
+
+  run grep -q 'with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):' "${ui_file}"
+  assert_success
+
+  run grep -q '<span class="hhs-inline-form-label">Top N:</span>' "${ui_file}"
+  assert_success
+
+  run grep -q '<span class="hhs-inline-form-label">Directory:</span>' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="monitor_disk_apply_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key=f"monitor_{metric.lower()}_refresh_button"' "${ui_file}"
+  assert_success
+
+  run grep -q '.st-key-monitor_disk_apply_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-monitor_mem_refresh_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-monitor_cpu_refresh_button button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-monitor_disk_controls \[data-testid="stExpanderDetails"\] > \[data-testid="stVerticalBlock"\]' "${css_file}"
+  assert_success
+
+  run grep -q ':has(.st-key-monitor_mem_refresh_button)' "${css_file}"
+  assert_success
+
+  run grep -q 'display: grid !important' "${css_file}"
+  assert_success
+
+  run grep -q ':has(.st-key-monitor_disk_apply_button)' "${css_file}"
+  assert_success
+
+  run grep -q 'grid-template-columns: max-content 150px minmax(0, 1fr) 2rem' "${css_file}"
+  assert_success
+
+  run grep -q 'grid-template-columns: max-content 150px max-content minmax(0, 1fr) 2rem' "${css_file}"
+  assert_success
+
+  run grep -q 'justify-self: end' "${css_file}"
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+disk_body = source.split("def render_monitor_disk_chart", 1)[1].split("\ndef ", 1)[0]
+process_chart_body = source.split("def render_process_monitor_chart", 1)[1].split("\ndef ", 1)[0]
+process_panel_body = source.split("def render_monitor_processes_panel", 1)[1].split("\ndef ", 1)[0]
+assert 'gap="small"' in disk_body
+assert 'gap="small"' in process_chart_body
+assert "top_label_col, top_input_col, _spacer_col, action_col = st.columns" in process_chart_body
+assert "[0.55, 0.75, 3.0, 0.45]" in process_chart_body
+assert "width=150" in disk_body
+assert "width=150" in process_chart_body
+assert disk_body.index("Top N:</span>") < disk_body.index("Directory:</span>")
+assert 'help="Refresh"' in disk_body
+assert 'help="Refresh"' in process_chart_body
+assert process_panel_body.count("complete_monitor_process_list_refresh()") >= 3
+assert process_panel_body.index("result = complete_monitor_process_list_refresh()") < process_panel_body.index(
+    "start_monitor_process_list_refresh()"
+)
+assert process_panel_body.index("render_background_job_status(MONITOR_PROCESS_LIST_JOB)") < process_panel_body.rindex(
+    "result = complete_monitor_process_list_refresh()"
+)
+PY
   assert_success
 
   run grep -q '"monitor_process_filter"' "${ui_file}"
@@ -7641,6 +7772,12 @@ LOGS
   assert_success
 
   run grep -q '.hhs-view-subtitle' "${css_file}"
+  assert_success
+
+  run grep -q '\[data-testid="stMain"\] \[data-testid="stVegaLiteChart"\]' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-top: var(--hhs-element-std-gap) !important' "${css_file}"
   assert_success
 
   run grep -q 'margin: 0 !important' "${css_file}"
@@ -9095,6 +9232,7 @@ filter_controls = functions["render_table_filter_controls"]
 normalizer = functions["normalized_table_filter_selection"]
 text_filter_cleaner = functions["clean_table_text_filter_value"]
 text_filter_state_normalizer = functions["normalize_table_text_filter_state"]
+persisted_text_filter_normalizer = functions["normalize_persisted_table_text_filter_states"]
 
 radio_calls = [
     call
@@ -9113,6 +9251,7 @@ assert "Containing" in ast.unparse(filter_controls)
 assert "Containing" in ast.unparse(normalizer)
 assert 'normalize_table_text_filter_state(other_key)' in ast.unparse(filter_controls)
 assert 'clean_table_text_filter_value(other_filter)' in ast.unparse(filter_controls)
+assert "clean_value == 'None'" in ast.unparse(persisted_text_filter_normalizer)
 assert any(
     isinstance(node, ast.Constant) and node.value == ""
     for node in ast.walk(text_filter_cleaner)
@@ -9136,11 +9275,18 @@ namespace = {
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 assert namespace["clean_table_text_filter_value"](None) == ""
+assert namespace["normalized_table_filter_selection"](None, ("All", "Containing")) == "All"
+assert namespace["normalized_table_filter_selection"]("None", ("All", "Containing")) == "All"
+assert namespace["normalized_table_filter_selection"]("Other", ("All", "Containing")) == "Containing"
 assert namespace["normalize_table_text_filter_state"]("monitor_process_other_filter") == ""
 assert session_state["monitor_process_other_filter"] == ""
 session_state["monitor_process_other_filter"] = 123
 assert namespace["normalize_table_text_filter_state"]("monitor_process_other_filter") == "123"
 assert session_state["monitor_process_other_filter"] == "123"
+session_state["env_other_filter"] = "None"
+namespace["normalize_persisted_table_text_filter_states"]("env_other_filter", "path_other_filter")
+assert session_state["env_other_filter"] == ""
+assert session_state["path_other_filter"] == ""
 PY
   assert_success
 }

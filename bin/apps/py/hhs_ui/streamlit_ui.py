@@ -60,17 +60,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import hhs_ui
 import hhs_ui.constants as hhs_ui_constants
 
-PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"
-FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY = "footer_status_log_handler"
-FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY = "footer_status_log_records"
-
 
 def process_resource_state() -> dict[str, object]:
     """Return process-wide resources that must survive Streamlit reruns."""
-    state = getattr(sys, PROCESS_RESOURCE_STATE_KEY, None)
+    state = getattr(sys, hhs_ui_constants.PROCESS_RESOURCE_STATE_KEY, None)
     if not isinstance(state, dict):
         state = {}
-        setattr(sys, PROCESS_RESOURCE_STATE_KEY, state)
+        setattr(sys, hhs_ui_constants.PROCESS_RESOURCE_STATE_KEY, state)
     return state
 
 
@@ -95,7 +91,9 @@ class FooterStatusLogHandler(logging.Handler):
             message = self.format(record).strip()
             if not message:
                 return
-            registry = process_resource_registry(FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY)
+            registry = process_resource_registry(
+                hhs_ui_constants.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY
+            )
             records = registry.setdefault("records", [])
             if not isinstance(records, list):
                 records = []
@@ -114,7 +112,9 @@ class FooterStatusLogHandler(logging.Handler):
 
 def install_footer_status_log_handler() -> None:
     """Install one footer status log handler on runtime warning/error loggers."""
-    registry = process_resource_registry(FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY)
+    registry = process_resource_registry(
+        hhs_ui_constants.FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY
+    )
     handler = registry.get("handler")
     if not isinstance(handler, FooterStatusLogHandler):
         handler = FooterStatusLogHandler()
@@ -702,9 +702,7 @@ def remember_host_switch_view_state() -> dict[str, object]:
     snapshot = reconnect_view_state_snapshot()
     st.session_state[HOST_SWITCH_VIEW_STATE_KEY] = snapshot
     return {
-        key: value
-        for key, value in snapshot.items()
-        if is_persistable_ui_value(value)
+        key: value for key, value in snapshot.items() if is_persistable_ui_value(value)
     }
 
 
@@ -2022,8 +2020,7 @@ def render_pending_streamlit_dialog_dismiss() -> None:
     """Render a queued browser-side dialog dismiss script during normal dialog flow."""
     if not st.session_state.pop("_hhs_dialog_dismiss_requested", False):
         return
-    render_script_html(
-        """
+    render_script_html("""
         <script>
           const doc = window.parent.document;
           const dialog = doc.querySelector('[data-testid="stDialog"], [role="dialog"]');
@@ -2038,8 +2035,7 @@ def render_pending_streamlit_dialog_dismiss() -> None:
             }));
           }
         </script>
-        """
-    )
+        """)
 
 
 def handle_dialog_dismiss(callback: Callable[[], None] | None = None) -> None:
@@ -2166,7 +2162,9 @@ def normalize_remote_path_picker_path(
         joined_tail = posixpath.normpath(posixpath.join(base_tail, raw_path))
         return "~" if joined_tail == "." else f"~/{joined_tail}"
     for home_token in ("$HOME", "${HOME}"):
-        if normalized_base == home_token or normalized_base.startswith(f"{home_token}/"):
+        if normalized_base == home_token or normalized_base.startswith(
+            f"{home_token}/"
+        ):
             base_tail = (
                 ""
                 if normalized_base == home_token
@@ -2290,7 +2288,9 @@ def parse_remote_path_picker_listing(output: str) -> tuple[str, list[tuple[str, 
         parts = line.split("\t", 2)
         if len(parts) == 3 and parts[1] in {"Dir", "File"} and parts[2].strip():
             entries.append((parts[1], parts[2].strip()))
-    entries.sort(key=lambda item: (item[0] != "Dir", posixpath.basename(item[1]).lower()))
+    entries.sort(
+        key=lambda item: (item[0] != "Dir", posixpath.basename(item[1]).lower())
+    )
     return current_directory, entries
 
 
@@ -2303,7 +2303,9 @@ def path_picker_listing_job_name(
     directory: str, mode: str = "folder", include_dot_folders: bool = False
 ) -> str:
     """Return the background job name for one remote path picker listing."""
-    cache_key = remote_path_picker_listing_cache_key(directory, mode, include_dot_folders)
+    cache_key = remote_path_picker_listing_cache_key(
+        directory, mode, include_dot_folders
+    )
     digest = hashlib.sha1(cache_key.encode("utf-8")).hexdigest()[:16]
     return f"{PATH_PICKER_LISTING_JOB_PREFIX}_{digest}"
 
@@ -2408,8 +2410,9 @@ def remember_remote_path_picker_listing(
     include_dot_folders: bool = False,
 ) -> None:
     """Cache one remote path picker listing for this open dialog."""
-    clean_current_directory = current_directory.strip() or normalize_remote_path_picker_path(
-        requested_directory
+    clean_current_directory = (
+        current_directory.strip()
+        or normalize_remote_path_picker_path(requested_directory)
     )
     listing = {
         "current_directory": clean_current_directory,
@@ -2418,9 +2421,7 @@ def remember_remote_path_picker_listing(
     cache = folder_picker_listing_cache()
     for directory in {requested_directory, clean_current_directory}:
         cache[
-            remote_path_picker_listing_cache_key(
-                directory, mode, include_dot_folders
-            )
+            remote_path_picker_listing_cache_key(directory, mode, include_dot_folders)
         ] = listing
 
 
@@ -2439,7 +2440,10 @@ def apply_remote_path_picker_listing(
 
 
 def complete_remote_path_picker_listing_job(
-    job_name: str, directory: str, mode: str = "folder", include_dot_folders: bool = False
+    job_name: str,
+    directory: str,
+    mode: str = "folder",
+    include_dot_folders: bool = False,
 ) -> list[str] | None:
     """Complete one remote path picker listing job, caching successful output."""
     completed = background_job_result(job_name)
@@ -2447,7 +2451,9 @@ def complete_remote_path_picker_listing_job(
         return None
     result, metadata = completed
     requested_directory = str(metadata.get("directory", "") or directory)
-    picker_mode = "file" if str(metadata.get("mode", "") or mode) == "file" else "folder"
+    picker_mode = (
+        "file" if str(metadata.get("mode", "") or mode) == "file" else "folder"
+    )
     include_hidden = bool(metadata.get("include_dot_folders", include_dot_folders))
     if st.session_state.get("_hhs_folder_picker_listing_loading_job") == job_name:
         st.session_state.pop("_hhs_folder_picker_listing_loading_job", None)
@@ -2522,7 +2528,9 @@ def load_pending_remote_path_picker_directory(
         remember_folder_picker_visible_child_paths(child_paths)
         sync_folder_picker_child_selection(child_paths)
         return True
-    job_name = path_picker_listing_job_name(pending_directory, mode, include_dot_folders)
+    job_name = path_picker_listing_job_name(
+        pending_directory, mode, include_dot_folders
+    )
     completed_paths = complete_remote_path_picker_listing_job(
         job_name, pending_directory, mode, include_dot_folders
     )
@@ -2735,9 +2743,7 @@ def apply_pending_folder_picker_selection() -> None:
 
 def sync_folder_picker_child_selection(child_paths: list[str]) -> None:
     """Keep the selected path picker child valid for the loaded child list."""
-    current_selection = str(
-        st.session_state.get("_hhs_folder_picker_selected_dir", "")
-    )
+    current_selection = str(st.session_state.get("_hhs_folder_picker_selected_dir", ""))
     if child_paths:
         if current_selection not in child_paths:
             st.session_state["_hhs_folder_picker_selected_dir"] = child_paths[0]
@@ -2859,7 +2865,9 @@ def open_folder_picker_parent() -> None:
         current_directory = normalize_remote_path_picker_path(
             str(st.session_state.get("_hhs_folder_picker_current_dir", ""))
         )
-        queue_folder_picker_directory_load(remote_path_picker_parent_path(current_directory))
+        queue_folder_picker_directory_load(
+            remote_path_picker_parent_path(current_directory)
+        )
         return
     current_directory = Path(
         folder_picker_start_directory(
@@ -2929,9 +2937,7 @@ def render_path_picker_dialog(owner_context: str = "") -> bool:
 
     with st.container(key="hhs_path_picker_overlay"):
         with st.container(key="hhs_path_picker_panel"):
-            title_col, close_col = st.columns(
-                [1.0, 0.08], vertical_alignment="center"
-            )
+            title_col, close_col = st.columns([1.0, 0.08], vertical_alignment="center")
             with title_col:
                 st.markdown(
                     f'<h2 class="hhs-path-picker-title">{html.escape(title)}</h2>',
@@ -2993,7 +2999,9 @@ def render_path_picker_body(
         current_directory, mode, include_dot_folders
     )
     prune_folder_picker_child_selection_widget_keys(selected_widget_key)
-    selected_directory = str(st.session_state.get("_hhs_folder_picker_selected_dir", ""))
+    selected_directory = str(
+        st.session_state.get("_hhs_folder_picker_selected_dir", "")
+    )
     if child_directories:
         if selected_directory not in child_directories:
             selected_directory = child_directories[0]
@@ -3005,9 +3013,9 @@ def render_path_picker_body(
     selectbox_kwargs: dict[str, object] = {
         "key": selected_widget_key,
         "format_func": path_picker_label,
-        "placeholder": PATH_PICKER_LISTING_LOADER_MESSAGE
-        if loading_children
-        else empty_caption,
+        "placeholder": (
+            PATH_PICKER_LISTING_LOADER_MESSAGE if loading_children else empty_caption
+        ),
         "disabled": loading_children or not bool(child_directories),
     }
     if not child_directories:
@@ -4023,7 +4031,9 @@ def render_floating_status() -> None:
 
 def drain_footer_status_log_records() -> None:
     """Move captured warning/error log records into the floating status queue."""
-    registry = process_resource_registry(FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY)
+    registry = process_resource_registry(
+        hhs_ui_constants.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY
+    )
     records = registry.get("records")
     if not isinstance(records, list) or not records:
         return
@@ -4043,8 +4053,7 @@ def drain_footer_status_log_records() -> None:
 
 def render_footer_client_error_bridge_script() -> None:
     """Mirror client-side Streamlit errors and alerts into the footer status UI."""
-    render_script_html(
-        """
+    render_script_html("""
         <script>
           (() => {
             const parentWindow = window.parent;
@@ -4146,8 +4155,7 @@ def render_footer_client_error_bridge_script() -> None:
             });
           })();
         </script>
-        """
-    )
+        """)
 
 
 def footer_cache_clear_menu_markup() -> str:
@@ -5459,6 +5467,15 @@ def normalize_table_text_filter_state(other_key: str) -> str:
     return clean_value
 
 
+def normalize_persisted_table_text_filter_states(*other_keys: str) -> None:
+    """Normalize persisted typed table filter values before widgets are rendered."""
+    for other_key in other_keys:
+        clean_value = clean_table_text_filter_value(st.session_state.get(other_key, ""))
+        if clean_value == "None":
+            clean_value = ""
+        st.session_state[other_key] = clean_value
+
+
 def render_table_filter_controls(
     options: tuple[str, ...],
     key: str,
@@ -5514,7 +5531,11 @@ def normalized_table_filter_selection(
     value: object, options: tuple[str, ...], default: str = "All"
 ) -> str:
     """Return a valid table filter selection while migrating legacy text labels."""
+    if value is None:
+        return default
     selected_value = str(value or "").strip()
+    if not selected_value or selected_value == "None":
+        return default
     if selected_value in {"Other", "Others"} and "Containing" in options:
         selected_value = "Containing"
     if selected_value not in options:
@@ -10039,7 +10060,7 @@ def build_hhs_env_environment_command() -> str:
         'export HHS_VENV_PATH="${HHS_VENV_PATH:-${HHS_DIR}/venv}"; '
         'mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}" "${HHS_CACHE_DIR}"; '
         'if [[ -s "${HHS_SETUP_FILE}" ]]; then '
-        'while IFS= read -r hhs_pref; do '
+        "while IFS= read -r hhs_pref; do "
         'if [[ "${hhs_pref}" =~ ^([a-zA-Z0-9_.]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then '
         'hhs_key="$(tr "[:lower:]." "[:upper:]_" <<<"${BASH_REMATCH[1]}")"; '
         'hhs_val="${BASH_REMATCH[2]//\\"/}"; hhs_val="${hhs_val//\\\'/}"; '
@@ -10062,14 +10083,14 @@ def build_hhs_env_environment_command() -> str:
         '[[ -d "${hhs_path}" ]] && PATH="${PATH}:${hhs_path}"; '
         "done; "
         'if [[ -f "${HHS_PATHS_FILE}" ]]; then '
-        'while IFS= read -r hhs_path; do '
+        "while IFS= read -r hhs_path; do "
         '[[ -n "${hhs_path}" ]] && PATH="${hhs_path}:${PATH}"; '
         'done < <(grep . "${HHS_PATHS_FILE}" | grep -v -e "^$"); '
         "fi; "
         '[[ -d "${HHS_VENV_PATH}/bin" ]] && PATH="${HHS_VENV_PATH}/bin:${PATH}"; '
         "PATH=\"$(awk -v RS=: 'NF && !seen[$0]++ {"
         'printf "%s%s", sep, $0; sep=":"'
-        "}' <<<\"${PATH}\")\"; "
+        '}\' <<<"${PATH}")"; '
         "export PATH; "
     )
 
@@ -10754,14 +10775,14 @@ def build_hhs_path_environment_command() -> str:
         '[[ -d "${hhs_path}" ]] && PATH="${PATH}:${hhs_path}"; '
         "done; "
         'if [[ -f "${HHS_PATHS_FILE}" ]]; then '
-        'while IFS= read -r hhs_path; do '
+        "while IFS= read -r hhs_path; do "
         '[[ -n "${hhs_path}" ]] && PATH="${hhs_path}:${PATH}"; '
         'done < <(grep . "${HHS_PATHS_FILE}" | grep -v -e "^$"); '
         "fi; "
         '[[ -d "${HHS_VENV_PATH}/bin" ]] && PATH="${HHS_VENV_PATH}/bin:${PATH}"; '
         "PATH=\"$(awk -v RS=: 'NF && !seen[$0]++ {"
         'printf "%s%s", sep, $0; sep=":"'
-        "}' <<<\"${PATH}\")\"; "
+        '}\' <<<"${PATH}")"; '
         "export PATH; "
     )
 
@@ -10770,7 +10791,7 @@ def build_hhs_paths_raw_entries_command() -> str:
     """Build the shell suffix that emits parse-safe PATH entries for the UI."""
     return (
         'printf "\\n"; '
-        'while IFS= read -r hhs_path; do '
+        "while IFS= read -r hhs_path; do "
         f'printf "{HHS_PATHS_RAW_ENTRY_MARKER}\\t%s\\n" "${{hhs_path}}"; '
         'done < <(printf "%s\\n" "${PATH}" | tr ":" "\\n")'
     )
@@ -10779,12 +10800,10 @@ def build_hhs_paths_raw_entries_command() -> str:
 def build_hhs_paths_command() -> str:
     """Build the Bash command used to run the __hhs_paths HomeSetup function."""
     return (
-        build_hhs_path_environment_command()
-        + 'export HHS_DIR="${HHS_DIR}"; '
+        build_hhs_path_environment_command() + 'export HHS_DIR="${HHS_DIR}"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-paths.bash"; '
-        "__hhs_paths; "
-        + build_hhs_paths_raw_entries_command()
+        "__hhs_paths; " + build_hhs_paths_raw_entries_command()
     )
 
 
@@ -10801,8 +10820,7 @@ def build_hhs_path_action_command(
     else:
         action_args = f"-a {safe_path}"
     return (
-        build_hhs_path_environment_command()
-        + 'export HHS_DIR="${HHS_DIR}"; '
+        build_hhs_path_environment_command() + 'export HHS_DIR="${HHS_DIR}"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-paths.bash"; '
         f"__hhs_paths {action_args}"
@@ -13687,6 +13705,7 @@ def render_history_stats_chart() -> None:
             key="history_stats_top_n",
             label_visibility="collapsed",
             on_change=save_ui_state,
+            width=150,
         )
     render_view_subtitle(f"Top {int(top_n)} most used commands")
     result = render_cached_command_result(
@@ -13734,50 +13753,55 @@ def render_monitor_disk_chart() -> None:
         "monitor_disk_top_n_input",
         st.session_state["monitor_disk_top_n"],
     )
-    (
-        dir_label_col,
-        dir_input_col,
-        top_label_col,
-        top_input_col,
-        action_col,
-    ) = st.columns(
-        [0.85, 3.0, 0.55, 0.75, 0.45],
-        vertical_alignment="center",
-    )
-    with dir_label_col:
-        st.markdown(
-            '<span class="hhs-inline-form-label">Directory</span>',
-            unsafe_allow_html=True,
-        )
-    with dir_input_col:
-        st.text_input(
-            "Directory",
-            key="monitor_disk_directory",
-            label_visibility="collapsed",
-            on_change=save_ui_state,
-        )
-    with top_label_col:
-        st.markdown(
-            '<span class="hhs-inline-form-label">Top N</span>', unsafe_allow_html=True
-        )
-    with top_input_col:
-        st.number_input(
-            "Top N",
-            min_value=hhs_ui_constants.MIN_TOP_N,
-            max_value=hhs_ui_constants.MAX_TOP_N,
-            step=1,
-            key="monitor_disk_top_n_input",
-            label_visibility="collapsed",
-            on_change=handle_monitor_disk_top_n_change,
-        )
-    with action_col:
-        st.button(
-            "",
-            key="monitor_disk_apply_button",
-            help="Apply",
-            on_click=apply_monitor_disk_controls,
-            width="stretch",
-        )
+    with st.container(key="monitor_disk_controls"):
+        with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):
+            (
+                top_label_col,
+                top_input_col,
+                dir_label_col,
+                dir_input_col,
+                action_col,
+            ) = st.columns(
+                [0.55, 0.75, 0.85, 3.0, 0.45],
+                gap="small",
+                vertical_alignment="center",
+            )
+            with top_label_col:
+                st.markdown(
+                    '<span class="hhs-inline-form-label">Top N:</span>',
+                    unsafe_allow_html=True,
+                )
+            with top_input_col:
+                st.number_input(
+                    "Top N",
+                    min_value=hhs_ui_constants.MIN_TOP_N,
+                    max_value=hhs_ui_constants.MAX_TOP_N,
+                    step=1,
+                    key="monitor_disk_top_n_input",
+                    label_visibility="collapsed",
+                    on_change=handle_monitor_disk_top_n_change,
+                    width=150,
+                )
+            with dir_label_col:
+                st.markdown(
+                    '<span class="hhs-inline-form-label">Directory:</span>',
+                    unsafe_allow_html=True,
+                )
+            with dir_input_col:
+                st.text_input(
+                    "Directory",
+                    key="monitor_disk_directory",
+                    label_visibility="collapsed",
+                    on_change=save_ui_state,
+                )
+            with action_col:
+                st.button(
+                    "",
+                    key="monitor_disk_apply_button",
+                    help="Refresh",
+                    on_click=apply_monitor_disk_controls,
+                    width="stretch",
+                )
     selected_directory = applied_monitor_disk_directory()
     applied_top_n = normalized_monitor_disk_top_n(
         st.session_state.get("monitor_disk_top_n")
@@ -13855,34 +13879,40 @@ def render_process_monitor_chart(metric: str) -> None:
         st.session_state.get(top_n_input_key, st.session_state[top_n_key])
     )
     complete_monitor_metric_refresh(metric)
-    top_label_col, top_input_col, action_col = st.columns(
-        [0.55, 0.75, 0.45],
-        vertical_alignment="center",
-    )
-    with top_label_col:
-        st.markdown(
-            '<span class="hhs-inline-form-label">Top N</span>', unsafe_allow_html=True
-        )
-    with top_input_col:
-        st.number_input(
-            "Top N",
-            min_value=hhs_ui_constants.MIN_TOP_N,
-            max_value=hhs_ui_constants.MAX_TOP_N,
-            step=1,
-            key=top_n_input_key,
-            label_visibility="collapsed",
-            on_change=handle_monitor_process_top_n_change,
-            args=(metric,),
-        )
-    with action_col:
-        refresh_clicked = st.button(
-            "",
-            key=f"monitor_{metric.lower()}_refresh_button",
-            help="Refresh",
-            on_click=apply_monitor_process_controls,
-            args=(metric,),
-            width="stretch",
-        )
+    refresh_clicked = False
+    with st.container(key=f"monitor_{metric.lower()}_controls"):
+        with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):
+            top_label_col, top_input_col, _spacer_col, action_col = st.columns(
+                [0.55, 0.75, 3.0, 0.45],
+                gap="small",
+                vertical_alignment="center",
+            )
+            with top_label_col:
+                st.markdown(
+                    '<span class="hhs-inline-form-label">Top N:</span>',
+                    unsafe_allow_html=True,
+                )
+            with top_input_col:
+                st.number_input(
+                    "Top N",
+                    min_value=hhs_ui_constants.MIN_TOP_N,
+                    max_value=hhs_ui_constants.MAX_TOP_N,
+                    step=1,
+                    key=top_n_input_key,
+                    label_visibility="collapsed",
+                    on_change=handle_monitor_process_top_n_change,
+                    args=(metric,),
+                    width=150,
+                )
+            with action_col:
+                refresh_clicked = st.button(
+                    "",
+                    key=f"monitor_{metric.lower()}_refresh_button",
+                    help="Refresh",
+                    on_click=apply_monitor_process_controls,
+                    args=(metric,),
+                    width="stretch",
+                )
     applied_top_n = normalized_monitor_process_top_n(metric)
     result, fresh_cache = cached_monitor_metric_result(metric)
     if (refresh_clicked or not fresh_cache) and not background_job_is_running(job_name):
@@ -13980,10 +14010,19 @@ def render_monitor_processes_panel() -> None:
 
     process_filter, other_filter = render_table_controls_panel(render_process_controls)
     result, fresh_cache = cached_monitor_process_list_result()
-    if not fresh_cache and not background_job_is_running(MONITOR_PROCESS_LIST_JOB):
+    if result is None and not fresh_cache:
+        result = complete_monitor_process_list_refresh()
+    if (
+        result is None
+        and not fresh_cache
+        and not background_job_is_running(MONITOR_PROCESS_LIST_JOB)
+    ):
         start_monitor_process_list_refresh()
     process_list_running = background_job_is_running(MONITOR_PROCESS_LIST_JOB)
     render_background_job_status(MONITOR_PROCESS_LIST_JOB)
+    if result is None:
+        result = complete_monitor_process_list_refresh()
+        process_list_running = background_job_is_running(MONITOR_PROCESS_LIST_JOB)
     if process_list_running and not fresh_cache:
         return
     if result is None:
@@ -15426,7 +15465,9 @@ def cached_search_command_result(
     return result
 
 
-def search_command_background_metadata(command: str, cache_key: str) -> dict[str, object]:
+def search_command_background_metadata(
+    command: str, cache_key: str
+) -> dict[str, object]:
     """Return background metadata for one Search command execution."""
     return {
         **background_command_metadata(command, "search"),
@@ -15441,7 +15482,9 @@ def search_background_job_matches(cache_key: str) -> bool:
     if not job:
         return False
     metadata = job.get("metadata")
-    return isinstance(metadata, dict) and str(metadata.get("cache_key", "")) == cache_key
+    return (
+        isinstance(metadata, dict) and str(metadata.get("cache_key", "")) == cache_key
+    )
 
 
 def complete_search_command_result(
@@ -15459,9 +15502,7 @@ def complete_search_command_result(
     return result
 
 
-def start_search_command(
-    command: str, cache_key: str, loader_message: str
-) -> bool:
+def start_search_command(command: str, cache_key: str, loader_message: str) -> bool:
     """Start the Search command in the background with a command preloader event."""
     if background_job_state(SEARCH_COMMAND_JOB) and not search_background_job_matches(
         cache_key
@@ -16099,7 +16140,9 @@ def remote_environment_values(variable_names: list[str]) -> dict[str, str]:
         timeout_seconds=10,
         cache_tag="system",
     )
-    values = parse_remote_environment_values(result.stdout if result.returncode == 0 else "")
+    values = parse_remote_environment_values(
+        result.stdout if result.returncode == 0 else ""
+    )
     st.session_state[cache_key] = values
     return values
 
@@ -16109,7 +16152,11 @@ def expand_path_for_active_host(path_value: str) -> str:
     clean_path = path_value.strip()
     if not connected_ssh_host():
         expanded_path = os.path.expandvars(os.path.expanduser(clean_path))
-        return posixpath.normpath(expanded_path) if expanded_path.startswith("/") else expanded_path
+        return (
+            posixpath.normpath(expanded_path)
+            if expanded_path.startswith("/")
+            else expanded_path
+        )
     variable_names = path_variable_names(clean_path)
     if clean_path == "~" or clean_path.startswith("~/") or "HOME" in variable_names:
         variable_names.append("HOME")
@@ -16581,7 +16628,9 @@ def selected_search_result_text_filter() -> str:
     """Return the active Search result text filter from Session State."""
     if selected_search_result_filter() != "Containing":
         return ""
-    return clean_table_text_filter_value(st.session_state.get("search_other_filter", ""))
+    return clean_table_text_filter_value(
+        st.session_state.get("search_other_filter", "")
+    )
 
 
 def render_search_filters() -> None:
@@ -16663,10 +16712,9 @@ def render_search_results() -> None:
     if result is None:
         result = cached_search_command_result(command, cache_key)
     if result is None:
-        if (
-            not background_job_is_running(SEARCH_COMMAND_JOB)
-            or not search_background_job_matches(cache_key)
-        ):
+        if not background_job_is_running(
+            SEARCH_COMMAND_JOB
+        ) or not search_background_job_matches(cache_key):
             start_search_command(command, cache_key, loader_message)
         render_background_job_status(SEARCH_COMMAND_JOB, loader_message)
         return
@@ -17423,14 +17471,28 @@ def main() -> None:
     st.session_state.setdefault("ssh_tunnel_other_filter", "")
     st.session_state.setdefault("monitor_process_filter", "All")
     st.session_state.setdefault("monitor_process_other_filter", "")
-    monitor_process_filter = str(st.session_state["monitor_process_filter"]).strip()
+    st.session_state["monitor_process_other_filter"] = clean_table_text_filter_value(
+        st.session_state.get("monitor_process_other_filter")
+    )
+    monitor_process_filter_value = st.session_state.get("monitor_process_filter")
+    monitor_process_filter = (
+        ""
+        if monitor_process_filter_value is None
+        else str(monitor_process_filter_value).strip()
+    )
     if not monitor_process_filter:
         st.session_state["monitor_process_filter"] = "All"
+        st.session_state["monitor_process_other_filter"] = ""
+    elif monitor_process_filter == "None":
+        st.session_state["monitor_process_filter"] = "All"
+        st.session_state["monitor_process_other_filter"] = ""
     elif monitor_process_filter in ("Other", "Others"):
         st.session_state["monitor_process_filter"] = "Containing"
     elif monitor_process_filter not in hhs_ui.PROCESS_FILTERS:
         st.session_state["monitor_process_other_filter"] = monitor_process_filter
         st.session_state["monitor_process_filter"] = "Containing"
+    else:
+        st.session_state["monitor_process_filter"] = monitor_process_filter
     st.session_state.setdefault(
         "monitor_disk_directory", monitor_default_disk_directory()
     )
@@ -17490,6 +17552,13 @@ def main() -> None:
         st.session_state[history_filter_key] = normalized_table_filter_selection(
             st.session_state[history_filter_key], hhs_ui.HISTORY_FILTERS
         )
+    normalize_persisted_table_text_filter_states(
+        *(
+            key
+            for key in hhs_ui_constants.PERSISTED_UI_KEYS
+            if isinstance(key, str) and key.endswith("_other_filter")
+        )
+    )
     st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(
         st.session_state.get("history_stats_top_n")
     )
