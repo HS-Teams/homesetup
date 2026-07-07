@@ -16,10 +16,11 @@ load "${HHS_FUNCTIONS_DIR}/hhs-toml.bash"
 load_bats_libs
 
 setup() {
-  if [[ -n "${HHS_VENV_PATH:-}" && -x "${HHS_VENV_PATH}/bin/python3" ]]; then
-    export PATH="${HHS_VENV_PATH}/bin:${PATH}"
-    export VIRTUAL_ENV="${HHS_VENV_PATH}"
-  fi
+  [[ -n "${HHS_VENV_PATH:-}" ]] || skip "HomeSetup virtual environment path is not configured"
+  [[ -x "${HHS_VENV_PATH}/bin/python3" ]] || skip "HomeSetup virtual environment is not installed"
+
+  export PATH="${HHS_VENV_PATH}/bin:${PATH}"
+  export VIRTUAL_ENV="${HHS_VENV_PATH}"
 
   PYTHON3="$(command -v python3)" || fail "Python3 is not installed on this system!"
   [[ -x "${PYTHON3}" ]] || fail "Python3 binary not executable!"

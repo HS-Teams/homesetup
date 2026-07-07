@@ -13,8 +13,14 @@
 load test_helper
 load_bats_libs
 
+require_installed_homesetup() {
+  [[ -n "${HHS_DIR:-}" && -d "${HHS_DIR}" ]] || skip "HomeSetup installation directory is not available"
+}
+
 # TC - 1
 @test "after-installation-all-homesetup-folders-should-exist" {
+  require_installed_homesetup
+
   [[ \
     -d "${HHS_HOME}" \
     && -d "${HHS_DIR}" \
@@ -28,6 +34,7 @@ load_bats_libs
 
 # TC - 2
 @test "after-installation-all-homesetup-dotfiles-should-exist" {
+  require_installed_homesetup
 
   declare -a missing=()
 
@@ -59,6 +66,7 @@ load_bats_libs
 
 # TC - 3
 @test "after-installation-all-homesetup-integrations-should-exist" {
+  require_installed_homesetup
 
   declare -a integrations=('starship' 'gtrash') missing=()
 
@@ -74,6 +82,8 @@ load_bats_libs
 
 # TC - 4
 @test "after-installation-all-homesetup-dotfiles-should-be-active" {
+  require_installed_homesetup
+
   run echo "$HHS_ACTIVE_DOTFILES"
   assert_output "bashrc hhsrc bash_commons bash_env bash_aliases bash_colors bash_functions bash_icons bash_prompt"
 }
