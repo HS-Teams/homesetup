@@ -16,6 +16,7 @@ idea {
       rootModuleType = 'PYTHON_MODULE'
     }
     sourceDirs += file('bin')
+    sourceDirs += file('bin/apps/py')
     sourceDirs += file('dotfiles')
     testSourceDirs += file('tests')
     excludeDirs += file('.idea')

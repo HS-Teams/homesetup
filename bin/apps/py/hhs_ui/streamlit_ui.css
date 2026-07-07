@@ -175,6 +175,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 .st-key-dir_add_submit button,
 .st-key-dir_folder_picker_button button,
 .st-key-env_add_submit button,
+.st-key-history_stats_refresh_button button,
 .st-key-monitor_cpu_refresh_button button,
 .st-key-monitor_disk_apply_button button,
 .st-key-monitor_log_clear_button button,
@@ -218,6 +219,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   width: 2rem;
 }
 
+.st-key-history_stats_refresh_button,
 .st-key-monitor_cpu_refresh_button,
 .st-key-monitor_disk_apply_button,
 .st-key-monitor_mem_refresh_button {
@@ -436,6 +438,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value) {
   gap: var(--hhs-element-std-gap) !important;
 }
 
+.st-key-history_stats_controls [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"],
 .st-key-monitor_cpu_controls [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"],
 .st-key-monitor_disk_controls [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"],
 .st-key-monitor_mem_controls [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"] {
@@ -443,6 +446,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value) {
   row-gap: var(--hhs-element-std-gap) !important;
 }
 
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-history_stats_refresh_button),
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-monitor_cpu_refresh_button),
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-monitor_disk_apply_button),
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-monitor_mem_refresh_button) {
@@ -454,6 +458,7 @@ div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-
   width: 100% !important;
 }
 
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-history_stats_refresh_button),
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-monitor_cpu_refresh_button),
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-monitor_mem_refresh_button) {
   grid-template-columns: max-content 150px minmax(0, 1fr) 2rem;
@@ -463,6 +468,8 @@ div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-
   grid-template-columns: max-content 150px max-content minmax(0, 1fr) 2rem;
 }
 
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-history_stats_refresh_button)
+  > div[data-testid="stColumn"],
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-monitor_cpu_refresh_button)
   > div[data-testid="stColumn"],
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-monitor_disk_apply_button)
@@ -474,6 +481,8 @@ div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-
   width: 100% !important;
 }
 
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-history_stats_refresh_button)
+  > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-monitor_cpu_refresh_button)
   > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]):has(.st-key-monitor_disk_apply_button)
@@ -748,11 +757,17 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 
 .st-key-active_view,
 .st-key-home_view,
+.st-key-home_view_widget,
 .st-key-config_view,
+.st-key-config_view_widget,
 .st-key-history_view,
+.st-key-history_view_widget,
 .st-key-monitor_view,
+.st-key-monitor_view_widget,
 .st-key-ssh_view,
-.st-key-ai_view {
+.st-key-ssh_view_widget,
+.st-key-ai_view,
+.st-key-ai_view_widget {
   margin-top: 0 !important;
   padding-top: 0 !important;
 }
@@ -763,29 +778,57 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-active_view),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-home_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-home_view_widget),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-config_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-config_view_widget),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-history_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-history_view_widget),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-monitor_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-monitor_view_widget),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ssh_view),
-[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ai_view) {
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ssh_view_widget),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ai_view),
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ai_view_widget) {
   margin: 0 !important;
   min-height: 0 !important;
   padding: 0 !important;
 }
 
 .st-key-home_view [data-baseweb="button-group"],
+.st-key-home_view [data-testid="stButtonGroup"] [role="radiogroup"],
+.st-key-home_view_widget [data-baseweb="button-group"],
+.st-key-home_view_widget [data-testid="stButtonGroup"] [role="radiogroup"],
 .st-key-config_view [data-baseweb="button-group"],
+.st-key-config_view [data-testid="stButtonGroup"] [role="radiogroup"],
+.st-key-config_view_widget [data-baseweb="button-group"],
+.st-key-config_view_widget [data-testid="stButtonGroup"] [role="radiogroup"],
 .st-key-history_view [data-baseweb="button-group"],
+.st-key-history_view [data-testid="stButtonGroup"] [role="radiogroup"],
+.st-key-history_view_widget [data-baseweb="button-group"],
+.st-key-history_view_widget [data-testid="stButtonGroup"] [role="radiogroup"],
 .st-key-monitor_view [data-baseweb="button-group"],
+.st-key-monitor_view [data-testid="stButtonGroup"] [role="radiogroup"],
+.st-key-monitor_view_widget [data-baseweb="button-group"],
+.st-key-monitor_view_widget [data-testid="stButtonGroup"] [role="radiogroup"],
 .st-key-ssh_view [data-baseweb="button-group"],
-.st-key-ai_view [data-baseweb="button-group"] {
+.st-key-ssh_view [data-testid="stButtonGroup"] [role="radiogroup"],
+.st-key-ssh_view_widget [data-baseweb="button-group"],
+.st-key-ssh_view_widget [data-testid="stButtonGroup"] [role="radiogroup"],
+.st-key-ai_view [data-baseweb="button-group"],
+.st-key-ai_view [data-testid="stButtonGroup"] [role="radiogroup"],
+.st-key-ai_view_widget [data-baseweb="button-group"],
+.st-key-ai_view_widget [data-testid="stButtonGroup"] [role="radiogroup"] {
   margin: 0 0 var(--hhs-element-std-gap) !important;
 }
 
 .stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"],
 .stButtonGroup [data-baseweb="button-group"] button[aria-pressed="true"],
 .stButtonGroup [data-baseweb="button-group"] button[aria-selected="true"],
-.stButtonGroup [data-baseweb="button-group"] button[data-selected="true"] {
+.stButtonGroup [data-baseweb="button-group"] button[data-selected="true"],
+.stButtonGroup [data-testid="stButtonGroup"] button[aria-checked="true"],
+.stButtonGroup [data-testid="stButtonGroup"] button[aria-pressed="true"],
+.stButtonGroup [data-testid="stButtonGroup"] button[aria-selected="true"],
+.stButtonGroup [data-testid="stButtonGroup"] button[data-selected] {
   border-color: var(--hhs-primary) !important;
   color: var(--hhs-primary) !important;
 }
@@ -793,7 +836,11 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 .stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"] *,
 .stButtonGroup [data-baseweb="button-group"] button[aria-pressed="true"] *,
 .stButtonGroup [data-baseweb="button-group"] button[aria-selected="true"] *,
-.stButtonGroup [data-baseweb="button-group"] button[data-selected="true"] * {
+.stButtonGroup [data-baseweb="button-group"] button[data-selected="true"] *,
+.stButtonGroup [data-testid="stButtonGroup"] button[aria-checked="true"] *,
+.stButtonGroup [data-testid="stButtonGroup"] button[aria-pressed="true"] *,
+.stButtonGroup [data-testid="stButtonGroup"] button[aria-selected="true"] *,
+.stButtonGroup [data-testid="stButtonGroup"] button[data-selected] * {
   color: var(--hhs-primary) !important;
   fill: currentColor !important;
 }
@@ -924,6 +971,18 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 
 [data-testid="stMain"] [data-testid="stVegaLiteChart"] {
   margin-top: var(--hhs-element-std-gap) !important;
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+[data-testid="stMain"] [data-testid="stVegaLiteChart"] > div {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stVegaLiteChart"]) {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
 }
 
 [data-testid="stMain"] .hhs-terminal-panel {
@@ -1524,6 +1583,16 @@ div[class*="st-key-service_selected_value_"] input {
 }
 
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:empty,
+[data-testid="stMain"] [data-testid="stElementContainer"]:empty,
+[data-testid="stMain"] [data-testid="stElementContainer"]:not(:has(> *)),
+[data-testid="stMain"] [data-testid="stElementContainer"]:has(> div:empty),
+[data-testid="stMain"] [data-testid="stElementContainer"]:has(> [data-testid="stMarkdownContainer"]:empty),
+[data-testid="stMain"] [data-testid="stElementContainer"]:has(> [data-testid="stLayoutWrapper"]:empty),
+[data-testid="stMain"] [data-testid="stElementContainer"]:has(> [data-testid="stLayoutWrapper"]:not(:has(> *))),
+[data-testid="stMain"] [data-testid="stElementContainer"]:has(> [data-testid="stLayoutWrapper"] > div:empty),
+[data-testid="stMain"] [data-testid="stLayoutWrapper"]:empty,
+[data-testid="stMain"] [data-testid="stLayoutWrapper"]:not(:has(> *)),
+[data-testid="stMain"] [data-testid="stLayoutWrapper"]:has(> div:empty),
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stMarkdownContainer"] style),
 [data-testid="stMain"] [data-testid="stVerticalBlock"]
   > div:not([class*="st-key-ssh_explorer_component"]):has(iframe[height="0"]),
@@ -1531,12 +1600,20 @@ div[class*="st-key-service_selected_value_"] input {
   > div:not([class*="st-key-ssh_explorer_component"]):has(iframe[style*="height: 0px"]),
 [data-testid="stMain"] [data-testid="stVerticalBlock"]
   > div:not([class*="st-key-ssh_explorer_component"]):has([data-testid="stIFrame"][height="0"]) {
+  block-size: 0 !important;
+  border: 0 !important;
   display: none !important;
+  flex: 0 0 0 !important;
+  flex-basis: 0 !important;
   height: 0 !important;
+  line-height: 0 !important;
   margin: 0 !important;
+  max-block-size: 0 !important;
+  max-height: 0 !important;
   min-height: 0 !important;
   overflow: hidden !important;
   padding: 0 !important;
+  visibility: hidden !important;
 }
 
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stDataFrame"]) {

@@ -1771,6 +1771,24 @@ expander_block = re.search(r"\[data-testid=\"stExpander\"\]\s*\{([^}]*)\}", base
 docker_expander_block = re.search(r"\.st-key-home_docker_panel \[data-testid=\"stExpander\"\]\s*\{([^}]*)\}", base_css).group(1)
 docker_expander_details_block = re.search(r"\.st-key-home_docker_panel \[data-testid=\"stExpanderDetails\"\] > \[data-testid=\"stVerticalBlock\"\]\s*\{([^}]*)\}", base_css).group(1)
 hidden_streamlit_block = re.search(r"\[data-testid=\"stMain\"\] \[data-testid=\"stVerticalBlock\"\] > div:empty,[^{]+\{([^}]*)\}", base_css).group(1)
+assert '[data-testid="stElementContainer"]:empty' in base_css
+assert '[data-testid="stElementContainer"]:not(:has(> *))' in base_css
+assert '[data-testid="stElementContainer"]:has(> div:empty)' in base_css
+assert '[data-testid="stElementContainer"]:has(> [data-testid="stMarkdownContainer"]:empty)' in base_css
+assert '[data-testid="stElementContainer"]:has(> [data-testid="stLayoutWrapper"]:empty)' in base_css
+assert '[data-testid="stElementContainer"]:has(> [data-testid="stLayoutWrapper"]:not(:has(> *)))' in base_css
+assert '[data-testid="stElementContainer"]:has(> [data-testid="stLayoutWrapper"] > div:empty)' in base_css
+assert '[data-testid="stLayoutWrapper"]:empty' in base_css
+assert '[data-testid="stLayoutWrapper"]:not(:has(> *))' in base_css
+assert '[data-testid="stLayoutWrapper"]:has(> div:empty)' in base_css
+for expected in (
+    "block-size: 0 !important",
+    "flex-basis: 0 !important",
+    "line-height: 0 !important",
+    "max-height: 0 !important",
+    "visibility: hidden !important",
+):
+    assert expected in hidden_streamlit_block
 view_key_block = re.search(r"\.st-key-active_view,[^{]+\{([^}]*)\}", base_css).group(1)
 active_view_tabs_block = re.search(r"\.st-key-active_view \[role=\"radiogroup\"\]\s*\{([^}]*)\}", base_css).group(1)
 streamlit_chrome_block = re.search(r"\[data-testid=\"stHeader\"\],[^{]+\{([^}]*)\}", base_css).group(1)
@@ -1865,10 +1883,24 @@ assert "gap: var(--hhs-element-std-gap) !important" in main_block_gap_block
 assert "row-gap: var(--hhs-element-std-gap) !important" in main_block_gap_block
 assert "margin-bottom: 0 !important" in active_view_block
 assert "margin: 0 0 var(--hhs-element-std-gap) !important" in sub_view_button_group_block
+assert "def view_segmented_control_widget_key" in ui_source
+assert "def save_view_segmented_control_state" in ui_source
+assert "def normalized_view_segmented_control_value" in ui_source
+assert "def render_view_segmented_control" in ui_source
+assert "key=widget_key" in ui_source
+assert "default=default_value" in ui_source
+assert "required=True" in ui_source
+assert "on_change=save_view_segmented_control_state" in ui_source
+assert "view_segmented_control_widget_key(state_key)" in ui_source
+assert "st.session_state.pop(widget_key, None)" in ui_source
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in base_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-pressed="true"]' in base_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-selected="true"]' in base_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[data-selected="true"]' in base_css
+assert '.stButtonGroup [data-testid="stButtonGroup"] button[aria-checked="true"]' in base_css
+assert '.stButtonGroup [data-testid="stButtonGroup"] button[aria-pressed="true"]' in base_css
+assert '.stButtonGroup [data-testid="stButtonGroup"] button[aria-selected="true"]' in base_css
+assert '.stButtonGroup [data-testid="stButtonGroup"] button[data-selected]' in base_css
 assert "fill: currentColor !important" in base_css
 assert "border-bottom: 0" in heading_block
 assert "margin: 0" in heading_block
@@ -1904,14 +1936,37 @@ assert ".st-key-history_view" in base_css
 assert ".st-key-monitor_view" in base_css
 assert ".st-key-ssh_view" in base_css
 assert ".st-key-ai_view" in base_css
+assert ".st-key-home_view_widget" in base_css
+assert ".st-key-config_view_widget" in base_css
+assert ".st-key-history_view_widget" in base_css
+assert ".st-key-monitor_view_widget" in base_css
+assert ".st-key-ssh_view_widget" in base_css
+assert ".st-key-ai_view_widget" in base_css
 assert "margin-top: 0 !important" in view_key_block
 assert "padding-top: 0 !important" in view_key_block
 assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-active_view)' in base_css
 assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-home_view)' in base_css
 assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ssh_view)' in base_css
 assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ai_view)' in base_css
+assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-home_view_widget)' in base_css
+assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ssh_view_widget)' in base_css
+assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-ai_view_widget)' in base_css
 assert '.st-key-home_view [data-baseweb="button-group"]' in base_css
 assert '.st-key-ssh_view [data-baseweb="button-group"]' in base_css
+assert '.st-key-home_view_widget [data-baseweb="button-group"]' in base_css
+assert '.st-key-home_view_widget [data-testid="stButtonGroup"] [role="radiogroup"]' in base_css
+assert '.st-key-ssh_view_widget [data-baseweb="button-group"]' in base_css
+assert '.st-key-ssh_view_widget [data-testid="stButtonGroup"] [role="radiogroup"]' in base_css
+for state_key in (
+    "home_view",
+    "config_view",
+    "history_view",
+    "monitor_view",
+    "ssh_view",
+    "ai_view",
+):
+    assert f'.st-key-{state_key}_widget' in base_css
+    assert f'"{state_key}"' in ui_source
 assert "padding-right: var(--hhs-streamlit-toolbar-guard-width)" in active_view_tabs_block
 assert '.st-key-active_view [role="radiogroup"] label input[type="radio"]' in base_css
 assert 'appearance: none !important' in base_css
@@ -1994,6 +2049,8 @@ assert "--hhs-theme-footer-status-error-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-text-size" in tokyo_night_css
 assert "--hhs-theme-footer-status-text-size: 1.176rem" in tokyo_night_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in dracula_css
+assert '.stButtonGroup [data-testid="stButtonGroup"] button[aria-checked="true"]' in dracula_css
+assert '.stButtonGroup [data-testid="stButtonGroup"] button[data-selected]' in dracula_css
 assert "border-color: var(--hhs-primary)" in dracula_css
 assert "--hhs-theme-heading-border-color: var(--hhs-theme-border-color)" in dracula_css
 assert "--hhs-theme-heading-border-color: var(--hhs-theme-border-color)" in tokyo_night_css
@@ -4159,11 +4216,20 @@ assert 'st.session_state["history_stats_top_n"] = normalized_history_stats_top_n
 history_body = source.split("def render_history_stats_chart()", 1)[1].split("\ndef ", 1)[0]
 assert history_body.index(
     'st.session_state["history_stats_top_n"] = normalized_history_stats_top_n('
-) < history_body.index("st.number_input(")
-assert "width=150" in history_body
-assert source.count("min_value=hhs_ui_constants.MIN_TOP_N") >= 3
-assert source.count("max_value=hhs_ui_constants.MAX_TOP_N") >= 3
-assert source.count("width=150") >= 3
+) < history_body.index("render_chart_controls(")
+assert '"history_stats_controls"' in history_body
+assert 'top_n_key="history_stats_top_n"' in history_body
+assert 'refresh_key="history_stats_refresh_button"' in history_body
+assert 'refresh_on_click=refresh_history_stats_chart' in history_body
+chart_top_n_body = source.split("def render_chart_top_n_input", 1)[1].split("\ndef ", 1)[0]
+assert '"min_value"' in chart_top_n_body
+assert "hhs_ui_constants.MIN_TOP_N" in chart_top_n_body
+assert '"max_value"' in chart_top_n_body
+assert "hhs_ui_constants.MAX_TOP_N" in chart_top_n_body
+assert "width" in chart_top_n_body
+assert "150" in chart_top_n_body
+assert source.count("render_chart_controls(") >= 3
+assert source.count("plot_chart(") >= 3
 for function_name in (
     "build_hhs_history_stats_command",
     "build_hhs_disk_usage_command",
@@ -4728,7 +4794,10 @@ PY
   run grep -q 'format_func=ssh_view_label' "${ui_file}"
   assert_success
 
-  run grep -q 'key="ssh_view"' "${ui_file}"
+  run grep -q 'render_view_segmented_control(' "${ui_file}"
+  assert_success
+
+  run grep -q 'view_segmented_control_widget_key(state_key)' "${ui_file}"
   assert_success
 
   run grep -q 'render_ssh_tunnels_panel(host)' "${ui_file}"
@@ -7327,25 +7396,46 @@ PY
   run grep -q 'def render_monitor_processes_panel' "${ui_file}"
   assert_success
 
-  run grep -q 'key="monitor_disk_controls"' "${ui_file}"
+  run grep -q 'def render_chart_controls' "${ui_file}"
   assert_success
 
-  run grep -q 'key=f"monitor_{metric.lower()}_controls"' "${ui_file}"
+  run grep -q 'def plot_chart' "${ui_file}"
+  assert_success
+
+  run grep -q 'Literal\["HBars", "VBars", "Pie"\]' "${ui_file}"
+  assert_success
+
+  run grep -q '"monitor_disk_controls"' "${ui_file}"
+  assert_success
+
+  run grep -q 'f"monitor_{metric.lower()}_controls"' "${ui_file}"
+  assert_success
+
+  run grep -q '"history_stats_controls"' "${ui_file}"
   assert_success
 
   run grep -q 'with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):' "${ui_file}"
   assert_success
 
-  run grep -q '<span class="hhs-inline-form-label">Top N:</span>' "${ui_file}"
+  run grep -q 'top_n_label: str = "Top N:"' "${ui_file}"
   assert_success
 
-  run grep -q '<span class="hhs-inline-form-label">Directory:</span>' "${ui_file}"
+  run grep -q 'input_label="Directory:"' "${ui_file}"
   assert_success
 
-  run grep -q 'key="monitor_disk_apply_button"' "${ui_file}"
+  run grep -q 'refresh_key="monitor_disk_apply_button"' "${ui_file}"
   assert_success
 
-  run grep -q 'key=f"monitor_{metric.lower()}_refresh_button"' "${ui_file}"
+  run grep -q 'refresh_key=f"monitor_{metric.lower()}_refresh_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'refresh_key="history_stats_refresh_button"' "${ui_file}"
+  assert_success
+
+  run grep -q 'refresh_on_click=refresh_history_stats_chart' "${ui_file}"
+  assert_success
+
+  run grep -q '.st-key-history_stats_refresh_button button' "${css_file}"
   assert_success
 
   run grep -q '.st-key-monitor_disk_apply_button button' "${css_file}"
@@ -7358,6 +7448,12 @@ PY
   assert_success
 
   run grep -q '.st-key-monitor_disk_controls \[data-testid="stExpanderDetails"\] > \[data-testid="stVerticalBlock"\]' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-history_stats_controls \[data-testid="stExpanderDetails"\]' "${css_file}"
+  assert_success
+
+  run grep -q ':has(.st-key-history_stats_refresh_button)' "${css_file}"
   assert_success
 
   run grep -q ':has(.st-key-monitor_mem_refresh_button)' "${css_file}"
@@ -7383,18 +7479,36 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
+chart_controls_body = source.split("def render_chart_controls", 1)[1].split(
+    "\ndef ", 1
+)[0]
 disk_body = source.split("def render_monitor_disk_chart", 1)[1].split("\ndef ", 1)[0]
-process_chart_body = source.split("def render_process_monitor_chart", 1)[1].split("\ndef ", 1)[0]
-process_panel_body = source.split("def render_monitor_processes_panel", 1)[1].split("\ndef ", 1)[0]
-assert 'gap="small"' in disk_body
-assert 'gap="small"' in process_chart_body
-assert "top_label_col, top_input_col, _spacer_col, action_col = st.columns" in process_chart_body
-assert "[0.55, 0.75, 3.0, 0.45]" in process_chart_body
-assert "width=150" in disk_body
-assert "width=150" in process_chart_body
-assert disk_body.index("Top N:</span>") < disk_body.index("Directory:</span>")
-assert 'help="Refresh"' in disk_body
-assert 'help="Refresh"' in process_chart_body
+process_chart_body = source.split("def render_process_monitor_chart", 1)[1].split(
+    "\ndef ", 1
+)[0]
+process_panel_body = source.split("def render_monitor_processes_panel", 1)[1].split(
+    "\ndef ", 1
+)[0]
+assert 'gap="small"' in chart_controls_body
+assert (
+    "top_label_col, top_input_col, _spacer_col, action_col = st.columns"
+    in chart_controls_body
+)
+assert "[0.55, 0.75, 3.0, 0.45]" in chart_controls_body
+assert "[0.55, 0.75, 0.85, 3.0, 0.45]" in chart_controls_body
+assert "render_chart_top_n_input" in chart_controls_body
+assert 'render_chart_control_label(top_n_label)' in chart_controls_body
+assert 'render_chart_control_label(str(input_label))' in chart_controls_body
+assert 'render_chart_refresh_button' in chart_controls_body
+assert 'help": "Refresh"' in source
+assert "width" in source.split("def render_chart_top_n_input", 1)[1].split("\ndef ", 1)[0]
+assert "150" in source.split("def render_chart_top_n_input", 1)[1].split("\ndef ", 1)[0]
+assert "render_chart_controls(" in disk_body
+assert "render_chart_controls(" in process_chart_body
+assert "plot_chart(" in disk_body
+assert "plot_chart(" in process_chart_body
+assert 'st.altair_chart(chart, width="stretch", height=fallback_height)' in source
+assert disk_body.index("top_n_key=") < disk_body.index("input_label=")
 assert process_panel_body.count("complete_monitor_process_list_refresh()") >= 3
 assert process_panel_body.index("result = complete_monitor_process_list_refresh()") < process_panel_body.index(
     "start_monitor_process_list_refresh()"
@@ -7778,6 +7892,15 @@ LOGS
   assert_success
 
   run grep -q 'margin-top: var(--hhs-element-std-gap) !important' "${css_file}"
+  assert_success
+
+  run grep -q '\[data-testid="stVegaLiteChart"\] > div' "${css_file}"
+  assert_success
+
+  run grep -q 'div:has(\[data-testid="stVegaLiteChart"\])' "${css_file}"
+  assert_success
+
+  run grep -q 'padding-bottom: 0 !important' "${css_file}"
   assert_success
 
   run grep -q 'margin: 0 !important' "${css_file}"

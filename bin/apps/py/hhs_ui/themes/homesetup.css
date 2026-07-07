@@ -87,12 +87,16 @@ body,
   color: #2563eb;
 }
 
-.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"] {
+.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"],
+.stButtonGroup [data-testid="stButtonGroup"] button[aria-checked="true"],
+.stButtonGroup [data-testid="stButtonGroup"] button[data-selected] {
   border-color: var(--hhs-primary) !important;
   color: var(--hhs-primary) !important;
 }
 
-.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"] * {
+.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"] *,
+.stButtonGroup [data-testid="stButtonGroup"] button[aria-checked="true"] *,
+.stButtonGroup [data-testid="stButtonGroup"] button[data-selected] * {
   color: var(--hhs-primary) !important;
   fill: currentColor !important;
 }

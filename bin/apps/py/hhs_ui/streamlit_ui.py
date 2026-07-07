@@ -48,7 +48,7 @@ from datetime import datetime
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 import altair as alt
 import pandas as pd
@@ -3677,6 +3677,13 @@ def apply_monitor_process_controls(metric: str) -> None:
     save_ui_state()
 
 
+def refresh_history_stats_chart() -> None:
+    """Clear cached history stats so the next chart run reloads command data."""
+    top_n = normalized_history_stats_top_n(st.session_state.get("history_stats_top_n"))
+    cache_delete_command(build_hhs_history_stats_command(top_n), "history")
+    save_ui_state()
+
+
 def applied_monitor_disk_directory() -> str:
     """Return the directory currently applied to the disk monitor command."""
     directory = str(
@@ -4537,14 +4544,12 @@ def render_home_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    home_view = st.segmented_control(
+    home_view = render_view_segmented_control(
         "Home view",
-        options=hhs_ui.HOME_VIEWS,
+        hhs_ui.HOME_VIEWS,
+        "home_view",
+        "System",
         format_func=home_view_label,
-        key="home_view",
-        label_visibility="collapsed",
-        on_change=save_ui_state,
-        width="stretch",
     )
     if home_view == "System":
         render_home_system_panel()
@@ -4559,6 +4564,73 @@ def render_home_view() -> None:
 def home_view_label(home_view: str) -> str:
     """Return the display label for a Home view key."""
     return hhs_ui.HOME_VIEW_LABELS.get(home_view, home_view)
+
+
+def view_segmented_control_widget_key(state_key: str) -> str:
+    """Return the temporary widget key for a persisted sub-view state key."""
+    return f"{state_key}_widget"
+
+
+def save_view_segmented_control_state(
+    state_key: str,
+    widget_key: str,
+    options: tuple[str, ...],
+) -> None:
+    """Copy a temporary segmented-control widget value into persisted UI state."""
+    value = st.session_state.get(widget_key)
+    if value in options:
+        st.session_state[state_key] = value
+    save_ui_state()
+
+
+def normalized_view_segmented_control_value(
+    state_key: str,
+    options: tuple[str, ...],
+    default: str,
+) -> str:
+    """Return a valid persisted sub-view segmented-control value."""
+    value = st.session_state.get(state_key, default)
+    if value in options:
+        return str(value)
+    return default
+
+
+def render_view_segmented_control(
+    label: str,
+    options: tuple[str, ...],
+    state_key: str,
+    default: str,
+    format_func: Callable[[str], str],
+) -> str:
+    """Render a persisted sub-view segmented control with a stable selected state."""
+    selected_value = normalized_view_segmented_control_value(
+        state_key, options, default
+    )
+    st.session_state[state_key] = selected_value
+    widget_key = view_segmented_control_widget_key(state_key)
+    widget_value = st.session_state.get(widget_key)
+    if widget_value in options and widget_value != selected_value:
+        st.session_state[widget_key] = selected_value
+        widget_value = selected_value
+    elif widget_value not in options:
+        st.session_state.pop(widget_key, None)
+    default_value = selected_value if widget_value not in options else None
+    view_value = st.segmented_control(
+        label,
+        options=options,
+        default=default_value,
+        required=True,
+        format_func=format_func,
+        key=widget_key,
+        label_visibility="collapsed",
+        on_change=save_view_segmented_control_state,
+        args=(state_key, widget_key, options),
+        width="stretch",
+    )
+    if view_value not in options:
+        view_value = selected_value
+    st.session_state[state_key] = view_value
+    return view_value
 
 
 def render_home_system_panel() -> None:
@@ -5383,11 +5455,6 @@ def bar_chart_height(height: int = hhs_ui.BAR_CHART_HEIGHT) -> int:
     return max(1, height - hhs_ui.BAR_CHART_HEIGHT_REDUCTION)
 
 
-def bar_chart_container_height() -> str:
-    """Return the Vega-Lite height mode for browser-aware chart containers."""
-    return "container"
-
-
 def render_bar_chart(
     rows: list[dict[str, object]],
     x: alt.X,
@@ -5406,10 +5473,227 @@ def render_bar_chart(
             y=y,
             tooltip=tooltip,
         )
-        .properties(height=bar_chart_container_height())
+        .properties(height=fallback_height)
         .configure_view(continuousHeight=fallback_height)
     )
-    st.altair_chart(chart, width="stretch")
+    st.altair_chart(chart, width="stretch", height=fallback_height)
+
+
+def render_chart_control_label(label: str) -> None:
+    """Render a normalized inline label for chart control rows."""
+    clean_label = str(label or "").strip()
+    if clean_label and not clean_label.endswith(":"):
+        clean_label = f"{clean_label}:"
+    st.markdown(
+        f'<span class="hhs-inline-form-label">{html.escape(clean_label)}</span>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_chart_refresh_button(
+    key: str,
+    on_click: Callable[..., None] | None = None,
+    args: tuple[object, ...] = (),
+) -> bool:
+    """Render the standard chart refresh glyph button and return click state."""
+    button_kwargs: dict[str, object] = {
+        "key": key,
+        "help": "Refresh",
+        "width": "stretch",
+    }
+    if on_click is not None:
+        button_kwargs["on_click"] = on_click
+        button_kwargs["args"] = args
+    return bool(st.button("", **button_kwargs))
+
+
+def render_chart_top_n_input(
+    key: str,
+    on_change: Callable[..., None] | None = None,
+    args: tuple[object, ...] = (),
+) -> None:
+    """Render the standard 150px Top N chart number input."""
+    input_kwargs: dict[str, object] = {
+        "min_value": hhs_ui_constants.MIN_TOP_N,
+        "max_value": hhs_ui_constants.MAX_TOP_N,
+        "step": 1,
+        "key": key,
+        "label_visibility": "collapsed",
+        "width": 150,
+    }
+    if on_change is not None:
+        input_kwargs["on_change"] = on_change
+        input_kwargs["args"] = args
+    st.number_input("Top N", **input_kwargs)
+
+
+def render_chart_text_input(
+    key: str,
+    label: str,
+    on_change: Callable[..., None] | None = None,
+    args: tuple[object, ...] = (),
+) -> None:
+    """Render a chart text input using the shared row distribution."""
+    input_kwargs: dict[str, object] = {
+        "key": key,
+        "label_visibility": "collapsed",
+    }
+    if on_change is not None:
+        input_kwargs["on_change"] = on_change
+        input_kwargs["args"] = args
+    st.text_input(label, **input_kwargs)
+
+
+def render_chart_controls(
+    key: str,
+    *,
+    has_top_n: bool = True,
+    top_n_key: str | None = None,
+    top_n_label: str = "Top N:",
+    top_n_on_change: Callable[..., None] | None = None,
+    top_n_args: tuple[object, ...] = (),
+    has_input: bool = False,
+    input_key: str | None = None,
+    input_label: str | None = None,
+    input_on_change: Callable[..., None] | None = None,
+    input_args: tuple[object, ...] = (),
+    has_refresh_btn: bool = True,
+    refresh_key: str | None = None,
+    refresh_on_click: Callable[..., None] | None = None,
+    refresh_args: tuple[object, ...] = (),
+) -> bool:
+    """Render the standard chart controls expander and return refresh clicks."""
+    if has_top_n and not top_n_key:
+        raise ValueError("top_n_key is required when has_top_n is true")
+    if has_input and (not input_key or not input_label):
+        raise ValueError(
+            "input_key and input_label are required when has_input is true"
+        )
+    if has_refresh_btn and not refresh_key:
+        raise ValueError("refresh_key is required when has_refresh_btn is true")
+
+    refresh_clicked = False
+    with st.container(key=key):
+        with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):
+            if has_top_n and has_input:
+                (
+                    top_label_col,
+                    top_input_col,
+                    input_label_col,
+                    input_col,
+                    action_col,
+                ) = st.columns(
+                    [0.55, 0.75, 0.85, 3.0, 0.45],
+                    gap="small",
+                    vertical_alignment="center",
+                )
+                with top_label_col:
+                    render_chart_control_label(top_n_label)
+                with top_input_col:
+                    render_chart_top_n_input(
+                        str(top_n_key), top_n_on_change, top_n_args
+                    )
+                with input_label_col:
+                    render_chart_control_label(str(input_label))
+                with input_col:
+                    render_chart_text_input(
+                        str(input_key),
+                        str(input_label).rstrip(":"),
+                        input_on_change,
+                        input_args,
+                    )
+                if has_refresh_btn:
+                    with action_col:
+                        refresh_clicked = render_chart_refresh_button(
+                            str(refresh_key), refresh_on_click, refresh_args
+                        )
+            elif has_top_n:
+                top_label_col, top_input_col, _spacer_col, action_col = st.columns(
+                    [0.55, 0.75, 3.0, 0.45],
+                    gap="small",
+                    vertical_alignment="center",
+                )
+                with top_label_col:
+                    render_chart_control_label(top_n_label)
+                with top_input_col:
+                    render_chart_top_n_input(
+                        str(top_n_key), top_n_on_change, top_n_args
+                    )
+                if has_refresh_btn:
+                    with action_col:
+                        refresh_clicked = render_chart_refresh_button(
+                            str(refresh_key), refresh_on_click, refresh_args
+                        )
+            elif has_input:
+                input_label_col, input_col, action_col = st.columns(
+                    [0.85, 4.0, 0.45],
+                    gap="small",
+                    vertical_alignment="center",
+                )
+                with input_label_col:
+                    render_chart_control_label(str(input_label))
+                with input_col:
+                    render_chart_text_input(
+                        str(input_key),
+                        str(input_label).rstrip(":"),
+                        input_on_change,
+                        input_args,
+                    )
+                if has_refresh_btn:
+                    with action_col:
+                        refresh_clicked = render_chart_refresh_button(
+                            str(refresh_key), refresh_on_click, refresh_args
+                        )
+    return refresh_clicked
+
+
+def plot_chart(
+    data: list[dict[str, object]],
+    type: Literal["HBars", "VBars", "Pie"],
+    title: str,
+    has_top_n: bool = True,
+    top_n_label: str = "Top N:",
+    has_input: bool = False,
+    input_label: str | None = None,
+    has_refresh_btn: bool = True,
+    *,
+    x: alt.X | None = None,
+    y: alt.Y | None = None,
+    tooltip: list[alt.Tooltip] | None = None,
+    color: str = "#ffb86c",
+    height: int = hhs_ui.BAR_CHART_HEIGHT,
+    title_is_html: bool = False,
+) -> None:
+    """Render a titled chart using the shared HomeSetup chart component style."""
+    render_view_subtitle(title, content_is_html=title_is_html)
+    if type in {"HBars", "VBars"}:
+        if x is None or y is None:
+            raise ValueError("x and y encodings are required for bar charts")
+        render_bar_chart(
+            data,
+            x=x,
+            y=y,
+            tooltip=tooltip or [],
+            color=color,
+            height=height,
+        )
+        return
+    if type == "Pie":
+        fallback_height = bar_chart_height(height)
+        chart = (
+            alt.Chart(alt.Data(values=data))
+            .mark_arc()
+            .encode(
+                theta=alt.Theta("Value:Q"),
+                color=alt.Color("Label:N"),
+                tooltip=tooltip or [],
+            )
+            .properties(height=fallback_height)
+            .configure_view(continuousHeight=fallback_height)
+        )
+        st.altair_chart(chart, width="stretch", height=fallback_height)
+        return
+    raise ValueError(f"Unsupported chart type: {type}")
 
 
 def table_action_visible(
@@ -13689,25 +13973,16 @@ def render_history_stats_chart() -> None:
     st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(
         st.session_state.get("history_stats_top_n")
     )
-    label_col, input_col, spacer_col = st.columns(
-        [0.55, 0.7, 2.75], vertical_alignment="center"
+    render_chart_controls(
+        "history_stats_controls",
+        top_n_key="history_stats_top_n",
+        top_n_on_change=save_ui_state,
+        refresh_key="history_stats_refresh_button",
+        refresh_on_click=refresh_history_stats_chart,
     )
-    with label_col:
-        st.markdown(
-            '<span class="hhs-inline-form-label">Top N</span>', unsafe_allow_html=True
-        )
-    with input_col:
-        top_n = st.number_input(
-            "Top N",
-            min_value=hhs_ui_constants.MIN_TOP_N,
-            max_value=hhs_ui_constants.MAX_TOP_N,
-            step=1,
-            key="history_stats_top_n",
-            label_visibility="collapsed",
-            on_change=save_ui_state,
-            width=150,
-        )
-    render_view_subtitle(f"Top {int(top_n)} most used commands")
+    top_n = normalized_history_stats_top_n(
+        st.session_state.get("history_stats_top_n")
+    )
     result = render_cached_command_result(
         build_hhs_history_stats_command(int(top_n)),
         "Loading history stats",
@@ -13729,8 +14004,10 @@ def render_history_stats_chart() -> None:
     if not rows:
         st.caption("No history stats found.")
         return
-    render_bar_chart(
+    plot_chart(
         rows,
+        "HBars",
+        f"Top {int(top_n)} most used commands",
         x=alt.X("Count:Q", title="Count"),
         y=alt.Y(
             "Command:N",
@@ -13753,55 +14030,17 @@ def render_monitor_disk_chart() -> None:
         "monitor_disk_top_n_input",
         st.session_state["monitor_disk_top_n"],
     )
-    with st.container(key="monitor_disk_controls"):
-        with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):
-            (
-                top_label_col,
-                top_input_col,
-                dir_label_col,
-                dir_input_col,
-                action_col,
-            ) = st.columns(
-                [0.55, 0.75, 0.85, 3.0, 0.45],
-                gap="small",
-                vertical_alignment="center",
-            )
-            with top_label_col:
-                st.markdown(
-                    '<span class="hhs-inline-form-label">Top N:</span>',
-                    unsafe_allow_html=True,
-                )
-            with top_input_col:
-                st.number_input(
-                    "Top N",
-                    min_value=hhs_ui_constants.MIN_TOP_N,
-                    max_value=hhs_ui_constants.MAX_TOP_N,
-                    step=1,
-                    key="monitor_disk_top_n_input",
-                    label_visibility="collapsed",
-                    on_change=handle_monitor_disk_top_n_change,
-                    width=150,
-                )
-            with dir_label_col:
-                st.markdown(
-                    '<span class="hhs-inline-form-label">Directory:</span>',
-                    unsafe_allow_html=True,
-                )
-            with dir_input_col:
-                st.text_input(
-                    "Directory",
-                    key="monitor_disk_directory",
-                    label_visibility="collapsed",
-                    on_change=save_ui_state,
-                )
-            with action_col:
-                st.button(
-                    "",
-                    key="monitor_disk_apply_button",
-                    help="Refresh",
-                    on_click=apply_monitor_disk_controls,
-                    width="stretch",
-                )
+    render_chart_controls(
+        "monitor_disk_controls",
+        top_n_key="monitor_disk_top_n_input",
+        top_n_on_change=handle_monitor_disk_top_n_change,
+        has_input=True,
+        input_key="monitor_disk_directory",
+        input_label="Directory:",
+        input_on_change=save_ui_state,
+        refresh_key="monitor_disk_apply_button",
+        refresh_on_click=apply_monitor_disk_controls,
+    )
     selected_directory = applied_monitor_disk_directory()
     applied_top_n = normalized_monitor_disk_top_n(
         st.session_state.get("monitor_disk_top_n")
@@ -13836,12 +14075,15 @@ def render_monitor_disk_chart() -> None:
     if not rows:
         st.caption("No disk usage entries found.")
         return
-    render_view_subtitle(
-        f"Top {applied_top_n} disk usage at <code>{html.escape(display_directory)}</code>",
-        content_is_html=True,
-    )
-    render_bar_chart(
+    plot_chart(
         rows,
+        "HBars",
+        (
+            f"Top {applied_top_n} disk usage at "
+            f"<code>{html.escape(display_directory)}</code>"
+        ),
+        has_input=True,
+        input_label="Directory:",
         x=alt.X(
             "Bytes:Q",
             title="Size",
@@ -13864,6 +14106,7 @@ def render_monitor_disk_chart() -> None:
             alt.Tooltip("Label:N", title="Path"),
             alt.Tooltip("Size:N", title="Size"),
         ],
+        title_is_html=True,
     )
 
 
@@ -13879,43 +14122,20 @@ def render_process_monitor_chart(metric: str) -> None:
         st.session_state.get(top_n_input_key, st.session_state[top_n_key])
     )
     complete_monitor_metric_refresh(metric)
-    refresh_clicked = False
-    with st.container(key=f"monitor_{metric.lower()}_controls"):
-        with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):
-            top_label_col, top_input_col, _spacer_col, action_col = st.columns(
-                [0.55, 0.75, 3.0, 0.45],
-                gap="small",
-                vertical_alignment="center",
-            )
-            with top_label_col:
-                st.markdown(
-                    '<span class="hhs-inline-form-label">Top N:</span>',
-                    unsafe_allow_html=True,
-                )
-            with top_input_col:
-                st.number_input(
-                    "Top N",
-                    min_value=hhs_ui_constants.MIN_TOP_N,
-                    max_value=hhs_ui_constants.MAX_TOP_N,
-                    step=1,
-                    key=top_n_input_key,
-                    label_visibility="collapsed",
-                    on_change=handle_monitor_process_top_n_change,
-                    args=(metric,),
-                    width=150,
-                )
-            with action_col:
-                refresh_clicked = st.button(
-                    "",
-                    key=f"monitor_{metric.lower()}_refresh_button",
-                    help="Refresh",
-                    on_click=apply_monitor_process_controls,
-                    args=(metric,),
-                    width="stretch",
-                )
+    refresh_clicked = render_chart_controls(
+        f"monitor_{metric.lower()}_controls",
+        top_n_key=top_n_input_key,
+        top_n_on_change=handle_monitor_process_top_n_change,
+        top_n_args=(metric,),
+        refresh_key=f"monitor_{metric.lower()}_refresh_button",
+        refresh_on_click=apply_monitor_process_controls,
+        refresh_args=(metric,),
+    )
     applied_top_n = normalized_monitor_process_top_n(metric)
     result, fresh_cache = cached_monitor_metric_result(metric)
-    if (refresh_clicked or not fresh_cache) and not background_job_is_running(job_name):
+    if (refresh_clicked or not fresh_cache) and not background_job_is_running(
+        job_name
+    ):
         start_monitor_metric_refresh(metric)
     metric_running = background_job_is_running(job_name)
     render_background_job_status(job_name)
@@ -13967,9 +14187,10 @@ def render_process_monitor_chart(metric: str) -> None:
     title = "Memory" if metric == "MEM" else "CPU"
     unit_suffix = "" if has_byte_values else " %"
     color = "#ffb86c"
-    render_view_subtitle(f"Top {applied_top_n} {title} processes")
-    render_bar_chart(
+    plot_chart(
         rows,
+        "HBars",
+        f"Top {applied_top_n} {title} processes",
         x=alt.X("Value:Q", title=f"{title}{unit_suffix}", axis=axis),
         y=alt.Y(
             "Label:N",
@@ -14233,14 +14454,12 @@ def render_configs_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    config_view = st.segmented_control(
+    config_view = render_view_segmented_control(
         "Configuration view",
-        options=hhs_ui.CONFIG_VIEWS,
+        hhs_ui.CONFIG_VIEWS,
+        "config_view",
+        "ENV",
         format_func=config_view_label,
-        key="config_view",
-        label_visibility="collapsed",
-        on_change=save_ui_state,
-        width="stretch",
     )
     if config_view == "ENV":
         render_envs_table()
@@ -15216,14 +15435,12 @@ def render_ssh_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    ssh_view = st.segmented_control(
+    ssh_view = render_view_segmented_control(
         "SSH view",
-        options=hhs_ui.SSH_VIEWS,
+        hhs_ui.SSH_VIEWS,
+        "ssh_view",
+        "TUNNELS",
         format_func=ssh_view_label,
-        key="ssh_view",
-        label_visibility="collapsed",
-        on_change=save_ui_state,
-        width="stretch",
     )
     if ssh_view == "TUNNELS":
         render_ssh_tunnels_panel(host)
@@ -15246,14 +15463,12 @@ def render_history_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    history_view = st.segmented_control(
+    history_view = render_view_segmented_control(
         "History view",
-        options=hhs_ui.HISTORY_VIEWS,
+        hhs_ui.HISTORY_VIEWS,
+        "history_view",
+        "COMMANDS",
         format_func=history_view_label,
-        key="history_view",
-        label_visibility="collapsed",
-        on_change=save_ui_state,
-        width="stretch",
     )
     if history_view == "COMMANDS":
         render_history_commands_table()
@@ -15273,14 +15488,12 @@ def render_monitor_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    monitor_view = st.segmented_control(
+    monitor_view = render_view_segmented_control(
         "Monitor view",
-        options=hhs_ui.MONITOR_VIEWS,
+        hhs_ui.MONITOR_VIEWS,
+        "monitor_view",
+        "DISK",
         format_func=monitor_view_label,
-        key="monitor_view",
-        label_visibility="collapsed",
-        on_change=save_ui_state,
-        width="stretch",
     )
     if monitor_view == "DISK":
         render_monitor_disk_chart()
@@ -17212,14 +17425,12 @@ def render_ai_view() -> None:
         """,
         unsafe_allow_html=True,
     )
-    ai_view = st.segmented_control(
+    ai_view = render_view_segmented_control(
         "AI view",
-        options=hhs_ui.AI_VIEWS,
+        hhs_ui.AI_VIEWS,
+        "ai_view",
+        "CHAT",
         format_func=ai_view_label,
-        key="ai_view",
-        label_visibility="collapsed",
-        on_change=save_ui_state,
-        width="stretch",
     )
     if ai_view == "CHAT":
         render_ai_chat_panel()
