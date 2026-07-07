@@ -283,6 +283,7 @@ AI_MODEL_DELETE_JOB = "ai_model_delete"
 UPDATER_UPDATE_JOB = "updater_update"
 UPDATER_CHECK_JOB = "updater_check"
 AI_ASK_JOB = "ai_ask"
+TERMINAL_AI_DEFAULT_PROMPT = "Explain me this"
 FOOTER_VERSION_JOB = "footer_hhs_version"
 FOOTER_WORKING_DIR_JOB = "footer_working_dir"
 SSH_CONNECT_JOB = "ssh_connect"
@@ -4287,7 +4288,7 @@ def footer_cache_clear_menu_markup() -> str:
         <summary class="hhs-footer-cache-clear-trigger"
                  title="Clear application cache"
                  aria-label="Clear application cache">
-          <span class="hhs-footer-cache-refresh-glyph">♻</span>
+          <span class="hhs-footer-glyph-button">♻</span>
         </summary>
         <div class="hhs-footer-cache-clear-panel" data-clear-param="{clear_param}">
           <label>
@@ -4320,15 +4321,40 @@ def render_footer_cache_clear_menu_script() -> None:
               return;
             }
             panel.dataset.clickHandlerInstalled = "true";
+            const menu = panel.closest(".hhs-footer-cache-clear-menu");
+            const closeMenu = () => {
+              if (menu) {
+                menu.removeAttribute("open");
+              }
+            };
+            const outsidePointerHandler = (event) => {
+              if (!menu || !menu.open || menu.contains(event.target)) {
+                return;
+              }
+              closeMenu();
+            };
+            if (window.parent.__hhsFooterCacheClearOutsideHandler) {
+              doc.removeEventListener(
+                "pointerdown",
+                window.parent.__hhsFooterCacheClearOutsideHandler,
+                true
+              );
+            }
+            window.parent.__hhsFooterCacheClearOutsideHandler = outsidePointerHandler;
+            doc.addEventListener("pointerdown", outsidePointerHandler, true);
+            menu?.addEventListener("toggle", () => {
+              if (menu.open) {
+                doc.querySelectorAll(".hhs-footer-terminal-ai-menu[open]").forEach((otherMenu) => {
+                  otherMenu.removeAttribute("open");
+                });
+              }
+            });
             panel.querySelector("button")?.addEventListener("click", () => {
               const checkedOptions = Array.from(
                 panel.querySelectorAll('input[type="checkbox"][data-param]:checked')
               );
-              const menu = panel.closest(".hhs-footer-cache-clear-menu");
               if (!checkedOptions.length) {
-                if (menu) {
-                  menu.removeAttribute("open");
-                }
+                closeMenu();
                 return;
               }
               const params = new URLSearchParams(window.parent.location.search);
@@ -4339,6 +4365,314 @@ def render_footer_cache_clear_menu_script() -> None:
               window.parent.location.search = params.toString();
             });
           })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def footer_terminal_ai_menu_markup() -> str:
+    """Return the native HTML footer terminal AI prompt menu."""
+    default_prompt = html.escape(TERMINAL_AI_DEFAULT_PROMPT, quote=True)
+    return f"""
+      <details class="hhs-footer-terminal-ai-menu">
+        <summary class="hhs-footer-terminal-ai-trigger"
+                 title="Ask AI about terminal"
+                 aria-label="Ask AI about terminal">
+          <span class="hhs-footer-glyph-button"></span>
+        </summary>
+        <div class="hhs-footer-terminal-ai-panel" data-default-prompt="{default_prompt}">
+          <label>
+            <span>Prompt</span>
+            <input
+              class="hhs-footer-terminal-ai-prompt-input"
+              type="text"
+              value=""
+              placeholder="{default_prompt}"
+              aria-label="Terminal AI prompt"
+            >
+          </label>
+          <label class="hhs-footer-terminal-ai-context-preview">
+            <span>Terminal text</span>
+            <input
+              class="hhs-footer-terminal-ai-context-input"
+              type="text"
+              value=""
+              placeholder="Terminal text"
+              aria-label="Captured terminal text"
+              readonly
+            >
+          </label>
+          <button type="button">OK</button>
+        </div>
+      </details>
+    """.strip()
+
+
+def render_footer_terminal_ai_menu_script() -> None:
+    """Submit terminal context prompt choices directly into the ttyd terminal."""
+    render_script_html(
+        f"""
+        <script>
+          (() => {{
+            const doc = window.parent.document;
+            const panel = doc.querySelector(".hhs-footer-terminal-ai-panel");
+            if (!panel || panel.dataset.clickHandlerInstalled === "true") {{
+              return;
+            }}
+            panel.dataset.clickHandlerInstalled = "true";
+            const menu = panel.closest(".hhs-footer-terminal-ai-menu");
+            const trigger = menu?.querySelector(".hhs-footer-terminal-ai-trigger");
+            const input = panel.querySelector(".hhs-footer-terminal-ai-prompt-input");
+            const contextInput = panel.querySelector(".hhs-footer-terminal-ai-context-input");
+            const button = panel.querySelector("button");
+            const defaultPrompt = {json.dumps(TERMINAL_AI_DEFAULT_PROMPT)};
+            const contextDelayMs = 700;
+            const contextWaitIntervalMs = 50;
+            const contextPreviewMaxChars = 180;
+            let currentTerminalContextEvent = null;
+            let ignoreTerminalContextUntil = 0;
+            const cleanTerminalContent = (value) => String(value || "")
+              .replace(/\\r\\n?/g, "\\n")
+              .trim();
+            const cleanTerminalPreview = (value) => cleanTerminalContent(value).replace(/\\s+/g, " ");
+            const contextPreviewText = (value) => {{
+              const cleanValue = cleanTerminalPreview(value);
+              if (cleanValue.length <= contextPreviewMaxChars) {{
+                return cleanValue;
+              }}
+              return `${{cleanValue.slice(0, contextPreviewMaxChars - 1)}}…`;
+            }};
+            const terminalEventMatchesRequest = (terminalEvent) => {{
+              const activeRequestId = panel.dataset.requestId || "";
+              const eventRequestId = String(terminalEvent.requestId || "");
+              return !activeRequestId || eventRequestId === activeRequestId;
+            }};
+            const setTerminalContextPreview = (value) => {{
+              if (!contextInput) {{
+                return;
+              }}
+              const cleanValue = cleanTerminalPreview(value);
+              contextInput.value = contextPreviewText(cleanValue);
+              contextInput.title = cleanValue;
+              contextInput.dataset.empty = cleanValue ? "false" : "true";
+            }};
+            const requestTerminalContext = (force = false) => {{
+              if (!force && panel.dataset.requestId) {{
+                return panel.dataset.requestId;
+              }}
+              const requestId = `${{Date.now()}}-${{Math.random().toString(36).slice(2)}}`;
+              panel.dataset.requestId = requestId;
+              currentTerminalContextEvent = null;
+              setTerminalContextPreview("");
+              const frame = doc.getElementById("hhs-persistent-ttyd-frame");
+              if (frame && frame.contentWindow) {{
+                frame.contentWindow.postMessage({{
+                  type: "hhs-ttyd-context-request",
+                  requestId,
+                }}, "*");
+              }}
+              return requestId;
+            }};
+            const applyTerminalContextEvent = (terminalEvent) => {{
+              if (Date.now() < ignoreTerminalContextUntil) {{
+                return false;
+              }}
+              if (!terminalEvent || terminalEvent.type !== "terminal-context") {{
+                return false;
+              }}
+              if (!terminalEventMatchesRequest(terminalEvent)) {{
+                return false;
+              }}
+              currentTerminalContextEvent = terminalEvent;
+              setTerminalContextPreview(terminalEvent.content || "");
+              return true;
+            }};
+            const matchingTerminalContextEvent = () => {{
+              if (Date.now() < ignoreTerminalContextUntil) {{
+                return null;
+              }}
+              const terminalEvent = currentTerminalContextEvent || window.parent.__hhsTtydTerminalContextEvent;
+              if (!terminalEvent || terminalEvent.type !== "terminal-context") {{
+                return null;
+              }}
+              if (terminalEventMatchesRequest(terminalEvent)) {{
+                return terminalEvent;
+              }}
+              return terminalEvent.content ? terminalEvent : null;
+            }};
+            const refreshTerminalContextPreview = () => {{
+              applyTerminalContextEvent(window.parent.__hhsTtydTerminalContextEvent);
+            }};
+            const waitForTerminalContextEvent = async (timeoutMs = contextDelayMs) => {{
+              const deadline = Date.now() + timeoutMs;
+              while (Date.now() < deadline) {{
+                refreshTerminalContextPreview();
+                const terminalEvent = matchingTerminalContextEvent();
+                if (terminalEvent?.content) {{
+                  currentTerminalContextEvent = terminalEvent;
+                  setTerminalContextPreview(terminalEvent.content || "");
+                  return terminalEvent;
+                }}
+                await new Promise((resolve) => window.setTimeout(resolve, contextWaitIntervalMs));
+              }}
+              refreshTerminalContextPreview();
+              return matchingTerminalContextEvent();
+            }};
+            const closeMenu = () => {{
+              if (menu) {{
+                menu.removeAttribute("open");
+              }}
+            }};
+            const resetTerminalInputs = () => {{
+              if (input) {{
+                input.value = "";
+              }}
+              ignoreTerminalContextUntil = Date.now() + 1200;
+              currentTerminalContextEvent = null;
+              delete panel.dataset.requestId;
+              setTerminalContextPreview("");
+            }};
+            const shellSingleQuote = (value) => (
+              "'" + String(value || "").replace(/'/g, "'\\\\''") + "'"
+            );
+            const shellDoubleQuote = (value) => JSON.stringify(String(value || ""))
+              .replace(/\\$/g, "\\\\$")
+              .replace(/`/g, "\\\\`");
+            const buildTerminalAskPrompt = (instruction) => (
+              String(instruction || defaultPrompt).trim() || defaultPrompt
+            );
+            const buildTerminalAskContext = (terminalEvent) => {{
+              const eventContent = terminalEvent?.content || "";
+              const previewContent = contextInput?.title || contextInput?.value || "";
+              const content = cleanTerminalContent(eventContent || previewContent);
+              return `${{content}}\\n\\n`;
+            }};
+            const buildTerminalAskCommand = (instruction, terminalEvent) => (
+              `echo ${{shellSingleQuote(buildTerminalAskContext(terminalEvent))}} | __hhs ask execute ${{shellDoubleQuote(buildTerminalAskPrompt(instruction))}}`
+            );
+            const submitTerminalCommand = (command) => {{
+              const frame = doc.getElementById("hhs-persistent-ttyd-frame");
+              if (!frame || !frame.contentWindow) {{
+                return false;
+              }}
+              frame.contentWindow.postMessage({{
+                type: "hhs-ttyd-command-submit",
+                command,
+              }}, "*");
+              return true;
+            }};
+            const terminalContextHandler = (event) => {{
+              const data = event.data || {{}};
+              if (data.type !== "hhs-ttyd-event") {{
+                return;
+              }}
+              applyTerminalContextEvent(data.event || {{}});
+            }};
+            if (window.parent.__hhsFooterTerminalAiContextHandler) {{
+              window.parent.removeEventListener(
+                "message",
+                window.parent.__hhsFooterTerminalAiContextHandler
+              );
+            }}
+            window.parent.__hhsFooterTerminalAiContextHandler = terminalContextHandler;
+            window.parent.addEventListener("message", terminalContextHandler);
+            if (window !== window.parent) {{
+              window.addEventListener("message", terminalContextHandler);
+            }}
+            const outsidePointerHandler = (event) => {{
+              if (!menu || !menu.open || menu.contains(event.target)) {{
+                return;
+              }}
+              closeMenu();
+            }};
+            const outsideFocusHandler = () => {{
+              window.setTimeout(() => {{
+                const activeElement = doc.activeElement;
+                if (!menu || !menu.open || !activeElement || menu.contains(activeElement)) {{
+                  return;
+                }}
+                closeMenu();
+              }}, 0);
+            }};
+            if (window.parent.__hhsFooterTerminalAiOutsideHandler) {{
+              doc.removeEventListener(
+                "pointerdown",
+                window.parent.__hhsFooterTerminalAiOutsideHandler,
+                true
+              );
+              doc.removeEventListener(
+                "focusin",
+                window.parent.__hhsFooterTerminalAiOutsideHandler,
+                true
+              );
+            }}
+            if (window.parent.__hhsFooterTerminalAiOutsideFocusHandler) {{
+              window.parent.removeEventListener(
+                "blur",
+                window.parent.__hhsFooterTerminalAiOutsideFocusHandler,
+                true
+              );
+            }}
+            window.parent.__hhsFooterTerminalAiOutsideHandler = outsidePointerHandler;
+            window.parent.__hhsFooterTerminalAiOutsideFocusHandler = outsideFocusHandler;
+            doc.addEventListener("pointerdown", outsidePointerHandler, true);
+            doc.addEventListener("focusin", outsidePointerHandler, true);
+            window.parent.addEventListener("blur", outsideFocusHandler, true);
+            const focusInput = () => {{
+              if (!input) {{
+                return;
+              }}
+              input.focus();
+              input.select();
+            }};
+            trigger?.addEventListener("pointerdown", () => {{
+              requestTerminalContext(true);
+            }}, {{ capture: true }});
+            if (menu) {{
+              menu.addEventListener("toggle", () => {{
+                if (menu.open) {{
+                  ignoreTerminalContextUntil = 0;
+                  doc.querySelectorAll(".hhs-footer-cache-clear-menu[open]").forEach((otherMenu) => {{
+                    otherMenu.removeAttribute("open");
+                  }});
+                  requestTerminalContext(false);
+                  window.setTimeout(() => {{
+                    void waitForTerminalContextEvent(contextDelayMs);
+                  }}, 0);
+                  window.setTimeout(refreshTerminalContextPreview, 80);
+                  window.setTimeout(refreshTerminalContextPreview, 220);
+                  window.setTimeout(focusInput, 120);
+                }} else {{
+                  delete panel.dataset.requestId;
+                  currentTerminalContextEvent = null;
+                  setTerminalContextPreview("");
+                }}
+              }});
+            }}
+            button?.addEventListener("click", async () => {{
+              requestTerminalContext(false);
+              const prompt = (input?.value || defaultPrompt).trim() || defaultPrompt;
+              const terminalEvent = await waitForTerminalContextEvent(contextDelayMs);
+              const command = buildTerminalAskCommand(prompt, terminalEvent);
+              const submitted = submitTerminalCommand(command);
+              if (submitted) {{
+                resetTerminalInputs();
+              }}
+              closeMenu();
+            }});
+            input?.addEventListener("keydown", (event) => {{
+              if (event.key === "Enter") {{
+                event.preventDefault();
+                button?.click();
+              }}
+              if (event.key === "Escape" && menu) {{
+                event.preventDefault();
+                menu.removeAttribute("open");
+              }}
+            }});
+          }})();
         </script>
         """,
         height=0,
@@ -4363,6 +4697,7 @@ def render_footer() -> None:
     shell_name = html.escape(os.environ.get("HHS_MY_SHELL", "").strip().upper())
     shell_status_markup = ""
     cache_clear_markup = ""
+    terminal_ai_markup = ""
     if shell_name:
         shell_status_markup = (
             f'<a class="hhs-footer-shell-status" href="{shell_version_url}" '
@@ -4373,6 +4708,10 @@ def render_footer() -> None:
         cache_clear_markup = (
             f'<span class="hhs-footer-glyph"></span>'
             f"{footer_cache_clear_menu_markup()}"
+        )
+        terminal_ai_markup = (
+            f'<span class="hhs-footer-glyph"></span>'
+            f"{footer_terminal_ai_menu_markup()}"
         )
     connected_host = str(st.session_state.get("ssh_connection_host", "")).strip()
     remote_status_markup = ""
@@ -4390,7 +4729,7 @@ def render_footer() -> None:
     if shell_status_markup:
         shell_controls_markup = (
             f'<span class="hhs-footer-shell-group">'
-            f"{shell_status_markup}{cache_clear_markup}</span>"
+            f"{shell_status_markup}{cache_clear_markup}{terminal_ai_markup}</span>"
         )
     status_group_markup = (
         f'<span class="hhs-footer-status-group">'
@@ -4415,6 +4754,7 @@ def render_footer() -> None:
         """)
     if shell_name:
         render_footer_cache_clear_menu_script()
+        render_footer_terminal_ai_menu_script()
 
 
 @st.fragment(run_every="5s")
@@ -6516,7 +6856,7 @@ def ttyd_font_format(font_file: Path) -> str:
 def ttyd_index_signature(binary: str, event_url: str = "") -> str:
     """Return a stable cache signature for the ttyd index and terminal font."""
     font_file = ttyd_font_file()
-    parts = ["hhs-ttyd-font-index-v10-exit-v1", binary, event_url]
+    parts = ["hhs-ttyd-font-index-v15-terminal-cancel-command-v1", binary, event_url]
     for path in (Path(binary), font_file):
         try:
             stat = path.stat()
@@ -6632,8 +6972,16 @@ def ttyd_bridge_script(event_url: str) -> str:
         "<script>"
         "(()=>{"
         f"const eventUrl={json.dumps(event_url)};"
+        f"const maxContentLength={int(hhs_ui.AI_TERMINAL_CONTEXT_MAX_CHARS)};"
         "const prefix='HHS_TTYD_EVENT|';"
+        "const selectionSnapshotAgeMs=300000;"
+        "let lastSelectedContent='';"
+        "let lastSelectedAt=0;"
         "const decode=(value)=>{try{return decodeURIComponent(escape(atob(value)));}catch(_error){return '';}};"
+        "const cleanContent=(value)=>String(value||'').replace(/\\r\\n?/g,'\\n').trim();"
+        "const limitContent=(value)=>{const content=cleanContent(value);"
+        "if(content.length<=maxContentLength){return {content,truncated:false};}"
+        "return {content:content.slice(content.length-maxContentLength),truncated:true};};"
         "const parse=(data)=>{"
         "if(!data||!data.startsWith(prefix)){return null;}"
         "const parts=data.split('|');"
@@ -6645,11 +6993,87 @@ def ttyd_bridge_script(event_url: str) -> str:
         "try{window.parent.postMessage({type:'hhs-ttyd-event',event},'*');}catch(_error){}"
         "try{fetch(eventUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event),keepalive:true}).catch(()=>{});}catch(_error){}"
         "};"
+        "const replyToRequester=(requestEvent,event)=>{"
+        "try{if(requestEvent&&requestEvent.source&&requestEvent.source!==window.parent){"
+        "requestEvent.source.postMessage({type:'hhs-ttyd-event',event},'*');}}catch(_error){}"
+        "};"
+        "const visibleBuffer=()=>{"
+        "const term=window.term;"
+        "const buffer=term&&term.buffer&&term.buffer.active;"
+        "if(!term||!buffer||typeof buffer.getLine!=='function'){return '';}"
+        "const rows=Number(term.rows||24);"
+        "const length=Number(buffer.length||0);"
+        "const viewportY=Number(buffer.viewportY||Math.max(0,(buffer.baseY||0)-rows+1));"
+        "const start=Math.max(0,Math.min(length,viewportY));"
+        "const end=Math.max(start,Math.min(length,start+rows));"
+        "const lines=[];"
+        "for(let index=start;index<end;index+=1){"
+        "const line=buffer.getLine(index);"
+        "if(line&&typeof line.translateToString==='function'){lines.push(line.translateToString(true));}"
+        "}"
+        "return lines.join('\\n');"
+        "};"
+        "const selectionContent=()=>{"
+        "const term=window.term;"
+        "return term&&typeof term.getSelection==='function'?cleanContent(term.getSelection()):'';"
+        "};"
+        "const rememberSelection=()=>{"
+        "const selected=selectionContent();"
+        "if(selected){lastSelectedContent=selected;lastSelectedAt=Date.now();}"
+        "};"
+        "const recentSelection=()=>{"
+        "const current=selectionContent();"
+        "if(current){lastSelectedContent=current;lastSelectedAt=Date.now();return current;}"
+        "if(lastSelectedContent&&Date.now()-lastSelectedAt<=selectionSnapshotAgeMs){return lastSelectedContent;}"
+        "return '';"
+        "};"
+        "const terminalContext=()=>{"
+        "const selected=recentSelection();"
+        "if(selected){const limited=limitContent(selected);return {...limited,mode:'selection'};}"
+        "const limited=limitContent(visibleBuffer());"
+        "return {...limited,mode:limited.content?'visible':'empty'};"
+        "};"
+        "const sendTerminalInput=(text)=>{"
+        "const term=window.term;"
+        "if(term&&typeof term.focus==='function'){term.focus();}"
+        "const coreService=term&&term._core&&term._core.coreService;"
+        "if(coreService&&typeof coreService.triggerDataEvent==='function'){"
+        "coreService.triggerDataEvent(String(text||''),true);return true;}"
+        "if(term&&typeof term.paste==='function'){term.paste(String(text||''));return true;}"
+        "const textarea=window.document&&window.document.querySelector('.xterm-helper-textarea');"
+        "if(textarea){textarea.focus();textarea.value+=String(text||'');"
+        "textarea.dispatchEvent(new InputEvent('input',{inputType:'insertText',data:String(text||''),bubbles:true}));"
+        "return true;}"
+        "return false;"
+        "};"
+        "const submitTerminalCommand=(command)=>{"
+        "const cleanCommand=String(command||'').trim();"
+        "if(!cleanCommand){return false;}"
+        "if(!sendTerminalInput('\\x03')){return false;}"
+        "window.setTimeout(()=>{sendTerminalInput(`${cleanCommand}\\r`);},90);"
+        "return true;"
+        "};"
+        "window.addEventListener('message',(messageEvent)=>{"
+        "const data=messageEvent.data||{};"
+        "if(data.type==='hhs-ttyd-command-submit'){submitTerminalCommand(data.command);return;}"
+        "if(data.type!=='hhs-ttyd-context-request'){return;}"
+        "const requestId=String(data.requestId||'').replace(/[^A-Za-z0-9_.:-]/g,'').slice(0,80);"
+        "const context=terminalContext();"
+        "const event={type:'terminal-context',command:'ask-ai',status:context.content?0:1,cwd:'',"
+        "time:Date.now(),requestId,mode:context.mode,content:context.content,truncated:context.truncated};"
+        "publish(event);"
+        "replyToRequester(messageEvent,event);"
+        "});"
         "const install=()=>{"
         "const term=window.term;"
         "if(!term||!term.parser||window.__hhsTtydBridgeInstalled){return !!window.__hhsTtydBridgeInstalled;}"
         "window.__hhsTtydBridgeInstalled=true;"
         "term.parser.registerOscHandler(777,(data)=>{const event=parse(String(data||''));if(event){publish(event);return true;}return false;});"
+        "const scheduleRememberSelection=()=>{window.setTimeout(rememberSelection,0);};"
+        "window.addEventListener('mouseup',scheduleRememberSelection,true);"
+        "window.addEventListener('keyup',scheduleRememberSelection,true);"
+        "window.addEventListener('touchend',scheduleRememberSelection,true);"
+        "if(window.document){window.document.addEventListener('selectionchange',scheduleRememberSelection,true);}"
         "window.addEventListener('keydown',(event)=>{"
         "if((event.metaKey||event.ctrlKey)&&String(event.key||'').toLowerCase()==='k'){"
         "event.preventDefault();event.stopPropagation();"
@@ -7200,13 +7624,30 @@ def normalize_ttyd_event(value: object) -> dict[str, object]:
         event_time = int(time.time() * 1000)
     if not event_type:
         return {}
-    return {
+    event = {
         "type": event_type,
         "command": command or "unknown",
         "status": status,
         "cwd": cwd,
         "time": event_time,
     }
+    if event_type == "terminal-context":
+        content = str(value.get("content", "")).replace("\r\n", "\n")
+        content = content.replace("\r", "\n").strip()
+        truncated = bool(value.get("truncated", False))
+        max_chars = int(hhs_ui.AI_TERMINAL_CONTEXT_MAX_CHARS)
+        if len(content) > max_chars:
+            content = content[-max_chars:]
+            truncated = True
+        event["content"] = content
+        event["mode"] = re.sub(
+            r"[^A-Za-z0-9_-]+", "", str(value.get("mode", ""))
+        )[:32]
+        event["requestId"] = re.sub(
+            r"[^A-Za-z0-9_.:-]+", "", str(value.get("requestId", ""))
+        )[:80]
+        event["truncated"] = truncated
+    return event
 
 
 def sync_ttyd_event_state() -> None:
@@ -7289,7 +7730,8 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         """Handle navigator.sendBeacon cleanup requests."""
-        if urllib.parse.urlparse(self.path).path == "/ttyd-event":
+        request_path = urllib.parse.urlparse(self.path).path
+        if request_path == "/ttyd-event":
             self.handle_ttyd_event_request()
             return
         self.handle_cleanup_request()
@@ -7320,7 +7762,6 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
             store_ttyd_event(token, event)
         self.send_response(204)
         self.end_headers()
-
 
 def cleanup_all_registered_sessions() -> None:
     """Close all registered ttyd and SSH resources on Streamlit process exit."""
@@ -7395,12 +7836,15 @@ def render_browser_cleanup_script() -> None:
     token = update_browser_cleanup_registration()
     port = ensure_ttyd_cleanup_server()
     cleanup_url = f"http://{hhs_ui.TTYD_HOST}:{port}/cleanup?token={token}"
+    ttyd_event_request_url = f"http://{hhs_ui.TTYD_HOST}:{port}/ttyd-event?token={token}"
     render_script_html(
         f"""
         <script>
           (() => {{
             const cleanupUrl = {cleanup_url!r};
+            const ttydEventUrl = {ttyd_event_request_url!r};
             const parentWindow = window.parent;
+            parentWindow.__hhsTtydEventUrl = ttydEventUrl;
             if (
               parentWindow.__hhsTtydCleanupUrl === cleanupUrl &&
               parentWindow.__hhsTtydCleanupHandler
@@ -7442,11 +7886,46 @@ def render_browser_cleanup_script() -> None:
             parentWindow.addEventListener("pagehide", cleanup, {{ once: true }});
             parentWindow.addEventListener("beforeunload", cleanup, {{ once: true }});
             parentWindow.__hhsTtydCleanupHandler = cleanup;
+            if (parentWindow.__hhsTtydTerminalContextCacheHandler) {{
+              parentWindow.removeEventListener(
+                "message",
+                parentWindow.__hhsTtydTerminalContextCacheHandler
+              );
+            }}
+            parentWindow.__hhsTtydTerminalContextCacheHandler = (event) => {{
+              const data = event.data || {{}};
+              if (
+                data.type === "hhs-ttyd-event" &&
+                data.event &&
+                data.event.type === "terminal-context"
+              ) {{
+                parentWindow.__hhsTtydTerminalContextEvent = data.event;
+              }}
+            }};
+            parentWindow.addEventListener(
+              "message",
+              parentWindow.__hhsTtydTerminalContextCacheHandler
+            );
             if (!parentWindow.__hhsTtydEventListenerInstalled) {{
               parentWindow.__hhsTtydEventListenerInstalled = true;
               parentWindow.addEventListener("message", (event) => {{
                 const data = event.data || {{}};
-                if (data.type !== "hhs-ttyd-event" || !data.event || data.event.type !== "cwd") {{
+                if (data.type !== "hhs-ttyd-event" || !data.event) {{
+                  return;
+                }}
+                if (data.event.type === "terminal-context") {{
+                  parentWindow.__hhsTtydTerminalContextEvent = data.event;
+                  try {{
+                    fetch(parentWindow.__hhsTtydEventUrl || ttydEventUrl, {{
+                      method: "POST",
+                      headers: {{"Content-Type": "application/json"}},
+                      body: JSON.stringify(data.event),
+                      keepalive: true,
+                    }}).catch(() => {{}});
+                  }} catch (_error) {{}}
+                  return;
+                }}
+                if (data.event.type !== "cwd") {{
                   return;
                 }}
                 const cwd = String(data.event.cwd || "").trim();
@@ -11297,6 +11776,88 @@ def build_hhs_ask_command(message: str) -> str:
     return build_hhs_ask_execute_command(["-k", message])
 
 
+def terminal_context_source_label(mode: str) -> str:
+    """Return a human-readable label for a terminal context capture mode."""
+    normalized_mode = re.sub(r"[^A-Za-z0-9_-]+", "", mode).lower()
+    if normalized_mode == "selection":
+        return "selected terminal text"
+    if normalized_mode == "visible":
+        return "visible terminal buffer"
+    return "terminal buffer"
+
+
+def terminal_context_markdown_fence(content: str) -> str:
+    """Return a Markdown fence long enough to wrap terminal content safely."""
+    fence = "```"
+    while fence in content:
+        fence += "`"
+    return fence
+
+
+def build_terminal_ai_context_prompt(
+    instruction: str,
+    content: str,
+    mode: str,
+    truncated: bool,
+) -> str:
+    """Build the AI chat prompt for an instruction plus terminal context."""
+    clean_instruction = instruction.strip() or TERMINAL_AI_DEFAULT_PROMPT
+    clean_content = content.strip()
+    source_label = terminal_context_source_label(mode)
+    truncation_note = ""
+    if truncated:
+        truncation_note = (
+            "\nTerminal context note: content was truncated to the most recent "
+            f"{int(hhs_ui.AI_TERMINAL_CONTEXT_MAX_CHARS)} characters."
+        )
+    fence = terminal_context_markdown_fence(clean_content)
+    return (
+        f"{clean_instruction}\n\n"
+        f"Terminal context source: {source_label}.{truncation_note}\n\n"
+        f"{fence}text\n{clean_content}\n{fence}"
+    )
+
+
+def submit_ai_chat_prompt(
+    prompt: str,
+    ollama_model: str = "",
+    context_size: str = "",
+) -> bool:
+    """Submit a prompt through the same background Ask AI job used by chat."""
+    clean_prompt = prompt.strip()
+    if not clean_prompt:
+        push_floating_status("Ask AI prompt is empty.", "warn")
+        return False
+    if background_job_is_running(AI_ASK_JOB):
+        push_floating_status("Ollama is still generating a response.", "warn")
+        return False
+    st.session_state.setdefault("ai_chat_messages", [])
+    if not isinstance(st.session_state["ai_chat_messages"], list):
+        st.session_state["ai_chat_messages"] = []
+    st.session_state["ai_chat_messages"].append(
+        {"role": "user", "content": clean_prompt}
+    )
+    save_ui_state()
+    ask_started_at = time.perf_counter()
+    started = start_background_bash_command(
+        AI_ASK_JOB,
+        build_hhs_ask_command(clean_prompt),
+        "Asking AI...",
+        timeout_seconds=hhs_ask_timeout_seconds(),
+        metadata={
+            "prompt": clean_prompt,
+            "ollama_model": ollama_model,
+            "context_size": context_size,
+            "started_at": ask_started_at,
+        },
+        show_preloader_event=True,
+    )
+    if not started:
+        push_floating_status("Ollama is still generating a response.", "warn")
+        return False
+    return True
+
+
 def build_hhs_ask_context_command() -> str:
     """Build the Bash command used to show the current Ollama ask context."""
     return build_hhs_ask_execute_command(["-c"])
@@ -13722,11 +14283,13 @@ def ollama_service_is_available() -> bool:
 
 
 def initialize_ollama_service_availability() -> None:
-    """Seed AI tab visibility from cached service data without starting commands."""
+    """Seed and refresh AI tab visibility from service availability data."""
     if st.session_state.get(hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY):
         return
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = True
-    cached_hhs_services_result()
+    _result, fresh_cache = cached_hhs_services_result()
+    if not fresh_cache and not background_job_is_running(SERVICE_LIST_JOB):
+        start_hhs_services_list_refresh()
 
 
 def main_views() -> tuple[str, ...]:
@@ -17473,11 +18036,8 @@ def render_ai_chat_panel() -> None:
             render_background_job_status(AI_ASK_JOB, "Generating response...")
 
     if prompt := st.chat_input("Ask Ollama through HomeSetup"):
-        if background_job_is_running(AI_ASK_JOB):
-            push_floating_status("Ollama is still generating a response.", "warn")
+        if not submit_ai_chat_prompt(prompt, ollama_model, context_size):
             return
-        st.session_state["ai_chat_messages"].append({"role": "user", "content": prompt})
-        save_ui_state()
         with st.chat_message(
             "User",
             avatar=(
@@ -17487,23 +18047,6 @@ def render_ai_chat_panel() -> None:
             ),
         ):
             render_ai_chat_message("user", prompt, username, ollama_model, context_size)
-        ask_started_at = time.perf_counter()
-        started = start_background_bash_command(
-            AI_ASK_JOB,
-            build_hhs_ask_command(prompt),
-            "Asking Ollama",
-            timeout_seconds=hhs_ask_timeout_seconds(),
-            metadata={
-                "prompt": prompt,
-                "ollama_model": ollama_model,
-                "context_size": context_size,
-                "started_at": ask_started_at,
-            },
-            show_preloader_event=True,
-        )
-        if not started:
-            push_floating_status("Ollama is still generating a response.", "warn")
-            return
         with st.chat_message(
             "Ollama",
             avatar=(

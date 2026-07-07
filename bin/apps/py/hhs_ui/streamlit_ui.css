@@ -3,6 +3,7 @@
   --hhs-bar-chart-height: max(12rem, min(380px, calc(100dvh - var(--hhs-bar-chart-chrome-height) - var(--hhs-footer-guard-height))));
   --hhs-element-std-gap: 1rem;
   --hhs-footer-guard-height: 3.5rem;
+  --hhs-theme-footer-glyph-button: 1.5rem;
   --hhs-floating-status-height: calc(1.85em + 20px);
   --hhs-log-chrome-height: 8.5rem;
   --hhs-log-expander-collapsed-height: 3.4rem;
@@ -1315,11 +1316,13 @@ body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-sidebar-title,
 body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-floating-status,
 body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-app-footer,
 body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-footer-cache-clear-panel,
+body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-footer-terminal-ai-panel,
 body:has(div[role="dialog"]) .hhs-sidebar-clock,
 body:has(div[role="dialog"]) .hhs-sidebar-title,
 body:has(div[role="dialog"]) .hhs-floating-status,
 body:has(div[role="dialog"]) .hhs-app-footer,
-body:has(div[role="dialog"]) .hhs-footer-cache-clear-panel {
+body:has(div[role="dialog"]) .hhs-footer-cache-clear-panel,
+body:has(div[role="dialog"]) .hhs-footer-terminal-ai-panel {
   z-index: calc(var(--hhs-modal-scrim-z-index) - 1) !important;
 }
 
@@ -2140,10 +2143,16 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   display: none;
 }
 
-.hhs-footer-cache-refresh-glyph {
-  color: var(--hhs-success);
-  font-size: 2.5em;
-  margin-top: -3px;
+.hhs-footer-glyph-button {
+  align-items: center;
+  color: currentColor;
+  display: inline-flex;
+  font-size: var(--hhs-theme-footer-glyph-button);
+  height: var(--hhs-theme-footer-glyph-button);
+  justify-content: center;
+  line-height: 1;
+  margin-top: -2px;
+  width: var(--hhs-theme-footer-glyph-button);
 }
 
 .hhs-footer-cache-clear-trigger:hover,
@@ -2216,6 +2225,125 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 
 .hhs-footer-cache-clear-panel button:hover,
 .hhs-footer-cache-clear-panel button:focus {
+  background: color-mix(in srgb, var(--hhs-theme-primary-color) 18%, transparent);
+  border-color: var(--hhs-theme-primary-color);
+}
+
+.hhs-footer-terminal-ai-menu {
+  align-items: center;
+  color: var(--hhs-warning);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  height: 1.18rem;
+  line-height: 1;
+  position: relative;
+}
+
+.hhs-footer-terminal-ai-trigger {
+  align-items: center;
+  border-radius: 4px;
+  color: var(--hhs-warning);
+  cursor: pointer;
+  display: inline-flex;
+  height: 1.18rem;
+  justify-content: center;
+  line-height: 1;
+  list-style: none;
+  padding: 0 0.12rem;
+  text-decoration: none !important;
+}
+
+.hhs-footer-terminal-ai-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.hhs-footer-terminal-ai-trigger .hhs-footer-glyph-button {
+  font-size: calc((var(--hhs-theme-footer-glyph-button) * 0.5) + 5px);
+}
+
+.hhs-footer-terminal-ai-trigger:hover,
+.hhs-footer-terminal-ai-trigger:focus,
+.hhs-footer-terminal-ai-menu[open] .hhs-footer-terminal-ai-trigger {
+  background: color-mix(in srgb, var(--hhs-warning) 14%, transparent);
+  filter: brightness(1.15);
+}
+
+.hhs-footer-terminal-ai-panel {
+  background: var(--hhs-theme-secondary-background-color);
+  border: 1px solid color-mix(in srgb, var(--hhs-theme-border-color) 82%, transparent);
+  border-radius: var(--hhs-theme-base-radius);
+  bottom: calc(var(--hhs-footer-guard-height) + 0.7rem);
+  box-shadow: 0 1rem 2rem color-mix(in srgb, #000 46%, transparent);
+  box-sizing: border-box;
+  color: var(--hhs-theme-text-color);
+  display: flex;
+  flex-direction: column;
+  gap: var(--hhs-element-std-gap);
+  padding: 0.45rem;
+  position: fixed;
+  right: 1rem;
+  width: min(22rem, calc(100vw - 2rem)) !important;
+  z-index: 10060;
+}
+
+.hhs-footer-terminal-ai-panel label {
+  box-sizing: border-box;
+  color: var(--hhs-theme-text-color);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--hhs-ui-font-family), monospace;
+  font-size: 0.78rem;
+  font-weight: 800;
+  gap: 0.4rem;
+  line-height: 1;
+  width: 100%;
+}
+
+.hhs-footer-terminal-ai-panel input[type="text"] {
+  background: transparent;
+  border: 1px solid var(--hhs-theme-border-color);
+  border-radius: calc(var(--hhs-theme-base-radius) - 0.1rem);
+  box-sizing: border-box;
+  color: var(--hhs-theme-text-color);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  height: 2.25rem;
+  outline: none;
+  padding: 0 0.65rem;
+  width: 100%;
+}
+
+.hhs-footer-terminal-ai-panel input[type="text"]:focus {
+  border-color: var(--hhs-theme-primary-color);
+  box-shadow: 0 0 0 1px var(--hhs-theme-primary-color);
+}
+
+.hhs-footer-terminal-ai-context-input {
+  color: color-mix(in srgb, var(--hhs-theme-text-color) 72%, transparent) !important;
+  cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hhs-footer-terminal-ai-panel button {
+  background: transparent;
+  border: 1px solid var(--hhs-theme-border-color);
+  border-radius: calc(var(--hhs-theme-base-radius) - 0.1rem);
+  color: var(--hhs-theme-text-color);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  height: 2.25rem;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.hhs-footer-terminal-ai-panel button:hover,
+.hhs-footer-terminal-ai-panel button:focus {
   background: color-mix(in srgb, var(--hhs-theme-primary-color) 18%, transparent);
   border-color: var(--hhs-theme-primary-color);
 }
