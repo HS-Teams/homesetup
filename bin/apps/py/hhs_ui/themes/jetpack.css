@@ -111,10 +111,6 @@ body,
   fill: currentColor !important;
 }
 
-.hhs-view-heading {
-  border-bottom: 1px solid var(--hhs-theme-heading-border-color);
-}
-
 .hhs-view-heading h2 {
   background: none;
   color: var(--hhs-foreground);

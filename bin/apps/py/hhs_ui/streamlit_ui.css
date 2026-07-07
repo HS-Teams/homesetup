@@ -13,8 +13,8 @@
   --hhs-modal-z-index: 1000002;
   --hhs-command-overlay-z-index: 1000010;
   --hhs-streamlit-toolbar-guard-width: 8rem;
-  --hhs-view-gap: 0.95rem;
-  --hhs-view-section-gap: 0.8rem;
+  --hhs-view-gap: var(--hhs-element-std-gap);
+  --hhs-view-section-gap: var(--hhs-element-std-gap);
   --hhs-danger: #dc2626;
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
@@ -77,8 +77,8 @@ textarea,
 
 [data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"],
 .block-container > [data-testid="stVerticalBlock"] {
-  gap: 0 !important;
-  row-gap: 0 !important;
+  gap: var(--hhs-element-std-gap) !important;
+  row-gap: var(--hhs-element-std-gap) !important;
 }
 
 [data-testid="stVegaLiteChart"] {
@@ -169,17 +169,14 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   width: 2rem;
 }
 
-.st-key-alias_add_submit,
-.st-key-cmd_add_submit,
-.st-key-dir_add_submit,
-.st-key-env_add_submit,
-.st-key-path_add_submit {
-  display: none;
-}
-
+.st-key-alias_add_submit button,
+.st-key-cmd_add_submit button,
+.st-key-dir_add_submit button,
 .st-key-dir_folder_picker_button button,
+.st-key-env_add_submit button,
 .st-key-monitor_log_clear_button button,
 .st-key-monitor_logs_tail_button button,
+.st-key-path_add_submit button,
 .st-key-path_folder_picker_button button,
 .st-key-search_other_filter_clear button,
 .st-key-search_path_folder_picker_button button,
@@ -231,6 +228,16 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   width: 100%;
 }
 
+div[data-testid="stHorizontalBlock"]:has(.st-key-alias_add_name),
+div[data-testid="stHorizontalBlock"]:has(.st-key-cmd_add_name),
+div[data-testid="stHorizontalBlock"]:has(.st-key-dir_add_name),
+div[data-testid="stHorizontalBlock"]:has(.st-key-env_add_name),
+div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value) {
+  align-items: end !important;
+  column-gap: var(--hhs-element-std-gap) !important;
+  gap: var(--hhs-element-std-gap) !important;
+}
+
 .st-key-search_load_more {
   margin-top: var(--hhs-element-std-gap) !important;
 }
@@ -266,7 +273,12 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 }
 
 .st-key-search_controls {
-  margin-top: var(--hhs-element-std-gap) !important;
+  margin-top: 0 !important;
+}
+
+[data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"]:has(.st-key-search_controls) {
+  gap: var(--hhs-element-std-gap) !important;
+  row-gap: var(--hhs-element-std-gap) !important;
 }
 
 .st-key-search_controls [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]) {
@@ -302,7 +314,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 }
 
 .st-key-search_filter_controls {
-  margin-top: var(--hhs-element-std-gap) !important;
+  margin-top: 0 !important;
 }
 
 .st-key-search_filter_controls
@@ -405,18 +417,6 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   min-height: 0 !important;
   overflow: hidden !important;
   width: 100% !important;
-}
-
-.st-key-dir_folder_picker_button,
-.st-key-monitor_log_clear_button,
-.st-key-monitor_logs_tail_button,
-.st-key-path_folder_picker_button {
-  margin-top: 1.55rem;
-}
-
-.st-key-monitor_log_clear_button,
-.st-key-monitor_logs_tail_button {
-  margin-top: 0;
 }
 
 .st-key-monitor_log_controls [data-testid="stHorizontalBlock"] {
@@ -698,7 +698,7 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 }
 
 .st-key-active_view {
-  margin-bottom: var(--hhs-view-gap) !important;
+  margin-bottom: 0 !important;
 }
 
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.st-key-active_view),
@@ -719,7 +719,23 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 .st-key-monitor_view [data-baseweb="button-group"],
 .st-key-ssh_view [data-baseweb="button-group"],
 .st-key-ai_view [data-baseweb="button-group"] {
-  margin: 0 0 var(--hhs-view-gap) !important;
+  margin: 0 0 var(--hhs-element-std-gap) !important;
+}
+
+.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"],
+.stButtonGroup [data-baseweb="button-group"] button[aria-pressed="true"],
+.stButtonGroup [data-baseweb="button-group"] button[aria-selected="true"],
+.stButtonGroup [data-baseweb="button-group"] button[data-selected="true"] {
+  border-color: var(--hhs-primary) !important;
+  color: var(--hhs-primary) !important;
+}
+
+.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"] *,
+.stButtonGroup [data-baseweb="button-group"] button[aria-pressed="true"] *,
+.stButtonGroup [data-baseweb="button-group"] button[aria-selected="true"] *,
+.stButtonGroup [data-baseweb="button-group"] button[data-selected="true"] * {
+  color: var(--hhs-primary) !important;
+  fill: currentColor !important;
 }
 
 .st-key-active_view [role="radiogroup"] {
@@ -787,29 +803,73 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
 }
 
 .hhs-view-heading {
-  margin: 0 0 var(--hhs-view-gap);
+  border-bottom: 0 !important;
+  margin: 0 0 var(--hhs-element-std-gap) !important;
   padding: 0;
 }
 
+.hhs-view-heading--with-tabs {
+  margin-bottom: calc(var(--hhs-element-std-gap) * 2) !important;
+}
+
+.hhs-view-heading--direct-content {
+  margin-bottom: calc(var(--hhs-element-std-gap) * 2) !important;
+}
+
+[data-testid="stMain"] [data-testid="stMarkdownContainer"] :is(h1, h2, h3, h4, h5, h6),
+.hhs-view-heading :is(h1, h2, h3, h4, h5, h6) {
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  padding-bottom: 0 !important;
+}
+
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.hhs-view-heading) {
+  margin-bottom: 0 !important;
+}
+
+[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has(.hhs-view-heading--with-tabs) {
+  margin-bottom: 0 !important;
+}
+
 .hhs-view-heading h2 {
+  border-bottom: 0 !important;
   font-size: 1.45rem;
   font-weight: 750;
   letter-spacing: 0;
   line-height: 1;
   margin: 0;
+  padding-bottom: 0 !important;
+}
+
+.hhs-view-subtitle {
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+  display: block;
+  font-size: 1rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1.2;
+  margin: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.hhs-view-subtitle code {
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.35rem;
 }
 
 [data-testid="stMain"] [data-testid="stMarkdownContainer"] h5 {
-  margin: var(--hhs-view-section-gap) 0 0.55rem !important;
+  margin: 0 !important;
 }
 
 [data-testid="stMain"] [data-testid="stVegaLiteChart"],
 [data-testid="stMain"] .hhs-terminal-panel {
-  margin-top: 0.35rem;
+  margin-top: 0 !important;
 }
 
 [data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.hhs-inline-form-label) {
-  margin-bottom: var(--hhs-view-section-gap);
+  gap: var(--hhs-element-std-gap) !important;
+  margin-bottom: 0 !important;
 }
 
 .hhs-remote-connect-required {
@@ -1150,30 +1210,17 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
   width: 100%;
 }
 
-.hhs-log-file-title {
-  display: block;
-  font-size: 0.92rem;
-  font-weight: 800;
-  line-height: 1.25;
-  margin: 0.55rem 0 var(--hhs-element-std-gap);
-}
-
-.hhs-log-file-title code {
-  border-radius: 0.25rem;
-  padding: 0.15rem 0.35rem;
-}
-
 [data-testid="stExpander"] {
-  margin: var(--hhs-view-section-gap) 0;
+  margin: 0 !important;
 }
 
 .st-key-home_docker_panel [data-testid="stExpander"] {
-  margin: 0 0 var(--hhs-element-std-gap);
+  margin: 0 !important;
 }
 
 .st-key-home_docker_panel [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"] {
-  gap: 0 !important;
-  row-gap: 0 !important;
+  gap: var(--hhs-element-std-gap) !important;
+  row-gap: var(--hhs-element-std-gap) !important;
 }
 
 [data-testid="stExpander"] details {
@@ -1430,14 +1477,14 @@ div[class*="st-key-service_selected_value_"] input {
 }
 
 [data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stDataFrame"]) {
-  margin-top: 0.35rem !important;
+  margin-top: 0 !important;
 }
 
 div[class*="_table_empty_hint"],
 div[class*="_table_action_hint_"],
 div[class*="_table_selected_panel_"],
 div[class*="_table_actions_"] {
-  margin-top: var(--hhs-view-section-gap) !important;
+  margin-top: 0 !important;
 }
 
 div[class*="_table_selected_panel_"] [data-testid="stHorizontalBlock"],
