@@ -288,8 +288,17 @@ FOOTER_WORKING_DIR_JOB = "footer_working_dir"
 SSH_CONNECT_JOB = "ssh_connect"
 SSH_DISCONNECT_JOB = "ssh_disconnect"
 SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"
+SEARCH_COMMAND_JOB = "search_command"
 PATH_PICKER_LISTING_JOB_PREFIX = "path_picker_listing"
+BACKGROUND_JOB_STATE_KEY_PREFIX = "_hhs_background_job_"
 PATH_PICKER_LISTING_LOADER_MESSAGE = "Loading directories and files..."
+COMMAND_PRELOADER_BUS = "hhs-ui-command-preloader"
+COMMAND_PRELOADER_START_EVENT = "command:start"
+COMMAND_PRELOADER_FINISH_EVENT = "command:finish"
+COMMAND_PRELOADER_EVENT_QUEUE_KEY = "_hhs_command_preloader_events"
+COMMAND_PRELOADER_SUBSCRIBER_MARKER = "_hhs_command_preloader_subscriber"
+COMMAND_PRELOADER_EVENT_BUS_REGISTRY_KEY = "command_preloader_event_bus"
+HOST_SWITCH_VIEW_STATE_KEY = "_hhs_host_switch_view_state"
 HOST_SWITCH_CACHE_TAGS = (
     FOOTER_VERSION_CACHE_TAG,
     "env",
@@ -302,6 +311,7 @@ HOST_SWITCH_BACKGROUND_JOBS = (
     SSH_CONNECT_JOB,
     SSH_DISCONNECT_JOB,
     SSH_FILE_TRANSFER_JOB,
+    SEARCH_COMMAND_JOB,
     FOOTER_VERSION_JOB,
     SERVICE_LIST_JOB,
     SERVICE_ACTION_JOB,
@@ -313,6 +323,7 @@ CACHE_CLEAR_BACKGROUND_JOBS = (
     SSH_CONNECT_JOB,
     SSH_DISCONNECT_JOB,
     SSH_FILE_TRANSFER_JOB,
+    SEARCH_COMMAND_JOB,
     FOOTER_VERSION_JOB,
     ALIAS_LIST_JOB,
     SERVICE_LIST_JOB,
@@ -652,9 +663,9 @@ def restore_terminal_document_view(was_terminal_active: bool) -> None:
     activate_terminal_document_view()
 
 
-def reconnect_view_state_snapshot() -> dict[str, object]:
-    """Return persisted view state that should survive automatic SSH reconnect."""
-    keys = (
+def reconnect_view_state_keys() -> tuple[str, ...]:
+    """Return UI navigation keys that must survive SSH host switches."""
+    return (
         "active_view",
         "ai_view",
         "config_view",
@@ -670,11 +681,42 @@ def reconnect_view_state_snapshot() -> dict[str, object]:
         "ssh_tunnel_other_filter",
         "ssh_view",
     )
+
+
+def reconnect_view_state_snapshot() -> dict[str, object]:
+    """Return persisted view state that should survive SSH host switches."""
+    persisted_state = load_ui_state()
+    snapshot = {}
+    for key in reconnect_view_state_keys():
+        if key in st.session_state:
+            value = st.session_state.get(key)
+        else:
+            value = persisted_state.get(key)
+        if is_persistable_ui_value(value):
+            snapshot[key] = value
+    return snapshot
+
+
+def remember_host_switch_view_state() -> dict[str, object]:
+    """Store the current UI navigation state before an SSH host switch."""
+    snapshot = reconnect_view_state_snapshot()
+    st.session_state[HOST_SWITCH_VIEW_STATE_KEY] = snapshot
     return {
-        key: st.session_state[key]
-        for key in keys
-        if key in st.session_state
-        and is_persistable_ui_value(st.session_state.get(key))
+        key: value
+        for key, value in snapshot.items()
+        if is_persistable_ui_value(value)
+    }
+
+
+def consume_host_switch_view_state() -> dict[str, object]:
+    """Return and clear the stored SSH host-switch navigation state."""
+    snapshot = st.session_state.pop(HOST_SWITCH_VIEW_STATE_KEY, None)
+    if not isinstance(snapshot, dict):
+        return reconnect_view_state_snapshot()
+    return {
+        key: value
+        for key, value in snapshot.items()
+        if isinstance(key, str) and is_persistable_ui_value(value)
     }
 
 
@@ -999,6 +1041,7 @@ def execute_pending_ai_model_selection() -> None:
             loader_message.rstrip("."),
             hhs_ui_constants.UI_COMMAND_MODEL_DOWNLOAD_TIMEOUT_SECONDS,
             metadata={"new_model": new_model, "model_status": model_status},
+            show_preloader_event=True,
         )
         if started:
             push_floating_status(
@@ -1072,6 +1115,7 @@ def execute_pending_ai_model_deletion() -> None:
                 "model_name": model_name,
                 "model_status": model_status,
             },
+            show_preloader_event=True,
         )
         if started:
             push_floating_status(f"Deleting AI model: {model_name}", "info")
@@ -1132,6 +1176,7 @@ def complete_ai_model_delete_phase(
         "Loading fallback Ollama model",
         hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
         metadata={"phase": "fallback_list", "model_name": model_name},
+        show_preloader_event=True,
     )
 
 
@@ -1168,6 +1213,7 @@ def complete_ai_model_delete_fallback_list_phase(
             "model_name": model_name,
             "fallback_model": fallback_model,
         },
+        show_preloader_event=True,
     )
 
 
@@ -1360,6 +1406,282 @@ def loader_label_html(message: str) -> str:
     if active_class:
         html_parts.append("</span>")
     return "".join(html_parts)
+
+
+def command_preloader_event_queue() -> list[dict[str, object]]:
+    """Return the queued browser command preloader events for this session."""
+    queued_events = st.session_state.setdefault(COMMAND_PRELOADER_EVENT_QUEUE_KEY, [])
+    if not isinstance(queued_events, list):
+        queued_events = []
+        st.session_state[COMMAND_PRELOADER_EVENT_QUEUE_KEY] = queued_events
+    return queued_events
+
+
+def command_preloader_event_arg(
+    event: object, name: str, default_value: object = ""
+) -> object:
+    """Return one EventBus argument value from an hspylib event object."""
+    event_args = getattr(event, "args", None)
+    return getattr(event_args, name, default_value)
+
+
+def command_preloader_event_payload(event: object) -> dict[str, object]:
+    """Return the browser payload for one command preloader EventBus event."""
+    event_name = str(getattr(event, "name", "")).strip()
+    message = str(command_preloader_event_arg(event, "message", "Loading...")).strip()
+    status = str(command_preloader_event_arg(event, "status", "")).strip()
+    token = str(command_preloader_event_arg(event, "token", "")).strip()
+    try:
+        timeout_seconds = int(command_preloader_event_arg(event, "timeout_seconds", 1))
+    except (TypeError, ValueError):
+        timeout_seconds = 1
+    return {
+        "event": event_name,
+        "messageHtml": loader_label_html(message or "Loading..."),
+        "status": status,
+        "timeoutSeconds": max(1, timeout_seconds),
+        "token": token,
+    }
+
+
+def enqueue_command_preloader_event(event: object) -> None:
+    """Append one command preloader EventBus event to the session render queue."""
+    queued_events = command_preloader_event_queue()
+    queued_events.append(command_preloader_event_payload(event))
+    del queued_events[: -hhs_ui_constants.FLOATING_STATUS_QUEUE_LIMIT]
+
+
+def create_command_preloader_event_bus() -> object:
+    """Create the hspylib FluidEventBus used by the UI command preloader."""
+    from hspylib.modules.eventbus.fluid import FluidEvent, FluidEventBus
+
+    return FluidEventBus(
+        COMMAND_PRELOADER_BUS,
+        start=FluidEvent(
+            COMMAND_PRELOADER_START_EVENT,
+            token="",
+            message="",
+            timeout_seconds=1,
+        ),
+        finish=FluidEvent(
+            COMMAND_PRELOADER_FINISH_EVENT,
+            token="",
+            status="success",
+        ),
+    )
+
+
+def command_preloader_event_bus() -> object:
+    """Return the hspylib FluidEventBus for command preloader events."""
+    registry = process_resource_registry(COMMAND_PRELOADER_EVENT_BUS_REGISTRY_KEY)
+    event_bus = registry.get("event_bus")
+    if event_bus is None:
+        event_bus = create_command_preloader_event_bus()
+        registry["event_bus"] = event_bus
+    return event_bus
+
+
+def command_preloader_events() -> object:
+    """Return the fluid command preloader events namespace."""
+    return command_preloader_event_bus().events
+
+
+def command_preloader_bus() -> object:
+    """Return the raw hspylib EventBus behind the fluid command event bus."""
+    return command_preloader_event_bus().bus
+
+
+def remove_command_preloader_subscribers() -> None:
+    """Remove older HomeSetup command preloader EventBus callbacks."""
+    event_bus_class = command_preloader_bus().__class__
+    for event_name in (COMMAND_PRELOADER_START_EVENT, COMMAND_PRELOADER_FINISH_EVENT):
+        cache_key = f"{COMMAND_PRELOADER_BUS}.{event_name}"
+        subscriber = event_bus_class._subscribers.get(cache_key)  # noqa: SLF001
+        if not isinstance(subscriber, dict):
+            continue
+        callbacks = subscriber.get("callbacks", [])
+        if not isinstance(callbacks, list):
+            subscriber["callbacks"] = []
+            continue
+        subscriber["callbacks"] = [
+            callback
+            for callback in callbacks
+            if not getattr(callback, COMMAND_PRELOADER_SUBSCRIBER_MARKER, False)
+        ]
+
+
+def ensure_command_preloader_event_bus() -> None:
+    """Subscribe the current session-safe command preloader EventBus callback."""
+    registry = process_resource_registry(COMMAND_PRELOADER_EVENT_BUS_REGISTRY_KEY)
+    callback_id = id(enqueue_command_preloader_event)
+    if registry.get("callback_id") == callback_id:
+        return
+    remove_command_preloader_subscribers()
+    setattr(enqueue_command_preloader_event, COMMAND_PRELOADER_SUBSCRIBER_MARKER, True)
+    events = command_preloader_events()
+    events.start.subscribe(cb_event_handler=enqueue_command_preloader_event)
+    events.finish.subscribe(cb_event_handler=enqueue_command_preloader_event)
+    registry["callback_id"] = callback_id
+
+
+def emit_command_preloader_start(
+    token: str, message: str, timeout_seconds: int | None = None
+) -> None:
+    """Emit an EventBus command preloader start event."""
+    clean_token = token.strip()
+    if not clean_token:
+        return
+    ensure_command_preloader_event_bus()
+    events = command_preloader_events()
+    events.start.emit(
+        token=clean_token,
+        message=message.strip() or "Loading...",
+        timeout_seconds=int(timeout_seconds or command_timeout_seconds()),
+    )
+
+
+def emit_command_preloader_finish(token: str, status: str = "success") -> None:
+    """Emit an EventBus command preloader finish event."""
+    clean_token = token.strip()
+    if not clean_token:
+        return
+    ensure_command_preloader_event_bus()
+    events = command_preloader_events()
+    events.finish.emit(
+        token=clean_token,
+        status=status.strip() or "success",
+    )
+
+
+def render_command_preloader_events() -> None:
+    """Flush queued command preloader events to browser CustomEvents."""
+    queued_events = command_preloader_event_queue()
+    if not queued_events:
+        return
+    events = list(queued_events)
+    queued_events.clear()
+    render_script_html(
+        f"""
+        <script>
+          (() => {{
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            const events = {json.dumps(events)};
+            const clearOverlayTimers = () => {{
+              if (parentWindow.__hhsCommandOverlayTimer) {{
+                parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
+                parentWindow.__hhsCommandOverlayTimer = null;
+              }}
+              if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
+                parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
+                parentWindow.__hhsCommandOverlayExpiryTimer = null;
+              }}
+            }};
+            const removeOverlay = (token) => {{
+              const overlay = doc.getElementById("hhs-command-overlay");
+              if (!overlay) {{
+                clearOverlayTimers();
+                return;
+              }}
+              const currentToken = String(overlay.dataset.hhsOverlayToken || "");
+              if (token && currentToken && currentToken !== token) {{
+                return;
+              }}
+              overlay.remove();
+              doc.body.dataset.hhsCommandOverlayHidden = "true";
+              parentWindow.__hhsCommandOverlayToken = "";
+              parentWindow.__hhsCommandOverlayClearedAt = Date.now();
+              clearOverlayTimers();
+            }};
+            const renderElapsed = (overlay, startedAt, timeoutSeconds) => {{
+              const node = overlay.querySelector(".hhs-tab-loader-elapsed");
+              if (!node) {{
+                return;
+              }}
+              const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+              const elapsedRatio = elapsedSeconds / Math.max(1, timeoutSeconds);
+              const minutes = Math.floor(elapsedSeconds / 60);
+              const seconds = String(elapsedSeconds % 60).padStart(2, "0");
+              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
+              node.classList.toggle("hhs-loader-elapsed-warning", elapsedRatio >= 0.3 && elapsedRatio < 0.6);
+              node.classList.toggle("hhs-loader-elapsed-danger", elapsedRatio >= 0.6);
+            }};
+            const showOverlay = (detail) => {{
+              const token = String(detail.token || "");
+              if (!token) {{
+                return;
+              }}
+              clearOverlayTimers();
+              const timeoutSeconds = Math.max(1, Number(detail.timeoutSeconds || 1));
+              const createdAt = Date.now();
+              let overlay = doc.getElementById("hhs-command-overlay");
+              if (!overlay) {{
+                overlay = doc.createElement("div");
+                overlay.id = "hhs-command-overlay";
+                overlay.className = "hhs-tab-loader hhs-tab-loader-transient";
+                overlay.style.position = "fixed";
+                overlay.style.inset = "0";
+                overlay.style.width = "100vw";
+                overlay.style.height = "100dvh";
+                overlay.style.display = "flex";
+                overlay.style.alignItems = "center";
+                overlay.style.justifyContent = "center";
+                overlay.style.zIndex = "1000010";
+                overlay.innerHTML = `
+                  <div class="hhs-tab-loader-panel">
+                    <span class="hhs-tab-loader-spinner"></span>
+                    <span class="hhs-tab-loader-copy">
+                      <span class="hhs-tab-loader-label"></span>
+                      <span class="hhs-tab-loader-elapsed" data-timeout-seconds="${{timeoutSeconds}}">
+                        time elapsed: 0m:00s
+                      </span>
+                    </span>
+                  </div>
+                `;
+                doc.body.appendChild(overlay);
+              }}
+              overlay.dataset.hhsOverlayToken = token;
+              overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
+              overlay.dataset.hhsOverlayStartedAt = String(createdAt);
+              parentWindow.__hhsCommandOverlayToken = token;
+              doc.body.dataset.hhsCommandOverlayHidden = "false";
+              const label = overlay.querySelector(".hhs-tab-loader-label");
+              if (label) {{
+                label.innerHTML = String(detail.messageHtml || "Loading...");
+              }}
+              renderElapsed(overlay, createdAt, timeoutSeconds);
+              parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(
+                () => renderElapsed(overlay, createdAt, timeoutSeconds),
+                1000
+              );
+            }};
+            if (!parentWindow.__hhsCommandPreloaderEventHandler) {{
+              parentWindow.__hhsCommandPreloaderEventHandler = (event) => {{
+                const detail = event.detail || {{}};
+                if (detail.event === {json.dumps(COMMAND_PRELOADER_START_EVENT)}) {{
+                  showOverlay(detail);
+                }} else if (
+                  detail.event === {json.dumps(COMMAND_PRELOADER_FINISH_EVENT)}
+                ) {{
+                  removeOverlay(String(detail.token || ""));
+                }}
+              }};
+              parentWindow.addEventListener(
+                "hhs:command-preloader",
+                parentWindow.__hhsCommandPreloaderEventHandler
+              );
+            }}
+            for (const detail of events) {{
+              parentWindow.dispatchEvent(
+                new parentWindow.CustomEvent("hhs:command-preloader", {{ detail }})
+              );
+            }}
+          }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def render_command_loader_timer(loader_id: str) -> None:
@@ -2178,6 +2500,7 @@ def remote_path_picker_child_paths(
             "mode": "file" if mode == "file" else "folder",
             "include_dot_folders": bool(include_dot_folders),
         },
+        show_preloader_event=True,
     )
     return []
 
@@ -2222,6 +2545,7 @@ def load_pending_remote_path_picker_directory(
                 "mode": "file" if mode == "file" else "folder",
                 "include_dot_folders": bool(include_dot_folders),
             },
+            show_preloader_event=True,
         )
     return False
 
@@ -4181,6 +4505,7 @@ def handle_footer_actions() -> None:
                 600,
                 force_local=not bool(connected_ssh_host()),
                 metadata={"updater_context": updater_check_context()},
+                show_preloader_event=True,
             )
             push_floating_status("HomeSetup update started.", "info")
 
@@ -4198,7 +4523,7 @@ def render_home_view() -> None:
     """Render the Home informational view."""
     st.markdown(
         """
-        <section class="hhs-view-heading">
+        <section class="hhs-view-heading hhs-view-heading--with-tabs">
           <h2> System</h2>
         </section>
         """,
@@ -4342,7 +4667,6 @@ def render_docker_command_table(
         selected_label=selected_label,
         action_buttons=action_buttons,
         reset_selection=reset_selection,
-        use_container_width=True,
     )
 
 
@@ -4880,7 +5204,6 @@ def render_table(
     checkbox: bool = True,
     height: int | None = None,
     width: str | None = None,
-    use_container_width: bool = False,
     hide_index: bool = True,
     table_data: object | None = None,
     row_style: Callable[[pd.Series], list[str]] | None = None,
@@ -4919,9 +5242,7 @@ def render_table(
         dataframe_args["column_config"] = column_config
     if height is not None:
         dataframe_args["height"] = table_height(height)
-    if use_container_width:
-        dataframe_args["use_container_width"] = True
-    elif width is not None:
+    if width is not None:
         dataframe_args["width"] = width
     else:
         dataframe_args["width"] = "stretch"
@@ -5123,6 +5444,21 @@ def clear_table_other_filter(other_key: str) -> None:
     save_ui_state()
 
 
+def clean_table_text_filter_value(value: object) -> str:
+    """Return a safe string value for a typed table text filter."""
+    if value is None:
+        return ""
+    return str(value)
+
+
+def normalize_table_text_filter_state(other_key: str) -> str:
+    """Normalize one typed table text filter key before its widget is rendered."""
+    clean_value = clean_table_text_filter_value(st.session_state.get(other_key, ""))
+    if st.session_state.get(other_key) != clean_value:
+        st.session_state[other_key] = clean_value
+    return clean_value
+
+
 def render_table_filter_controls(
     options: tuple[str, ...],
     key: str,
@@ -5152,6 +5488,7 @@ def render_table_filter_controls(
 
     other_filter = ""
     if selected_filter in other_options:
+        normalize_table_text_filter_state(other_key)
         with other_filter_col:
             other_filter = st.text_input(
                 "Filters",
@@ -5167,10 +5504,10 @@ def render_table_filter_controls(
                 help="Clear filter text",
                 on_click=clear_table_other_filter,
                 args=(other_key,),
-                disabled=not bool(str(other_filter)),
+                disabled=not bool(clean_table_text_filter_value(other_filter)),
                 width="content",
             )
-    return selected_filter, other_filter
+    return selected_filter, clean_table_text_filter_value(other_filter)
 
 
 def normalized_table_filter_selection(
@@ -5197,6 +5534,15 @@ def render_env_add_controls() -> None:
     )
 
 
+def config_add_columns(weights: list[float]) -> list:
+    """Return Config add-row columns with the standard horizontal gap."""
+    return st.columns(
+        weights,
+        gap="small",
+        vertical_alignment="bottom",
+    )
+
+
 def render_named_value_add_controls(
     key_prefix: str,
     name_label: str,
@@ -5206,37 +5552,36 @@ def render_named_value_add_controls(
     on_submit: Callable[[], None],
     value_folder_picker: bool = False,
 ) -> None:
-    """Render Enter-submitted Name and Value controls for a config listing."""
-    # Layout reference for the paired name/value path picker:
-    # name_col, value_col, _spacer_col, folder_col = st.columns(
-    #     [1.25, 4.05, 0.012, 0.15], vertical_alignment="center"
-    # )
+    """Render Name and Value add controls for a config listing."""
     if value_folder_picker:
-        form_col, folder_col = st.columns([1, 0.035], vertical_alignment="center")
+        name_col, value_col, add_col, folder_col = config_add_columns(
+            [1.375, 4.05, 0.15, 0.15]
+        )
     else:
-        form_col = st.container()
+        name_col, value_col, add_col = config_add_columns([1.375, 4.2, 0.15])
         folder_col = None
-    with form_col:
-        with st.form(f"{key_prefix}_add_form", border=False):
-            name_col, value_col = st.columns([1.25, 4.2], vertical_alignment="center")
-            with name_col:
-                st.text_input(
-                    name_label,
-                    key=f"{key_prefix}_add_name",
-                    placeholder=name_placeholder,
-                )
-            with value_col:
-                st.text_input(
-                    value_label,
-                    key=f"{key_prefix}_add_value",
-                    placeholder=value_placeholder,
-                )
-            st.form_submit_button(
-                "Add",
-                key=f"{key_prefix}_add_submit",
-                on_click=on_submit,
-            )
-    if folder_col is not None:
+    with name_col:
+        st.text_input(
+            name_label,
+            key=f"{key_prefix}_add_name",
+            placeholder=name_placeholder,
+        )
+    with value_col:
+        st.text_input(
+            value_label,
+            key=f"{key_prefix}_add_value",
+            placeholder=value_placeholder,
+            on_change=on_submit,
+        )
+    with add_col:
+        st.button(
+            "",
+            key=f"{key_prefix}_add_submit",
+            help="Add",
+            on_click=on_submit,
+            width="stretch",
+        )
+    if value_folder_picker and folder_col is not None:
         with folder_col:
             st.button(
                 "",
@@ -5255,25 +5600,28 @@ def render_value_add_controls(
     on_submit: Callable[[], None],
     value_folder_picker: bool = False,
 ) -> None:
-    """Render an Enter-submitted Value control for a config listing."""
+    """Render a Value add control for a config listing."""
     if value_folder_picker:
-        form_col, folder_col = st.columns([1, 0.035], vertical_alignment="center")
+        value_col, add_col, folder_col = config_add_columns([1, 0.035, 0.035])
     else:
-        form_col = st.container()
+        value_col, add_col = config_add_columns([1, 0.035])
         folder_col = None
-    with form_col:
-        with st.form(f"{key_prefix}_add_form", border=False):
-            st.text_input(
-                value_label,
-                key=f"{key_prefix}_add_value",
-                placeholder=value_placeholder,
-            )
-            st.form_submit_button(
-                "Add",
-                key=f"{key_prefix}_add_submit",
-                on_click=on_submit,
-            )
-    if folder_col is not None:
+    with value_col:
+        st.text_input(
+            value_label,
+            key=f"{key_prefix}_add_value",
+            placeholder=value_placeholder,
+            on_change=on_submit,
+        )
+    with add_col:
+        st.button(
+            "",
+            key=f"{key_prefix}_add_submit",
+            help="Add",
+            on_click=on_submit,
+            width="stretch",
+        )
+    if value_folder_picker and folder_col is not None:
         with folder_col:
             st.button(
                 "",
@@ -6665,6 +7013,7 @@ def start_updater_check(context: str, force_local: bool) -> None:
         hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         force_local=force_local,
         metadata={"updater_context": context},
+        show_preloader_event=True,
     )
     if started:
         st.session_state["updater_check_started_context"] = context
@@ -7907,6 +8256,7 @@ def restore_registered_ssh_connection_on_session_start() -> None:
     if not ssh_connection_is_alive(host):
         clear_registered_ssh_connection()
         if reconnect_host and not selected_host_is_local(reconnect_host):
+            remember_host_switch_view_state()
             st.session_state["ssh_host_selected"] = reconnect_host
             st.session_state["ssh_host_selector"] = reconnect_host
             st.session_state["ssh_connect_pending"] = reconnect_host
@@ -8299,6 +8649,7 @@ def request_ssh_host_connect() -> None:
     host = selected_ssh_host()
     if selected_host_is_local(host):
         return
+    remember_host_switch_view_state()
     st.session_state["ssh_connect_pending"] = host
     st.session_state["ssh_connect_pending_message"] = ""
     st.session_state["ssh_disconnect_pending"] = ""
@@ -8314,6 +8665,7 @@ def request_ssh_host_disconnection() -> None:
         host = connected_host
     if selected_host_is_local(host):
         return
+    remember_host_switch_view_state()
     st.session_state["ssh_disconnect_pending"] = host
     st.session_state["ssh_connect_pending"] = ""
     st.session_state["ssh_connect_pending_message"] = ""
@@ -8331,7 +8683,7 @@ def execute_pending_ssh_connection() -> bool:
     ).strip()
     loader_message = loader_message or f"Connecting to SSH host {host}..."
     st.session_state.pop("ssh_reconnect_restore_view_state", False)
-    reconnect_state = reconnect_view_state_snapshot()
+    reconnect_state = consume_host_switch_view_state()
     was_terminal_active = terminal_document_view_is_active()
     st.session_state["ssh_connect_pending"] = ""
     st.session_state["ssh_connect_pending_message"] = ""
@@ -8348,6 +8700,7 @@ def execute_pending_ssh_connection() -> bool:
             "reconnect_state": reconnect_state,
             "was_terminal_active": was_terminal_active,
         },
+        show_preloader_event=True,
     )
     if started:
         render_background_job_status(SSH_CONNECT_JOB)
@@ -8374,6 +8727,8 @@ def complete_ssh_connection() -> bool:
     reconnect_state = metadata.get("reconnect_state")
     if not isinstance(reconnect_state, dict):
         reconnect_state = {}
+    if not reconnect_state:
+        reconnect_state = consume_host_switch_view_state()
     was_terminal_active = bool(metadata.get("was_terminal_active", False))
     if result.returncode == 0:
         clear_host_scoped_session_state()
@@ -8412,7 +8767,7 @@ def clear_completed_ssh_disconnection(
     host: str, result: subprocess.CompletedProcess[str]
 ) -> None:
     """Clear UI connection state after an SSH disconnect command finishes."""
-    disconnect_view_state = reconnect_view_state_snapshot()
+    disconnect_view_state = consume_host_switch_view_state()
     clear_host_scoped_session_state()
     restore_reconnect_view_state(disconnect_view_state)
     st.session_state["ssh_connection_status"] = ""
@@ -8484,6 +8839,7 @@ def execute_pending_ssh_disconnection() -> bool:
         10,
         force_local=True,
         metadata={"ssh_host": host},
+        show_preloader_event=True,
     )
     render_background_job_status(SSH_DISCONNECT_JOB)
     return True
@@ -8512,6 +8868,7 @@ def render_ssh_connection_dialog() -> bool:
     if not title:
         return False
     set_overlay(False)
+    render_command_preloader_events()
     return pop_dialog(
         title=title,
         buttons=(
@@ -8647,13 +9004,25 @@ def run_bash_subprocess(
 def background_job_state_key(job_name: str) -> str:
     """Return the Streamlit session key used for a background command job."""
     safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", job_name.strip())
-    return f"_hhs_background_job_{safe_name or 'job'}"
+    return f"{BACKGROUND_JOB_STATE_KEY_PREFIX}{safe_name or 'job'}"
 
 
 def background_job_state(job_name: str) -> dict[str, object] | None:
     """Return the stored background job state for a named job."""
     value = st.session_state.get(background_job_state_key(job_name))
     return value if isinstance(value, dict) else None
+
+
+def background_job_session_items() -> list[tuple[str, dict[str, object]]]:
+    """Return all stored background job states for this Streamlit session."""
+    jobs: list[tuple[str, dict[str, object]]] = []
+    for state_key in list(st.session_state):
+        if not str(state_key).startswith(BACKGROUND_JOB_STATE_KEY_PREFIX):
+            continue
+        value = st.session_state.get(state_key)
+        if isinstance(value, dict):
+            jobs.append((str(state_key), value))
+    return jobs
 
 
 def background_job_process(job: dict[str, object]) -> subprocess.Popen[str] | None:
@@ -8692,6 +9061,7 @@ def stop_background_job(job_name: str) -> None:
     if job is None:
         st.session_state.pop(job_key, None)
         return
+    finish_background_job_preloader(job, "cancelled")
     process = background_job_process(job)
     if process is not None:
         stop_process(process)
@@ -8714,6 +9084,7 @@ def stop_background_jobs_with_state_prefix(state_key_prefix: str) -> None:
         if not isinstance(job, dict):
             st.session_state.pop(state_key, None)
             continue
+        finish_background_job_preloader(job, "cancelled")
         process = background_job_process(job)
         if process is not None:
             stop_process(process)
@@ -8730,6 +9101,20 @@ def background_job_elapsed_seconds(job: dict[str, object]) -> float:
     return max(0.0, time.time() - started_at) if started_at else 0.0
 
 
+def background_job_preloader_token(job_name: str) -> str:
+    """Return a unique command preloader token for one background job."""
+    return f"{job_name}:{secrets.token_hex(8)}"
+
+
+def finish_background_job_preloader(
+    job: dict[str, object], status: str = "success"
+) -> None:
+    """Emit the finish event for one background job command preloader."""
+    preloader_token = str(job.get("preloader_token", "")).strip()
+    if preloader_token:
+        emit_command_preloader_finish(preloader_token, status)
+
+
 def start_background_bash_command(
     job_name: str,
     command: str,
@@ -8737,6 +9122,8 @@ def start_background_bash_command(
     timeout_seconds: int,
     force_local: bool = False,
     metadata: dict[str, object] | None = None,
+    show_preloader_event: bool = False,
+    preloader_token: str | None = None,
 ) -> bool:
     """Start a Bash command in the background and store its process state."""
     if background_job_is_running(job_name):
@@ -8758,6 +9145,18 @@ def start_background_bash_command(
         timeout_seconds, force_local=force_local
     )
     command_to_run = effective_bash_command(command, force_local=force_local)
+    command_preloader_token = ""
+    if show_preloader_event:
+        command_preloader_token = (
+            preloader_token.strip()
+            if preloader_token and preloader_token.strip()
+            else background_job_preloader_token(job_name)
+        )
+        emit_command_preloader_start(
+            command_preloader_token,
+            description,
+            int(effective_timeout),
+        )
     stdout_handle = Path(stdout_path).open("w", encoding="utf-8")
     stderr_handle = Path(stderr_path).open("w", encoding="utf-8")
     try:
@@ -8784,6 +9183,7 @@ def start_background_bash_command(
         "started_at": time.time(),
         "timeout_seconds": effective_timeout,
         "metadata": metadata or {},
+        "preloader_token": command_preloader_token,
     }
     return True
 
@@ -8811,6 +9211,30 @@ def cleanup_background_job_files(job: dict[str, object]) -> None:
             file_path.unlink(missing_ok=True)
         except OSError:
             continue
+
+
+def background_job_completion_needs_app_rerun(
+    state_key: str, job: dict[str, object]
+) -> bool:
+    """Return whether one completed background job should trigger one app rerun."""
+    process = background_job_process(job)
+    if process is None:
+        return False
+    if process.poll() is None and background_job_has_timed_out(job):
+        stop_process(process)
+    if process.poll() is None or bool(job.get("completion_rerun_queued")):
+        return False
+    job["completion_rerun_queued"] = True
+    st.session_state[state_key] = job
+    return True
+
+
+def background_jobs_completion_needs_app_rerun() -> bool:
+    """Return whether any completed background job should trigger one app rerun."""
+    return any(
+        background_job_completion_needs_app_rerun(state_key, job)
+        for state_key, job in background_job_session_items()
+    )
 
 
 def background_job_result(
@@ -8852,15 +9276,19 @@ def background_job_result(
     )
     remote_host = str(job.get("remote_host", ""))
     result = sanitize_remote_command_result(remote_host, result)
+    finish_background_job_preloader(
+        job,
+        "success" if result.returncode == 0 else "error",
+    )
     st.session_state.pop(job_key, None)
     cleanup_background_job_files(job)
     metadata = job.get("metadata")
     return result, metadata if isinstance(metadata, dict) else {}
 
 
-@st.fragment(run_every="2s")
 def render_background_job_status(job_name: str, message: str = "") -> None:
-    """Render and poll a compact status line for a background command."""
+    """Render a compact status line for a background command."""
+    render_command_preloader_events()
     job = background_job_state(job_name)
     if not job:
         return
@@ -8871,10 +9299,8 @@ def render_background_job_status(job_name: str, message: str = "") -> None:
         and background_job_has_timed_out(job)
     ):
         stop_process(process)
-        st.rerun()
         return
     if not background_job_is_running(job_name):
-        st.rerun()
         return
     description = message.strip() or str(job.get("description", "Command")).strip()
     try:
@@ -8886,24 +9312,21 @@ def render_background_job_status(job_name: str, message: str = "") -> None:
         started_at or None,
         int(background_job_timeout_seconds(job) or command_timeout_seconds()),
     )
+    render_command_preloader_events()
 
 
-@st.fragment(run_every="2s")
 def poll_background_job_completion(job_name: str) -> None:
-    """Poll one background job without rendering a visible loader."""
+    """Mark one completed background job for an app rerun without rendering UI."""
     job = background_job_state(job_name)
     if not job:
         return
-    process = background_job_process(job)
-    if (
-        process is not None
-        and process.poll() is None
-        and background_job_has_timed_out(job)
-    ):
-        stop_process(process)
-        st.rerun()
-        return
-    if not background_job_is_running(job_name):
+    background_job_completion_needs_app_rerun(background_job_state_key(job_name), job)
+
+
+@st.fragment(run_every="2s")
+def render_background_job_polling_fragment() -> None:
+    """Poll all background jobs from one always-mounted fragment."""
+    if background_jobs_completion_needs_app_rerun():
         st.rerun()
 
 
@@ -11469,7 +11892,6 @@ def parse_hhs_history_stats(output: str) -> list[dict[str, int | str]]:
     return rows
 
 
-@st.fragment(run_every="2s")
 def render_ssh_tunnel_status_loader(job_names: tuple[str, ...]) -> None:
     """Render one polling loader while SSH tunnel status jobs are running."""
     if any(background_job_is_running(job_name) for job_name in job_names):
@@ -11489,8 +11911,8 @@ def render_ssh_tunnel_status_loader(job_names: tuple[str, ...]) -> None:
             min(started_times) if started_times else None,
         )
         return
-    if job_names:
-        st.rerun()
+    for job_name in job_names:
+        poll_background_job_completion(job_name)
 
 
 def parse_hhs_disk_usage(output: str) -> list[dict[str, float | str]]:
@@ -12685,6 +13107,7 @@ def execute_pending_home_tool_action() -> None:
             f"{home_tool_action_noun(operation)} of {tool_name}",
             hhs_ui_constants.UI_COMMAND_LONG_ACTION_TIMEOUT_SECONDS,
             metadata={"operation": operation, "tool_name": tool_name},
+            show_preloader_event=True,
         )
         if started:
             push_floating_status(
@@ -12848,6 +13271,7 @@ def execute_pending_service_action() -> None:
             f"Service {operation}: {service_name}",
             hhs_ui_constants.UI_COMMAND_SERVICE_ACTION_TIMEOUT_SECONDS,
             metadata={"operation": operation, "service_name": service_name},
+            show_preloader_event=True,
         )
         if started:
             push_floating_status(f"Service {operation} started: {service_name}", "info")
@@ -13233,6 +13657,15 @@ def render_history_directories_table() -> None:
     )
 
 
+def render_view_subtitle(content: str, content_is_html: bool = False) -> None:
+    """Render a normalized secondary page heading."""
+    safe_content = content if content_is_html else html.escape(content)
+    st.markdown(
+        f'<h3 class="hhs-view-subtitle">{safe_content}</h3>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_history_stats_chart() -> None:
     """Render command history stats using __hhs_hist_stats."""
     st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(
@@ -13255,7 +13688,7 @@ def render_history_stats_chart() -> None:
             label_visibility="collapsed",
             on_change=save_ui_state,
         )
-    st.markdown(f"##### Top {int(top_n)} most used commands")
+    render_view_subtitle(f"Top {int(top_n)} most used commands")
     result = render_cached_command_result(
         build_hhs_history_stats_command(int(top_n)),
         "Loading history stats",
@@ -13379,7 +13812,10 @@ def render_monitor_disk_chart() -> None:
     if not rows:
         st.caption("No disk usage entries found.")
         return
-    st.markdown(f"##### Top {applied_top_n} disk usage at `{display_directory}`")
+    render_view_subtitle(
+        f"Top {applied_top_n} disk usage at <code>{html.escape(display_directory)}</code>",
+        content_is_html=True,
+    )
     render_bar_chart(
         rows,
         x=alt.X(
@@ -13501,7 +13937,7 @@ def render_process_monitor_chart(metric: str) -> None:
     title = "Memory" if metric == "MEM" else "CPU"
     unit_suffix = "" if has_byte_values else " %"
     color = "#ffb86c"
-    st.markdown(f"##### Top {applied_top_n} {title} processes")
+    render_view_subtitle(f"Top {applied_top_n} {title} processes")
     render_bar_chart(
         rows,
         x=alt.X("Value:Q", title=f"{title}{unit_suffix}", axis=axis),
@@ -13688,9 +14124,9 @@ def render_monitor_logs_panel() -> None:
     selected_log, selected_level, tail_enabled, log_filter, log_text_filter = (
         render_table_controls_panel(render_log_controls)
     )
-    st.markdown(
-        f'<div class="hhs-log-file-title"><code>{html.escape(selected_log)}</code></div>',
-        unsafe_allow_html=True,
+    render_view_subtitle(
+        f"<code>{html.escape(selected_log)}</code>",
+        content_is_html=True,
     )
     if tail_enabled:
         render_monitor_logs_tail(
@@ -13752,7 +14188,7 @@ def render_configs_view() -> None:
     """Render the draft configurations view."""
     st.markdown(
         """
-        <section class="hhs-view-heading">
+        <section class="hhs-view-heading hhs-view-heading--with-tabs">
           <h2> Dotfiles Configurations</h2>
         </section>
         """,
@@ -13783,7 +14219,7 @@ def render_service_view() -> None:
     """Render the HomeSetup services view."""
     st.markdown(
         """
-        <section class="hhs-view-heading">
+        <section class="hhs-view-heading hhs-view-heading--direct-content">
           <h2> System Services</h2>
         </section>
         """,
@@ -14387,6 +14823,7 @@ def start_ssh_explorer_transfer(command: str, description: str) -> None:
         description,
         hhs_ui.UI_COMMAND_REMOTE_TIMEOUT_SECONDS,
         force_local=True,
+        show_preloader_event=True,
     )
     if not started:
         push_floating_status("A file transfer is already running.", "warn")
@@ -14734,7 +15171,7 @@ def render_ssh_view() -> None:
     host = connected_ssh_host()
     st.markdown(
         """
-        <section class="hhs-view-heading">
+        <section class="hhs-view-heading hhs-view-heading--with-tabs">
           <h2> Remote Connection</h2>
         </section>
         """,
@@ -14764,7 +15201,7 @@ def render_history_view() -> None:
     """Render the command and directory history view."""
     st.markdown(
         """
-        <section class="hhs-view-heading">
+        <section class="hhs-view-heading hhs-view-heading--with-tabs">
           <h2> History</h2>
         </section>
         """,
@@ -14791,7 +15228,7 @@ def render_monitor_view() -> None:
     """Render the HomeSetup monitor view."""
     st.markdown(
         """
-        <section class="hhs-view-heading">
+        <section class="hhs-view-heading hhs-view-heading--with-tabs">
           <h2> Activity Monitor</h2>
         </section>
         """,
@@ -14966,6 +15403,78 @@ def search_command_cache_key(
     )
     search_hash = hashlib.md5(key_material.encode("utf-8")).hexdigest()
     return f"command_tag:{safe_cache_tag('search')}:{search_hash}"
+
+
+def cached_search_command_result(
+    command: str, cache_key: str
+) -> subprocess.CompletedProcess[str] | None:
+    """Return a cached Search command result by explicit Search cache key."""
+    command_to_run = effective_bash_command(command)
+    remote_host = command_remote_host()
+    cached_value = cache_get(cache_key)
+    if cached_value is None:
+        cached_value = command_result_snapshot_get(cache_key)
+    if cached_value is None:
+        return None
+    command_result_snapshot_set(cache_key, cached_value)
+    result = sanitize_remote_command_result(
+        remote_host,
+        completed_process_from_cache(command_to_run, cached_value),
+    )
+    if handle_remote_command_result(remote_host, result):
+        st.rerun()
+    return result
+
+
+def search_command_background_metadata(command: str, cache_key: str) -> dict[str, object]:
+    """Return background metadata for one Search command execution."""
+    return {
+        **background_command_metadata(command, "search"),
+        "cache_key": cache_key,
+        "ttl_seconds": hhs_ui.UI_CACHE_NORMAL_TTL_SECONDS,
+    }
+
+
+def search_background_job_matches(cache_key: str) -> bool:
+    """Return whether the active Search background job is for the cache key."""
+    job = background_job_state(SEARCH_COMMAND_JOB)
+    if not job:
+        return False
+    metadata = job.get("metadata")
+    return isinstance(metadata, dict) and str(metadata.get("cache_key", "")) == cache_key
+
+
+def complete_search_command_result(
+    cache_key: str,
+) -> subprocess.CompletedProcess[str] | None:
+    """Complete the active Search background job and cache its result."""
+    completed = background_job_result(SEARCH_COMMAND_JOB)
+    if completed is None:
+        return None
+    result, metadata = completed
+    if str(metadata.get("cache_key", "")) != cache_key:
+        return None
+    if result.returncode == 0:
+        cache_background_command_result(metadata, result)
+    return result
+
+
+def start_search_command(
+    command: str, cache_key: str, loader_message: str
+) -> bool:
+    """Start the Search command in the background with a command preloader event."""
+    if background_job_state(SEARCH_COMMAND_JOB) and not search_background_job_matches(
+        cache_key
+    ):
+        stop_background_job(SEARCH_COMMAND_JOB)
+    return start_background_bash_command(
+        SEARCH_COMMAND_JOB,
+        command,
+        loader_message,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        metadata=search_command_background_metadata(command, cache_key),
+        show_preloader_event=True,
+    )
 
 
 def build_hhs_open_search_result_command(path: str) -> str:
@@ -16072,7 +16581,7 @@ def selected_search_result_text_filter() -> str:
     """Return the active Search result text filter from Session State."""
     if selected_search_result_filter() != "Containing":
         return ""
-    return str(st.session_state.get("search_other_filter", "") or "")
+    return clean_table_text_filter_value(st.session_state.get("search_other_filter", ""))
 
 
 def render_search_filters() -> None:
@@ -16101,6 +16610,7 @@ def render_search_filters() -> None:
             )
         other_filter = ""
         if selected_filter == "Containing":
+            normalize_table_text_filter_state("search_other_filter")
             with other_filter_column:
                 other_filter = st.text_input(
                     "Filters",
@@ -16125,7 +16635,7 @@ def render_search_filters() -> None:
                 help="Clear filter text",
                 on_click=clear_table_other_filter,
                 args=("search_other_filter",),
-                disabled=not bool(str(other_filter)),
+                disabled=not bool(clean_table_text_filter_value(other_filter)),
                 width="stretch",
             )
 
@@ -16142,19 +16652,24 @@ def render_search_results() -> None:
     ignore_case = bool(st.session_state.get("search_result_ignore_case", False))
     words = bool(st.session_state.get("search_result_words", False))
     binary = bool(st.session_state.get("search_result_binary", False))
-    result = run_bash_command(
-        build_hhs_search_command(
-            search_type, query, search_path, ignore_case, words, binary
-        ),
-        search_loader_message(query, search_path),
-        ttl_seconds=hhs_ui.UI_CACHE_NORMAL_TTL_SECONDS,
-        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
-        cache_tag="search",
-        cache_key_override=search_command_cache_key(
-            search_type, query, search_path, ignore_case, words, binary
-        ),
+    command = build_hhs_search_command(
+        search_type, query, search_path, ignore_case, words, binary
     )
-    clear_preloader()
+    cache_key = search_command_cache_key(
+        search_type, query, search_path, ignore_case, words, binary
+    )
+    loader_message = search_loader_message(query, search_path)
+    result = complete_search_command_result(cache_key)
+    if result is None:
+        result = cached_search_command_result(command, cache_key)
+    if result is None:
+        if (
+            not background_job_is_running(SEARCH_COMMAND_JOB)
+            or not search_background_job_matches(cache_key)
+        ):
+            start_search_command(command, cache_key, loader_message)
+        render_background_job_status(SEARCH_COMMAND_JOB, loader_message)
+        return
     with st.container(key="search_results"):
         if result.returncode != 0:
             st.error(clean_command_status_message(result.stderr or result.stdout))
@@ -16191,7 +16706,7 @@ def render_search_view() -> None:
     """Render the HomeSetup Search view."""
     st.markdown(
         """
-        <section class="hhs-view-heading">
+        <section class="hhs-view-heading hhs-view-heading--direct-content">
           <h2> Search</h2>
         </section>
         """,
@@ -16283,7 +16798,7 @@ def render_ai_chat_panel() -> None:
             width="stretch",
         )
     if not st.session_state["ai_chat_messages"]:
-        st.markdown("### There is no chat history")
+        render_view_subtitle("There is no chat history")
     for message in st.session_state["ai_chat_messages"]:
         if message["role"] == "assistant":
             avatar_file = hhs_ui.APP_AI_OLLAMA_AVATAR_FILE
@@ -16341,6 +16856,7 @@ def render_ai_chat_panel() -> None:
                 "context_size": context_size,
                 "started_at": ask_started_at,
             },
+            show_preloader_event=True,
         )
         if not started:
             push_floating_status("Ollama is still generating a response.", "warn")
@@ -16482,7 +16998,7 @@ def render_ai_context_output_panel() -> None:
         st.error(context_error)
         return
     if not context_output:
-        st.markdown("### AI context is clear")
+        render_view_subtitle("AI context is clear")
         return
     render_terminal_output(context_output)
 
@@ -16564,7 +17080,7 @@ def render_ai_settings_panel() -> None:
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("##### Available Models")
+    render_view_subtitle("Available Models")
     rows = parse_rows_cached(
         f"ollama_models_{current_model}",
         model_result.stdout,
@@ -16577,7 +17093,6 @@ def render_ai_settings_panel() -> None:
     selected_index, selected_row = render_table(
         rows,
         key=ai_model_table_key(),
-        use_container_width=True,
         row_style=style_ai_model_row,
         selected_label=lambda row, _index: f"Selected: {row['Name']}",
         action_buttons=[
@@ -16643,7 +17158,7 @@ def render_ai_view() -> None:
 
     st.markdown(
         """
-        <section class="hhs-view-heading">
+        <section class="hhs-view-heading hhs-view-heading--with-tabs">
           <h2> Ask Ollama HomeSetup AI</h2>
         </section>
         """,
@@ -16819,6 +17334,7 @@ def main() -> None:
         st.session_state["ssh_connection_error"] = ""
         st.session_state["ssh_connect_pending"] = ""
         st.session_state["ssh_disconnect_pending"] = ""
+    render_background_job_polling_fragment()
     if execute_pending_ssh_disconnection():
         return
     if execute_pending_ssh_connection():
@@ -16987,6 +17503,7 @@ def main() -> None:
     render_footer_client_error_bridge_script()
     install_footer_status_log_handler()
     render_folder_picker_dialog()
+    render_command_preloader_events()
     render_browser_cleanup_script()
 
 
