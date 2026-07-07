@@ -1037,6 +1037,50 @@ PY
   assert_success
 }
 
+@test "when SSH host switches then current main page should be preserved" {
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+start = source.index("def reconnect_view_state_keys(")
+end = source.index("def render_script_html(")
+session_state = {"active_view": "Configs"}
+persisted_state = {
+    "active_view": "Search",
+    "config_view": "PATH",
+    "home_view": "Docker",
+}
+namespace = {
+    "HOST_SWITCH_VIEW_STATE_KEY": "_hhs_host_switch_view_state",
+    "hhs_ui": SimpleNamespace(
+        DOCUMENT_PREVIOUS_VIEW_KEY="document_previous_view",
+        DOCUMENT_SELECTED_KEY="document_selected",
+        DOCUMENT_VIEW_ACTIVE_KEY="document_view_active",
+    ),
+    "is_persistable_ui_value": lambda value: isinstance(
+        value, (str, bool, int, float)
+    ),
+    "load_ui_state": lambda: persisted_state,
+    "st": SimpleNamespace(session_state=session_state),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+snapshot = namespace["reconnect_view_state_snapshot"]()
+assert snapshot["active_view"] == "Configs"
+assert snapshot["config_view"] == "PATH"
+assert snapshot["home_view"] == "Docker"
+remembered = namespace["remember_host_switch_view_state"]()
+assert remembered == snapshot
+session_state.pop("active_view", None)
+assert namespace["consume_host_switch_view_state"]() == snapshot
+assert "_hhs_host_switch_view_state" not in session_state
+session_state.clear()
+assert namespace["consume_host_switch_view_state"]()["active_view"] == "Search"
+PY
+  assert_success
+}
+
 @test "when footer statuses are queued then display timing should start on render" {
   run python3 - "${ui_file}" <<'PY'
 import sys
@@ -1715,6 +1759,11 @@ block_container_block = re.search(r"\.block-container\s*\{([^}]*)\}", base_css).
 main_block_gap_block = re.search(r"\[data-testid=\"stMainBlockContainer\"\] > \[data-testid=\"stVerticalBlock\"\],[^{]+\{([^}]*)\}", base_css).group(1)
 active_view_block = re.search(r"\.st-key-active_view\s*\{([^}]*)\}", base_css).group(1)
 sub_view_button_group_block = re.search(r"\.st-key-home_view \[data-baseweb=\"button-group\"\],[^{]+\{([^}]*)\}", base_css).group(1)
+heading_block = re.search(r"\.hhs-view-heading\s*\{([^}]*)\}", base_css).group(1)
+tabbed_heading_block = re.search(r"\.hhs-view-heading--with-tabs\s*\{([^}]*)\}", base_css).group(1)
+direct_content_heading_block = re.search(r"\.hhs-view-heading--direct-content\s*\{([^}]*)\}", base_css).group(1)
+heading_container_block = re.search(r"\[data-testid=\"stMain\"\] \[data-testid=\"stVerticalBlock\"\] > div:has\(\.hhs-view-heading\)\s*\{([^}]*)\}", base_css).group(1)
+tabbed_heading_container_block = re.search(r"\[data-testid=\"stMain\"\] \[data-testid=\"stVerticalBlock\"\] > div:has\(\.hhs-view-heading--with-tabs\)\s*\{([^}]*)\}", base_css).group(1)
 expander_block = re.search(r"\[data-testid=\"stExpander\"\]\s*\{([^}]*)\}", base_css).group(1)
 docker_expander_block = re.search(r"\.st-key-home_docker_panel \[data-testid=\"stExpander\"\]\s*\{([^}]*)\}", base_css).group(1)
 docker_expander_details_block = re.search(r"\.st-key-home_docker_panel \[data-testid=\"stExpanderDetails\"\] > \[data-testid=\"stVerticalBlock\"\]\s*\{([^}]*)\}", base_css).group(1)
@@ -1804,26 +1853,45 @@ assert "var(--hhs-theme-footer-status-error-color)" in base_css
 assert "font-size: var(--hhs-theme-footer-status-text-size)" in base_css
 assert "--hhs-streamlit-toolbar-guard-width: 8rem" in base_css
 assert "--hhs-ttyd-max-height: 760px" in base_css
-assert "--hhs-view-gap: 0.95rem" in base_css
-assert "--hhs-view-section-gap: 0.8rem" in base_css
+assert "--hhs-view-gap: var(--hhs-element-std-gap)" in base_css
+assert "--hhs-view-section-gap: var(--hhs-element-std-gap)" in base_css
 assert "padding-top: 0 !important" in block_container_block
 assert '[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]' in base_css
 assert ".block-container > [data-testid=\"stVerticalBlock\"]" in base_css
-assert "gap: 0 !important" in main_block_gap_block
-assert "row-gap: 0 !important" in main_block_gap_block
-assert "margin-bottom: var(--hhs-view-gap) !important" in active_view_block
-assert "margin: 0 0 var(--hhs-view-gap) !important" in sub_view_button_group_block
-assert "margin: var(--hhs-view-section-gap) 0" in expander_block
-assert "margin: 0 0 var(--hhs-element-std-gap)" in docker_expander_block
-assert "gap: 0 !important" in docker_expander_details_block
-assert "row-gap: 0 !important" in docker_expander_details_block
+assert "gap: var(--hhs-element-std-gap) !important" in main_block_gap_block
+assert "row-gap: var(--hhs-element-std-gap) !important" in main_block_gap_block
+assert "margin-bottom: 0 !important" in active_view_block
+assert "margin: 0 0 var(--hhs-element-std-gap) !important" in sub_view_button_group_block
+assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in base_css
+assert '.stButtonGroup [data-baseweb="button-group"] button[aria-pressed="true"]' in base_css
+assert '.stButtonGroup [data-baseweb="button-group"] button[aria-selected="true"]' in base_css
+assert '.stButtonGroup [data-baseweb="button-group"] button[data-selected="true"]' in base_css
+assert "fill: currentColor !important" in base_css
+assert "border-bottom: 0" in heading_block
+assert "margin: 0" in heading_block
+assert "margin: 0 0 var(--hhs-element-std-gap) !important" in heading_block
+assert "margin-bottom: calc(var(--hhs-element-std-gap) * 2) !important" in tabbed_heading_block
+assert "margin-bottom: calc(var(--hhs-element-std-gap) * 2) !important" in direct_content_heading_block
+assert "margin-bottom: 0 !important" in heading_container_block
+assert "margin-bottom: 0 !important" in tabbed_heading_container_block
+assert ui_source.count("hhs-view-heading hhs-view-heading--with-tabs") >= 6
+assert ui_source.count("hhs-view-heading hhs-view-heading--direct-content") == 2
+assert "def render_view_subtitle" in ui_source
+assert '<h3 class="hhs-view-subtitle">' in ui_source
+assert ".hhs-view-subtitle" in base_css
+assert "border-bottom: 0 !important" in base_css
+assert "box-shadow: none !important" in base_css
+assert "margin: 0 !important" in expander_block
+assert "margin: 0 !important" in docker_expander_block
+assert "gap: var(--hhs-element-std-gap) !important" in docker_expander_details_block
+assert "row-gap: var(--hhs-element-std-gap) !important" in docker_expander_details_block
 assert "display: none !important" in hidden_streamlit_block
 assert '[data-testid="stMain"] [data-testid="stVerticalBlock"] > div:has([data-testid="stDataFrame"])' in base_css
-assert "margin-top: 0.35rem !important" in base_css
+assert "margin-top: 0 !important" in base_css
 assert '[data-testid="stMain"] [data-testid="stMarkdownContainer"] h5' in base_css
-assert "margin: var(--hhs-view-section-gap) 0 0.55rem !important" in base_css
+assert "margin: 0 !important" in base_css
 assert '[data-testid="stMain"] [data-testid="stHorizontalBlock"]:has(.hhs-inline-form-label)' in base_css
-assert "margin-bottom: var(--hhs-view-section-gap)" in base_css
+assert "margin-bottom: 0 !important" in base_css
 assert '.st-key-home_docker_panel [data-testid="stVerticalBlock"] > div:has([data-testid="stDataFrame"])' in base_css
 assert '.st-key-home_docker_panel [data-testid="stElementContainer"][style*="height: 0px"]' in base_css
 assert '.st-key-home_docker_panel [data-testid="stElementContainer"][style*="width:0px"]' in base_css
@@ -1926,6 +1994,11 @@ assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]
 assert "border-color: var(--hhs-primary)" in dracula_css
 assert "--hhs-theme-heading-border-color: var(--hhs-theme-border-color)" in dracula_css
 assert "--hhs-theme-heading-border-color: var(--hhs-theme-border-color)" in tokyo_night_css
+assert ".hhs-view-heading {\n" not in dracula_css
+assert ".hhs-view-heading {\n" not in homesetup_css
+assert ".hhs-view-heading {\n" not in jetpack_css
+assert ".hhs-view-heading {\n" not in pastel_powerline_css
+assert ".hhs-view-heading {\n" not in tokyo_night_css
 PY
   assert_success
 
@@ -3281,7 +3354,7 @@ PY
   run grep -q 'div\[class\*="_table_actions_"\]' "${css_file}"
   assert_success
 
-  run grep -q 'margin-top: var(--hhs-view-section-gap) !important' "${css_file}"
+  run grep -q 'margin-top: 0 !important' "${css_file}"
   assert_success
 
   run grep -q 'gap: var(--hhs-element-std-gap) !important' "${css_file}"
@@ -3407,7 +3480,16 @@ PY
   run grep -q '.st-key-search_controls {' "${css_file}"
   assert_success
 
-  run grep -q 'margin-top: var(--hhs-element-std-gap) !important' "${css_file}"
+  run grep -q '\[data-testid="stExpanderDetails"\] > \[data-testid="stVerticalBlock"\]:has(.st-key-search_controls)' "${css_file}"
+  assert_success
+
+  run grep -q 'row-gap: var(--hhs-element-std-gap) !important' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_filter_controls {' "${css_file}"
+  assert_success
+
+  run grep -q 'margin-top: 0 !important' "${css_file}"
   assert_success
 
   run grep -q '.st-key-search_results {' "${css_file}"
@@ -3447,18 +3529,39 @@ PY
   assert_success
 
   run grep -q 'margin-top: 1.55rem' "${css_file}"
+  assert_failure
+
+  run grep -q '\[1.375, 4.05, 0.15, 0.15\]' "${ui_file}"
   assert_success
 
-  run grep -q '\[1.25, 4.05, 0.012, 0.15\], vertical_alignment="center"' "${ui_file}"
+  run grep -q 'def config_add_columns' "${ui_file}"
+  assert_success
+
+  run grep -q 'vertical_alignment="bottom"' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-alias_add_name)' "${css_file}"
+  assert_success
+
+  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-cmd_add_name)' "${css_file}"
+  assert_success
+
+  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-dir_add_name)' "${css_file}"
+  assert_success
+
+  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-env_add_name)' "${css_file}"
+  assert_success
+
+  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value)' "${css_file}"
+  assert_success
+
+  run grep -q 'column-gap: var(--hhs-element-std-gap) !important' "${css_file}"
   assert_success
 
   run grep -q '.st-key-cmd_add_submit' "${css_file}"
   assert_success
 
   run grep -q '.st-key-alias_add_submit' "${css_file}"
-  assert_success
-
-  run grep -q 'display: none' "${css_file}"
   assert_success
 
   run grep -q '.st-key-env_add_button' "${css_file}"
@@ -4154,6 +4257,12 @@ PY
   run grep -q 'def reconnect_view_state_snapshot' "${ui_file}"
   assert_success
 
+  run grep -q 'def remember_host_switch_view_state' "${ui_file}"
+  assert_success
+
+  run grep -q 'def consume_host_switch_view_state' "${ui_file}"
+  assert_success
+
   run grep -q 'def restore_reconnect_view_state' "${ui_file}"
   assert_success
 
@@ -4208,18 +4317,21 @@ assert "cache_clear()" in source.split("def clear_host_scoped_session_state", 1)
 assert "cache_clear()" in source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
 assert 'st.session_state.pop("ssh_reconnect_restore_view_state", False)' in body
 assert "reset_updater_remote_check_state()" in complete_body
-assert "reconnect_view_state_snapshot()" in body
+assert "consume_host_switch_view_state()" in body
 assert "restore_reconnect_view_state(reconnect_state)" in body
-assert '"ssh_view"' in source.split("def reconnect_view_state_snapshot", 1)[1].split("\ndef ", 1)[0]
-assert '"ssh_explorer_local_path"' in source.split("def reconnect_view_state_snapshot", 1)[1].split("\ndef ", 1)[0]
-assert '"ssh_explorer_remote_path"' in source.split("def reconnect_view_state_snapshot", 1)[1].split("\ndef ", 1)[0]
+assert "remember_host_switch_view_state()" in source.split("def request_ssh_host_connect", 1)[1].split("\ndef ", 1)[0]
+assert "remember_host_switch_view_state()" in source.split("def request_ssh_host_disconnection", 1)[1].split("\ndef ", 1)[0]
+view_state_keys_body = source.split("def reconnect_view_state_keys", 1)[1].split("\ndef ", 1)[0]
+assert '"ssh_view"' in view_state_keys_body
+assert '"ssh_explorer_local_path"' in view_state_keys_body
+assert '"ssh_explorer_remote_path"' in view_state_keys_body
 restore_reconnect_index = body.index("restore_reconnect_view_state(reconnect_state)")
 assert reset_index < restore_reconnect_index < status_index
 disconnect_body = source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
 assert "st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)" in disconnect_body
 assert 'st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""' in disconnect_body
 clear_disconnect_body = source.split("def clear_completed_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
-disconnect_snapshot_index = clear_disconnect_body.index("disconnect_view_state = reconnect_view_state_snapshot()")
+disconnect_snapshot_index = clear_disconnect_body.index("disconnect_view_state = consume_host_switch_view_state()")
 disconnect_reset_index = clear_disconnect_body.index("clear_host_scoped_session_state()")
 disconnect_restore_index = clear_disconnect_body.index("restore_reconnect_view_state(disconnect_view_state)")
 disconnect_availability_refresh_index = clear_disconnect_body.index(
@@ -4725,7 +4837,7 @@ PY
   run grep -q 'height: var(--hhs-ssh-explorer-height) !important' "${css_file}"
   assert_success
 
-  run grep -q 'margin-bottom: var(--hhs-view-gap)' "${css_file}"
+  run grep -q -- '--hhs-view-gap: var(--hhs-element-std-gap)' "${css_file}"
   assert_success
 
   run grep -q 'min-height: 0' "${css_file}"
@@ -5579,6 +5691,51 @@ PY
   run grep -q 'label.innerHTML = {json.dumps(safe_message_html)}' "${ui_file}"
   assert_success
 
+  run grep -q 'COMMAND_PRELOADER_BUS = "hhs-ui-command-preloader"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def create_command_preloader_event_bus' "${ui_file}"
+  assert_success
+
+  run grep -q 'from hspylib.modules.eventbus.fluid import FluidEvent, FluidEventBus' "${ui_file}"
+  assert_success
+
+  run grep -q 'FluidEventBus(' "${ui_file}"
+  assert_success
+
+  run grep -q 'start=FluidEvent(' "${ui_file}"
+  assert_success
+
+  run grep -q 'finish=FluidEvent(' "${ui_file}"
+  assert_success
+
+  run grep -q 'events.start.emit(' "${ui_file}"
+  assert_success
+
+  run grep -q 'events.finish.emit(' "${ui_file}"
+  assert_success
+
+  run grep -q 'events.start.subscribe(cb_event_handler=enqueue_command_preloader_event)' "${ui_file}"
+  assert_success
+
+  run grep -q 'events.finish.subscribe(cb_event_handler=enqueue_command_preloader_event)' "${ui_file}"
+  assert_success
+
+  run grep -q '"hhs:command-preloader"' "${ui_file}"
+  assert_success
+
+  run grep -q 'show_preloader_event: bool = False' "${ui_file}"
+  assert_success
+
+  run grep -q '"preloader_token": command_preloader_token' "${ui_file}"
+  assert_success
+
+  run grep -q 'finish_background_job_preloader(' "${ui_file}"
+  assert_success
+
+  run grep -q 'show_preloader_event=True' "${ui_file}"
+  assert_success
+
   run python3 - "${ui_file}" <<'PY'
 from pathlib import Path
 import html
@@ -5595,6 +5752,44 @@ rendered = namespace["loader_label_html"](
 )
 assert '<span class="hhs-loader-primary">&lt;term&gt;</span>' in rendered
 assert '<span class="hhs-loader-secondary">/tmp/a&amp;b</span>' in rendered
+PY
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import html
+import sys
+import types
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def loader_label_html(")
+end = source.index("def render_command_loader_timer(")
+namespace = {
+    "COMMAND_PRELOADER_START_EVENT": "command:start",
+    "COMMAND_PRELOADER_FINISH_EVENT": "command:finish",
+    "COMMAND_PRELOADER_EVENT_QUEUE_KEY": "_hhs_command_preloader_events",
+    "html": html,
+    "hhs_ui_constants": types.SimpleNamespace(FLOATING_STATUS_QUEUE_LIMIT=20),
+    "st": types.SimpleNamespace(session_state={}),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+class Args:
+    token = "token-1"
+    message = "Searching %primary_color%needle%primary_color%"
+    timeout_seconds = 30
+    status = ""
+
+event = types.SimpleNamespace(name="command:start", args=Args())
+payload = namespace["command_preloader_event_payload"](event)
+assert payload["event"] == "command:start"
+assert payload["token"] == "token-1"
+assert payload["timeoutSeconds"] == 30
+assert '<span class="hhs-loader-primary">needle</span>' in payload["messageHtml"]
+
+renderer_body = source.split("def render_command_preloader_events", 1)[1].split("\ndef ", 1)[0]
+assert 'parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout' not in renderer_body
+assert 'removeOverlay(String(detail.token || ""))' in renderer_body
 PY
   assert_success
 
@@ -6171,6 +6366,7 @@ connect_index = main_body.index("execute_pending_ssh_connection()")
 ssh_dialog_index = main_body.index("render_ssh_connection_dialog()")
 ai_initialize_index = main_body.index("initialize_ollama_service_availability()")
 ai_refresh_index = main_body.index("update_ollama_service_availability_refresh()")
+background_poll_index = main_body.index("render_background_job_polling_fragment()")
 active_view_validation_index = main_body.index('if st.session_state["active_view"] not in main_views():')
 footer_actions_index = main_body.index("handle_footer_actions()")
 updater_status_index = main_body.index("render_background_job_status(UPDATER_UPDATE_JOB)")
@@ -6187,14 +6383,18 @@ assert 'st.session_state.setdefault("updater_check_context", "local")' in main_b
 assert 'st.session_state.setdefault("updater_check_started_context", "")' in main_body
 assert 'st.session_state.setdefault("updater_remote_checked_context", "")' in main_body
 assert "execute_due_updater_check()" not in main_body
-assert disconnect_index < connect_index < ssh_dialog_index
+assert background_poll_index < disconnect_index < connect_index < ssh_dialog_index
 assert ssh_dialog_index < ai_initialize_index < ai_refresh_index < active_view_validation_index
 assert active_view_validation_index < footer_actions_index < updater_status_index < shell_dialog_index
 assert shell_dialog_index < sidebar_index < main_view_index
 assert footer_index < client_status_index < cleanup_index
 footer_status_body = ui_source.split("def render_footer_status_fragment", 1)[1].split("\ndef ", 1)[0]
 footer_status_decorator = ui_source[: ui_source.index("def render_footer_status_fragment")].rstrip().splitlines()[-1]
+background_poll_decorator = ui_source[: ui_source.index("def render_background_job_polling_fragment")].rstrip().splitlines()[-1]
+background_status_decorator = ui_source[: ui_source.index("def render_background_job_status")].rstrip().splitlines()[-1]
 assert footer_status_decorator == '@st.fragment(run_every="5s")'
+assert background_poll_decorator == '@st.fragment(run_every="2s")'
+assert background_status_decorator != '@st.fragment(run_every="2s")'
 assert 'execute_due_updater_check()' in footer_status_body
 assert 'drain_footer_status_log_records()' in footer_status_body
 assert 'render_footer()' in footer_status_body
@@ -6656,8 +6856,11 @@ PY
   run grep -q 'st.session_state.setdefault("ai_prompt_loaded", False)' "${ui_file}"
   assert_success
 
-  run grep -q 'st.markdown("### AI context is clear")' "${ui_file}"
+  run grep -q 'render_view_subtitle("AI context is clear")' "${ui_file}"
   assert_success
+
+  run grep -q 'st.markdown("### AI context is clear")' "${ui_file}"
+  assert_failure
 
   run grep -q 'elif ai_view == "CONTEXT"' "${ui_file}"
   assert_success
@@ -6788,8 +6991,11 @@ PY
   run grep -q 'disabled=not st.session_state\["ai_chat_messages"\]' "${ui_file}"
   assert_failure
 
-  run grep -q 'st.markdown("### There is no chat history")' "${ui_file}"
+  run grep -q 'render_view_subtitle("There is no chat history")' "${ui_file}"
   assert_success
+
+  run grep -q 'st.markdown("### There is no chat history")' "${ui_file}"
+  assert_failure
 
   run grep -q 'meta_col, clear_col = st.columns(\[3.6, 0.4\], vertical_alignment="center")' "${ui_file}"
   assert_success
@@ -7434,7 +7640,10 @@ LOGS
   run grep -q 'white-space: pre' "${css_file}"
   assert_success
 
-  run grep -q 'margin: 0.55rem 0 var(--hhs-element-std-gap)' "${css_file}"
+  run grep -q '.hhs-view-subtitle' "${css_file}"
+  assert_success
+
+  run grep -q 'margin: 0 !important' "${css_file}"
   assert_success
 
   run grep -q '.hhs-log-output' "${css_file}"
@@ -7630,12 +7839,18 @@ LOGS
   assert_success
 
   run grep -q 'with st.form(f"{key_prefix}_add_form", border=False)' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'st.form_submit_button(' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'key=f"{key_prefix}_add_submit"' "${ui_file}"
+  assert_success
+
+  run grep -q '""' "${ui_file}"
+  assert_success
+
+  run grep -q 'on_change=on_submit' "${ui_file}"
   assert_success
 
   run grep -q 'env_add_button' "${ui_file}"
@@ -7863,6 +8078,20 @@ LOGS
   run grep -q '"Loading directories and files..."' "${ui_file}"
   assert_success
 
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+remote_listing_body = source.split("def remote_path_picker_child_paths", 1)[1].split("\ndef ", 1)[0]
+pending_listing_body = source.split("def load_pending_remote_path_picker_directory", 1)[1].split("\ndef ", 1)[0]
+assert "show_preloader_event=True" in remote_listing_body
+assert "show_preloader_event=True" in pending_listing_body
+assert "PATH_PICKER_LISTING_LOADER_MESSAGE" in remote_listing_body
+assert "PATH_PICKER_LISTING_LOADER_MESSAGE" in pending_listing_body
+PY
+  assert_success
+
   run grep -q 'def render_path_picker_open_preloader_script' "${ui_file}"
   assert_success
 
@@ -7896,10 +8125,10 @@ LOGS
   run grep -q 'key=f"{key_prefix}_folder_picker_button"' "${ui_file}"
   assert_success
 
-  run grep -q 'name_col, value_col, _spacer_col, folder_col = st.columns(' "${ui_file}"
+  run grep -q 'name_col, value_col, add_col, folder_col = config_add_columns(' "${ui_file}"
   assert_success
 
-  run grep -q '\[1.25, 4.05, 0.012, 0.15\], vertical_alignment="center"' "${ui_file}"
+  run grep -q '\[1.375, 4.05, 0.15, 0.15\]' "${ui_file}"
   assert_success
 
   run grep -q 'value_group_col.columns(' "${ui_file}"
@@ -7907,6 +8136,9 @@ LOGS
 
   run grep -q '\[1, 0.012, 0.035\], vertical_alignment="center"' "${ui_file}"
   assert_failure
+
+  run grep -q '\[1, 0.035, 0.035\]' "${ui_file}"
+  assert_success
 
   run grep -q 'value_group_col = st.columns' "${ui_file}"
   assert_failure
@@ -8177,7 +8409,13 @@ def background_job_state_key(job_name):
     return f"_hhs_background_job_{job_name}"
 
 def start_background_bash_command(
-    job_name, command, description, timeout_seconds, force_local=False, metadata=None
+    job_name,
+    command,
+    description,
+    timeout_seconds,
+    force_local=False,
+    metadata=None,
+    show_preloader_event=False,
 ):
     commands.append(
         (
@@ -8186,6 +8424,7 @@ def start_background_bash_command(
                 "description": description,
                 "timeout_seconds": timeout_seconds,
                 "metadata": metadata or {},
+                "show_preloader_event": show_preloader_event,
             },
         )
     )
@@ -8284,6 +8523,7 @@ assert loading_job.startswith("path_picker_listing_")
 assert "raw_target='$HOME'" in commands[0][0]
 assert commands[0][1]["description"] == "Loading directories and files..."
 assert commands[0][1]["timeout_seconds"] == 30
+assert commands[0][1]["show_preloader_event"] is True
 children = namespace["path_picker_child_paths"]("$HOME", "folder", False)
 assert children == ["/home/root/app"]
 namespace["remember_folder_picker_visible_child_paths"](children)
@@ -8318,6 +8558,7 @@ assert namespace["load_pending_remote_path_picker_directory"]("folder", False) i
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
 assert namespace["folder_picker_visible_child_paths"]() == ["/home/root/app"]
 assert len(commands) == command_count + 1
+assert commands[-1][1]["show_preloader_event"] is True
 assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is True
 assert "_hhs_folder_picker_pending_dir" not in session_state
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
@@ -8369,6 +8610,7 @@ assert children == []
 children = namespace["path_picker_child_paths"]("/home/root", "file", False)
 assert children == ["/home/root/app", "/home/root/readme.md"]
 assert commands[-1][1]["timeout_seconds"] == 30
+assert commands[-1][1]["show_preloader_event"] is True
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/readme.md"
 assert session_state["_hhs_folder_picker_path_kinds"]["/home/root/readme.md"] == "File"
@@ -8851,6 +9093,8 @@ functions = {
 }
 filter_controls = functions["render_table_filter_controls"]
 normalizer = functions["normalized_table_filter_selection"]
+text_filter_cleaner = functions["clean_table_text_filter_value"]
+text_filter_state_normalizer = functions["normalize_table_text_filter_state"]
 
 radio_calls = [
     call
@@ -8867,6 +9111,36 @@ assert on_change.id == "save_ui_state"
 assert "handle_monitor_disk_top_n_change" not in ast.unparse(filter_controls)
 assert "Containing" in ast.unparse(filter_controls)
 assert "Containing" in ast.unparse(normalizer)
+assert 'normalize_table_text_filter_state(other_key)' in ast.unparse(filter_controls)
+assert 'clean_table_text_filter_value(other_filter)' in ast.unparse(filter_controls)
+assert any(
+    isinstance(node, ast.Constant) and node.value == ""
+    for node in ast.walk(text_filter_cleaner)
+)
+assert 'st.session_state[other_key] = clean_value' in ast.unparse(text_filter_state_normalizer)
+PY
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+from types import SimpleNamespace
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def clear_table_other_filter(")
+end = source.index("def render_env_add_controls(")
+session_state = {"monitor_process_other_filter": None}
+namespace = {
+    "save_ui_state": lambda: None,
+    "st": SimpleNamespace(session_state=session_state),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+assert namespace["clean_table_text_filter_value"](None) == ""
+assert namespace["normalize_table_text_filter_state"]("monitor_process_other_filter") == ""
+assert session_state["monitor_process_other_filter"] == ""
+session_state["monitor_process_other_filter"] = 123
+assert namespace["normalize_table_text_filter_state"]("monitor_process_other_filter") == "123"
+assert session_state["monitor_process_other_filter"] == "123"
 PY
   assert_success
 }
@@ -9174,6 +9448,14 @@ assert "search_path = remember_search_directory(search_path)" in submit_body
 assert submit_body.index("search_path = remember_search_directory(search_path)") < (
     submit_body.index('if not query:')
 )
+render_results_body = source.split("def render_search_results", 1)[1].split("\ndef ", 1)[0]
+assert "run_bash_command(" not in render_results_body
+assert "start_search_command(command, cache_key, loader_message)" in render_results_body
+assert "render_background_job_status(SEARCH_COMMAND_JOB, loader_message)" in render_results_body
+assert "complete_search_command_result(cache_key)" in render_results_body
+assert "cached_search_command_result(command, cache_key)" in render_results_body
+assert 'SEARCH_COMMAND_JOB = "search_command"' in source
+assert "show_preloader_event=True" in source.split("def start_search_command", 1)[1].split("\ndef ", 1)[0]
 assert namespace["normalized_search_type"]("Folders") == "Folders"
 assert namespace["normalized_search_type"]("Unknown") == "Files"
 assert namespace["search_glob_from_query"]("report") == "*report*"
@@ -9694,6 +9976,15 @@ PY
   assert_failure
 
   run grep -q 'st.table(' "${ui_file}"
+  assert_failure
+
+  run grep -q 'use_container_width' "${ui_file}"
+  assert_failure
+
+  run grep -q 'st.form(' "${ui_file}"
+  assert_failure
+
+  run grep -q 'st.form_submit_button(' "${ui_file}"
   assert_failure
 
   run grep -q 'render_env_table_html' "${ui_file}"

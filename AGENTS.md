@@ -41,3 +41,8 @@
 * Do not run regression tests all the time
 * When the user requests a commit; ask if the user wants to run/fix the regressions tests before the commit.
 * Prior to commiting, check older commits and follow the same style and create a maximum of 5 commits (if more are necessary ask the User).
+
+## IMPORTANT NOTE FOR THE UI DESIGN
+
+* RESPECT THE DEFAULT STANDARD GAP OF 1 REM between every and each component, so no componet hugs another
+* when you see that a repeating code is not normalized (and it could be) do it!
