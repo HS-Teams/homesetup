@@ -603,6 +603,56 @@ def render_sidebar_title() -> None:
     )
 
 
+def render_sidebar_title_separator_alignment_script() -> None:
+    """Align the sidebar title separator with the rendered sidebar controls."""
+    render_script_html(
+        """
+        <script>
+        (() => {
+          const parentWindow = window.parent || window;
+          const doc = parentWindow.document;
+          const syncSeparator = () => {
+            const title = doc.querySelector(".hhs-sidebar-title");
+            const controls = [
+              ...doc.querySelectorAll(
+                '.st-key-ssh_host_selector [data-testid="stSelectbox"], ' +
+                'div[class*="st-key-ssh_host_connected_display_"] [data-testid="stSelectbox"], ' +
+                '.st-key-theme_selected [data-testid="stSelectbox"]'
+              ),
+            ];
+            const control = controls.find((candidate) => {
+              const rect = candidate.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            });
+            if (!title || !control) {
+              return;
+            }
+            const titleRect = title.getBoundingClientRect();
+            const controlRect = control.getBoundingClientRect();
+            const separatorLeft = Math.max(0, controlRect.left - titleRect.left);
+            doc.documentElement.style.setProperty(
+              "--hhs-sidebar-title-separator-left",
+              `${separatorLeft}px`
+            );
+            doc.documentElement.style.setProperty(
+              "--hhs-sidebar-title-separator-width",
+              `${controlRect.width}px`
+            );
+          };
+          syncSeparator();
+          parentWindow.requestAnimationFrame(syncSeparator);
+          parentWindow.setTimeout(syncSeparator, 100);
+          parentWindow.setTimeout(syncSeparator, 500);
+          if (parentWindow.__hhsSidebarTitleSeparatorSync !== true) {
+            parentWindow.__hhsSidebarTitleSeparatorSync = true;
+            parentWindow.addEventListener("resize", syncSeparator);
+          }
+        })();
+        </script>
+        """
+    )
+
+
 def document_details(document_key: str) -> tuple[str, Path]:
     """Return the display title and file path for a document key."""
     title, relative_path = hhs_ui.DOCUMENTS.get(
@@ -613,8 +663,6 @@ def document_details(document_key: str) -> tuple[str, Path]:
 
 def open_document_view(document_key: str) -> None:
     """Open a document view in the main content panel."""
-    if terminal_document_view_is_active() and document_key != "TERMINAL":
-        deactivate_terminal_document_view()
     st.session_state[hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] = st.session_state.get(
         "active_view", "Home"
     )
@@ -641,7 +689,7 @@ def clear_ttyd_exit_request() -> None:
 
 
 def deactivate_terminal_document_view() -> None:
-    """Stop ttyd resources when leaving the Terminal document view."""
+    """Stop ttyd resources when the Terminal session must reset."""
     clear_ttyd_exit_request()
     stop_ttyd_session()
     st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = False
@@ -735,10 +783,10 @@ def render_script_html(
     st.html(body, unsafe_allow_javascript=True)
 
 
-def close_document_view() -> None:
+def close_document_view(reset_terminal: bool = False) -> None:
     """Close the document view and restore the previous main view."""
     previous_view = st.session_state.get(hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY, "Home")
-    if terminal_document_view_is_active():
+    if reset_terminal and terminal_document_view_is_active():
         deactivate_terminal_document_view()
     st.session_state[hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] = False
     if previous_view in hhs_ui.VIEWS:
@@ -747,14 +795,14 @@ def close_document_view() -> None:
 
 
 def render_terminal_back_button_cleanup_script() -> None:
-    """Attach browser-side ttyd iframe cleanup to the document Back button."""
+    """Attach browser-side ttyd iframe hiding to the document Back button."""
     render_script_html(
         """
         <script>
           (() => {
             const parentWindow = window.parent;
             const doc = parentWindow.document;
-            const cleanup = () => {
+            const detachTerminalFrameSync = () => {
               if (parentWindow.__hhsTtydFrameSyncCleanup) {
                 parentWindow.__hhsTtydFrameSyncCleanup();
                 parentWindow.__hhsTtydFrameSyncCleanup = null;
@@ -763,13 +811,23 @@ def render_terminal_back_button_cleanup_script() -> None:
                 parentWindow.removeEventListener("message", parentWindow.__hhsTtydExitBackHandler);
                 parentWindow.__hhsTtydExitBackHandler = null;
               }
+            };
+            const hideFrame = () => {
+              detachTerminalFrameSync();
+              const frame = doc.getElementById("hhs-persistent-ttyd-frame");
+              if (frame) {
+                frame.style.display = "none";
+              }
+            };
+            const removeFrame = () => {
+              detachTerminalFrameSync();
               const frame = doc.getElementById("hhs-persistent-ttyd-frame");
               if (frame) {
                 frame.remove();
               }
             };
             const triggerBack = () => {
-              cleanup();
+              removeFrame();
               const backButton = doc.querySelector(".st-key-document_back_button button");
               if (!backButton || backButton.dataset.hhsTtydBackRequested === "true") {
                 return;
@@ -800,7 +858,7 @@ def render_terminal_back_button_cleanup_script() -> None:
               return;
             }
             button.dataset.hhsTtydCleanupAttached = "true";
-            button.addEventListener("click", cleanup, { capture: true });
+            button.addEventListener("click", hideFrame, { capture: true });
           })();
         </script>
         """,
@@ -1317,6 +1375,7 @@ def render_sidebar() -> None:
             st.session_state["theme_reload_name"] = selected_theme
             st.rerun()
         st.session_state["theme_last_seen"] = selected_theme
+        render_sidebar_title_separator_alignment_script()
         st.markdown(
             '<hr class="hhs-sidebar-separator" />',
             unsafe_allow_html=True,
@@ -1331,7 +1390,7 @@ def render_sidebar() -> None:
             if terminal_document_view_is_active():
                 render_terminal_back_button_cleanup_script()
         else:
-            render_ttyd_terminal_frame_cleanup_script()
+            render_ttyd_terminal_frame_hide_script()
             st.button(
                 " README",
                 key="readme_open_button",
@@ -1619,7 +1678,7 @@ def render_command_preloader_events() -> None:
                 overlay.className = "hhs-tab-loader hhs-tab-loader-transient";
                 overlay.style.position = "fixed";
                 overlay.style.inset = "0";
-                overlay.style.width = "100vw";
+                overlay.style.width = "auto";
                 overlay.style.height = "100dvh";
                 overlay.style.display = "flex";
                 overlay.style.alignItems = "center";
@@ -1777,7 +1836,7 @@ def render_preloader(
             overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
             overlay.style.position = "fixed";
             overlay.style.inset = "0";
-            overlay.style.width = "100vw";
+            overlay.style.width = "auto";
             overlay.style.height = "100dvh";
             overlay.style.display = "flex";
             overlay.style.alignItems = "center";
@@ -3162,7 +3221,7 @@ def render_path_picker_open_preloader_script() -> None:
               overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
               overlay.style.position = "fixed";
               overlay.style.inset = "0";
-              overlay.style.width = "100vw";
+              overlay.style.width = "auto";
               overlay.style.height = "100dvh";
               overlay.style.display = "flex";
               overlay.style.alignItems = "center";
@@ -3986,9 +4045,9 @@ def current_floating_status() -> dict[str, object] | None:
 
 
 def effective_floating_status_timeout(status: dict[str, object]) -> float:
-    """Return the visible timeout for a floating status, including disposal grace."""
+    """Return the visible timeout for a floating status."""
     timeout = float(status.get("timeout_seconds", 5.0))
-    return timeout + hhs_ui_constants.FLOATING_STATUS_DISMISS_DELAY_EXTENSION_SECONDS
+    return timeout + hhs_ui_constants.FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS
 
 
 def floating_status_glyph(kind: str) -> str:
@@ -3998,6 +4057,55 @@ def floating_status_glyph(kind: str) -> str:
         "error": "",
         "warn": "",
     }.get(kind, "")
+
+
+def floating_status_dom_id(status: dict[str, object], message: str, kind: str) -> str:
+    """Return a stable browser-side identity for one rendered floating status."""
+    displayed_at = status.get("displayed_at", "")
+    raw_status = f"{kind}|{message}|{displayed_at}"
+    return hashlib.sha256(raw_status.encode("utf-8")).hexdigest()[:16]
+
+
+def render_floating_status_dispose_script(status_id: str) -> None:
+    """Attach browser-only disposal behavior to a rendered floating status."""
+    safe_status_id = json.dumps(status_id)
+    render_script_html(
+        f"""
+        <script>
+        (() => {{
+          const statusId = {safe_status_id};
+          const parentWindow = window.parent || window;
+          const parentDocument = parentWindow.document;
+          const disposedStatuses = parentWindow.__hhsDisposedFloatingStatuses;
+          if (!(disposedStatuses instanceof Set)) {{
+            parentWindow.__hhsDisposedFloatingStatuses = new Set();
+          }}
+          const status = parentDocument.querySelector(
+            `.hhs-floating-status[data-hhs-floating-status-id="${{statusId}}"]`
+          );
+          if (!status) {{
+            return;
+          }}
+          if (parentWindow.__hhsDisposedFloatingStatuses.has(statusId)) {{
+            status.remove();
+            return;
+          }}
+          const button = status.querySelector(".hhs-floating-status-dismiss");
+          if (!button || button.dataset.hhsDisposeAttached === "true") {{
+            return;
+          }}
+          button.dataset.hhsDisposeAttached = "true";
+          button.addEventListener("click", (event) => {{
+            event.preventDefault();
+            event.stopPropagation();
+            parentWindow.__hhsDisposedFloatingStatuses.add(statusId);
+            status.classList.add("hhs-floating-status--disposing");
+            parentWindow.setTimeout(() => status.remove(), 240);
+          }});
+        }})();
+        </script>
+        """
+    )
 
 
 def render_floating_status() -> None:
@@ -4011,25 +4119,23 @@ def render_floating_status() -> None:
     kind = str(status.get("kind", "info"))
     timeout = effective_floating_status_timeout(status)
     glyph = html.escape(floating_status_glyph(kind))
-    dismiss_url = (
-        f"?{html.escape(hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM, quote=True)}=1"
-    )
+    status_id = floating_status_dom_id(status, message, kind)
     st.markdown(
         f"""
         <div class="hhs-floating-status hhs-floating-status-kind-{html.escape(kind)}"
+             data-hhs-floating-status-id="{status_id}"
              style="--hhs-floating-status-timeout: {timeout:.2f}s;">
           <span class="hhs-floating-status-glyph">{glyph}</span>
           <span class="hhs-floating-status-message">{message}</span>
-          <a class="hhs-floating-status-dismiss"
-             href="{dismiss_url}"
-             onclick="this.closest('.hhs-floating-status')?.remove();"
-             role="button"
-             aria-label="Dismiss footer status"
-             title="Dismiss footer status">x</a>
+          <button class="hhs-floating-status-dismiss"
+                  type="button"
+                  aria-label="Dispose footer status"
+                  title="Dispose footer status">x</button>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    render_floating_status_dispose_script(status_id)
 
 
 def drain_footer_status_log_records() -> None:
@@ -4453,10 +4559,6 @@ def remove_footer_cache_clear_query_params() -> None:
 
 def handle_footer_actions() -> None:
     """Run footer actions requested through Streamlit query parameters."""
-    if query_param_requested(hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM):
-        remove_query_param(hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM)
-        pop_floating_status()
-
     updater_completed = background_job_result(UPDATER_UPDATE_JOB)
     if updater_completed is not None:
         result, metadata = updater_completed
@@ -6969,7 +7071,7 @@ def render_ttyd_terminal_frame(ttyd_url: str) -> None:
 
 
 def render_ttyd_terminal_frame_cleanup_script() -> None:
-    """Remove the browser-persistent ttyd iframe when Terminal is inactive."""
+    """Remove the browser-persistent ttyd iframe after a Terminal session reset."""
     render_script_html(
         """
         <script>
@@ -6987,6 +7089,34 @@ def render_ttyd_terminal_frame_cleanup_script() -> None:
             const frame = doc.getElementById("hhs-persistent-ttyd-frame");
             if (frame) {
               frame.remove();
+            }
+          })();
+        </script>
+        """,
+        height=1,
+        width=1,
+    )
+
+
+def render_ttyd_terminal_frame_hide_script() -> None:
+    """Hide the browser-persistent ttyd iframe while preserving its session."""
+    render_script_html(
+        """
+        <script>
+          (() => {
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
+            if (parentWindow.__hhsTtydFrameSyncCleanup) {
+              parentWindow.__hhsTtydFrameSyncCleanup();
+              parentWindow.__hhsTtydFrameSyncCleanup = null;
+            }
+            if (parentWindow.__hhsTtydExitBackHandler) {
+              parentWindow.removeEventListener("message", parentWindow.__hhsTtydExitBackHandler);
+              parentWindow.__hhsTtydExitBackHandler = null;
+            }
+            const frame = doc.getElementById("hhs-persistent-ttyd-frame");
+            if (frame) {
+              frame.style.display = "none";
             }
           })();
         </script>
@@ -7091,8 +7221,10 @@ def sync_ttyd_event_state() -> None:
         return
     if bool(entry.pop("exit_requested", False)):
         if terminal_document_view_is_active():
-            close_document_view()
+            close_document_view(reset_terminal=True)
             st.rerun()
+        else:
+            deactivate_terminal_document_view()
         return
     cwd = str(entry.get("cwd", "")).strip()
     if not cwd:
@@ -9182,6 +9314,8 @@ def execute_pending_ssh_connection() -> bool:
     st.session_state.pop("ssh_reconnect_restore_view_state", False)
     reconnect_state = consume_host_switch_view_state()
     was_terminal_active = terminal_document_view_is_active()
+    render_ttyd_terminal_frame_cleanup_script()
+    stop_ttyd_session()
     st.session_state["ssh_connect_pending"] = ""
     st.session_state["ssh_connect_pending_message"] = ""
     st.session_state["ssh_connection_status"] = "connecting"
@@ -9320,6 +9454,7 @@ def execute_pending_ssh_disconnection() -> bool:
     host = str(st.session_state.get("ssh_disconnect_pending", "")).strip()
     if not host:
         return False
+    render_ttyd_terminal_frame_cleanup_script()
     stop_ttyd_session()
     st.session_state["ssh_disconnect_pending"] = ""
     st.session_state["ssh_connect_pending_message"] = ""
@@ -16980,7 +17115,7 @@ def render_search_submit_preloader_script() -> None:
               overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
               overlay.style.position = "fixed";
               overlay.style.inset = "0";
-              overlay.style.width = "100vw";
+              overlay.style.width = "auto";
               overlay.style.height = "100dvh";
               overlay.style.display = "flex";
               overlay.style.alignItems = "center";
@@ -17716,8 +17851,7 @@ def render_remote_connection_required_view() -> None:
 def render_main_view() -> None:
     """Render the active HomeSetup UI view."""
     if not terminal_document_view_is_active():
-        render_ttyd_terminal_frame_cleanup_script()
-        stop_ttyd_session()
+        render_ttyd_terminal_frame_hide_script()
     if selected_remote_host_requires_connection():
         render_remote_connection_required_view()
         return

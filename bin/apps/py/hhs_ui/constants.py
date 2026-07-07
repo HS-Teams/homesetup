@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -55,7 +55,7 @@ UPDATER_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
 FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
 FLOATING_STATUS_QUEUE_LIMIT = 20
-FLOATING_STATUS_DISMISS_DELAY_EXTENSION_SECONDS = 2.0
+FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 1.0
 FOOTER_REMOTE_WORKING_DIR_KEY = "_hhs_footer_remote_working_dir"
 FOOTER_LOCAL_WORKING_DIR_KEY = "_hhs_footer_local_working_dir"
 TABLE_SELECTION_SNAPSHOT_KEY = "_hhs_table_selection_snapshots"
@@ -414,7 +414,6 @@ FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"
 FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cache"
 FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"
 FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM = "hhs_clear_ai_history"
-FOOTER_DISMISS_STATUS_QUERY_PARAM = "hhs_dismiss_footer_status"
 SEARCH_OPEN_RESULT_QUERY_PARAM = "hhs_open_search_result"
 PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"
 FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY = "footer_status_log_handler"

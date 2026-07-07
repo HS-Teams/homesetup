@@ -1039,6 +1039,62 @@ PY
   assert_success
 }
 
+@test "when closing Terminal view then ttyd should only reset when requested" {
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+start = source.index("def close_document_view(")
+end = source.index("def render_terminal_back_button_cleanup_script(")
+session_state = {
+    "active_view": "Monitor",
+    "document_previous_view": "Home",
+    "document_selected": "TERMINAL",
+    "document_view_active": True,
+}
+deactivated = []
+saved = []
+namespace = {
+    "hhs_ui": SimpleNamespace(
+        DOCUMENT_PREVIOUS_VIEW_KEY="document_previous_view",
+        DOCUMENT_SELECTED_KEY="document_selected",
+        DOCUMENT_VIEW_ACTIVE_KEY="document_view_active",
+        VIEWS=("Home", "Configs", "Services", "SSH", "History", "Monitor", "AI"),
+    ),
+    "st": SimpleNamespace(session_state=session_state),
+    "terminal_document_view_is_active": lambda: (
+        bool(session_state.get("document_view_active"))
+        and session_state.get("document_selected") == "TERMINAL"
+    ),
+    "deactivate_terminal_document_view": lambda: deactivated.append(True),
+    "save_ui_state": lambda: saved.append(dict(session_state)),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+namespace["close_document_view"]()
+assert deactivated == []
+assert session_state["document_view_active"] is False
+assert session_state["active_view"] == "Home"
+assert len(saved) == 1
+
+session_state.update(
+    {
+        "active_view": "Monitor",
+        "document_previous_view": "Home",
+        "document_selected": "TERMINAL",
+        "document_view_active": True,
+    }
+)
+namespace["close_document_view"](reset_terminal=True)
+assert deactivated == [True]
+assert session_state["document_view_active"] is False
+assert session_state["active_view"] == "Home"
+assert len(saved) == 2
+PY
+  assert_success
+}
+
 @test "when SSH host switches then current main page should be preserved" {
   run python3 - "${ui_file}" <<'PY'
 from pathlib import Path
@@ -1106,7 +1162,7 @@ namespace = {
         FLOATING_STATUS_QUEUE_KEY="_hhs_floating_status_queue",
         FLOATING_STATUS_LEGACY_KEY="_hhs_floating_status",
         FLOATING_STATUS_QUEUE_LIMIT=20,
-        FLOATING_STATUS_DISMISS_DELAY_EXTENSION_SECONDS=2.0,
+        FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS=1.0,
     ),
     "clean_command_status_message": lambda value: str(value).strip(),
     "st": SimpleNamespace(session_state=session_state),
@@ -1125,14 +1181,13 @@ status = namespace["current_floating_status"]()
 assert status["message"] == "First"
 assert status["kind"] == "info"
 assert status["displayed_at"] == 150.0
+assert namespace["effective_floating_status_timeout"](status) == 6.0
 
 clock.now = 155.5
 assert namespace["current_floating_status"]()["message"] == "First"
 clock.now = 157.5
-assert namespace["current_floating_status"]()["message"] == "First"
-clock.now = 158.5
 assert namespace["current_floating_status"]()["message"] == "Second"
-assert session_state["_hhs_floating_status_queue"][0]["displayed_at"] == 158.5
+assert session_state["_hhs_floating_status_queue"][0]["displayed_at"] == 157.5
 assert namespace["pop_floating_status"]()["message"] == "Second"
 assert namespace["pop_floating_status"]() is None
 PY
@@ -1165,6 +1220,9 @@ PY
   assert_success
 
   run grep -q -- '--hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace' "${css_file}"
+  assert_success
+
+  run grep -q 'overflow-x: hidden' "${css_file}"
   assert_success
 
   run grep -q -- '--hhs-theme-background-color: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
@@ -1227,7 +1285,19 @@ PY
   run grep -q -- '--hhs-sidebar-inline-inset: 20px' "${css_file}"
   assert_success
 
+  run grep -q -- '--hhs-sidebar-title-separator-left: 0px' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-sidebar-title-separator-width: 100%' "${css_file}"
+  assert_success
+
   run grep -q 'padding: 0 2rem 0 var(--hhs-sidebar-inline-inset)' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-sidebar-title::after' "${css_file}"
+  assert_success
+
+  run grep -q 'def render_sidebar_title_separator_alignment_script' "${ui_file}"
   assert_success
 
   run grep -q '.hhs-sidebar-title-logo' "${css_file}"
@@ -1344,7 +1414,10 @@ PY
   run grep -q 'UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900' "${constants_file}"
   assert_success
 
-  run grep -q 'FLOATING_STATUS_DISMISS_DELAY_EXTENSION_SECONDS = 2.0' "${constants_file}"
+  run grep -q 'FLOATING_STATUS_DISMISS_DELAY_EXTENSION_SECONDS' "${constants_file}"
+  assert_failure
+
+  run grep -q 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 1.0' "${constants_file}"
   assert_success
 
   run grep -q 'UI_COMMAND_LOCAL_TIMEOUT_SECONDS = 30' "${constants_file}"
@@ -1359,8 +1432,8 @@ PY
   run grep -q 'UI_COMMAND_SEARCH_TIMEOUT_SECONDS = 120' "${constants_file}"
   assert_success
 
-  run grep -q 'FOOTER_DISMISS_STATUS_QUERY_PARAM = "hhs_dismiss_footer_status"' "${constants_file}"
-  assert_success
+  run grep -q 'FOOTER_DISMISS_STATUS_QUERY_PARAM' "${constants_file}"
+  assert_failure
 
   run grep -q '"search_query"' "${constants_file}"
   assert_failure
@@ -1566,13 +1639,15 @@ assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"' in constants_source
 assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cache"' in constants_source
 assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"' in constants_source
 assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM = "hhs_clear_ai_history"' in constants_source
-assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM = "hhs_dismiss_footer_status"' in constants_source
+assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 1.0' in constants_source
+assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in constants_source
+assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS' in init_source
 assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in init_source
-assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' in init_source
+assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in init_source
 assert '"updater_last_check_epoch"' in constants_source
 assert '"updater_last_check_output"' in constants_source
 assert '"updater_update_available"' in constants_source
@@ -1677,8 +1752,8 @@ assert 'hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in footer_actions_body
-assert 'hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM' in footer_actions_body
-assert 'pop_floating_status()' in footer_actions_body
+assert 'hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM' not in footer_actions_body
+assert 'pop_floating_status()' not in footer_actions_body
 assert 'remove_footer_cache_clear_query_params()' in footer_actions_body
 assert 'apply_footer_cache_clear_options(' in footer_actions_body
 assert 'open_footer_cache_clear_menu()' not in footer_actions_body
@@ -1749,13 +1824,20 @@ assert 'def push_floating_status' in ui_source
 assert 'def pop_floating_status' in ui_source
 assert 'def current_floating_status' in ui_source
 assert 'def effective_floating_status_timeout' in ui_source
+assert 'hhs_ui_constants.FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS' in ui_source
+assert 'def floating_status_dom_id' in ui_source
+assert 'def render_floating_status_dispose_script' in ui_source
 assert 'hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY' in ui_source
 assert 'def render_floating_status' in ui_source
 assert 'render_floating_status()' in ui_source
 assert 'class="hhs-floating-status ' in ui_source
+assert 'data-hhs-floating-status-id' in ui_source
+assert '<button class="hhs-floating-status-dismiss"' in ui_source
 assert 'class="hhs-floating-status-dismiss"' in ui_source
-assert "this.closest('.hhs-floating-status')?.remove();" in ui_source
-assert 'aria-label="Dismiss footer status"' in ui_source
+assert '__hhsDisposedFloatingStatuses' in ui_source
+assert 'hhs-floating-status--disposing' in ui_source
+assert 'aria-label="Dispose footer status"' in ui_source
+assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in ui_source
 assert 'open "$target"' in ui_source
 assert 'xdg-open "$target"' in ui_source
 assert 'gio open "$target"' in ui_source
@@ -1763,6 +1845,10 @@ assert 'sensible-browser "$target"' in ui_source
 assert 'use_cache=False' in ui_source
 assert 'hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"' in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source
+assert 'def render_sidebar_title_separator_alignment_script' in ui_source
+assert 'render_sidebar_title_separator_alignment_script()' in ui_source
+assert '--hhs-sidebar-title-separator-width' in ui_source
+assert 'getBoundingClientRect()' in ui_source
 base_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", base_css).group(1)
 link_block = re.search(r"\.hhs-footer-link,[^{]+\{([^}]*)\}", base_css).group(1)
 logo_link_block = re.search(r"\.hhs-footer-logo-link,[^{]+\{([^}]*)\}", base_css).group(1)
@@ -1774,6 +1860,8 @@ shell_name_hover_block = re.search(r"\.hhs-footer-shell-status:hover \.hhs-foote
 remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", base_css).group(1)
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
 shell_group_block = re.search(r"\.hhs-footer-shell-group\s*\{([^}]*)\}", base_css).group(1)
+sidebar_title_block = re.search(r"\.hhs-sidebar-title\s*\{([^}]*)\}", base_css).group(1)
+sidebar_title_separator_block = re.search(r"\.hhs-sidebar-title::after\s*\{([^}]*)\}", base_css).group(1)
 cache_menu_block = re.search(r"\.hhs-footer-cache-clear-menu\s*\{([^}]*)\}", base_css).group(1)
 cache_trigger_block = re.search(r"\.hhs-footer-cache-clear-trigger\s*\{([^}]*)\}", base_css).group(1)
 cache_panel_block = re.search(r"^\.hhs-footer-cache-clear-panel\s*\{([^}]*)\}", base_css, re.M).group(1)
@@ -1813,7 +1901,9 @@ for expected in (
     assert expected in hidden_streamlit_block
 view_key_block = re.search(r"\.st-key-active_view,[^{]+\{([^}]*)\}", base_css).group(1)
 active_view_tabs_block = re.search(r"\.st-key-active_view \[role=\"radiogroup\"\]\s*\{([^}]*)\}", base_css).group(1)
-streamlit_chrome_block = re.search(r"\[data-testid=\"stHeader\"\],[^{]+\{([^}]*)\}", base_css).group(1)
+streamlit_chrome_block = re.search(r"\[data-testid=\"stDecoration\"\],[^{]+\{([^}]*)\}", base_css).group(1)
+streamlit_header_block = re.search(r"\[data-testid=\"stHeader\"\]\s*\{([^}]*)\}", base_css).group(1)
+streamlit_toolbar_block = re.search(r"\[data-testid=\"stToolbar\"\]\s*\{([^}]*)\}", base_css).group(1)
 theme_block = re.search(r"\.hhs-footer-glyph\s*\{([^}]*)\}", dracula_css).group(1)
 assert "color: inherit" in link_block
 assert "text-decoration: none !important" in link_block
@@ -1886,7 +1976,9 @@ assert "align-items: baseline" in base_css
 assert ".hhs-footer-update-link" in base_css
 assert "top: -0.42em" in base_css
 assert ".hhs-floating-status" in base_css
-assert "hhs-floating-status-hide" in base_css
+assert "hhs-floating-status-slide-up" in base_css
+assert "hhs-floating-status-slide-down" in base_css
+assert ".hhs-floating-status--disposing" in base_css
 assert ".hhs-floating-status-kind-info" in base_css
 assert ".hhs-floating-status-kind-warn" in base_css
 assert ".hhs-floating-status-kind-error" in base_css
@@ -1999,16 +2091,32 @@ assert '.st-key-active_view [data-testid="stRadioOption"] > div > div:first-chil
 assert '[data-testid="stToolbar"]' in base_css
 assert '[data-testid="stDecoration"]' in base_css
 assert '[data-testid="stStatusWidget"]' in base_css
+assert '[data-testid="stAppDeployButton"]' in base_css
+assert '[data-testid="stMainMenu"]' in base_css
 assert "#MainMenu" in base_css
 assert "display: none !important" in streamlit_chrome_block
 assert "height: 0 !important" in streamlit_chrome_block
 assert "visibility: hidden !important" in streamlit_chrome_block
+assert "display: block !important" in streamlit_header_block
+assert "height: 0 !important" in streamlit_header_block
+assert "pointer-events: none" in streamlit_header_block
+assert "visibility: visible !important" in streamlit_header_block
+assert "display: flex !important" in streamlit_toolbar_block
+assert "height: 0 !important" in streamlit_toolbar_block
+assert "pointer-events: none" in streamlit_toolbar_block
+assert "visibility: visible !important" in streamlit_toolbar_block
+assert '[data-testid="stSidebarCollapseButton"]' in base_css
+assert '[data-testid="stExpandSidebarButton"]' in base_css
+assert '[data-testid="stSidebarCollapsedControl"]' in base_css
+assert "position: fixed !important" in base_css
+assert "pointer-events: auto" in base_css
 assert "border-top: 1px solid var(--hhs-floating-status-color)" in base_css
 assert "border-bottom: 1px solid" in base_css
 assert "border-top: 2px solid var(--hhs-comment)" in dracula_css
 assert "justify-content: center" in base_css
 assert "text-align: center" in base_css
 assert "--hhs-footer-guard-height: 3.5rem" in base_css
+assert "--hhs-floating-status-height: calc(1.85em + 20px)" in base_css
 assert "bottom: 3.25rem" in base_css
 assert "font-size: 0.84rem" in base_css
 assert "min-height: 3.25rem" in base_css
@@ -2018,10 +2126,22 @@ assert "background: rgba(25, 24, 31, 0.82)" in jetpack_css
 assert "background: rgba(20, 17, 31, 0.82)" in pastel_powerline_css
 assert "left: 0" in base_css
 assert "right: 0" in base_css
-assert "min-height: 1.85em" in base_css
-assert "padding: 0.32em 2rem 0.32em var(--hhs-sidebar-inline-inset)" in base_css
+assert "min-height: var(--hhs-floating-status-height)" in base_css
+assert "padding: 0.32em 2.5rem 0.32em var(--hhs-sidebar-inline-inset)" in base_css
+assert "--hhs-sidebar-title-separator-left: 0px" in base_css
+assert "--hhs-sidebar-title-separator-width: 100%" in base_css
+assert "border-bottom: 0" in sidebar_title_block
+assert "border-bottom: 2px solid var(--hhs-theme-text-color)" in sidebar_title_separator_block
+assert 'content: ""' in sidebar_title_separator_block
+assert "left: var(--hhs-sidebar-title-separator-left)" in sidebar_title_separator_block
+assert "width: var(--hhs-sidebar-title-separator-width)" in sidebar_title_separator_block
+assert "border-radius: 50%" in base_css
+assert "height: 1.35rem" in base_css
+assert "text-decoration: none !important" in base_css
+assert '[data-testid="stApp"]' in base_css
+assert '[data-testid="stMainBlockContainer"]' in base_css
 assert "--hhs-floating-status-timeout: 5s" in base_css
-assert "animation-delay: var(--hhs-floating-status-timeout, 5s)" in base_css
+assert "animation-delay: 0s, var(--hhs-floating-status-timeout, 5s)" in base_css
 assert "font-family: var(--hhs-ui-font-family)" in base_css
 assert "var(--hhs-font-family)" not in base_css
 assert "--hhs-modal-scrim-z-index: 1000001" in base_css
@@ -5737,6 +5857,12 @@ PY
   run grep -q 'overlay.style.inset = "0"' "${ui_file}"
   assert_success
 
+  run grep -q 'overlay.style.width = "auto"' "${ui_file}"
+  assert_success
+
+  run grep -q 'overlay.style.width = "100vw"' "${ui_file}"
+  assert_failure
+
   run grep -q 'overlay.style.height = "100dvh"' "${ui_file}"
   assert_success
 
@@ -6206,14 +6332,24 @@ open_body = ui_source.split("def open_document_view", 1)[1].split("\ndef ", 1)[0
 close_body = ui_source.split("def close_document_view", 1)[1].split("\ndef ", 1)[0]
 render_main_body = ui_source.split("def render_main_view", 1)[1].split("\ndef ", 1)[0]
 deactivate_body = ui_source.split("def deactivate_terminal_document_view", 1)[1].split("\ndef ", 1)[0]
-assert 'terminal_document_view_is_active() and document_key != "TERMINAL"' in open_body
-assert "deactivate_terminal_document_view()" in open_body
-assert "if terminal_document_view_is_active():" in close_body
+sync_events_body = ui_source.split("def sync_ttyd_event_state", 1)[1].split("\ndef ", 1)[0]
+ssh_connect_body = ui_source.split("def execute_pending_ssh_connection", 1)[1].split("\ndef ", 1)[0]
+ssh_disconnect_body = ui_source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
+assert 'terminal_document_view_is_active() and document_key != "TERMINAL"' not in open_body
+assert "deactivate_terminal_document_view()" not in open_body
+assert "if reset_terminal and terminal_document_view_is_active():" in close_body
 assert "deactivate_terminal_document_view()" in close_body
 assert "if not terminal_document_view_is_active():" in render_main_body
-assert "stop_ttyd_session()" in render_main_body
+assert "render_ttyd_terminal_frame_hide_script()" in render_main_body
+assert "stop_ttyd_session()" not in render_main_body
 assert "stop_ttyd_session()" in deactivate_body
 assert "TERMINAL_READY_STATUS_SHOWN_KEY" in deactivate_body
+assert "close_document_view(reset_terminal=True)" in sync_events_body
+assert "deactivate_terminal_document_view()" in sync_events_body
+assert "render_ttyd_terminal_frame_cleanup_script()" in ssh_connect_body
+assert "stop_ttyd_session()" in ssh_connect_body
+assert "render_ttyd_terminal_frame_cleanup_script()" in ssh_disconnect_body
+assert "stop_ttyd_session()" in ssh_disconnect_body
 PY
   assert_success
 
@@ -6577,7 +6713,13 @@ PY
   run grep -q 'def render_ttyd_terminal_frame_cleanup_script' "${ui_file}"
   assert_success
 
-  run grep -q 'render_ttyd_terminal_frame_cleanup_script()' "${ui_file}"
+  run grep -q 'def render_ttyd_terminal_frame_hide_script' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_ttyd_terminal_frame_hide_script()' "${ui_file}"
+  assert_success
+
+  run grep -q 'frame.style.display = "none"' "${ui_file}"
   assert_success
 
   run grep -q 'stop_ttyd_session()' "${ui_file}"
@@ -8340,7 +8482,7 @@ LOGS
   run grep -q 'min-height: 100dvh !important' "${css_file}"
   assert_success
 
-  run grep -q 'width: 100vw !important' "${css_file}"
+  run grep -q 'width: auto !important' "${css_file}"
   assert_success
 
   run grep -q 'margin: auto !important' "${css_file}"
