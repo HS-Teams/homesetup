@@ -1635,14 +1635,21 @@ init_source = Path("bin/apps/py/hhs_ui/__init__.py").read_text()
 assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in constants_source
 assert 'FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"' in constants_source
 assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM = "hhs_show_shell_version"' in constants_source
+assert 'FOOTER_ASK_TERMINAL_QUERY_PARAM' not in constants_source
+assert 'FOOTER_ASK_TERMINAL_PROMPT_QUERY_PARAM' not in constants_source
+assert 'FOOTER_ASK_TERMINAL_REQUEST_QUERY_PARAM' not in constants_source
 assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"' in constants_source
 assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cache"' in constants_source
 assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"' in constants_source
 assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM = "hhs_clear_ai_history"' in constants_source
 assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 1.0' in constants_source
+assert 'AI_TERMINAL_CONTEXT_MAX_CHARS = 12000' in constants_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in constants_source
 assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS' in init_source
 assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in init_source
+assert 'FOOTER_ASK_TERMINAL_QUERY_PARAM' not in init_source
+assert 'FOOTER_ASK_TERMINAL_PROMPT_QUERY_PARAM' not in init_source
+assert 'FOOTER_ASK_TERMINAL_REQUEST_QUERY_PARAM' not in init_source
 assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in init_source
@@ -1666,25 +1673,103 @@ assert '' in ui_source
 assert 'class="hhs-footer-shell-group"' in ui_source
 assert 'def footer_cache_clear_menu_markup' in ui_source
 assert 'def render_footer_cache_clear_menu_script' in ui_source
+assert 'def footer_terminal_ai_menu_markup' in ui_source
+assert 'def render_footer_terminal_ai_menu_script' in ui_source
 assert '<details class="hhs-footer-cache-clear-menu">' in ui_source
 assert '<summary class="hhs-footer-cache-clear-trigger"' in ui_source
+assert '<details class="hhs-footer-terminal-ai-menu">' in ui_source
+assert '<summary class="hhs-footer-terminal-ai-trigger"' in ui_source
 assert '<form class="hhs-footer-cache-clear-form" method="get">' not in ui_source
 assert '<div class="hhs-footer-cache-clear-panel" data-clear-param="{clear_param}">' in ui_source
+assert '<div class="hhs-footer-terminal-ai-panel" data-default-prompt="{default_prompt}">' in ui_source
+assert 'class="hhs-footer-terminal-ai-prompt-input"' in ui_source
+assert 'class="hhs-footer-terminal-ai-prompt-input"\n              type="text"\n              value=""\n              placeholder="{default_prompt}"' in ui_source
+assert 'value="{default_prompt}"' not in ui_source
+assert '<label class="hhs-footer-terminal-ai-context-preview">' in ui_source
+assert 'class="hhs-footer-terminal-ai-context-input"' in ui_source
+assert 'placeholder="Terminal text"' in ui_source
+assert 'aria-label="Captured terminal text"' in ui_source
+assert 'readonly' in ui_source
 assert '<button type="button">OK</button>' in ui_source
 assert 'panel.querySelectorAll(\'input[type="checkbox"][data-param]:checked\')' in ui_source
 assert 'params.set(panel.dataset.clearParam, "1")' in ui_source
-assert 'window.parent.location.search = params.toString()' in ui_source
+assert 'window.parent.__hhsFooterCacheClearOutsideHandler' in ui_source
+assert 'doc.querySelectorAll(".hhs-footer-terminal-ai-menu[open]")' in ui_source
+assert 'doc.addEventListener("pointerdown", outsidePointerHandler, true)' in ui_source
+assert 'terminal_ai_ask_command_prefix = build_hhs_ask_plugin_command(' not in ui_source
+assert 'const terminalAskCommandPrefix' not in ui_source
+assert 'let currentTerminalContextEvent = null' in ui_source
+assert 'type: "hhs-ttyd-context-request"' in ui_source
+assert 'const trigger = menu?.querySelector(".hhs-footer-terminal-ai-trigger")' in ui_source
+assert 'const contextInput = panel.querySelector(".hhs-footer-terminal-ai-context-input")' in ui_source
+assert 'const shellSingleQuote = (value)' in ui_source
+assert "replace(/'/g" in ui_source
+assert 'const shellDoubleQuote = (value) => JSON.stringify(String(value || ""))' in ui_source
+assert 'const buildTerminalAskPrompt = (instruction) =>' in ui_source
+assert 'const buildTerminalAskContext = (terminalEvent)' in ui_source
+assert 'const buildTerminalAskCommand = (instruction, terminalEvent)' in ui_source
+assert '`echo ${{shellSingleQuote(buildTerminalAskContext(terminalEvent))}} | __hhs ask execute ${{shellDoubleQuote(buildTerminalAskPrompt(instruction))}}`' in ui_source
+assert '`echo ${{shellSingleQuote(buildTerminalAskPayload(instruction, terminalEvent))}} | __hhs ask execute`' not in ui_source
+assert '`__hhs ask execute ${{shellDoubleQuote(buildTerminalAskPrompt(instruction, terminalEvent))}}`' not in ui_source
+assert 'const submitTerminalCommand = (command)' in ui_source
+assert 'type: "hhs-ttyd-command-submit"' in ui_source
+assert 'submitTerminalCommand(command)' in ui_source
+assert 'const contextPreviewMaxChars = 180' in ui_source
+assert 'return `${{cleanValue.slice(0, contextPreviewMaxChars - 1)}}…`' in ui_source
+assert 'const terminalEventMatchesRequest = (terminalEvent)' in ui_source
+assert 'const applyTerminalContextEvent = (terminalEvent)' in ui_source
+assert 'currentTerminalContextEvent = terminalEvent' in ui_source
+assert 'const matchingTerminalContextEvent = ()' in ui_source
+assert 'currentTerminalContextEvent || window.parent.__hhsTtydTerminalContextEvent' in ui_source
+assert 'const refreshTerminalContextPreview = ()' in ui_source
+assert 'applyTerminalContextEvent(window.parent.__hhsTtydTerminalContextEvent)' in ui_source
+assert 'const closeMenu = ()' in ui_source
+assert 'const resetTerminalInputs = ()' in ui_source
+assert 'input.value = ""' in ui_source
+assert 'const terminalContextHandler = (event)' in ui_source
+assert 'window.addEventListener("message", terminalContextHandler)' in ui_source
+assert 'if (window !== window.parent)' in ui_source
+assert 'window.parent.__hhsFooterTerminalAiOutsideHandler' in ui_source
+assert 'if (!menu || !menu.open || menu.contains(event.target))' in ui_source
+assert 'setTerminalContextPreview(terminalEvent.content || "")' in ui_source
+assert 'window.setTimeout(refreshTerminalContextPreview, 80)' in ui_source
+assert 'window.setTimeout(refreshTerminalContextPreview, 220)' in ui_source
+assert 'trigger?.addEventListener("pointerdown"' in ui_source
+assert 'requestTerminalContext(false)' in ui_source
 assert 'menu.removeAttribute("open")' in ui_source
+assert 'const submitted = submitTerminalCommand(command)' in ui_source
+assert 'if (submitted)' in ui_source
+assert 'resetTerminalInputs()' in ui_source
+assert 'closeMenu()' in ui_source
+assert 'const prompt = (input?.value || defaultPrompt).trim() || defaultPrompt' in ui_source
+terminal_ai_script_body = ui_source.split("def render_footer_terminal_ai_menu_script", 1)[1].split("\ndef ", 1)[0]
+assert "window.parent.location.search" not in terminal_ai_script_body
+assert "await fetch(terminalAiRequestUrl" not in terminal_ai_script_body
+assert "__hhs ask execute -k" not in terminal_ai_script_body
+assert "submitBridgeRerun" not in terminal_ai_script_body
+assert "context: terminalEvent || {{}}" not in terminal_ai_script_body
+assert ".st-key-footer_terminal_ai_bridge_container" not in terminal_ai_script_body
 assert 'render_footer_cache_clear_menu_script()' in ui_source
+assert 'render_footer_terminal_ai_menu_script()' in ui_source
+assert 'key=FOOTER_TERMINAL_AI_BRIDGE_BUTTON_KEY' not in ui_source
+assert 'key=FOOTER_TERMINAL_AI_BRIDGE_CONTAINER_KEY' not in ui_source
+assert 'on_click=handle_footer_terminal_ai_bridge_button' not in ui_source
+assert 'key=FOOTER_TERMINAL_AI_BRIDGE_BUTTON_KEY' not in render_footer_body
+assert 'key=FOOTER_TERMINAL_AI_BRIDGE_CONTAINER_KEY' not in render_footer_body
 assert 'href="{cache_clear_url}"' not in ui_source
 assert 'key="footer_cache_clear_button"' not in ui_source
 assert 'on_click=open_footer_cache_clear_menu' not in ui_source
 assert 'f\'<span class="hhs-footer-glyph"></span>\'' in ui_source
-assert '<span class="hhs-footer-cache-refresh-glyph">♻</span>' in ui_source
+assert '<span class="hhs-footer-glyph-button">♻</span>' in ui_source
+assert '<span class="hhs-footer-glyph-button"></span>' in ui_source
+assert "hhs-footer-cache-refresh-glyph" not in ui_source
+assert "hhs-footer-terminal-ai-glyph" not in ui_source
+assert 'Explain me this' in ui_source
 assert '<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}"' not in ui_source
 assert '<span class="hhs-footer-glyph"></span><span class="hhs-footer-cache-refresh-glyph">♻</span></a>' not in ui_source
 assert 'def render_footer_cache_clear_menu(' not in ui_source
 assert 'st.container(key="footer_cache_clear_menu")' not in ui_source
+assert 'f"{shell_status_markup}{cache_clear_markup}{terminal_ai_markup}</span>"' in ui_source
 assert '>Clear application cache</span>' in ui_source
 assert '>Clear application states</span>' in ui_source
 assert '>Clear AI history</span>' in ui_source
@@ -1752,8 +1837,13 @@ assert 'hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in footer_actions_body
+assert 'hhs_ui.FOOTER_ASK_TERMINAL_QUERY_PARAM' not in footer_actions_body
+assert 'hhs_ui.FOOTER_ASK_TERMINAL_PROMPT_QUERY_PARAM' not in footer_actions_body
+assert 'hhs_ui.FOOTER_ASK_TERMINAL_REQUEST_QUERY_PARAM' not in footer_actions_body
 assert 'hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM' not in footer_actions_body
 assert 'pop_floating_status()' not in footer_actions_body
+assert 'remove_footer_ask_terminal_query_params()' not in footer_actions_body
+assert 'FOOTER_TERMINAL_AI_BRIDGE_BUTTON_KEY' not in footer_actions_body
 assert 'remove_footer_cache_clear_query_params()' in footer_actions_body
 assert 'apply_footer_cache_clear_options(' in footer_actions_body
 assert 'open_footer_cache_clear_menu()' not in footer_actions_body
@@ -1776,6 +1866,13 @@ assert "hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM" in remove_cache_params_body
 assert "hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM" in remove_cache_params_body
 assert "hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM" in remove_cache_params_body
 assert "hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM" in remove_cache_params_body
+assert "def remove_footer_ask_terminal_query_params" not in ui_source
+assert "def apply_footer_terminal_ai_request" not in ui_source
+assert "def handle_footer_terminal_ai_bridge_button" not in ui_source
+assert "def render_footer_terminal_ai_bridge_button" not in ui_source
+assert "pop_footer_terminal_ai_request" not in ui_source
+assert "terminal_ai_request_endpoint_url" not in ui_source
+assert '"/terminal-ai-request"' not in ui_source
 state_clear_body = ui_source.split("def clear_application_state_data", 1)[1].split("\ndef ", 1)[0]
 assert "hhs_ui.UI_STATE_FILE.unlink" in state_clear_body
 assert "is_persisted_ui_key" in state_clear_body
@@ -1868,6 +1965,18 @@ cache_panel_block = re.search(r"^\.hhs-footer-cache-clear-panel\s*\{([^}]*)\}", 
 cache_panel_label_block = re.search(r"\.hhs-footer-cache-clear-panel label\s*\{([^}]*)\}", base_css).group(1)
 cache_panel_checkbox_block = re.search(r"\.hhs-footer-cache-clear-panel input\[type=\"checkbox\"\]\s*\{([^}]*)\}", base_css).group(1)
 cache_panel_button_block = re.search(r"\.hhs-footer-cache-clear-panel button\s*\{([^}]*)\}", base_css).group(1)
+footer_glyph_button_block = re.search(r"\.hhs-footer-glyph-button\s*\{([^}]*)\}", base_css).group(1)
+terminal_ai_menu_block = re.search(r"\.hhs-footer-terminal-ai-menu\s*\{([^}]*)\}", base_css).group(1)
+terminal_ai_trigger_block = re.search(r"\.hhs-footer-terminal-ai-trigger\s*\{([^}]*)\}", base_css).group(1)
+terminal_ai_glyph_button_block = re.search(
+    r"\.hhs-footer-terminal-ai-trigger \.hhs-footer-glyph-button\s*\{([^}]*)\}",
+    base_css,
+).group(1)
+terminal_ai_panel_block = re.search(r"^\.hhs-footer-terminal-ai-panel\s*\{([^}]*)\}", base_css, re.M).group(1)
+terminal_ai_panel_label_block = re.search(r"\.hhs-footer-terminal-ai-panel label\s*\{([^}]*)\}", base_css).group(1)
+terminal_ai_panel_input_block = re.search(r"\.hhs-footer-terminal-ai-panel input\[type=\"text\"\]\s*\{([^}]*)\}", base_css).group(1)
+terminal_ai_context_input_block = re.search(r"\.hhs-footer-terminal-ai-context-input\s*\{([^}]*)\}", base_css).group(1)
+terminal_ai_panel_button_block = re.search(r"\.hhs-footer-terminal-ai-panel button\s*\{([^}]*)\}", base_css).group(1)
 block_container_block = re.search(r"\.block-container\s*\{([^}]*)\}", base_css).group(1)
 main_block_gap_block = re.search(r"\[data-testid=\"stMainBlockContainer\"\] > \[data-testid=\"stVerticalBlock\"\],[^{]+\{([^}]*)\}", base_css).group(1)
 active_view_block = re.search(r"\.st-key-active_view\s*\{([^}]*)\}", base_css).group(1)
@@ -1917,6 +2026,9 @@ assert ".hhs-footer-cache-clear-menu" in base_css
 assert ".hhs-footer-cache-clear-trigger" in base_css
 assert ".hhs-footer-cache-clear-form" not in base_css
 assert ".hhs-footer-cache-clear-panel" in base_css
+assert ".hhs-footer-terminal-ai-menu" in base_css
+assert ".hhs-footer-terminal-ai-trigger" in base_css
+assert ".hhs-footer-terminal-ai-panel" in base_css
 assert ".st-key-footer_cache_clear_button" not in base_css
 assert ".hhs-footer-remote-status" in base_css
 assert ".hhs-footer-status-group" in base_css
@@ -1935,10 +2047,31 @@ assert "cursor: pointer" in cache_trigger_block
 assert "height: 1.18rem" in cache_trigger_block
 assert "list-style: none" in cache_trigger_block
 assert "padding: 0 0.12rem" in cache_trigger_block
-assert ".hhs-footer-cache-refresh-glyph" in base_css
-assert "font-size: 2.5em" in base_css
+assert "font-size: 0.68rem" in terminal_ai_menu_block
+assert "height: 1.18rem" in terminal_ai_menu_block
+assert "position: relative" in terminal_ai_menu_block
+assert "color: var(--hhs-warning)" in terminal_ai_menu_block
+assert "cursor: pointer" in terminal_ai_trigger_block
+assert "height: 1.18rem" in terminal_ai_trigger_block
+assert "list-style: none" in terminal_ai_trigger_block
+assert "padding: 0 0.12rem" in terminal_ai_trigger_block
+assert "color: var(--hhs-warning)" in terminal_ai_trigger_block
+assert ".hhs-footer-glyph-button" in base_css
+assert ".hhs-footer-cache-refresh-glyph" not in base_css
+assert ".hhs-footer-terminal-ai-glyph" not in base_css
+assert "color: currentColor" in footer_glyph_button_block
+assert "--hhs-theme-footer-glyph-button: 1.5rem" in base_css
+assert "font-size: var(--hhs-theme-footer-glyph-button)" in footer_glyph_button_block
+assert "height: var(--hhs-theme-footer-glyph-button)" in footer_glyph_button_block
+assert "width: var(--hhs-theme-footer-glyph-button)" in footer_glyph_button_block
+assert "font-size: calc((var(--hhs-theme-footer-glyph-button) * 0.5) + 5px)" in terminal_ai_glyph_button_block
+assert ".st-key-footer_terminal_ai_bridge_button" not in base_css
+assert ".st-key-footer_terminal_ai_bridge_container" not in base_css
+assert ".st-key-footer-terminal-ai-bridge-button" not in base_css
+assert ".st-key-footer-terminal-ai-bridge-container" not in base_css
 assert ".hhs-footer-cache-clear-button" not in base_css
 assert ".hhs-footer-cache-clear-trigger:hover" in base_css
+assert ".hhs-footer-terminal-ai-trigger:hover" in base_css
 assert "bottom: calc(var(--hhs-footer-guard-height) + 0.7rem)" in base_css
 assert "right: 1rem" in base_css
 assert "background: var(--hhs-theme-secondary-background-color)" in cache_panel_block
@@ -1953,8 +2086,24 @@ assert "height: 1rem" in cache_panel_checkbox_block
 assert "background: transparent" in cache_panel_button_block
 assert "height: 2.25rem" in cache_panel_button_block
 assert "width: 100%" in cache_panel_button_block
+assert "background: var(--hhs-theme-secondary-background-color)" in terminal_ai_panel_block
+assert "box-shadow: 0 1rem 2rem" in terminal_ai_panel_block
+assert "gap: var(--hhs-element-std-gap)" in terminal_ai_panel_block
+assert "position: fixed" in terminal_ai_panel_block
+assert "width: min(22rem, calc(100vw - 2rem)) !important" in terminal_ai_panel_block
+assert "width: 100%" in terminal_ai_panel_label_block
+assert "height: 2.25rem" in terminal_ai_panel_input_block
+assert "width: 100%" in terminal_ai_panel_input_block
+assert "overflow: hidden" in terminal_ai_context_input_block
+assert "text-overflow: ellipsis" in terminal_ai_context_input_block
+assert "white-space: nowrap" in terminal_ai_context_input_block
+assert "cursor: default" in terminal_ai_context_input_block
+assert "background: transparent" in terminal_ai_panel_button_block
+assert "height: 2.25rem" in terminal_ai_panel_button_block
+assert "width: 100%" in terminal_ai_panel_button_block
 assert ".hhs-footer-cache-clear-panel label:hover" in base_css
 assert ".hhs-footer-cache-clear-panel button:hover" in base_css
+assert ".hhs-footer-terminal-ai-panel button:hover" in base_css
 assert 'div[role="dialog"]:has(.hhs-shell-version-output)' in base_css
 assert ".hhs-shell-version-output" in base_css
 assert "max-height: 88dvh" in base_css
@@ -2153,11 +2302,14 @@ assert '[data-testid="stDialog"][data-baseweb="modal"] [role="dialog"]' in base_
 assert "min-height: 100dvh !important" in base_css
 assert 'body:has(div[role="dialog"]) .hhs-app-footer' in base_css
 assert 'body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-app-footer' in base_css
+assert 'body:has(div[role="dialog"]) .hhs-footer-terminal-ai-panel' in base_css
+assert 'body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-footer-terminal-ai-panel' in base_css
 assert 'body:has(div[role="dialog"]) .hhs-sidebar-clock' in base_css
 assert "z-index: calc(var(--hhs-modal-scrim-z-index) - 1) !important" in base_css
 assert "z-index: var(--hhs-modal-z-index) !important" in base_css
 assert "z-index: var(--hhs-command-overlay-z-index)" in base_css
 main_body = ui_source.split("def main()", 1)[1].split('if __name__ == "__main__"', 1)[0]
+assert "render_footer_terminal_ai_bridge_button()" not in main_body
 assert main_body.index("render_footer_status_fragment()") < main_body.index(
     "render_folder_picker_dialog()"
 )
@@ -2180,16 +2332,21 @@ assert "--hhs-theme-footer-status-warn-color" in dracula_css
 assert "--hhs-theme-footer-status-error-color" in dracula_css
 assert "--hhs-theme-footer-status-text-size" in dracula_css
 assert "--hhs-theme-footer-status-text-size: 1.176rem" in dracula_css
+assert "--hhs-theme-footer-glyph-button: 1.5rem" in dracula_css
 assert "--hhs-theme-footer-status-info-color" in homesetup_css
 assert "--hhs-theme-footer-status-warn-color" in homesetup_css
 assert "--hhs-theme-footer-status-error-color" in homesetup_css
 assert "--hhs-theme-footer-status-text-size" in homesetup_css
 assert "--hhs-theme-footer-status-text-size: 1.176rem" in homesetup_css
+assert "--hhs-theme-footer-glyph-button: 1.5rem" in homesetup_css
 assert "--hhs-theme-footer-status-info-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-warn-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-error-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-text-size" in tokyo_night_css
 assert "--hhs-theme-footer-status-text-size: 1.176rem" in tokyo_night_css
+assert "--hhs-theme-footer-glyph-button: 1.5rem" in tokyo_night_css
+assert "--hhs-theme-footer-glyph-button: 1.5rem" in jetpack_css
+assert "--hhs-theme-footer-glyph-button: 1.5rem" in pastel_powerline_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in dracula_css
 assert '.stButtonGroup [data-testid="stButtonGroup"] button[aria-checked="true"]' in dracula_css
 assert '.stButtonGroup [data-testid="stButtonGroup"] button[data-selected]' in dracula_css
@@ -6398,7 +6555,7 @@ PY
   run grep -q 'background:#000000!important;' "${ui_file}"
   assert_success
 
-  run grep -q 'hhs-ttyd-font-index-v10' "${ui_file}"
+  run grep -q 'hhs-ttyd-font-index-v15-terminal-cancel-command-v1' "${ui_file}"
   assert_success
 
   run grep -q 'padding:0!important;' "${ui_file}"
@@ -6445,6 +6602,96 @@ PY
 
   run grep -q 'registerOscHandler(777' "${ui_file}"
   assert_success
+
+  run grep -q 'AI_TERMINAL_CONTEXT_MAX_CHARS' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-ttyd-context-request' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-ttyd-command-submit' "${ui_file}"
+  assert_success
+
+  run grep -q "def sendTerminalInput" "${ui_file}"
+  assert_failure
+
+  run grep -q "const sendTerminalInput=(text)" "${ui_file}"
+  assert_success
+
+  run grep -Fq "sendTerminalInput('\\\\x03')" "${ui_file}"
+  assert_success
+
+  run grep -Fq 'window.setTimeout(()=>{sendTerminalInput(`${cleanCommand}\\r`);},90);' "${ui_file}"
+  assert_success
+
+  run grep -q "triggerDataEvent" "${ui_file}"
+  assert_success
+
+  run grep -q "term.paste" "${ui_file}"
+  assert_success
+
+  run grep -q "terminal-context" "${ui_file}"
+  assert_success
+
+  run grep -q "replyToRequester" "${ui_file}"
+  assert_success
+
+  run grep -q "__hhsTtydTerminalContextEvent" "${ui_file}"
+  assert_success
+
+  run grep -q "__hhsTtydTerminalContextCacheHandler" "${ui_file}"
+  assert_success
+
+  run grep -q "def normalize_terminal_ai_request" "${ui_file}"
+  assert_failure
+
+  run grep -q "def store_terminal_ai_request" "${ui_file}"
+  assert_failure
+
+  run grep -q "def pop_footer_terminal_ai_request" "${ui_file}"
+  assert_failure
+
+  run grep -q "def terminal_ai_request_endpoint_url" "${ui_file}"
+  assert_failure
+
+  run grep -q '"/terminal-ai-request"' "${ui_file}"
+  assert_failure
+
+  run grep -q "handle_terminal_ai_request" "${ui_file}"
+  assert_failure
+
+  run grep -q "contextDelayMs = 700" "${ui_file}"
+  assert_success
+
+  run grep -q "requestTerminalContext(true)" "${ui_file}"
+  assert_success
+
+  run grep -q "requestTerminalContext(false)" "${ui_file}"
+  assert_success
+
+  run grep -q "parentWindow.__hhsTtydEventUrl" "${ui_file}"
+  assert_success
+
+  run grep -q 'def wait_for_ttyd_terminal_context_event' "${ui_file}"
+  assert_failure
+
+  run grep -q "term.getSelection()" "${ui_file}"
+  assert_success
+
+  run grep -q "lastSelectedContent" "${ui_file}"
+  assert_success
+
+  run grep -q "rememberSelection" "${ui_file}"
+  assert_success
+
+  run grep -q "selectionchange" "${ui_file}"
+  assert_success
+
+  run grep -q "visibleBuffer" "${ui_file}"
+  assert_success
+
+  run grep -q 'def pop_ttyd_terminal_context_event' "${ui_file}"
+  assert_failure
 
   run grep -q "window.term.clear()" "${ui_file}"
   assert_success
@@ -6896,6 +7143,24 @@ PY
   assert_success
 
   run grep -q 'build_hhs_ask_execute_command(\["-k", message\])' "${ui_file}"
+  assert_success
+
+  run grep -q 'def build_terminal_ai_context_prompt' "${ui_file}"
+  assert_success
+
+  run grep -q 'def submit_ai_chat_prompt' "${ui_file}"
+  assert_success
+
+  run grep -q 'TERMINAL_AI_DEFAULT_PROMPT = "Explain me this"' "${ui_file}"
+  assert_success
+
+  run grep -q 'build_hhs_ask_command(clean_prompt)' "${ui_file}"
+  assert_success
+
+  run grep -q '"Asking AI..."' "${ui_file}"
+  assert_success
+
+  run grep -q 'submit_ai_chat_prompt(prompt, ollama_model, context_size)' "${ui_file}"
   assert_success
 
   run grep -q 'build_hhs_ask_execute_command(\["-c"\])' "${ui_file}"
@@ -10189,7 +10454,7 @@ PY
   assert_success
 }
 
-@test "when rendering main navigation then AI visibility should not start service jobs" {
+@test "when rendering main navigation then AI visibility should refresh before Services view" {
   run python3 - "${ui_file}" <<'PY'
 import ast
 import sys
@@ -10203,7 +10468,7 @@ functions = {
 main_views = functions["main_views"]
 ollama_available = functions["ollama_service_is_available"]
 initialize_available = functions["initialize_ollama_service_availability"]
-for function_node in (main_views, ollama_available, initialize_available):
+for function_node in (main_views, ollama_available):
     called_names = {
         call.func.id
         for call in ast.walk(function_node)
@@ -10212,6 +10477,17 @@ for function_node in (main_views, ollama_available, initialize_available):
     assert "start_hhs_services_list_refresh" not in called_names
     assert "complete_hhs_services_list_refresh" not in called_names
     assert "poll_background_job_completion" not in called_names
+
+initialize_calls = {
+    call.func.id
+    for call in ast.walk(initialize_available)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "cached_hhs_services_result" in initialize_calls
+assert "background_job_is_running" in initialize_calls
+assert "start_hhs_services_list_refresh" in initialize_calls
+assert "complete_hhs_services_list_refresh" not in initialize_calls
+assert "poll_background_job_completion" not in initialize_calls
 
 remember = functions["remember_ollama_service_availability"]
 remember_calls = {
