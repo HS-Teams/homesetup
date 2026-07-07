@@ -1825,6 +1825,34 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   line-height: 1;
 }
 
+.hhs-floating-status-dismiss {
+  align-items: center;
+  border: 1px solid
+    color-mix(in srgb, var(--hhs-floating-status-color) 48%, transparent);
+  border-radius: 999px;
+  color: var(--hhs-floating-status-color);
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 900;
+  height: 1rem;
+  justify-content: center;
+  line-height: 1;
+  position: absolute;
+  right: 0.72rem;
+  text-decoration: none;
+  width: 1rem;
+}
+
+.hhs-floating-status-dismiss:hover,
+.hhs-floating-status-dismiss:focus-visible {
+  background: color-mix(
+    in srgb,
+    var(--hhs-floating-status-color) 18%,
+    transparent
+  );
+  outline: none;
+}
+
 .hhs-app-footer {
   align-items: center;
   bottom: 0;

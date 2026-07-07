@@ -1104,6 +1104,7 @@ namespace = {
         FLOATING_STATUS_QUEUE_KEY="_hhs_floating_status_queue",
         FLOATING_STATUS_LEGACY_KEY="_hhs_floating_status",
         FLOATING_STATUS_QUEUE_LIMIT=20,
+        FLOATING_STATUS_DISMISS_DELAY_EXTENSION_SECONDS=2.0,
     ),
     "clean_command_status_message": lambda value: str(value).strip(),
     "st": SimpleNamespace(session_state=session_state),
@@ -1125,9 +1126,11 @@ assert status["displayed_at"] == 150.0
 
 clock.now = 155.5
 assert namespace["current_floating_status"]()["message"] == "First"
-clock.now = 156.5
+clock.now = 157.5
+assert namespace["current_floating_status"]()["message"] == "First"
+clock.now = 158.5
 assert namespace["current_floating_status"]()["message"] == "Second"
-assert session_state["_hhs_floating_status_queue"][0]["displayed_at"] == 156.5
+assert session_state["_hhs_floating_status_queue"][0]["displayed_at"] == 158.5
 assert namespace["pop_floating_status"]()["message"] == "Second"
 assert namespace["pop_floating_status"]() is None
 PY
@@ -1339,6 +1342,9 @@ PY
   run grep -q 'UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900' "${constants_file}"
   assert_success
 
+  run grep -q 'FLOATING_STATUS_DISMISS_DELAY_EXTENSION_SECONDS = 2.0' "${constants_file}"
+  assert_success
+
   run grep -q 'UI_COMMAND_LOCAL_TIMEOUT_SECONDS = 30' "${constants_file}"
   assert_success
 
@@ -1346,6 +1352,12 @@ PY
   assert_success
 
   run grep -q 'UI_COMMAND_DEFAULT_TIMEOUT_SECONDS = UI_COMMAND_LOCAL_TIMEOUT_SECONDS' "${constants_file}"
+  assert_success
+
+  run grep -q 'UI_COMMAND_SEARCH_TIMEOUT_SECONDS = 120' "${constants_file}"
+  assert_success
+
+  run grep -q 'FOOTER_DISMISS_STATUS_QUERY_PARAM = "hhs_dismiss_footer_status"' "${constants_file}"
   assert_success
 
   run grep -q '"search_query"' "${constants_file}"
@@ -1552,11 +1564,13 @@ assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"' in constants_source
 assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cache"' in constants_source
 assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"' in constants_source
 assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM = "hhs_clear_ai_history"' in constants_source
+assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM = "hhs_dismiss_footer_status"' in constants_source
 assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in init_source
+assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' in init_source
 assert '"updater_last_check_epoch"' in constants_source
 assert '"updater_last_check_output"' in constants_source
 assert '"updater_update_available"' in constants_source
@@ -1661,6 +1675,8 @@ assert 'hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in footer_actions_body
+assert 'hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM' in footer_actions_body
+assert 'pop_floating_status()' in footer_actions_body
 assert 'remove_footer_cache_clear_query_params()' in footer_actions_body
 assert 'apply_footer_cache_clear_options(' in footer_actions_body
 assert 'open_footer_cache_clear_menu()' not in footer_actions_body
@@ -1730,10 +1746,14 @@ assert 'metadata={"updater_context": updater_check_context()}' in footer_actions
 assert 'def push_floating_status' in ui_source
 assert 'def pop_floating_status' in ui_source
 assert 'def current_floating_status' in ui_source
+assert 'def effective_floating_status_timeout' in ui_source
 assert 'hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY' in ui_source
 assert 'def render_floating_status' in ui_source
 assert 'render_floating_status()' in ui_source
 assert 'class="hhs-floating-status ' in ui_source
+assert 'class="hhs-floating-status-dismiss"' in ui_source
+assert "this.closest('.hhs-floating-status')?.remove();" in ui_source
+assert 'aria-label="Dismiss footer status"' in ui_source
 assert 'open "$target"' in ui_source
 assert 'xdg-open "$target"' in ui_source
 assert 'gio open "$target"' in ui_source
@@ -3019,9 +3039,26 @@ PY
   assert_success
 
   run grep -q 'event.target.closest(".st-key-search_path")' "${ui_file}"
-  assert_failure
+  assert_success
+
+  run grep -q 'clearPendingSearchOverlay();' "${ui_file}"
+  assert_success
 
   run grep -q 'label.append("Searching for ", queryNode, " in ", pathNode)' "${ui_file}"
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+body = source.split("def render_search_submit_preloader_script", 1)[1].split("\ndef ", 1)[0]
+assert 'event.target.closest(".st-key-search_path")' in body
+assert 'clearPendingSearchOverlay();\n                return;' in body
+assert body.index('event.target.closest(".st-key-search_path")') < body.index(
+    'event.target.closest(".st-key-search_query")'
+)
+PY
   assert_success
 
   run grep -q 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-search.bash";' "${ui_file}"
@@ -3042,8 +3079,17 @@ PY
   run grep -q 'timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS' "${ui_file}"
   assert_success
 
-  run grep -q 'show_overlay=False' "${ui_file}"
-  assert_failure
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+search_preloader_body = source.split("def render_search_submit_preloader_script", 1)[1].split("\ndef ", 1)[0]
+start_search_body = source.split("def start_search_command", 1)[1].split("\ndef ", 1)[0]
+assert "show_overlay=False" not in search_preloader_body
+assert "show_overlay=False" not in start_search_body
+PY
+  assert_success
 
   run grep -q 'clear_preloader()' "${ui_file}"
   assert_success
@@ -3177,7 +3223,7 @@ PY
   run grep -q 'cache_delete_tag("search")' "${ui_file}"
   assert_success
 
-  run grep -q 'ttl_seconds=hhs_ui.UI_CACHE_NORMAL_TTL_SECONDS' "${ui_file}"
+  run grep -q '"ttl_seconds": hhs_ui.UI_CACHE_NORMAL_TTL_SECONDS' "${ui_file}"
   assert_success
 
   run python3 - "${ui_file}" <<'PY'
@@ -3198,11 +3244,11 @@ assert "search_filter = selected_search_result_filter()" in results_body
 assert "text_filter = selected_search_result_text_filter()" in results_body
 assert (
     "build_hhs_search_command(\n"
-    "            search_type, query, search_path, ignore_case, words, binary"
+    "        search_type, query, search_path, ignore_case, words, binary"
 ) in results_body
 assert (
     "search_command_cache_key(\n"
-    "            search_type, query, search_path, ignore_case, words, binary"
+    "        search_type, query, search_path, ignore_case, words, binary"
 ) in results_body
 PY
   assert_success
@@ -9218,6 +9264,154 @@ PY
   assert_success
 }
 
+@test "when rendering history tables then compact columns are headless" {
+  run python3 - "${ui_file}" <<'PY'
+import sys
+import re
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def history_command_display_index(")
+end = source.index("def table_selection_key_prefixes()")
+parse_start = source.index("def parse_legacy_hhs_history_line(")
+parse_end = source.index("def parse_hhs_history_dirs(")
+
+class ColumnConfig:
+    """Stub Streamlit column config used by the pure helper test."""
+
+    def TextColumn(self, label, width=None):
+        """Return the requested text column label and width."""
+        return {"label": label, "width": width}
+
+
+class FakeIndex(list):
+    """Stub dataframe index with a mutable name."""
+
+    name = None
+
+
+class FakeDataFrame:
+    """Stub pandas DataFrame behavior used by history command table helpers."""
+
+    def __init__(self, rows, columns):
+        """Store row dictionaries and ordered column labels."""
+        self.rows = [dict(row) for row in rows]
+        self.columns = list(columns)
+        self.index = FakeIndex()
+
+    def __setitem__(self, column, values):
+        """Assign one column across all stub rows."""
+        for row, value in zip(self.rows, values):
+            row[column] = value
+        if column not in self.columns:
+            self.columns.append(column)
+
+    def set_index(self, column):
+        """Move one column into the stub index and return this dataframe."""
+        self.index = FakeIndex([row[column] for row in self.rows])
+        self.columns = [name for name in self.columns if name != column]
+        return self
+
+
+namespace = {
+    "hhs_ui_constants": SimpleNamespace(
+        HISTORY_DIRECTORY_TYPE_COLUMN_WIDTH=27,
+        HISTORY_INDEX_COLUMN_DIGIT_WIDTH=9,
+        HISTORY_INDEX_COLUMN_MIN_WIDTH=36,
+        HISTORY_INDEX_COLUMN_PADDING=24,
+        PATH_ORIGIN_COLUMN_WIDTH=160,
+        PATH_TYPE_COLUMN_WIDTH=80,
+        PATH_VALUE_COLUMN_WIDTH=4096,
+    ),
+    "display_table_rows": lambda rows: rows,
+    "pd": SimpleNamespace(DataFrame=FakeDataFrame),
+    "st": SimpleNamespace(column_config=ColumnConfig()),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+rows = [
+    {"Index": "49", "Value": "ls"},
+    {"Index": "1200", "Value": "git status"},
+]
+config = namespace["history_command_column_config"](rows)
+table_data = namespace["history_command_table_data"](rows)
+assert namespace["history_command_display_index"]("1200") == "!1200"
+assert namespace["history_command_display_index"]("") == ""
+assert namespace["history_index_column_width"](rows) == 69
+assert namespace["history_index_column_width"]([]) == 36
+assert config["_index"] == {"label": "", "width": 69}, config
+assert config["Value"] == {"label": "Value", "width": None}, config
+assert list(table_data.index) == ["!49", "!1200"], table_data
+assert table_data.index.name == "", table_data
+assert list(table_data.columns) == ["Value"], table_data
+
+directory_rows = [
+    {"Type": "", "Value": "/tmp"},
+    {"Type": "", "Value": "/tmp/link"},
+]
+directory_config = namespace["history_directory_column_config"]()
+directory_table_data = namespace["history_directory_table_data"](directory_rows)
+assert directory_config["_index"] == {"label": "", "width": 27}, directory_config
+assert directory_config["Value"] == {"label": "Value", "width": None}, directory_config
+assert list(directory_table_data.index) == ["", ""], directory_table_data
+assert directory_table_data.index.name == "", directory_table_data
+assert list(directory_table_data.columns) == ["Value"], directory_table_data
+
+path_config = namespace["path_column_config"]()
+assert path_config["Type"] == {"label": "Type", "width": 80}, path_config
+assert path_config["Origin"] == {"label": "Origin", "width": 160}, path_config
+assert path_config["Path Value"] == {"label": "Path Value", "width": 4096}, path_config
+
+parse_namespace = {
+    "hhs_ui": SimpleNamespace(
+        HISTORY_COMMAND_LINE_PATTERN=re.compile(
+            r"^(\d+)\.{2,}\s+(?:|➜|→|=>)\s+(.*)$"
+        ),
+    ),
+    "re": re,
+    "strip_ansi": lambda value: value,
+}
+exec("from __future__ import annotations\n" + source[parse_start:parse_end], parse_namespace)
+parsed_rows = parse_namespace["parse_hhs_history"](
+    """
+    49.....................................  ls
+    1200...................................  git status
+    """
+)
+parsed_table_data = namespace["history_command_table_data"](parsed_rows)
+assert parsed_rows == [
+    {"Index": "49", "Value": "ls"},
+    {"Index": "1200", "Value": "git status"},
+], parsed_rows
+assert list(parsed_table_data.index) == ["!49", "!1200"], parsed_table_data
+
+history_body = source.split("def render_history_commands_table()", 1)[1].split("\ndef ", 1)[0]
+assert 'headers=["Value"]' in history_body
+assert "hide_index=False" in history_body
+assert "table_data=history_command_table_data(rows)" in history_body
+assert "column_config=history_command_column_config(rows)" in history_body
+assert "history_command_display_index(row.get(\"Index\", \"\"))" in source
+assert 'parse_rows_cached("history", result.stdout, parse_hhs_history)' in history_body
+assert "run_bash_command(" in history_body
+assert "ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS" in history_body
+
+history_directories_body = source.split("def render_history_directories_table()", 1)[1].split("\ndef ", 1)[0]
+assert 'headers=["Value"]' in history_directories_body
+assert "hide_index=False" in history_directories_body
+assert "table_data=history_directory_table_data(rows)" in history_directories_body
+assert "column_config=history_directory_column_config()" in history_directories_body
+
+path_body = source.split("def render_path_rows(", 1)[1].split("\ndef ", 1)[0]
+assert "column_config=path_column_config()" in path_body
+
+history_command_body = source.split("def build_hhs_history_command()", 1)[1].split("\ndef ", 1)[0]
+assert "HISTFILE" in history_command_body
+assert "__hhs_history" in history_command_body
+PY
+  assert_success
+}
+
 @test "when selecting table rows then command overlays should be suppressed" {
   run python3 - "${ui_file}" <<'PY'
 import sys
@@ -9332,6 +9526,9 @@ assert calls == ["one"]
 first[0]["Name"] = "mutated"
 third = namespace["parse_rows_cached"]("sample", "one", parser)
 assert third == [{"Name": "one"}]
+fourth = namespace["parse_rows_cached"]("sample", "two", parser)
+assert fourth == [{"Name": "two"}]
+assert calls == ["one", "two"]
 
 rendered = namespace["rendered_log_output_cached"]("hello needle", "Containing", "needle")
 cached = namespace["rendered_log_output_cached"]("hello needle", "Containing", "needle")
@@ -9627,6 +9824,7 @@ namespace = {
     "urllib": types.SimpleNamespace(parse=urllib.parse),
     "hhs_ui": types.SimpleNamespace(
         SEARCH_OPEN_RESULT_QUERY_PARAM="hhs_open_search_result",
+        SEARCH_FILTERS=("All", "Containing"),
     ),
     "hhs_ui_constants": types.SimpleNamespace(
         SEARCH_TYPES=("Files", "Folders", "Strings"),
@@ -9636,6 +9834,7 @@ namespace = {
         SEARCH_TERM_HISTORY_TTL_SECONDS=900,
         SEARCH_PAGE_SIZE=20,
         UI_CACHE_NORMAL_TTL_SECONDS=300,
+        UI_COMMAND_SEARCH_TIMEOUT_SECONDS=120,
         UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS=30,
         SEARCH_TYPE_LABELS={
             "Files": "Files",
@@ -9719,12 +9918,16 @@ assert submit_body.index("search_path = remember_search_directory(search_path)")
 )
 render_results_body = source.split("def render_search_results", 1)[1].split("\ndef ", 1)[0]
 assert "run_bash_command(" not in render_results_body
+assert "st.error(" not in render_results_body
+assert 'push_floating_status(message or "Search command failed.", "error")' in render_results_body
 assert "start_search_command(command, cache_key, loader_message)" in render_results_body
 assert "render_background_job_status(SEARCH_COMMAND_JOB, loader_message)" in render_results_body
 assert "complete_search_command_result(cache_key)" in render_results_body
 assert "cached_search_command_result(command, cache_key)" in render_results_body
 assert 'SEARCH_COMMAND_JOB = "search_command"' in source
-assert "show_preloader_event=True" in source.split("def start_search_command", 1)[1].split("\ndef ", 1)[0]
+start_search_body = source.split("def start_search_command", 1)[1].split("\ndef ", 1)[0]
+assert "hhs_ui_constants.UI_COMMAND_SEARCH_TIMEOUT_SECONDS" in start_search_body
+assert "show_preloader_event=True" in start_search_body
 assert namespace["normalized_search_type"]("Folders") == "Folders"
 assert namespace["normalized_search_type"]("Unknown") == "Files"
 assert namespace["search_glob_from_query"]("report") == "*report*"
@@ -9761,9 +9964,13 @@ assert namespace["search_directory_options"]() == ["/srv/homeselect", "/tmp", "/
 assert namespace["st"].session_state["search_path"] == "/srv/homeselect"
 namespace["st"].session_state["search_query"] = None
 namespace["st"].session_state["search_path"] = "$HHS_HOME/selected"
+namespace["st"].session_state["search_result_query"] = "*.mp4"
+namespace["st"].session_state["search_result_path"] = "/old/search/root"
 statuses_before = list(statuses)
 namespace["apply_search_directory_change"]()
 assert namespace["st"].session_state["search_path"] == "/opt/hhs/selected"
+assert namespace["st"].session_state["search_result_path"] == "/opt/hhs/selected"
+assert namespace["st"].session_state["search_result_query"] == ""
 assert namespace["st"].session_state["search_directories"] == [
     "/opt/hhs/selected",
     "/srv/homeselect",
@@ -9879,6 +10086,27 @@ assert namespace["search_command_cache_key"](
         "Strings\nneedle\n/tmp/search root\nTrue\nTrue\nTrue".encode("utf-8")
     ).hexdigest()
 )
+namespace["st"].session_state.update(
+    {
+        "search_result_type": "Files",
+        "search_result_path": "/tmp/search root",
+        "search_result_query": "needle",
+        "search_result_ignore_case": False,
+        "search_result_words": False,
+        "search_result_binary": False,
+        "search_filter": "All",
+    }
+)
+namespace["complete_search_command_result"] = lambda _cache_key: subprocess.CompletedProcess(
+    ["search"],
+    124,
+    "",
+    "Command timed out after 120 seconds.",
+)
+namespace["cached_search_command_result"] = lambda *_args: None
+statuses.clear()
+namespace["render_search_results"]()
+assert statuses == [("Command timed out after 120 seconds.", "error")]
 open_command = namespace["build_hhs_open_search_result_command"](
     "/tmp/search root/report.txt"
 )

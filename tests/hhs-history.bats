@@ -65,12 +65,12 @@ EOF
 }
 
 # TC - 3
-@test "when-history-has-duplicate-commands-then-only-the-oldest-entry-is-rendered" {
+@test "when-history-has-duplicate-commands-then-each-event-index-is-rendered" {
   run __hhs_history "ls -la"
 
   assert_success
   assert_output --partial '  12'
-  refute_output --partial '  22'
+  assert_output --partial '  22'
 }
 
 # TC - 4
@@ -132,4 +132,37 @@ EOF
 
   assert_success
   refute_output --partial 'towc:'
+}
+
+# TC - 9
+@test "when-listing-history-non-interactively-then-helper-clears-before-loading-file" {
+  export HISTFILE="${BATS_TEST_TMPDIR}/history"
+  touch "${HISTFILE}"
+  call_log="${BATS_TEST_TMPDIR}/history-calls"
+
+  # shellcheck disable=SC2329
+  function history() {
+    printf '%s\n' "$*" >>"${call_log}"
+    case "$1" in
+    -c | -r)
+      return 0
+      ;;
+    esac
+
+    cat <<'EOF'
+   1  gcm first command
+   2  echo second command
+EOF
+  }
+
+  run __hhs_history
+
+  assert_success
+  assert_output --partial '   1'
+  assert_output --partial 'gcm first'
+
+  run sed -n '1,2p' "${call_log}"
+  assert_success
+  assert_line --index 0 '-c'
+  assert_line --index 1 "-r ${HISTFILE}"
 }

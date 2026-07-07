@@ -3990,7 +3990,7 @@ def current_floating_status() -> dict[str, object] | None:
             pop_floating_status()
             queue = floating_status_queue()
             continue
-        timeout = float(status.get("timeout_seconds", 5.0))
+        timeout = effective_floating_status_timeout(status)
         displayed_at = status.get("displayed_at")
         if not isinstance(displayed_at, (int, float)):
             status["displayed_at"] = time.time()
@@ -4002,6 +4002,12 @@ def current_floating_status() -> dict[str, object] | None:
             continue
         return status
     return None
+
+
+def effective_floating_status_timeout(status: dict[str, object]) -> float:
+    """Return the visible timeout for a floating status, including disposal grace."""
+    timeout = float(status.get("timeout_seconds", 5.0))
+    return timeout + hhs_ui_constants.FLOATING_STATUS_DISMISS_DELAY_EXTENSION_SECONDS
 
 
 def floating_status_glyph(kind: str) -> str:
@@ -4022,14 +4028,23 @@ def render_floating_status() -> None:
     if not message:
         return
     kind = str(status.get("kind", "info"))
-    timeout = float(status.get("timeout_seconds", 5.0))
+    timeout = effective_floating_status_timeout(status)
     glyph = html.escape(floating_status_glyph(kind))
+    dismiss_url = (
+        f"?{html.escape(hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM, quote=True)}=1"
+    )
     st.markdown(
         f"""
         <div class="hhs-floating-status hhs-floating-status-kind-{html.escape(kind)}"
              style="--hhs-floating-status-timeout: {timeout:.2f}s;">
           <span class="hhs-floating-status-glyph">{glyph}</span>
           <span class="hhs-floating-status-message">{message}</span>
+          <a class="hhs-floating-status-dismiss"
+             href="{dismiss_url}"
+             onclick="this.closest('.hhs-floating-status')?.remove();"
+             role="button"
+             aria-label="Dismiss footer status"
+             title="Dismiss footer status">x</a>
         </div>
         """,
         unsafe_allow_html=True,
@@ -4457,6 +4472,10 @@ def remove_footer_cache_clear_query_params() -> None:
 
 def handle_footer_actions() -> None:
     """Run footer actions requested through Streamlit query parameters."""
+    if query_param_requested(hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM):
+        remove_query_param(hhs_ui.FOOTER_DISMISS_STATUS_QUERY_PARAM)
+        pop_floating_status()
+
     updater_completed = background_job_result(UPDATER_UPDATE_JOB)
     if updater_completed is not None:
         result, metadata = updater_completed
@@ -5171,6 +5190,86 @@ def display_table_rows(rows: list[dict[str, str]]) -> list[dict[str, object]]:
         {name: display_table_value(value) for name, value in row.items()}
         for row in rows
     ]
+
+
+def history_command_display_index(value: object) -> str:
+    """Return the visible History Commands index value."""
+    clean_value = str(value).strip()
+    if not clean_value:
+        return ""
+    return f"!{clean_value}"
+
+
+def history_index_column_width(rows: list[dict[str, str]]) -> int:
+    """Return the pixel width for a history table Index column."""
+    index_widths = [
+        len(history_command_display_index(row.get("Index", ""))) for row in rows
+    ]
+    index_width = max([1, *index_widths])
+    return max(
+        hhs_ui_constants.HISTORY_INDEX_COLUMN_MIN_WIDTH,
+        hhs_ui_constants.HISTORY_INDEX_COLUMN_PADDING
+        + (index_width * hhs_ui_constants.HISTORY_INDEX_COLUMN_DIGIT_WIDTH),
+    )
+
+
+def history_command_column_config(rows: list[dict[str, str]]) -> dict[str, object]:
+    """Return column settings for the History Commands table."""
+    return {
+        "_index": st.column_config.TextColumn(
+            "",
+            width=history_index_column_width(rows),
+        ),
+        "Value": st.column_config.TextColumn("Value"),
+    }
+
+
+def history_command_table_data(rows: list[dict[str, str]]) -> pd.DataFrame:
+    """Return History Commands table data with Index rendered as row labels."""
+    dataframe = pd.DataFrame(display_table_rows(rows), columns=["Index", "Value"])
+    dataframe["Index"] = [
+        history_command_display_index(row.get("Index", "")) for row in rows
+    ]
+    dataframe = dataframe.set_index("Index")
+    dataframe.index.name = ""
+    return dataframe
+
+
+def history_directory_column_config() -> dict[str, object]:
+    """Return column settings for the History Directories table."""
+    return {
+        "_index": st.column_config.TextColumn(
+            "",
+            width=hhs_ui_constants.HISTORY_DIRECTORY_TYPE_COLUMN_WIDTH,
+        ),
+        "Value": st.column_config.TextColumn("Value"),
+    }
+
+
+def history_directory_table_data(rows: list[dict[str, str]]) -> pd.DataFrame:
+    """Return History Directories table data with Type rendered as row labels."""
+    dataframe = pd.DataFrame(display_table_rows(rows), columns=["Type", "Value"])
+    dataframe = dataframe.set_index("Type")
+    dataframe.index.name = ""
+    return dataframe
+
+
+def path_column_config() -> dict[str, object]:
+    """Return column settings for the Configs Paths table."""
+    return {
+        "Type": st.column_config.TextColumn(
+            "Type",
+            width=hhs_ui_constants.PATH_TYPE_COLUMN_WIDTH,
+        ),
+        "Origin": st.column_config.TextColumn(
+            "Origin",
+            width=hhs_ui_constants.PATH_ORIGIN_COLUMN_WIDTH,
+        ),
+        "Path Value": st.column_config.TextColumn(
+            "Path Value",
+            width=hhs_ui_constants.PATH_VALUE_COLUMN_WIDTH,
+        ),
+    }
 
 
 def table_selection_key_prefixes() -> tuple[str, ...]:
@@ -10794,6 +10893,9 @@ def build_hhs_history_command() -> str:
     """Build the Bash command used to run the __hhs_history HomeSetup function."""
     return (
         'export HHS_DIR="${HHS_DIR}"; '
+        'export HISTSIZE="${HISTSIZE:-2000}"; '
+        'export HISTFILESIZE="${HISTFILESIZE:-2000}"; '
+        'export HISTFILE="${HISTFILE:-${HOME}/.bash_history}"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-shell-utils.bash"; '
         "__hhs_history"
@@ -12146,21 +12248,27 @@ def styled_ssh_tunnel_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.St
     return styler
 
 
+def parse_legacy_hhs_history_line(line: str) -> dict[str, str] | None:
+    """Parse one decorative __hhs_history terminal row into a table row."""
+    match = hhs_ui.HISTORY_COMMAND_LINE_PATTERN.match(line.strip())
+    if not match:
+        return None
+    command_value = match.group(2).strip()
+    if re.fullmatch(r"#\d+", command_value):
+        return None
+    return {
+        "Index": match.group(1).strip(),
+        "Value": command_value,
+    }
+
+
 def parse_hhs_history(output: str) -> list[dict[str, str]]:
     """Parse __hhs_history terminal output into table rows."""
     rows = []
     for line in strip_ansi(output).splitlines():
-        match = hhs_ui.HISTORY_COMMAND_LINE_PATTERN.match(line.strip())
-        if match:
-            command_value = match.group(2).strip()
-            if re.fullmatch(r"#\d+", command_value):
-                continue
-            rows.append(
-                {
-                    "Index": match.group(1).strip(),
-                    "Value": command_value,
-                }
-            )
+        row = parse_legacy_hhs_history_line(line)
+        if row is not None:
+            rows.append(row)
     return rows
 
 
@@ -13151,6 +13259,7 @@ def render_path_rows(rows: list[dict[str, str]]) -> None:
         key=path_table_key(),
         height=hhs_ui.PATH_TABLE_HEIGHT,
         width=hhs_ui.PATH_TABLE_WIDTH,
+        column_config=path_column_config(),
         selected_label=lambda row, _index: f"Selected: {row['Origin']}",
         selected_editable=True,
         selected_edit_key=lambda _row, index: path_value_editor_key(index),
@@ -13278,14 +13387,22 @@ def render_read_only_rows(
     table_key: str,
     empty_caption: str = "Select a row to interact",
     selected_value: Callable[[dict[str, str], int], str] | None = None,
+    headers: list[str] | None = None,
+    hide_index: bool = True,
+    table_data: object | None = None,
+    column_config: dict[str, object] | None = None,
 ) -> None:
     """Render selectable read-only configuration rows."""
     render_table(
         rows,
         key=table_key,
         empty_hint=empty_caption,
+        headers=headers,
         height=hhs_ui.ENV_TABLE_HEIGHT,
+        hide_index=hide_index,
+        table_data=table_data,
         width=hhs_ui.ENV_TABLE_WIDTH,
+        column_config=column_config,
         selected_label=lambda row, _index: (
             "Selected: "
             + (
@@ -13896,26 +14013,29 @@ def render_history_commands_table() -> None:
             hhs_ui.TWO_OPTION_FILTER_COLUMNS,
         )
     )
-    result = render_cached_command_result(
+    result = run_bash_command(
         build_hhs_history_command(),
         "Loading command history",
-        "history",
-        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
-        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
-        "Unable to list command history.",
+        ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        cache_tag="history",
+        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        show_overlay=False,
     )
-    if result is None:
-        return
     if result.returncode != 0:
         st.error(result.stderr or "Unable to list command history.")
         return
+    rows = filter_rows_by_text(
+        parse_rows_cached("history", result.stdout, parse_hhs_history),
+        history_commands_filter,
+        other_filter,
+    )
     render_read_only_rows(
-        filter_rows_by_text(
-            parse_rows_cached("history", result.stdout, parse_hhs_history),
-            history_commands_filter,
-            other_filter,
-        ),
+        rows,
         history_command_table_key(),
+        headers=["Value"],
+        hide_index=False,
+        table_data=history_command_table_data(rows),
+        column_config=history_command_column_config(rows),
         selected_value=lambda row, _index: row.get("Value", ""),
     )
 
@@ -13955,6 +14075,10 @@ def render_history_directories_table() -> None:
     render_read_only_rows(
         rows,
         history_directory_table_key(),
+        headers=["Value"],
+        hide_index=False,
+        table_data=history_directory_table_data(rows),
+        column_config=history_directory_column_config(),
         selected_value=lambda row, _index: row.get("Value", ""),
     )
 
@@ -15725,7 +15849,7 @@ def start_search_command(command: str, cache_key: str, loader_message: str) -> b
         SEARCH_COMMAND_JOB,
         command,
         loader_message,
-        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SEARCH_TIMEOUT_SECONDS,
         metadata=search_command_background_metadata(command, cache_key),
         show_preloader_event=True,
     )
@@ -16502,7 +16626,10 @@ def search_directory_options() -> list[str]:
 
 def apply_search_directory_change() -> None:
     """Persist Search directory changes without submitting a Search."""
-    remember_search_directory(st.session_state.get("search_path", ""))
+    search_path = remember_search_directory(st.session_state.get("search_path", ""))
+    st.session_state["search_result_path"] = search_path
+    st.session_state["search_result_query"] = ""
+    st.session_state["search_visible_count"] = hhs_ui_constants.SEARCH_PAGE_SIZE
     save_ui_state()
 
 
@@ -16802,11 +16929,19 @@ def render_search_submit_preloader_script() -> None:
               );
             }};
             const onClick = (event) => {{
+              if (event.target && event.target.closest(".st-key-search_path")) {{
+                clearPendingSearchOverlay();
+                return;
+              }}
               if (event.target && event.target.closest(buttonSelector)) {{
                 scheduleOverlay();
               }}
             }};
             const onKeydown = (event) => {{
+              if (event.target && event.target.closest(".st-key-search_path")) {{
+                clearPendingSearchOverlay();
+                return;
+              }}
               if (
                 event.key === "Enter" &&
                 event.target &&
@@ -16931,10 +17066,11 @@ def render_search_results() -> None:
             start_search_command(command, cache_key, loader_message)
         render_background_job_status(SEARCH_COMMAND_JOB, loader_message)
         return
+    if result.returncode != 0:
+        message = clean_command_status_message(result.stderr or result.stdout)
+        push_floating_status(message or "Search command failed.", "error")
+        return
     with st.container(key="search_results"):
-        if result.returncode != 0:
-            st.error(clean_command_status_message(result.stderr or result.stdout))
-            return
         rows = parse_rows_cached(
             "search",
             f"{search_type}\n{search_path}\n{result.stdout}",

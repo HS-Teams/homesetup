@@ -19,7 +19,8 @@ function __hhs_history() {
 
   if [[ $- != *i* && -f "${HISTFILE:-${HOME}/.bash_history}" ]]; then
     set -o history
-    history -r "${HISTFILE:-${HOME}/.bash_history}" >/dev/null 2>&1
+    \history -c >/dev/null 2>&1
+    \history -r "${HISTFILE:-${HOME}/.bash_history}" >/dev/null 2>&1
   fi
 
   filter="${*}"
@@ -55,14 +56,14 @@ function __hhs_history() {
     [[ ${#hist_cmd} -ge ${columns} ]] && printf '%s' "..."
     printf '%s\n' "${NC}"
     found=1
-  # Parse history as raw bytes so malformed or non-UTF-8 entries do not crash awk.
-  done < <(HISTTIMEFORMAT='' LC_ALL=C history | LC_ALL=C awk -v filter="${lc_filter}" '
+  # Parse \history as raw bytes so malformed or non-UTF-8 entries do not crash awk.
+  done < <(HISTTIMEFORMAT='' LC_ALL=C \history | LC_ALL=C awk -v filter="${lc_filter}" '
     function trim(value) {
       sub(/^[[:space:]]+/, "", value)
       sub(/[[:space:]]+$/, "", value)
       return value
     }
-    function store_entry(value) {
+    function print_entry(value) {
       value = strip_metadata(trim(value))
       gsub(/[[:space:]]+/, " ", value)
       value = trim(value)
@@ -71,12 +72,11 @@ function __hhs_history() {
         return
       }
 
-      count += 1
-      hist_ids[count] = current_hist_id + 0
-      cmds[count] = value
-      if (!(value in first_pos)) {
-        first_pos[value] = count
+      if (filter != "" && tolower(value) !~ filter) {
+        return
       }
+
+      printf "%d\034%s\n", current_hist_id + 0, value
     }
     function strip_metadata(value, changed) {
       value = trim(value)
@@ -106,26 +106,14 @@ function __hhs_history() {
         next
       }
 
-      store_entry(current_cmd)
+      print_entry(current_cmd)
 
       current_hist_id = substr(line, RSTART, RLENGTH)
       gsub(/[^0-9]/, "", current_hist_id)
       current_cmd = trim(substr(line, RLENGTH + 1))
     }
     END {
-      store_entry(current_cmd)
-
-      for (i = 1; i <= count; i++) {
-        cmd = cmds[i]
-        if (first_pos[cmd] != i) {
-          continue
-        }
-        if (filter != "" && tolower(cmd) !~ filter) {
-          continue
-        }
-
-        printf "%d\034%s\n", hist_ids[i], cmd
-      }
+      print_entry(current_cmd)
     }
   ')
 
@@ -152,12 +140,13 @@ function __hhs_hist_stats() {
 
   if [[ $- != *i* && -f "${HISTFILE:-${HOME}/.bash_history}" ]]; then
     set -o history
-    history -r "${HISTFILE:-${HOME}/.bash_history}" >/dev/null 2>&1
+    \history -c >/dev/null 2>&1
+    \history -r "${HISTFILE:-${HOME}/.bash_history}" >/dev/null 2>&1
   fi
 
   # Generic parser – handles user/date/timestamped history formats
   hist_output="$(
-    HISTTIMEFORMAT='' history |
+    HISTTIMEFORMAT='' \history |
       sed -E 's/^\[[^]]*\][[:space:]]*//' |             # remove [user,date,...]
       sed -E 's/^[[:space:]]*[0-9]+\**[[:space:]]*//' | # remove numeric ids
       awk '{
