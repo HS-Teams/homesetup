@@ -17,6 +17,14 @@ VERSION=${VERSION:-1.0.0}
 # This application name.
 APP_NAME="${APP_NAME:-${0##*/}}"
 
+# Direct app execution may happen before hhsrc has exported these paths.
+HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"
+HHS_BACKUP_DIR="${HHS_BACKUP_DIR:-${HHS_DIR}/backup}"
+HHS_CACHE_DIR="${HHS_CACHE_DIR:-${HHS_DIR}/cache}"
+HHS_LOG_DIR="${HHS_LOG_DIR:-${HHS_DIR}/log}"
+HHS_LOG_FILE="${HHS_LOG_FILE:-${HHS_LOG_DIR}/hhsrc.log}"
+mkdir -p "${HHS_LOG_DIR}" "${HHS_CACHE_DIR}" 2>/dev/null || true
+
 # Help message to be displayed by the application.
 if [[ -z "${USAGE:-}" ]]; then
   read -r -d '' USAGE <<EOF
@@ -45,18 +53,32 @@ fi
 # Default identifiers to be unset
 UNSETS=('quit' 'usage' 'version' 'trim')
 
+# @purpose: Source a HomeSetup dotfile from the checkout or installed home.
+# @param $1 [Req] : The dotfile basename without leading dot or .bash suffix.
+function source_hhs_dotfile() {
+  local dotfile_name="$1"
+  local checkout_file="${HHS_HOME:-}/dotfiles/bash/${dotfile_name}.bash"
+  local installed_file="${HOME}/.${dotfile_name}"
+
+  if [[ -s "${checkout_file}" ]]; then
+    source "${checkout_file}"
+  elif [[ -s "${installed_file}" ]]; then
+    source "${installed_file}"
+  fi
+}
+
 # Save currently active dotfiles.
-OLD_DOTFILES=("${HHS_ACTIVE_DOTFILES[*]}")
+OLD_DOTFILES=("${HHS_ACTIVE_DOTFILES:-}")
 # Unset to allow sourcing them again
 unset HHS_ACTIVE_DOTFILES
 
 # We need to load the dotfiles below due to non-interactive shell.
-source "${HOME}"/.bash_commons
-source "${HOME}"/.bash_aliases
-source "${HOME}"/.bash_colors
-source "${HOME}"/.bash_env
-source "${HOME}"/.bash_functions
-source "${HOME}"/.bash_icons
+source_hhs_dotfile bash_commons
+source_hhs_dotfile bash_env
+source_hhs_dotfile bash_aliases
+source_hhs_dotfile bash_colors
+source_hhs_dotfile bash_functions
+source_hhs_dotfile bash_icons
 
 # Re-export active dotfiles.
 export HHS_ACTIVE_DOTFILES="${OLD_DOTFILES[*]}"
@@ -67,7 +89,7 @@ trap _app_cleanups_ EXIT
 # @purpose: When the application has exited, execute some cleanups.
 function _app_cleanups_() {
   # Unset all declared functions
-  unset -f quit usage version trim list_contains toml_get_key
+  unset -f quit usage version trim list_contains toml_get_key source_hhs_dotfile
   unset -f "${UNSETS[*]}"
 }
 

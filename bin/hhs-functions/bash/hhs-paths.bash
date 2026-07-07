@@ -26,7 +26,7 @@ function __hhs_paths() {
   local show_help=0
 
   # Display & formatting
-  local path path_raw custom private path_dir
+  local path path_raw custom private path_dir tmp_file
   local columns truncate_col max_path_len=0 truncated=0
   local line_title pad_len PAD_CHAR="."
   local pad_space ellipsis="…"
@@ -88,7 +88,9 @@ function __hhs_paths() {
       return 1
     fi
     grep -qxF "${add_path}" "${HHS_PATHS_FILE}" && return 0
-    ised -e "s#(^${add_path}$)*##g" -e '/^\s*$/d' "${HHS_PATHS_FILE}"
+    tmp_file="$(mktemp "${HHS_PATHS_FILE}.XXXXXX")" || return 1
+    grep -vxF -- "${add_path}" "${HHS_PATHS_FILE}" >"${tmp_file}" || true
+    mv "${tmp_file}" "${HHS_PATHS_FILE}" || return 1
     echo "${add_path}" >>"${HHS_PATHS_FILE}"
     export PATH="${add_path}:${PATH}"
     [[ "${quiet}" -eq 0 ]] && echo "${GREEN}Path added: ${WHITE}\"${add_path}\"${NC}"
@@ -98,7 +100,9 @@ function __hhs_paths() {
   # Remove
   if [[ -n "${remove_path}" ]]; then
     if grep -qxF "${remove_path}" "${HHS_PATHS_FILE}"; then
-      if ised -e "s#(^${remove_path}$)*##g" -e '/^\s*$/d' "${HHS_PATHS_FILE}"; then
+      tmp_file="$(mktemp "${HHS_PATHS_FILE}.XXXXXX")" || return 1
+      grep -vxF -- "${remove_path}" "${HHS_PATHS_FILE}" >"${tmp_file}" || true
+      if mv "${tmp_file}" "${HHS_PATHS_FILE}"; then
         export PATH="${PATH//${remove_path}:/}"
         [[ "${quiet}" -eq 0 ]] && echo "${YELLOW}Path removed: ${WHITE}\"${remove_path}\"${NC}"
       fi
@@ -176,7 +180,9 @@ function __hhs_paths() {
       echo -en "${GREEN} ${CHECK_ICN}  ${WHITE}"
     else
       if [[ "${clean}" -eq 1 ]]; then
-        ised -e "s#(^${path_raw}$)*##g" -e '/^\s*$/d' "${HHS_PATHS_FILE}"
+        tmp_file="$(mktemp "${HHS_PATHS_FILE}.XXXXXX")" || return 1
+        grep -vxF -- "${path_raw}" "${HHS_PATHS_FILE}" >"${tmp_file}" || true
+        mv "${tmp_file}" "${HHS_PATHS_FILE}" || return 1
         export PATH="${PATH//${path_raw}:/}"
         echo -en "${RED} ${CROSS_ICN}  "
       else

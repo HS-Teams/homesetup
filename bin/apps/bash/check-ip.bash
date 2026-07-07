@@ -52,7 +52,12 @@ EOF
 UNSETS=(main check_class check_scope check_valid parse_args)
 
 # Common application functions
-[[ -s "${HHS_DIR}/bin/app-commons.bash" ]] && source "${HHS_DIR}/bin/app-commons.bash"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -s "${HHS_DIR:-}/bin/app-commons.bash" ]]; then
+  source "${HHS_DIR}/bin/app-commons.bash"
+elif [[ -s "${SCRIPT_DIR}/app-commons.bash" ]]; then
+  source "${SCRIPT_DIR}/app-commons.bash"
+fi
 
 # Whether the IP is valid or not.
 IP_VALID=1

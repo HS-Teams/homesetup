@@ -26,6 +26,9 @@ UNSETS=(
 # Streamlit UI port.
 HHS_STREAMLIT_UI_PORT="${HHS_STREAMLIT_UI_PORT:-18501}"
 
+# OS label used by the usage banner when the shell environment has not loaded yet.
+HHS_MY_OS_RELEASE="${HHS_MY_OS_RELEASE:-$(uname -s)}"
+
 # Usage message
 read -r -d '' USAGE <<EOF
 usage: ${APP_NAME} ${PLUGIN_NAME} <operation> [service_name] [options]

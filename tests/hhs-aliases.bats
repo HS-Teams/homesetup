@@ -15,6 +15,17 @@ load "${HHS_FUNCTIONS_DIR}/hhs-text.bash"
 load "${HHS_FUNCTIONS_DIR}/hhs-aliases.bash"
 load_bats_libs
 
+setup() {
+  export HHS_DIR="${BATS_TEST_TMPDIR}/hhs-dir"
+  export HHS_ALIASES_FILE="${BATS_TEST_TMPDIR}/aliases"
+  mkdir -p "${HHS_DIR}"
+  touch "${HHS_ALIASES_FILE}"
+}
+
+teardown() {
+  unset HHS_ALIASES_FILE
+}
+
 # TC - 1
 @test "when-invoking-with-help-option-then-should-print-usage-message" {
   run __hhs_aliases -h

@@ -19,7 +19,7 @@ function __hhs_command() {
 
   HHS_CMD_FILE=${HHS_CMD_FILE:-$HHS_DIR/.cmd_file}
 
-  local cmd_name cmd_alias cmd_expr pad pad_len mselect_file all_cmds=() cmd_index next_cmd
+  local cmd_name cmd_alias cmd_expr pad pad_len mselect_file all_cmds=() cmd_index next_cmd tmp_file
   local normalized_index
   local index=1 sel_cmd ret_val=1
   local columns col_offset=26
@@ -76,15 +76,19 @@ function __hhs_command() {
         normalized_index=$((10#${cmd_alias}))
         cmd_expr=$(awk "NR==${normalized_index}" "${HHS_CMD_FILE}" | awk -F ': ' '{ print $0 }')
         [[ -z "${cmd_expr}" ]] && __hhs_errcho "${FUNCNAME[0]}" "Command index not found: \"${cmd_alias}\"" && return 1
-        ised -e "/^${cmd_expr}$/d" "${HHS_CMD_FILE}" && {
+        tmp_file="$(mktemp "${HHS_CMD_FILE}.XXXXXX")" || return 1
+        grep -vxF -- "${cmd_expr}" "${HHS_CMD_FILE}" >"${tmp_file}" || true
+        mv "${tmp_file}" "${HHS_CMD_FILE}" && {
           echo "${YELLOW}Command ${WHITE}(${normalized_index})${NC} removed!"
           ret_val=0
         }
       elif [[ -n "${cmd_alias}" ]]; then
         # Remove by alias
-        cmd_expr=$(grep "${cmd_alias}" "${HHS_CMD_FILE}")
+        cmd_expr=$(grep -m 1 -F "Command ${cmd_alias}: " "${HHS_CMD_FILE}")
         [[ -z "${cmd_expr}" ]] && __hhs_errcho "${FUNCNAME[0]}" "Command not found: \"${cmd_alias}\"" && return 1
-        ised -e "/^Command ${cmd_alias}:.*/d" "${HHS_CMD_FILE}" && {
+        tmp_file="$(mktemp "${HHS_CMD_FILE}.XXXXXX")" || return 1
+        grep -vxF -- "${cmd_expr}" "${HHS_CMD_FILE}" >"${tmp_file}" || true
+        mv "${tmp_file}" "${HHS_CMD_FILE}" && {
           echo "${YELLOW}Command ${WHITE}\"${cmd_alias}\"${NC} removed!"
           ret_val=0
         }

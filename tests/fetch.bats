@@ -6,6 +6,32 @@ load_bats_libs
 # Define the app path from environment
 setup() {
   APP="${HHS_APPS_DIR}/fetch.bash"
+  export HHS_DIR="${BATS_TEST_TMPDIR}/hhs-dir"
+  STUB_BIN="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${STUB_BIN}" "${HHS_DIR}/cache" "${HHS_DIR}/log"
+  export FETCH_CURL_ARGS_FILE="${BATS_TEST_TMPDIR}/curl-args"
+  export PATH="${STUB_BIN}:${PATH}"
+
+  cat >"${STUB_BIN}/curl" <<'CURL'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >"${FETCH_CURL_ARGS_FILE}"
+printf '%s200' '{"userId":1,"id":1,"title":"stub title","body":"stub body"}'
+CURL
+  chmod +x "${STUB_BIN}/curl"
+
+  cat >"${STUB_BIN}/jq" <<'JQ'
+#!/usr/bin/env bash
+cat >/dev/null
+cat <<'JSON'
+{
+  "userId": 1,
+  "id": 1,
+  "title": "stub title",
+  "body": "stub body"
+}
+JSON
+JQ
+  chmod +x "${STUB_BIN}/jq"
 }
 
 # TC - 1
@@ -17,6 +43,15 @@ setup() {
 
   # Since jsonplaceholder does not echo headers, we only check response content
   [[ "${output}" =~ userId ]] || fail "Expected response JSON missing"
+
+  run grep -qx -- '-H' "${FETCH_CURL_ARGS_FILE}"
+  assert_success
+
+  run grep -qx 'X-Test-One: alpha' "${FETCH_CURL_ARGS_FILE}"
+  assert_success
+
+  run grep -qx 'X-Test-Two: beta' "${FETCH_CURL_ARGS_FILE}"
+  assert_success
 }
 
 # TC - 2

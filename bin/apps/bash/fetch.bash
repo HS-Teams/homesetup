@@ -57,7 +57,12 @@ UNSETS=(
 )
 
 # Common application functions
-[[ -s "${HHS_DIR}/bin/app-commons.bash" ]] && source "${HHS_DIR}/bin/app-commons.bash"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -s "${HHS_DIR:-}/bin/app-commons.bash" ]]; then
+  source "${HHS_DIR}/bin/app-commons.bash"
+elif [[ -s "${SCRIPT_DIR}/app-commons.bash" ]]; then
+  source "${SCRIPT_DIR}/app-commons.bash"
+fi
 
 # Request timeout in seconds (default is 10).
 REQ_TIMEOUT=10
@@ -150,7 +155,7 @@ validate_url() {
 # @purpose: Parse CLI arguments (short and long options supported)
 # @param $@ [Req]: All arguments passed to script
 parse_args() {
-  local args
+  local args header oldifs
 
   declare -a args=()
 
@@ -193,6 +198,16 @@ parse_args() {
   # Positional arguments
   METHOD="$(trim_whitespace "${args[0]}")"
   URL="$(trim_whitespace "${args[1]}")"
+
+  if [[ -n "${HEADERS}" ]]; then
+    oldifs="${IFS}"
+    IFS=','
+    for header in ${HEADERS}; do
+      header="$(trim_whitespace "${header}")"
+      [[ -n "${header}" ]] && HEADER_ARGS+=('-H' "${header}")
+    done
+    IFS="${oldifs}"
+  fi
 
   validate_method "${METHOD}"
   validate_url "${URL}"

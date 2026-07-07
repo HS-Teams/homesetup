@@ -20,7 +20,7 @@ function __hhs_aliases() {
 
   HHS_ALIASES_FILE=${HHS_ALIASES_FILE:-$HHS_DIR/.aliases}
 
-  local filter='.+' alias_name alias_expr pad pad_len all_aliases=() name expr
+  local filter='.+' alias_name alias_expr pad pad_len all_aliases=() name expr tmp_file
   local col_offset=18 columns re
 
   touch "${HHS_ALIASES_FILE}"
@@ -47,7 +47,11 @@ function __hhs_aliases() {
       # Remove one alias
       if grep -q "^alias ${alias_name}=.*$" "${HHS_ALIASES_FILE}"; then
         unalias "${alias_name}" &>/dev/null || true
-        if ised "/^alias ${alias_name}=.*$/d" "${HHS_ALIASES_FILE}"; then
+        tmp_file="$(mktemp "${HHS_ALIASES_FILE}.XXXXXX")" || return 1
+        awk -v alias_name="${alias_name}" \
+          'index($0, "alias " alias_name "=") != 1 { print }' \
+          "${HHS_ALIASES_FILE}" >"${tmp_file}"
+        if mv "${tmp_file}" "${HHS_ALIASES_FILE}"; then
           echo -e "${YELLOW}Alias removed: ${WHITE}\"${alias_name}\"${NC}"
           return 0
         fi
@@ -103,7 +107,11 @@ function __hhs_aliases() {
       fi
     elif [[ -n "${alias_name}" && -n "${alias_expr}" ]]; then
       # Add/Set one alias
-      ised -e "s#(^alias ${alias_name}=.*)*##g" -e '/^\s*$/d' "${HHS_ALIASES_FILE}"
+      tmp_file="$(mktemp "${HHS_ALIASES_FILE}.XXXXXX")" || return 1
+      awk -v alias_name="${alias_name}" \
+        'index($0, "alias " alias_name "=") != 1 && $0 !~ /^[[:space:]]*$/ { print }' \
+        "${HHS_ALIASES_FILE}" >"${tmp_file}"
+      mv "${tmp_file}" "${HHS_ALIASES_FILE}" || return 1
       echo "alias ${alias_name}='${alias_expr}'" >>"${HHS_ALIASES_FILE}"
       echo -e "${GREEN}Alias set: ${WHITE}\"${alias_name}\" is ${HHS_HIGHLIGHT_COLOR}'${alias_expr}'${NC}"
       source "${HHS_ALIASES_FILE}"

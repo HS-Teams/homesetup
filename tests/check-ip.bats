@@ -6,6 +6,8 @@ load_bats_libs
 # Define the app path from environment
 setup() {
   APP="${HHS_APPS_DIR}/check-ip.bash"
+  export HHS_DIR="${BATS_TEST_TMPDIR}/hhs-dir"
+  mkdir -p "${HHS_DIR}/cache" "${HHS_DIR}/log"
 }
 
 # TC - 1
