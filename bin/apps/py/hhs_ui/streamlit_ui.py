@@ -2621,9 +2621,7 @@ def folder_picker_owner_context_for_target(target_key: str) -> str:
     target = str(target_key or "")
     if target == "search_path" or target.startswith("search_"):
         return "search"
-    if target.startswith("path_") or target.startswith(
-        f"{hhs_ui.PATH_VALUE_EDITOR_KEY_PREFIX}_"
-    ):
+    if target.startswith("path_add_"):
         return "path"
     if target.startswith("dir_") or target.startswith(
         f"{hhs_ui.DIR_VALUE_EDITOR_KEY_PREFIX}_"
@@ -3874,22 +3872,6 @@ def export_env_value_overrides(overrides: object) -> None:
             os.environ[key] = value
 
 
-def export_path_value_overrides(overrides: object) -> None:
-    """Export persisted PATH value overrides to the Streamlit process."""
-    if not isinstance(overrides, dict):
-        return
-    path_entries = os.environ.get("PATH", "").split(":")
-    for old_path, new_path in overrides.items():
-        if not isinstance(old_path, str) or not isinstance(new_path, str):
-            continue
-        path_entries = [
-            new_path if entry == old_path else entry for entry in path_entries
-        ]
-        if new_path not in path_entries:
-            path_entries.append(new_path)
-    os.environ["PATH"] = ":".join(path_entries)
-
-
 def restore_ui_state() -> None:
     """Restore persisted UI selections into Streamlit session state."""
     if st.session_state.get("ui_state_restored"):
@@ -3898,7 +3880,6 @@ def restore_ui_state() -> None:
         st.session_state[key] = value
     restore_persisted_theme_selection()
     export_env_value_overrides(st.session_state.get(hhs_ui.ENV_VALUE_OVERRIDES_KEY))
-    export_path_value_overrides(st.session_state.get(hhs_ui.PATH_VALUE_OVERRIDES_KEY))
     st.session_state["ui_state_restored"] = True
 
 
@@ -5218,9 +5199,10 @@ def history_command_column_config(rows: list[dict[str, str]]) -> dict[str, objec
     return {
         "_index": st.column_config.TextColumn(
             "",
+            disabled=True,
             width=history_index_column_width(rows),
         ),
-        "Value": st.column_config.TextColumn("Value"),
+        "Value": st.column_config.TextColumn("Value", disabled=True),
     }
 
 
@@ -5240,9 +5222,10 @@ def history_directory_column_config() -> dict[str, object]:
     return {
         "_index": st.column_config.TextColumn(
             "",
+            disabled=True,
             width=hhs_ui_constants.HISTORY_DIRECTORY_TYPE_COLUMN_WIDTH,
         ),
-        "Value": st.column_config.TextColumn("Value"),
+        "Value": st.column_config.TextColumn("Value", disabled=True),
     }
 
 
@@ -5254,20 +5237,13 @@ def history_directory_table_data(rows: list[dict[str, str]]) -> pd.DataFrame:
     return dataframe
 
 
-def path_column_config() -> dict[str, object]:
-    """Return column settings for the Configs Paths table."""
+def cmd_column_config() -> dict[str, object]:
+    """Return column settings for the Configs Saved Cmds table."""
     return {
-        "Type": st.column_config.TextColumn(
-            "Type",
-            width=hhs_ui_constants.PATH_TYPE_COLUMN_WIDTH,
-        ),
-        "Origin": st.column_config.TextColumn(
-            "Origin",
-            width=hhs_ui_constants.PATH_ORIGIN_COLUMN_WIDTH,
-        ),
-        "Path Value": st.column_config.TextColumn(
-            "Path Value",
-            width=hhs_ui_constants.PATH_VALUE_COLUMN_WIDTH,
+        "Index": st.column_config.TextColumn(
+            "Index",
+            disabled=True,
+            width=hhs_ui_constants.CMD_INDEX_COLUMN_WIDTH,
         ),
     }
 
@@ -5353,21 +5329,23 @@ def scroll_to_table_selection_content(anchor_key: str) -> None:
     render_script_html(
         f"""
         <script>
-          const selector = {selector!r};
-          const scroll_to_table_selection = () => {{
-            const doc = window.parent.document;
-            const target = doc.querySelector(selector);
-            if (!target) {{
-              return;
-            }}
-            target.scrollIntoView({{
-              behavior: "smooth",
-              block: "end",
-              inline: "nearest"
-            }});
-          }};
-          window.setTimeout(scroll_to_table_selection, 75);
-          window.setTimeout(scroll_to_table_selection, 250);
+          (() => {{
+            const table_selection_selector = {selector!r};
+            const scroll_to_table_selection = () => {{
+              const doc = window.parent.document;
+              const target = doc.querySelector(table_selection_selector);
+              if (!target) {{
+                return;
+              }}
+              target.scrollIntoView({{
+                behavior: "smooth",
+                block: "end",
+                inline: "nearest"
+              }});
+            }};
+            window.setTimeout(scroll_to_table_selection, 75);
+            window.setTimeout(scroll_to_table_selection, 250);
+          }})();
         </script>
         """,
         height=0,
@@ -5926,6 +5904,97 @@ def normalized_table_filter_selection(
     return selected_value
 
 
+def table_filter_mapping(options: tuple[str, ...]) -> dict[str, str | None]:
+    """Return Config filter labels mapped to their returned filter values."""
+    return {option: None for option in options}
+
+
+def config_filter_columns(filters: dict[str, str | None]) -> list[float]:
+    """Return Config filter column weights based on the number of filter options."""
+    filter_count = len(filters)
+    if filter_count >= 5:
+        return hhs_ui.PATH_FILTER_COLUMNS
+    if filter_count == 4:
+        return hhs_ui.FOUR_OPTION_FILTER_COLUMNS
+    if filter_count >= 3:
+        return hhs_ui.THREE_OPTION_FILTER_COLUMNS
+    return hhs_ui.TWO_OPTION_FILTER_COLUMNS
+
+
+def config_filter_display_label(
+    filters: dict[str, str | None],
+    selected_value: object,
+    default_label: str,
+) -> str:
+    """Return the display label that matches a persisted Config filter value."""
+    selected_text = str(selected_value or "").strip()
+    if selected_text in filters:
+        return selected_text
+    for label, filter_value in filters.items():
+        if filter_value is not None and str(filter_value) == selected_text:
+            return label
+    return default_label
+
+
+def config_filter_return_value(
+    filters: dict[str, str | None],
+    selected_label: str,
+) -> str:
+    """Return the semantic filter value for a selected Config filter label."""
+    filter_value = filters.get(selected_label)
+    return selected_label if filter_value is None else str(filter_value)
+
+
+def render_filters_and_controls(
+    name_label: str | None = "Name",
+    value_label: str | None = "Value",
+    has_plus_btn: bool = True,
+    has_file_picker_btn: bool = False,
+    filters: dict[str, str | None] | None = None,
+    *,
+    key_prefix: str,
+    filter_key: str,
+    other_filter_key: str,
+    name_placeholder: str | None = None,
+    value_placeholder: str | None = None,
+    on_submit: Callable[[], None] | None = None,
+    default_filter: str | None = None,
+) -> tuple[str, str]:
+    """Render a Config Filters & Controls expander and return filter selections."""
+    filter_map = filters or {"All": None, "Containing": None}
+    filter_labels = tuple(filter_map)
+    default_label = config_filter_display_label(
+        filter_map,
+        default_filter,
+        filter_labels[0],
+    )
+    st.session_state[filter_key] = config_filter_display_label(
+        filter_map,
+        st.session_state.get(filter_key, default_label),
+        default_label,
+    )
+    with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):
+        render_config_add_controls(
+            key_prefix,
+            name_label,
+            value_label,
+            name_placeholder or name_label or "",
+            value_placeholder or value_label or "",
+            on_submit=on_submit,
+            has_plus_btn=has_plus_btn,
+            has_file_picker_btn=has_file_picker_btn,
+        )
+        selected_label, other_filter = render_table_filter_controls(
+            filter_labels,
+            filter_key,
+            other_filter_key,
+            config_filter_columns(filter_map),
+            index=filter_labels.index(default_label),
+            other_options=(filter_labels[-1],),
+        )
+    return config_filter_return_value(filter_map, selected_label), other_filter
+
+
 def render_env_add_controls() -> None:
     """Render the environment variable new-entry controls."""
     render_named_value_add_controls(
@@ -5947,6 +6016,78 @@ def config_add_columns(weights: list[float]) -> list:
     )
 
 
+def render_config_add_controls(
+    key_prefix: str,
+    name_label: str | None,
+    value_label: str | None,
+    name_placeholder: str,
+    value_placeholder: str,
+    *,
+    on_submit: Callable[[], None] | None = None,
+    has_plus_btn: bool = True,
+    has_file_picker_btn: bool = False,
+) -> None:
+    """Render the Config add-row inputs and action buttons."""
+    if value_label is None:
+        return
+
+    action_weights = []
+    if has_plus_btn:
+        action_weights.append(0.2 if name_label else 0.035)
+    if has_file_picker_btn:
+        action_weights.append(0.19 if name_label else 0.035)
+
+    if name_label is None:
+        columns = config_add_columns([1, *action_weights])
+        value_col = columns[0]
+        action_cols = columns[1:]
+        name_col = None
+    else:
+        value_weight = 4.05 if has_file_picker_btn else 4.2
+        columns = config_add_columns([1.375, value_weight, *action_weights])
+        name_col = columns[0]
+        value_col = columns[1]
+        action_cols = columns[2:]
+
+    if name_col is not None and name_label is not None:
+        with name_col:
+            st.text_input(
+                name_label,
+                key=f"{key_prefix}_add_name",
+                placeholder=name_placeholder,
+            )
+    value_input_args: dict[str, object] = {
+        "key": f"{key_prefix}_add_value",
+        "placeholder": value_placeholder,
+    }
+    if on_submit is not None:
+        value_input_args["on_change"] = on_submit
+    with value_col:
+        st.text_input(value_label, **value_input_args)
+
+    action_index = 0
+    if has_plus_btn:
+        with action_cols[action_index]:
+            st.button(
+                "",
+                key=f"{key_prefix}_add_submit",
+                help="Add",
+                on_click=on_submit,
+                width="stretch",
+            )
+        action_index += 1
+    if has_file_picker_btn:
+        with action_cols[action_index]:
+            st.button(
+                "",
+                key=f"{key_prefix}_folder_picker_button",
+                help="Select folder",
+                on_click=request_folder_picker,
+                args=(f"{key_prefix}_add_value", value_placeholder),
+                width="stretch",
+            )
+
+
 def render_named_value_add_controls(
     key_prefix: str,
     name_label: str,
@@ -5957,44 +6098,16 @@ def render_named_value_add_controls(
     value_folder_picker: bool = False,
 ) -> None:
     """Render Name and Value add controls for a config listing."""
-    if value_folder_picker:
-        name_col, value_col, add_col, folder_col = config_add_columns(
-            [1.375, 4.05, 0.15, 0.15]
-        )
-    else:
-        name_col, value_col, add_col = config_add_columns([1.375, 4.2, 0.15])
-        folder_col = None
-    with name_col:
-        st.text_input(
-            name_label,
-            key=f"{key_prefix}_add_name",
-            placeholder=name_placeholder,
-        )
-    with value_col:
-        st.text_input(
-            value_label,
-            key=f"{key_prefix}_add_value",
-            placeholder=value_placeholder,
-            on_change=on_submit,
-        )
-    with add_col:
-        st.button(
-            "",
-            key=f"{key_prefix}_add_submit",
-            help="Add",
-            on_click=on_submit,
-            width="stretch",
-        )
-    if value_folder_picker and folder_col is not None:
-        with folder_col:
-            st.button(
-                "",
-                key=f"{key_prefix}_folder_picker_button",
-                help="Select folder",
-                on_click=request_folder_picker,
-                args=(f"{key_prefix}_add_value", value_placeholder),
-                width="stretch",
-            )
+    render_config_add_controls(
+        key_prefix,
+        name_label,
+        value_label,
+        name_placeholder,
+        value_placeholder,
+        on_submit=on_submit,
+        has_plus_btn=True,
+        has_file_picker_btn=value_folder_picker,
+    )
 
 
 def render_value_add_controls(
@@ -6005,36 +6118,16 @@ def render_value_add_controls(
     value_folder_picker: bool = False,
 ) -> None:
     """Render a Value add control for a config listing."""
-    if value_folder_picker:
-        value_col, add_col, folder_col = config_add_columns([1, 0.035, 0.035])
-    else:
-        value_col, add_col = config_add_columns([1, 0.035])
-        folder_col = None
-    with value_col:
-        st.text_input(
-            value_label,
-            key=f"{key_prefix}_add_value",
-            placeholder=value_placeholder,
-            on_change=on_submit,
-        )
-    with add_col:
-        st.button(
-            "",
-            key=f"{key_prefix}_add_submit",
-            help="Add",
-            on_click=on_submit,
-            width="stretch",
-        )
-    if value_folder_picker and folder_col is not None:
-        with folder_col:
-            st.button(
-                "",
-                key=f"{key_prefix}_folder_picker_button",
-                help="Select folder",
-                on_click=request_folder_picker,
-                args=(f"{key_prefix}_add_value", value_placeholder),
-                width="stretch",
-            )
+    render_config_add_controls(
+        key_prefix,
+        None,
+        value_label,
+        "",
+        value_placeholder,
+        on_submit=on_submit,
+        has_plus_btn=True,
+        has_file_picker_btn=value_folder_picker,
+    )
 
 
 def render_path_add_controls() -> None:
@@ -11554,12 +11647,15 @@ def env_filter_pattern(env_filter: str, other_filter: str = "") -> str | None:
     return None
 
 
-def row_matches_text_filter(row: dict[str, str], text_filter: str = "") -> bool:
-    """Return whether any row value contains the text filter."""
-    clean_filter = text_filter.strip().lower()
-    if not clean_filter:
-        return True
-    return any(clean_filter in str(value).lower() for value in row.values())
+def filter_env_rows(
+    rows: list[dict[str, str]], env_filter: str = "All", other_filter: str = ""
+) -> list[dict[str, str]]:
+    """Return environment rows matching the selected UI filter."""
+    if env_filter == "HHS":
+        return [row for row in rows if row.get("Name", "").startswith("HHS_")]
+    if env_filter in ("Other", "Containing"):
+        return [row for row in rows if row_matches_text_filter(row, other_filter)]
+    return rows
 
 
 def row_matches_text_filter(row: dict[str, str], text_filter: str) -> bool:
@@ -12479,7 +12575,7 @@ def path_entries(output: str = "") -> list[str]:
 
 
 def parse_hhs_paths(output: str) -> list[dict[str, str]]:
-    """Parse __hhs_paths terminal output into editable PATH rows."""
+    """Parse __hhs_paths terminal output into PATH rows."""
     sources = path_sources(output)
     types = path_types(output)
     rows = []
@@ -12499,11 +12595,6 @@ def env_widget_key_fragment(name: str) -> str:
 def env_value_editor_key(name: str) -> str:
     """Return the Streamlit widget key for a selected environment value editor."""
     return f"{hhs_ui.ENV_VALUE_EDITOR_KEY_PREFIX}_{env_widget_key_fragment(name)}"
-
-
-def path_value_editor_key(index: int) -> str:
-    """Return the Streamlit widget key for a selected PATH value editor."""
-    return f"{hhs_ui.PATH_VALUE_EDITOR_KEY_PREFIX}_{index}"
 
 
 def dir_value_editor_key(index: int) -> str:
@@ -12745,34 +12836,90 @@ def refresh_home_shopts_listing() -> None:
     reset_home_shopts_table_selection()
 
 
+def stop_config_listing_background_jobs(cache_tag: str) -> None:
+    """Stop stale background listing jobs for one Config cache tag."""
+    stop_background_jobs_with_state_prefix(
+        background_job_state_key(f"cached_{safe_cache_tag(cache_tag)}_")
+    )
+    if cache_tag == "aliases":
+        stop_background_job(ALIAS_LIST_JOB)
+
+
+def refresh_config_listing_cache(
+    cache_tag: str,
+    command: str,
+    loader_message: str,
+    reset_selection: Callable[[], None],
+) -> subprocess.CompletedProcess[str]:
+    """Invalidate, synchronously reload, and cache one Config listing."""
+    stop_config_listing_background_jobs(cache_tag)
+    cache_delete_tag(cache_tag)
+    result = run_bash_command(
+        command,
+        loader_message,
+        use_cache=False,
+        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        cache_tag=cache_tag,
+        show_overlay=False,
+    )
+    if result.returncode == 0:
+        metadata = {
+            **background_command_metadata(command, cache_tag),
+            "ttl_seconds": hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        }
+        cache_background_command_result(metadata, result)
+    reset_selection()
+    return result
+
+
 def refresh_env_listing() -> None:
     """Refresh cached environment listings and reset the environment selection."""
-    cache_delete_tag("env")
-    reset_env_table_selection()
+    refresh_config_listing_cache(
+        "env",
+        build_hhs_envs_command(None),
+        "Loading environment variables...",
+        reset_env_table_selection,
+    )
 
 
 def refresh_path_listing() -> None:
     """Refresh cached PATH listings and reset the PATH selection."""
-    cache_delete_tag("path")
-    reset_path_table_selection()
+    refresh_config_listing_cache(
+        "path",
+        build_hhs_paths_command(),
+        "Loading PATH entries...",
+        reset_path_table_selection,
+    )
 
 
 def refresh_dir_listing() -> None:
     """Refresh cached saved directory listings and reset the directory selection."""
-    cache_delete_tag("dirs")
-    reset_dir_table_selection()
+    refresh_config_listing_cache(
+        "dirs",
+        build_hhs_dirs_command(),
+        "Loading saved directories...",
+        reset_dir_table_selection,
+    )
 
 
 def refresh_cmd_listing() -> None:
     """Refresh cached saved command listings and reset the command selection."""
-    cache_delete_tag("cmds")
-    reset_cmd_table_selection()
+    refresh_config_listing_cache(
+        "cmds",
+        build_hhs_commands_command(),
+        "Loading saved commands...",
+        reset_cmd_table_selection,
+    )
 
 
 def refresh_alias_listing() -> None:
     """Refresh cached alias listings and reset the alias selection."""
-    cache_delete_tag("aliases")
-    reset_alias_table_selection()
+    refresh_config_listing_cache(
+        "aliases",
+        build_hhs_aliases_command(),
+        "Loading custom aliases...",
+        reset_alias_table_selection,
+    )
 
 
 def refresh_service_listing() -> None:
@@ -12830,15 +12977,6 @@ def env_value_overrides() -> dict[str, str]:
     return overrides
 
 
-def path_value_overrides() -> dict[str, str]:
-    """Return session-scoped PATH value overrides."""
-    overrides = st.session_state.setdefault(hhs_ui.PATH_VALUE_OVERRIDES_KEY, {})
-    if not isinstance(overrides, dict):
-        overrides = {}
-        st.session_state[hhs_ui.PATH_VALUE_OVERRIDES_KEY] = overrides
-    return overrides
-
-
 def apply_env_value_overrides(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     """Return environment rows with session-scoped value overrides applied."""
     overrides = env_value_overrides()
@@ -12851,26 +12989,14 @@ def apply_env_value_overrides(rows: list[dict[str, str]]) -> list[dict[str, str]
     ]
 
 
-def apply_path_value_overrides(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Return PATH rows with session-scoped value overrides applied."""
-    overrides = path_value_overrides()
-    return [
-        {
-            **row,
-            "Path Value": str(overrides.get(row["Path Value"], row["Path Value"])),
-        }
-        for row in rows
-    ]
-
-
 def apply_selected_env_value(name: str, value: str) -> bool:
     """Persist a selected environment value and store it for table rerenders."""
     result = run_hhs_env_action("add", name, value)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    refresh_env_listing()
     if result.returncode == 0:
         os.environ[name] = value
         env_value_overrides()[name] = value
+        refresh_env_listing()
         push_floating_status(
             status_message or f'Environment variable saved: "{name}"',
             "info",
@@ -12888,10 +13014,10 @@ def apply_env_delete(name: str) -> None:
     """Delete a custom environment value and reset the table selection."""
     result = run_hhs_env_action("del", name)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    refresh_env_listing()
     if result.returncode == 0:
         os.environ.pop(name, None)
         env_value_overrides().pop(name, None)
+        refresh_env_listing()
         push_floating_status(
             status_message or f'Environment variable removed: "{name}"',
             "info",
@@ -12928,15 +13054,14 @@ def push_config_action_status(
 
 
 def apply_selected_path_value(old_path: str, new_path: str) -> bool:
-    """Persist an edited PATH entry and store it for table rerenders."""
+    """Persist a PATH entry and refresh the table listing."""
     result = run_hhs_path_action("edit", new_path, old_path)
-    refresh_path_listing()
     if result.returncode == 0:
         path_values = [entry for entry in path_entries() if entry != old_path]
         if new_path not in path_values:
             path_values.insert(0, new_path)
         os.environ["PATH"] = ":".join(path_values)
-        path_value_overrides()[old_path] = new_path
+        refresh_path_listing()
     push_config_action_status(
         result,
         f'PATH entry saved: "{new_path}"',
@@ -12949,12 +13074,11 @@ def apply_selected_path_value(old_path: str, new_path: str) -> bool:
 def apply_path_delete(path_value: str) -> None:
     """Delete a PATH entry and reset the table selection."""
     result = run_hhs_path_action("del", path_value)
-    refresh_path_listing()
     if result.returncode == 0:
         os.environ["PATH"] = ":".join(
             entry for entry in path_entries() if entry != path_value
         )
-        path_value_overrides().pop(path_value, None)
+        refresh_path_listing()
     push_config_action_status(
         result,
         f'PATH entry removed: "{path_value}"',
@@ -12966,7 +13090,8 @@ def apply_path_delete(path_value: str) -> None:
 def apply_selected_dir_value(name: str, value: str) -> bool:
     """Persist a saved directory value."""
     result = run_hhs_dir_action("add", name, value)
-    refresh_dir_listing()
+    if result.returncode == 0:
+        refresh_dir_listing()
     push_config_action_status(
         result,
         f'Saved directory saved: "{name}"',
@@ -12979,7 +13104,8 @@ def apply_selected_dir_value(name: str, value: str) -> bool:
 def apply_dir_delete(name: str) -> None:
     """Delete a saved directory and reset the table selection."""
     result = run_hhs_dir_action("del", name)
-    refresh_dir_listing()
+    if result.returncode == 0:
+        refresh_dir_listing()
     push_config_action_status(
         result,
         f'Saved directory removed: "{name}"',
@@ -12991,7 +13117,8 @@ def apply_dir_delete(name: str) -> None:
 def apply_selected_cmd_value(name: str, value: str) -> bool:
     """Persist a saved command value."""
     result = run_hhs_command_action("add", name, value)
-    refresh_cmd_listing()
+    if result.returncode == 0:
+        refresh_cmd_listing()
     push_config_action_status(
         result,
         f'Saved command saved: "{name}"',
@@ -13004,7 +13131,8 @@ def apply_selected_cmd_value(name: str, value: str) -> bool:
 def apply_cmd_delete(name: str) -> None:
     """Delete a saved command and reset the table selection."""
     result = run_hhs_command_action("del", name)
-    refresh_cmd_listing()
+    if result.returncode == 0:
+        refresh_cmd_listing()
     push_config_action_status(
         result,
         f'Saved command removed: "{name}"',
@@ -13016,7 +13144,8 @@ def apply_cmd_delete(name: str) -> None:
 def apply_selected_alias_value(name: str, value: str) -> bool:
     """Persist a custom alias value."""
     result = run_hhs_alias_action("add", name, value)
-    refresh_alias_listing()
+    if result.returncode == 0:
+        refresh_alias_listing()
     push_config_action_status(
         result,
         f'Alias saved: "{name}"',
@@ -13029,7 +13158,8 @@ def apply_selected_alias_value(name: str, value: str) -> bool:
 def apply_alias_delete(name: str) -> None:
     """Delete a custom alias and reset the table selection."""
     result = run_hhs_alias_action("del", name)
-    refresh_alias_listing()
+    if result.returncode == 0:
+        refresh_alias_listing()
     push_config_action_status(
         result,
         f'Alias removed: "{name}"',
@@ -13086,11 +13216,6 @@ def apply_docker_image_action(image_id: str) -> None:
 def apply_selected_env_editor_value(name: str, editor_key: str) -> None:
     """Export the current selected environment editor value."""
     apply_selected_env_value(name, str(st.session_state.get(editor_key, "")))
-
-
-def apply_selected_path_editor_value(old_path: str, editor_key: str) -> None:
-    """Persist the current selected PATH editor value."""
-    apply_selected_path_value(old_path, str(st.session_state.get(editor_key, "")))
 
 
 def apply_selected_dir_editor_value(name: str, editor_key: str) -> None:
@@ -13160,15 +13285,17 @@ def scroll_to_env_value_editor(editor_key: str) -> None:
     render_script_html(
         f"""
         <script>
-          const selector = {selector!r};
-          const scroll_to_editor = () => {{
-            const target = window.parent.document.querySelector(selector);
-            if (target) {{
-              target.scrollIntoView({{ behavior: "smooth", block: "center" }});
-              target.focus({{ preventScroll: true }});
-            }}
-          }};
-          window.setTimeout(scroll_to_editor, 75);
+          (() => {{
+            const editor_selector = {selector!r};
+            const scroll_to_editor = () => {{
+              const target = window.parent.document.querySelector(editor_selector);
+              if (target) {{
+                target.scrollIntoView({{ behavior: "smooth", block: "center" }});
+                target.focus({{ preventScroll: true }});
+              }}
+            }};
+            window.setTimeout(scroll_to_editor, 75);
+          }})();
         </script>
         """,
         height=hhs_ui.ENV_VALUE_EDITOR_SCROLL_HELPER_HEIGHT,
@@ -13252,26 +13379,13 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
 
 
 def render_path_rows(rows: list[dict[str, str]]) -> None:
-    """Render selectable editable PATH rows."""
-    rows = apply_path_value_overrides(rows)
+    """Render selectable read-only PATH rows."""
     render_table(
         rows,
         key=path_table_key(),
         height=hhs_ui.PATH_TABLE_HEIGHT,
         width=hhs_ui.PATH_TABLE_WIDTH,
-        column_config=path_column_config(),
-        selected_label=lambda row, _index: f"Selected: {row['Origin']}",
-        selected_editable=True,
-        selected_edit_key=lambda _row, index: path_value_editor_key(index),
-        selected_edit_value=lambda row, _index: row["Path Value"],
-        selected_edit_label="Selected PATH value",
-        selected_edit_max_chars=int(hhs_ui.COMMAND_COLUMNS),
-        selected_edit_on_change=apply_selected_path_editor_value,
-        selected_edit_args=lambda row, index: (
-            row["Path Value"],
-            path_value_editor_key(index),
-        ),
-        selected_edit_folder_picker=True,
+        selected_label=lambda row, _index: f"Selected: {row['Path Value']}",
         reset_selection=reset_path_table_selection,
         selected_action_buttons=[
             {
@@ -13326,6 +13440,7 @@ def render_cmd_rows(rows: list[dict[str, str]]) -> None:
         empty_hint="Select a row to interact",
         height=hhs_ui.ENV_TABLE_HEIGHT,
         width=hhs_ui.ENV_TABLE_WIDTH,
+        column_config=cmd_column_config(),
         selected_label=lambda row, _index: f"Selected: {row['Name']}",
         selected_editable=True,
         selected_edit_key=lambda _row, index: cmd_value_editor_key(index),
@@ -13790,22 +13905,21 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
 @st.fragment()
 def render_envs_table() -> None:
     """Render environment variables using __hhs_envs."""
-
-    def render_env_controls() -> tuple[str, str]:
-        """Render environment table controls and return the selected filter."""
-        render_env_add_controls()
-        return render_table_filter_controls(
-            hhs_ui.ENV_FILTERS,
-            "env_filter",
-            "env_other_filter",
-            hhs_ui.THREE_OPTION_FILTER_COLUMNS,
-            index=1,
-        )
-
-    env_filter, other_filter = render_table_controls_panel(render_env_controls)
+    env_filter, other_filter = render_filters_and_controls(
+        "Name",
+        "Value",
+        filters=table_filter_mapping(hhs_ui.ENV_FILTERS),
+        key_prefix="env",
+        filter_key="env_filter",
+        other_filter_key="env_other_filter",
+        name_placeholder="Custom Variable",
+        value_placeholder="Optional value",
+        on_submit=apply_env_add_form_value,
+        default_filter="HHS",
+    )
 
     result = render_cached_command_result(
-        build_hhs_envs_command(env_filter_pattern(env_filter, other_filter)),
+        build_hhs_envs_command(None),
         "Loading environment variables",
         "env",
         hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
@@ -13819,24 +13933,23 @@ def render_envs_table() -> None:
         if result.returncode == 0
         else []
     )
-    render_env_rows(rows)
+    render_env_rows(filter_env_rows(rows, env_filter, other_filter))
 
 
 @st.fragment()
 def render_paths_table() -> None:
     """Render PATH entries using __hhs_paths."""
-
-    def render_path_controls() -> tuple[str, str]:
-        """Render PATH table controls and return the selected filter."""
-        render_path_add_controls()
-        return render_table_filter_controls(
-            hhs_ui.PATH_FILTERS,
-            "path_filter",
-            "path_other_filter",
-            hhs_ui.PATH_FILTER_COLUMNS,
-        )
-
-    path_filter, other_filter = render_table_controls_panel(render_path_controls)
+    path_filter, other_filter = render_filters_and_controls(
+        None,
+        "Path",
+        has_file_picker_btn=True,
+        filters=table_filter_mapping(hhs_ui.PATH_FILTERS),
+        key_prefix="path",
+        filter_key="path_filter",
+        other_filter_key="path_other_filter",
+        value_placeholder="Custom path",
+        on_submit=apply_path_add_form_value,
+    )
     render_folder_picker_dialog("path")
     result = render_cached_command_result(
         build_hhs_paths_command(),
@@ -13859,18 +13972,18 @@ def render_paths_table() -> None:
 @st.fragment()
 def render_dirs_table() -> None:
     """Render saved directories using __hhs_load_dir."""
-
-    def render_dir_controls() -> tuple[str, str]:
-        """Render saved directory table controls and return the selected filter."""
-        render_dir_add_controls()
-        return render_table_filter_controls(
-            hhs_ui.LIST_FILTERS,
-            "dirs_filter",
-            "dirs_other_filter",
-            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
-        )
-
-    dirs_filter, other_filter = render_table_controls_panel(render_dir_controls)
+    dirs_filter, other_filter = render_filters_and_controls(
+        "Name",
+        "Path",
+        has_file_picker_btn=True,
+        filters=table_filter_mapping(hhs_ui.LIST_FILTERS),
+        key_prefix="dir",
+        filter_key="dirs_filter",
+        other_filter_key="dirs_other_filter",
+        name_placeholder="Directory alias",
+        value_placeholder="Directory path",
+        on_submit=apply_dir_add_form_value,
+    )
     render_folder_picker_dialog("dir")
     result = render_cached_command_result(
         build_hhs_dirs_command(),
@@ -13895,18 +14008,17 @@ def render_dirs_table() -> None:
 @st.fragment()
 def render_cmds_table() -> None:
     """Render saved commands using __hhs_command."""
-
-    def render_cmd_controls() -> tuple[str, str]:
-        """Render saved command table controls and return the selected filter."""
-        render_cmd_add_controls()
-        return render_table_filter_controls(
-            hhs_ui.LIST_FILTERS,
-            "cmds_filter",
-            "cmds_other_filter",
-            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
-        )
-
-    cmds_filter, other_filter = render_table_controls_panel(render_cmd_controls)
+    cmds_filter, other_filter = render_filters_and_controls(
+        "Name",
+        "Command",
+        filters=table_filter_mapping(hhs_ui.LIST_FILTERS),
+        key_prefix="cmd",
+        filter_key="cmds_filter",
+        other_filter_key="cmds_other_filter",
+        name_placeholder="Command alias",
+        value_placeholder="Command value",
+        on_submit=apply_cmd_add_form_value,
+    )
     result = render_cached_command_result(
         build_hhs_commands_command(),
         "Loading saved commands",
@@ -13931,18 +14043,17 @@ def render_cmds_table() -> None:
 def render_aliases_table() -> None:
     """Render custom aliases using __hhs_aliases."""
     complete_aliases_list_refresh()
-
-    def render_alias_controls() -> tuple[str, str]:
-        """Render alias table controls and return the selected filter."""
-        render_alias_add_controls()
-        return render_table_filter_controls(
-            hhs_ui.LIST_FILTERS,
-            "alias_filter",
-            "alias_other_filter",
-            hhs_ui.TWO_OPTION_FILTER_COLUMNS,
-        )
-
-    alias_filter, other_filter = render_table_controls_panel(render_alias_controls)
+    alias_filter, other_filter = render_filters_and_controls(
+        "Name",
+        "Expression",
+        filters=table_filter_mapping(hhs_ui.LIST_FILTERS),
+        key_prefix="alias",
+        filter_key="alias_filter",
+        other_filter_key="alias_other_filter",
+        name_placeholder="Alias",
+        value_placeholder="Alias expression",
+        on_submit=apply_alias_add_form_value,
+    )
     result, fresh_cache = cached_aliases_result()
     if not fresh_cache and not background_job_is_running(ALIAS_LIST_JOB):
         start_aliases_list_refresh()

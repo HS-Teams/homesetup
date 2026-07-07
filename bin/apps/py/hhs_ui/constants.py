@@ -258,7 +258,6 @@ PERSISTED_UI_KEYS = (
     "monitor_view",
     "path_filter",
     "path_other_filter",
-    "path_value_overrides",
     "service_filter",
     "service_other_filter",
     "search_binary",
@@ -285,7 +284,6 @@ PERSISTED_UI_KEY_PREFIXES = (
     "env_selected_value_",
     "history_command_selected_value_",
     "history_directory_selected_value_",
-    "path_selected_value_",
     "service_selected_value_",
 )
 ANSI_ESCAPE_PATTERN = re.compile(
@@ -354,6 +352,7 @@ ALIAS_TABLE_RESET_COUNTER_KEY = "alias_vars_table_reset_counter"
 ALIAS_VALUE_EDITOR_KEY_PREFIX = "alias_selected_value"
 CMD_TABLE_KEY = "cmd_vars_table"
 CMD_TABLE_RESET_COUNTER_KEY = "cmd_vars_table_reset_counter"
+CMD_INDEX_COLUMN_WIDTH = 80
 CMD_VALUE_EDITOR_KEY_PREFIX = "cmd_selected_value"
 DIR_TABLE_KEY = "dir_vars_table"
 DIR_TABLE_RESET_COUNTER_KEY = "dir_vars_table_reset_counter"
@@ -389,12 +388,6 @@ PATH_TABLE_HEIGHT = ENV_TABLE_HEIGHT
 PATH_TABLE_KEY = "path_vars_table"
 PATH_TABLE_RESET_COUNTER_KEY = "path_vars_table_reset_counter"
 PATH_TABLE_WIDTH = ENV_TABLE_WIDTH
-PATH_TYPE_COLUMN_WIDTH = 80
-PATH_ORIGIN_COLUMN_WIDTH = 160
-PATH_VALUE_COLUMN_WIDTH = 4096
-PATH_VALUE_EDITOR_HEIGHT = ENV_VALUE_EDITOR_HEIGHT
-PATH_VALUE_EDITOR_KEY_PREFIX = "path_selected_value"
-PATH_VALUE_OVERRIDES_KEY = "path_value_overrides"
 SERVICE_TABLE_KEY = "service_vars_table"
 SERVICE_TABLE_RESET_COUNTER_KEY = "service_vars_table_reset_counter"
 SERVICE_VALUE_EDITOR_KEY_PREFIX = "service_selected_value"

@@ -219,7 +219,6 @@ div[class*="st-key-dir_selected_value_"] textarea,
 div[class*="st-key-env_selected_value_"] textarea,
 div[class*="st-key-history_command_selected_value_"] textarea,
 div[class*="st-key-history_directory_selected_value_"] textarea,
-div[class*="st-key-path_selected_value_"] textarea,
 div[class*="st-key-service_selected_value_"] textarea {
   background: rgba(15, 23, 42, 0.42) !important;
   border-color: #dc2626 !important;

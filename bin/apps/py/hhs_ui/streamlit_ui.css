@@ -219,6 +219,16 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   width: 2rem;
 }
 
+.st-key-alias_add_submit button,
+.st-key-cmd_add_submit button,
+.st-key-dir_add_submit button,
+.st-key-dir_folder_picker_button button,
+.st-key-env_add_submit button,
+.st-key-path_add_submit button,
+.st-key-path_folder_picker_button button {
+  transform: translateY(-0.25rem);
+}
+
 .st-key-history_stats_refresh_button,
 .st-key-monitor_cpu_refresh_button,
 .st-key-monitor_disk_apply_button,
@@ -241,10 +251,10 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   width: 100%;
 }
 
-div[data-testid="stHorizontalBlock"]:has(.st-key-alias_add_name),
-div[data-testid="stHorizontalBlock"]:has(.st-key-cmd_add_name),
-div[data-testid="stHorizontalBlock"]:has(.st-key-dir_add_name),
-div[data-testid="stHorizontalBlock"]:has(.st-key-env_add_name),
+div[data-testid="stHorizontalBlock"]:has(.st-key-alias_add_value),
+div[data-testid="stHorizontalBlock"]:has(.st-key-cmd_add_value),
+div[data-testid="stHorizontalBlock"]:has(.st-key-dir_add_value),
+div[data-testid="stHorizontalBlock"]:has(.st-key-env_add_value),
 div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value) {
   align-items: end !important;
   column-gap: var(--hhs-element-std-gap) !important;
@@ -643,7 +653,6 @@ div[class*="st-key-dir_selected_value_"] [data-testid="stTextInput"],
 div[class*="st-key-env_selected_value_"] [data-testid="stTextInput"],
 div[class*="st-key-history_command_selected_value_"] [data-testid="stTextInput"],
 div[class*="st-key-history_directory_selected_value_"] [data-testid="stTextInput"],
-div[class*="st-key-path_selected_value_"] [data-testid="stTextInput"],
 div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] {
   align-items: center;
   display: grid;
@@ -657,7 +666,6 @@ div[class*="st-key-dir_selected_value_"] [data-testid="stTextInput"] label,
 div[class*="st-key-env_selected_value_"] [data-testid="stTextInput"] label,
 div[class*="st-key-history_command_selected_value_"] [data-testid="stTextInput"] label,
 div[class*="st-key-history_directory_selected_value_"] [data-testid="stTextInput"] label,
-div[class*="st-key-path_selected_value_"] [data-testid="stTextInput"] label,
 div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label {
   margin: 0;
   min-width: 0;
@@ -669,7 +677,6 @@ div[class*="st-key-dir_selected_value_"] [data-testid="stTextInput"] label p,
 div[class*="st-key-env_selected_value_"] [data-testid="stTextInput"] label p,
 div[class*="st-key-history_command_selected_value_"] [data-testid="stTextInput"] label p,
 div[class*="st-key-history_directory_selected_value_"] [data-testid="stTextInput"] label p,
-div[class*="st-key-path_selected_value_"] [data-testid="stTextInput"] label p,
 div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p {
   color: var(--hhs-selected-item-label);
   font-size: 0.88rem;
@@ -1560,7 +1567,6 @@ div[class*="st-key-dir_selected_value_"] textarea,
 div[class*="st-key-env_selected_value_"] textarea,
 div[class*="st-key-history_command_selected_value_"] textarea,
 div[class*="st-key-history_directory_selected_value_"] textarea,
-div[class*="st-key-path_selected_value_"] textarea,
 div[class*="st-key-service_selected_value_"] textarea {
   height: 2.5rem !important;
   line-height: 1.2;
@@ -1577,7 +1583,6 @@ div[class*="st-key-dir_selected_value_"] input,
 div[class*="st-key-env_selected_value_"] input,
 div[class*="st-key-history_command_selected_value_"] input,
 div[class*="st-key-history_directory_selected_value_"] input,
-div[class*="st-key-path_selected_value_"] input,
 div[class*="st-key-service_selected_value_"] input {
   min-height: 2.5rem;
 }

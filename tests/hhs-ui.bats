@@ -963,6 +963,7 @@ PY
   run python3 - "${ui_file}" <<'PY'
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -971,6 +972,7 @@ end = source.index("def ssh_output_is_only_shared_close(")
 namespace = {
     "strip_ansi": lambda value: value,
     "subprocess": subprocess,
+    "lru_cache": lru_cache,
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
@@ -2174,6 +2176,7 @@ tokyo-night-css
     streamlit.session_state["search_result_query"] = "admin"
     streamlit.session_state["search_result_path"] = "/tmp"
     streamlit.session_state["search_result_type"] = "Strings"
+    streamlit.session_state["path_value_overrides"] = {"/bin": "/tmp/bin"}
     ui.save_ui_state()
     saved_state = json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))
     assert saved_state["theme_selected"] == "tokyo-night"
@@ -2186,6 +2189,7 @@ tokyo-night-css
     assert "search_result_query" not in saved_state
     assert "search_result_path" not in saved_state
     assert "search_result_type" not in saved_state
+    assert "path_value_overrides" not in saved_state
 
     streamlit.session_state.clear()
     ui.restore_ui_state()
@@ -2196,6 +2200,7 @@ tokyo-night-css
     assert streamlit.session_state["search_directories"] == ["/tmp", "/var"]
     assert "search_query" not in streamlit.session_state
     assert "search_result_query" not in streamlit.session_state
+    assert "path_value_overrides" not in streamlit.session_state
     assert "tokyo-night-css" in ui.load_app_theme_css()
 
     config_options.clear()
@@ -3430,7 +3435,6 @@ tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
 functions = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
 for function_name in (
     "apply_selected_env_editor_value",
-    "apply_selected_path_editor_value",
     "apply_selected_dir_editor_value",
     "apply_selected_cmd_editor_value",
     "apply_selected_alias_editor_value",
@@ -3471,6 +3475,12 @@ PY
 
   run grep -q 'div\[class\*="st-key-path_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
   assert_success
+
+  run grep -q 'st-key-path_selected_value_' "${css_file}"
+  assert_failure
+
+  run grep -R -q 'st-key-path_selected_value_' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes"
+  assert_failure
 
   run grep -q 'div\[class\*="st-key-dir_delete_button_"\]\[class\*="_selected"\] button' "${css_file}"
   assert_success
@@ -3640,7 +3650,13 @@ PY
   run grep -q 'margin-top: 1.55rem' "${css_file}"
   assert_failure
 
-  run grep -q '\[1.375, 4.05, 0.15, 0.15\]' "${ui_file}"
+  run grep -q -- '--hhs-config-add-control-height' "${css_file}"
+  assert_failure
+
+  run grep -q 'transform: translateY(-0.25rem)' "${css_file}"
+  assert_success
+
+  run grep -q 'action_weights.append(0.19 if name_label else 0.035)' "${ui_file}"
   assert_success
 
   run grep -q 'def config_add_columns' "${ui_file}"
@@ -3649,16 +3665,16 @@ PY
   run grep -q 'vertical_alignment="bottom"' "${ui_file}"
   assert_success
 
-  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-alias_add_name)' "${css_file}"
+  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-alias_add_value)' "${css_file}"
   assert_success
 
-  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-cmd_add_name)' "${css_file}"
+  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-cmd_add_value)' "${css_file}"
   assert_success
 
-  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-dir_add_name)' "${css_file}"
+  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-dir_add_value)' "${css_file}"
   assert_success
 
-  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-env_add_name)' "${css_file}"
+  run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-env_add_value)' "${css_file}"
   assert_success
 
   run grep -Fq 'div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value)' "${css_file}"
@@ -3908,10 +3924,10 @@ PY
   run grep -q 'st.session_state\["history_stats_top_n"\] = normalized_history_stats_top_n' "${ui_file}"
   assert_success
 
-  run grep -q 'min_value=hhs_ui_constants.MIN_TOP_N' "${ui_file}"
+  run grep -q '"min_value": hhs_ui_constants.MIN_TOP_N' "${ui_file}"
   assert_success
 
-  run grep -q 'max_value=hhs_ui_constants.MAX_TOP_N' "${ui_file}"
+  run grep -q '"max_value": hhs_ui_constants.MAX_TOP_N' "${ui_file}"
   assert_success
 
   run grep -q '"monitor_cpu_top_n"' "${constants_file}"
@@ -4643,7 +4659,7 @@ PY
   assert_failure
 
   run grep -q 'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"' "${ui_file}"
-  assert_failure
+  assert_success
 
   run grep -q 'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"' "${ui_file}"
   assert_success
@@ -4834,7 +4850,7 @@ PY
   run grep -q 'def ssh_view_label' "${ui_file}"
   assert_success
 
-  run grep -q 'options=hhs_ui.SSH_VIEWS' "${ui_file}"
+  run grep -q 'hhs_ui.SSH_VIEWS' "${ui_file}"
   assert_success
 
   run grep -q 'format_func=ssh_view_label' "${ui_file}"
@@ -5111,7 +5127,7 @@ controls = component[
     component.index("function createTransferControls") : component.index("function resizeFrame")
 ]
 assert controls.index('""') < controls.index('""') < controls.index('""')
-assert controls.index('"﬋"') < controls.index('""')
+assert controls.index('""') < controls.index('""')
 assert '""' in controls
 assert '""' in controls
 PY
@@ -5150,10 +5166,10 @@ PY
   run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
   assert_success
 
-  run grep -q '"﬌"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
   assert_success
 
-  run grep -q '"﬋"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  run grep -q '""' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
   assert_success
 
   run python3 - <<'PY'
@@ -8156,7 +8172,7 @@ LOGS
   run grep -q '""' "${ui_file}"
   assert_success
 
-  run grep -q 'on_change=on_submit' "${ui_file}"
+  run grep -q 'value_input_args\["on_change"\] = on_submit' "${ui_file}"
   assert_success
 
   run grep -q 'env_add_button' "${ui_file}"
@@ -8431,10 +8447,19 @@ PY
   run grep -q 'key=f"{key_prefix}_folder_picker_button"' "${ui_file}"
   assert_success
 
-  run grep -q 'name_col, value_col, add_col, folder_col = config_add_columns(' "${ui_file}"
+  run grep -q 'name_col = columns\[0\]' "${ui_file}"
   assert_success
 
-  run grep -q '\[1.375, 4.05, 0.15, 0.15\]' "${ui_file}"
+  run grep -q 'action_weights.append(0.19 if name_label else 0.035)' "${ui_file}"
+  assert_success
+
+  run grep -q 'action_weights.append(0.2 if name_label else 0.035)' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'columns = config_add_columns([1, *action_weights])' "${ui_file}"
+  assert_success
+
+  run grep -Fq 'columns = config_add_columns([1.375, value_weight, *action_weights])' "${ui_file}"
   assert_success
 
   run grep -q 'value_group_col.columns(' "${ui_file}"
@@ -8443,7 +8468,7 @@ PY
   run grep -q '\[1, 0.012, 0.035\], vertical_alignment="center"' "${ui_file}"
   assert_failure
 
-  run grep -q '\[1, 0.035, 0.035\]' "${ui_file}"
+  run grep -q 'value_weight = 4.05 if has_file_picker_btn else 4.2' "${ui_file}"
   assert_success
 
   run grep -q 'value_group_col = st.columns' "${ui_file}"
@@ -8458,19 +8483,35 @@ PY
   run grep -q 'def render_alias_add_controls' "${ui_file}"
   assert_success
 
-  run grep -q 'render_table_controls_panel(render_env_controls)' "${ui_file}"
+  run grep -q 'def render_filters_and_controls' "${ui_file}"
   assert_success
 
-  run grep -q 'render_table_controls_panel(render_path_controls)' "${ui_file}"
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+component_body = source.split("def render_filters_and_controls(", 1)[1].split("\ndef ", 1)[0]
+assert "with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):" in component_body
+assert "render_config_add_controls(" in component_body
+assert "render_table_filter_controls(" in component_body
+assert "other_options=(filter_labels[-1],)" in component_body
+PY
   assert_success
 
-  run grep -q 'render_table_controls_panel(render_dir_controls)' "${ui_file}"
+  run grep -q 'env_filter, other_filter = render_filters_and_controls(' "${ui_file}"
   assert_success
 
-  run grep -q 'render_table_controls_panel(render_cmd_controls)' "${ui_file}"
+  run grep -q 'path_filter, other_filter = render_filters_and_controls(' "${ui_file}"
   assert_success
 
-  run grep -q 'render_table_controls_panel(render_alias_controls)' "${ui_file}"
+  run grep -q 'dirs_filter, other_filter = render_filters_and_controls(' "${ui_file}"
+  assert_success
+
+  run grep -q 'cmds_filter, other_filter = render_filters_and_controls(' "${ui_file}"
+  assert_success
+
+  run grep -q 'alias_filter, other_filter = render_filters_and_controls(' "${ui_file}"
   assert_success
 
   run grep -q 'render_table_filter_controls' "${ui_file}"
@@ -8541,9 +8582,6 @@ PY
   run grep -q 'selected_edit_key=lambda row, _index: env_value_editor_key(row\["Name"\])' "${ui_file}"
   assert_success
 
-  run grep -q 'selected_edit_key=lambda _row, index: path_value_editor_key(index)' "${ui_file}"
-  assert_success
-
   run grep -q 'selected_edit_key=lambda _row, index: dir_value_editor_key(index)' "${ui_file}"
   assert_success
 
@@ -8556,7 +8594,47 @@ PY
   run grep -q 'selected_edit_key=lambda _row, index: alias_value_editor_key(index)' "${ui_file}"
   assert_success
 
-  run grep -q 'on_click": apply_path_delete' "${ui_file}"
+  run python3 - "${ui_file}" "${constants_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+constants_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+path_body = source.split("def render_path_rows(", 1)[1].split("\ndef ", 1)[0]
+assert '"""Render selectable read-only PATH rows."""' in path_body
+assert "selected_label=lambda row, _index: f\"Selected: {row['Path Value']}\"" in path_body
+assert "reset_selection=reset_path_table_selection" in path_body
+assert "selected_action_buttons=[" in path_body
+assert '"key_prefix": "path_delete_button"' in path_body
+assert '"on_click": apply_path_delete' in path_body
+assert "column_config=" not in path_body
+assert "path_column_config" not in path_body
+assert "rows = apply_path_value_overrides(rows)" not in path_body
+assert "selected_editable=True" not in path_body
+assert "path_value_editor_key" not in path_body
+assert "selected_edit_on_change=apply_selected_path_editor_value" not in path_body
+assert "selected_edit_folder_picker=True" not in path_body
+assert "checkbox=False" not in path_body
+assert "clear_path_table_edit_state()" not in path_body
+assert "def clear_path_table_edit_state(" not in source
+assert "def path_value_editor_key(" not in source
+assert "def apply_selected_path_editor_value(" not in source
+assert "def path_value_overrides(" not in source
+assert "def apply_path_value_overrides(" not in source
+assert "def export_path_value_overrides(" not in source
+assert "def path_column_config(" not in source
+assert "path_value_overrides()" not in source
+
+persisted_prefix_body = constants_source.split("PERSISTED_UI_KEY_PREFIXES = (", 1)[1].split(")", 1)[0]
+persisted_keys_body = constants_source.split("PERSISTED_UI_KEYS = (", 1)[1].split(")", 1)[0]
+assert '"path_selected_value_"' not in persisted_prefix_body
+assert "PATH_VALUE_EDITOR_KEY_PREFIX" not in constants_source
+assert '"path_value_overrides"' not in persisted_keys_body
+assert "PATH_VALUE_OVERRIDES_KEY" not in constants_source
+assert "PATH_TYPE_COLUMN_WIDTH" not in constants_source
+assert "PATH_ORIGIN_COLUMN_WIDTH" not in constants_source
+assert "PATH_VALUE_COLUMN_WIDTH" not in constants_source
+PY
   assert_success
 
   run grep -q 'on_click": apply_dir_delete' "${ui_file}"
@@ -8578,8 +8656,14 @@ PY
 import ast
 from pathlib import Path
 
-tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+tree = ast.parse(source)
 functions = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+
+def function_body(function_name):
+    function = functions[function_name]
+    return "\n".join(source.splitlines()[function.lineno - 1:function.end_lineno])
+
 required_refresh_calls = {
     "execute_pending_ai_model_selection": "refresh_ai_model_listing",
     "execute_pending_ai_model_deletion": "refresh_ai_model_listing",
@@ -8607,6 +8691,78 @@ for function_name, refresh_name in required_refresh_calls.items():
         for node in ast.walk(function)
     ):
         raise SystemExit(f"{function_name} should call {refresh_name}")
+
+refresh_cache_body = function_body("refresh_config_listing_cache")
+for expected_fragment in (
+    "stop_config_listing_background_jobs(cache_tag)",
+    "cache_delete_tag(cache_tag)",
+    "use_cache=False",
+    "show_overlay=False",
+    "background_command_metadata(command, cache_tag)",
+    "cache_background_command_result(metadata, result)",
+    "reset_selection()",
+):
+    if expected_fragment not in refresh_cache_body:
+        raise SystemExit(f"refresh_config_listing_cache should include {expected_fragment}")
+
+stop_jobs_body = function_body("stop_config_listing_background_jobs")
+for expected_fragment in (
+    'background_job_state_key(f"cached_{safe_cache_tag(cache_tag)}_")',
+    "stop_background_jobs_with_state_prefix(",
+    'if cache_tag == "aliases":',
+    "stop_background_job(ALIAS_LIST_JOB)",
+):
+    if expected_fragment not in stop_jobs_body:
+        raise SystemExit(f"stop_config_listing_background_jobs should include {expected_fragment}")
+
+config_refresh_specs = {
+    "refresh_env_listing": ("env", "build_hhs_envs_command(None)", "reset_env_table_selection"),
+    "refresh_path_listing": ("path", "build_hhs_paths_command()", "reset_path_table_selection"),
+    "refresh_dir_listing": ("dirs", "build_hhs_dirs_command()", "reset_dir_table_selection"),
+    "refresh_cmd_listing": ("cmds", "build_hhs_commands_command()", "reset_cmd_table_selection"),
+    "refresh_alias_listing": ("aliases", "build_hhs_aliases_command()", "reset_alias_table_selection"),
+}
+for function_name, (cache_tag, command_fragment, reset_name) in config_refresh_specs.items():
+    body = function_body(function_name)
+    for expected_fragment in (
+        "refresh_config_listing_cache(",
+        f'"{cache_tag}"',
+        command_fragment,
+        reset_name,
+    ):
+        if expected_fragment not in body:
+            raise SystemExit(f"{function_name} should include {expected_fragment}")
+
+render_envs_body = function_body("render_envs_table")
+for expected_fragment in (
+    "build_hhs_envs_command(None)",
+    "filter_env_rows(rows, env_filter, other_filter)",
+):
+    if expected_fragment not in render_envs_body:
+        raise SystemExit(f"render_envs_table should include {expected_fragment}")
+
+def assert_success_refresh_order(function_name, refresh_name, before_fragment=None):
+    body = function_body(function_name)
+    refresh_fragment = f"{refresh_name}()"
+    if body.count(refresh_fragment) != 1:
+        raise SystemExit(f"{function_name} should call {refresh_fragment} exactly once")
+    success_index = body.index("if result.returncode == 0:")
+    refresh_index = body.index(refresh_fragment)
+    if success_index > refresh_index:
+        raise SystemExit(f"{function_name} should refresh only after a successful mutation")
+    if before_fragment is not None and body.index(before_fragment) > refresh_index:
+        raise SystemExit(f"{function_name} should update {before_fragment} before refreshing")
+
+assert_success_refresh_order("apply_selected_env_value", "refresh_env_listing", "os.environ[name] = value")
+assert_success_refresh_order("apply_env_delete", "refresh_env_listing", "os.environ.pop(name, None)")
+assert_success_refresh_order("apply_selected_path_value", "refresh_path_listing", 'os.environ["PATH"] =')
+assert_success_refresh_order("apply_path_delete", "refresh_path_listing", 'os.environ["PATH"] =')
+assert_success_refresh_order("apply_selected_dir_value", "refresh_dir_listing")
+assert_success_refresh_order("apply_dir_delete", "refresh_dir_listing")
+assert_success_refresh_order("apply_selected_cmd_value", "refresh_cmd_listing")
+assert_success_refresh_order("apply_cmd_delete", "refresh_cmd_listing")
+assert_success_refresh_order("apply_selected_alias_value", "refresh_alias_listing")
+assert_success_refresh_order("apply_alias_delete", "refresh_alias_listing")
 
 required_add_success_clears = {
     "apply_env_add_form_value": ("apply_selected_env_value", "clear_add_form_fields"),
@@ -8639,7 +8795,6 @@ required_delete_command_fragments = {
     "build_hhs_command_action_command": "-r {safe_name}",
     "build_hhs_alias_action_command": "-r {safe_name}",
 }
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 for function_name, expected_fragment in required_delete_command_fragments.items():
     function = functions[function_name]
     lines = source.splitlines()[function.lineno - 1:function.end_lineno]
@@ -8658,8 +8813,147 @@ PY
   assert_success
 }
 
+@test "when Config listing cache refreshes then it reloads and seeds fresh data" {
+  run python3 - "${ui_file}" <<'PY'
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def stop_config_listing_background_jobs(")
+end = source.index("def service_table_key(")
+calls = []
+run_returncode = 0
+
+def safe_cache_tag(cache_tag):
+    calls.append(("safe_cache_tag", cache_tag))
+    return cache_tag
+
+def background_job_state_key(job_name):
+    calls.append(("background_job_state_key", job_name))
+    return f"state:{job_name}"
+
+def stop_background_jobs_with_state_prefix(state_key_prefix):
+    calls.append(("stop_prefix", state_key_prefix))
+
+def stop_background_job(job_name):
+    calls.append(("stop_job", job_name))
+
+def cache_delete_tag(cache_tag):
+    calls.append(("delete", cache_tag))
+
+def run_bash_command(command, loader_message, **kwargs):
+    calls.append(("run", command, loader_message, kwargs))
+    return subprocess.CompletedProcess(["bash"], run_returncode, f"fresh:{command}", "")
+
+def background_command_metadata(command, cache_tag):
+    calls.append(("metadata", command, cache_tag))
+    return {"cache_key": f"{cache_tag}:key"}
+
+def cache_background_command_result(metadata, result):
+    calls.append(("cache", metadata, result.stdout))
+
+def build_hhs_envs_command(_prefix_filter):
+    return "LIST_ENV"
+
+def build_hhs_paths_command():
+    return "LIST_PATH"
+
+def build_hhs_dirs_command():
+    return "LIST_DIRS"
+
+def build_hhs_commands_command():
+    return "LIST_CMDS"
+
+def build_hhs_aliases_command():
+    return "LIST_ALIASES"
+
+def reset_env_table_selection():
+    calls.append(("reset", "env"))
+
+def reset_path_table_selection():
+    calls.append(("reset", "path"))
+
+def reset_dir_table_selection():
+    calls.append(("reset", "dirs"))
+
+def reset_cmd_table_selection():
+    calls.append(("reset", "cmds"))
+
+def reset_alias_table_selection():
+    calls.append(("reset", "aliases"))
+
+namespace = {
+    "ALIAS_LIST_JOB": "alias_list_job",
+    "hhs_ui": SimpleNamespace(
+        UI_COMMAND_DEFAULT_TIMEOUT_SECONDS=30,
+        UI_CACHE_DEFAULT_TTL_SECONDS=300,
+    ),
+    "safe_cache_tag": safe_cache_tag,
+    "background_job_state_key": background_job_state_key,
+    "stop_background_jobs_with_state_prefix": stop_background_jobs_with_state_prefix,
+    "stop_background_job": stop_background_job,
+    "cache_delete_tag": cache_delete_tag,
+    "run_bash_command": run_bash_command,
+    "background_command_metadata": background_command_metadata,
+    "cache_background_command_result": cache_background_command_result,
+    "build_hhs_envs_command": build_hhs_envs_command,
+    "build_hhs_paths_command": build_hhs_paths_command,
+    "build_hhs_dirs_command": build_hhs_dirs_command,
+    "build_hhs_commands_command": build_hhs_commands_command,
+    "build_hhs_aliases_command": build_hhs_aliases_command,
+    "reset_env_table_selection": reset_env_table_selection,
+    "reset_path_table_selection": reset_path_table_selection,
+    "reset_dir_table_selection": reset_dir_table_selection,
+    "reset_cmd_table_selection": reset_cmd_table_selection,
+    "reset_alias_table_selection": reset_alias_table_selection,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+namespace["refresh_path_listing"]()
+assert calls[:5] == [
+    ("safe_cache_tag", "path"),
+    ("background_job_state_key", "cached_path_"),
+    ("stop_prefix", "state:cached_path_"),
+    ("delete", "path"),
+    (
+        "run",
+        "LIST_PATH",
+        "Loading PATH entries...",
+        {
+            "use_cache": False,
+            "timeout_seconds": 30,
+            "cache_tag": "path",
+            "show_overlay": False,
+        },
+    ),
+], calls
+assert calls[5:] == [
+    ("metadata", "LIST_PATH", "path"),
+    ("cache", {"cache_key": "path:key", "ttl_seconds": 300}, "fresh:LIST_PATH"),
+    ("reset", "path"),
+], calls
+
+calls.clear()
+namespace["refresh_alias_listing"]()
+assert ("stop_job", "alias_list_job") in calls, calls
+assert ("delete", "aliases") in calls, calls
+assert ("cache", {"cache_key": "aliases:key", "ttl_seconds": 300}, "fresh:LIST_ALIASES") in calls, calls
+assert calls[-1] == ("reset", "aliases"), calls
+
+calls.clear()
+run_returncode = 1
+namespace["refresh_dir_listing"]()
+assert ("delete", "dirs") in calls, calls
+assert not any(call[0] == "cache" for call in calls), calls
+assert calls[-1] == ("reset", "dirs"), calls
+PY
+  assert_success
+}
+
 @test "when connected over SSH then reusable path picker should list remote paths" {
-	run python3 - "${ui_file}" <<'PY'
+  run python3 - "${ui_file}" <<'PY'
 import hashlib
 import os
 import posixpath
@@ -8757,7 +9051,6 @@ namespace = {
     "textwrap": textwrap,
     "hhs_ui": types.SimpleNamespace(
         DIR_VALUE_EDITOR_KEY_PREFIX="dir_selected_value",
-        PATH_VALUE_EDITOR_KEY_PREFIX="path_selected_value",
         UI_CACHE_REALTIME_TTL_SECONDS=1,
     ),
     "hhs_ui_constants": types.SimpleNamespace(
@@ -8813,7 +9106,7 @@ assert namespace["path_picker_uses_remote"]()
 assert namespace["remote_path_picker_default_directory"]() == "$HOME"
 assert namespace["folder_picker_owner_context_for_target"]("search_path") == "search"
 assert namespace["folder_picker_owner_context_for_target"]("path_add_value") == "path"
-assert namespace["folder_picker_owner_context_for_target"]("path_selected_value_0") == "path"
+assert namespace["folder_picker_owner_context_for_target"]("path_selected_value_0") == ""
 assert namespace["folder_picker_owner_context_for_target"]("dir_add_value") == "dir"
 assert namespace["folder_picker_owner_context_for_target"]("dir_selected_value_0") == "dir"
 assert namespace["request_path_picker"]("search_path", "", "folder") is None
@@ -8975,7 +9268,6 @@ namespace = {
     "textwrap": textwrap,
     "hhs_ui": types.SimpleNamespace(
         DIR_VALUE_EDITOR_KEY_PREFIX="dir_selected_value",
-        PATH_VALUE_EDITOR_KEY_PREFIX="path_selected_value",
     ),
     "st": types.SimpleNamespace(
         session_state=session_state,
@@ -9280,9 +9572,9 @@ parse_end = source.index("def parse_hhs_history_dirs(")
 class ColumnConfig:
     """Stub Streamlit column config used by the pure helper test."""
 
-    def TextColumn(self, label, width=None):
+    def TextColumn(self, label, width=None, disabled=False):
         """Return the requested text column label and width."""
-        return {"label": label, "width": width}
+        return {"disabled": disabled, "label": label, "width": width}
 
 
 class FakeIndex(list):
@@ -9316,13 +9608,11 @@ class FakeDataFrame:
 
 namespace = {
     "hhs_ui_constants": SimpleNamespace(
+        CMD_INDEX_COLUMN_WIDTH=80,
         HISTORY_DIRECTORY_TYPE_COLUMN_WIDTH=27,
         HISTORY_INDEX_COLUMN_DIGIT_WIDTH=9,
         HISTORY_INDEX_COLUMN_MIN_WIDTH=36,
         HISTORY_INDEX_COLUMN_PADDING=24,
-        PATH_ORIGIN_COLUMN_WIDTH=160,
-        PATH_TYPE_COLUMN_WIDTH=80,
-        PATH_VALUE_COLUMN_WIDTH=4096,
     ),
     "display_table_rows": lambda rows: rows,
     "pd": SimpleNamespace(DataFrame=FakeDataFrame),
@@ -9340,8 +9630,8 @@ assert namespace["history_command_display_index"]("1200") == "!1200"
 assert namespace["history_command_display_index"]("") == ""
 assert namespace["history_index_column_width"](rows) == 69
 assert namespace["history_index_column_width"]([]) == 36
-assert config["_index"] == {"label": "", "width": 69}, config
-assert config["Value"] == {"label": "Value", "width": None}, config
+assert config["_index"] == {"disabled": True, "label": "", "width": 69}, config
+assert config["Value"] == {"disabled": True, "label": "Value", "width": None}, config
 assert list(table_data.index) == ["!49", "!1200"], table_data
 assert table_data.index.name == "", table_data
 assert list(table_data.columns) == ["Value"], table_data
@@ -9352,16 +9642,20 @@ directory_rows = [
 ]
 directory_config = namespace["history_directory_column_config"]()
 directory_table_data = namespace["history_directory_table_data"](directory_rows)
-assert directory_config["_index"] == {"label": "", "width": 27}, directory_config
-assert directory_config["Value"] == {"label": "Value", "width": None}, directory_config
+assert directory_config["_index"] == {"disabled": True, "label": "", "width": 27}, directory_config
+assert directory_config["Value"] == {
+    "disabled": True,
+    "label": "Value",
+    "width": None,
+}, directory_config
 assert list(directory_table_data.index) == ["", ""], directory_table_data
 assert directory_table_data.index.name == "", directory_table_data
 assert list(directory_table_data.columns) == ["Value"], directory_table_data
 
-path_config = namespace["path_column_config"]()
-assert path_config["Type"] == {"label": "Type", "width": 80}, path_config
-assert path_config["Origin"] == {"label": "Origin", "width": 160}, path_config
-assert path_config["Path Value"] == {"label": "Path Value", "width": 4096}, path_config
+cmd_config = namespace["cmd_column_config"]()
+assert cmd_config == {
+    "Index": {"disabled": True, "label": "Index", "width": 80}
+}, cmd_config
 
 parse_namespace = {
     "hhs_ui": SimpleNamespace(
@@ -9403,7 +9697,11 @@ assert "table_data=history_directory_table_data(rows)" in history_directories_bo
 assert "column_config=history_directory_column_config()" in history_directories_body
 
 path_body = source.split("def render_path_rows(", 1)[1].split("\ndef ", 1)[0]
-assert "column_config=path_column_config()" in path_body
+assert "column_config=" not in path_body
+assert "path_column_config" not in source
+
+cmd_body = source.split("def render_cmd_rows(", 1)[1].split("\ndef ", 1)[0]
+assert "column_config=cmd_column_config()" in cmd_body
 
 history_command_body = source.split("def build_hhs_history_command()", 1)[1].split("\ndef ", 1)[0]
 assert "HISTFILE" in history_command_body
@@ -9590,11 +9888,34 @@ start = source.index("def clear_table_other_filter(")
 end = source.index("def render_env_add_controls(")
 session_state = {"monitor_process_other_filter": None}
 namespace = {
+    "hhs_ui": SimpleNamespace(
+        FOUR_OPTION_FILTER_COLUMNS=[1.75, 2.25],
+        PATH_FILTER_COLUMNS=[2.25, 1.75],
+        THREE_OPTION_FILTER_COLUMNS=[1.1, 2.9],
+        TWO_OPTION_FILTER_COLUMNS=[0.75, 3.25],
+    ),
     "save_ui_state": lambda: None,
     "st": SimpleNamespace(session_state=session_state),
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
+sample_filters = {
+    "All": None,
+    "On": "Up",
+    "Off": "Down",
+    "Other": "Containing",
+}
 assert namespace["clean_table_text_filter_value"](None) == ""
+assert namespace["table_filter_mapping"](("All", "Containing")) == {
+    "All": None,
+    "Containing": None,
+}
+assert namespace["config_filter_columns"](sample_filters) == [1.75, 2.25]
+assert namespace["config_filter_display_label"](
+    sample_filters,
+    "Containing",
+    "All",
+) == "Other"
+assert namespace["config_filter_return_value"](sample_filters, "Other") == "Containing"
 assert namespace["normalized_table_filter_selection"](None, ("All", "Containing")) == "All"
 assert namespace["normalized_table_filter_selection"]("None", ("All", "Containing")) == "All"
 assert namespace["normalized_table_filter_selection"]("Other", ("All", "Containing")) == "Containing"
@@ -10469,8 +10790,32 @@ PY
 
 # TC - 19
 @test "when rendering UI then deprecated table approaches should stay removed" {
-  run grep -q 'st.data_editor' "${ui_file}"
-  assert_failure
+  run python3 - "${HHS_REPO_DIR}/bin/apps/py" <<'PY'
+import ast
+from pathlib import Path
+import sys
+
+matches = []
+for path in Path(sys.argv[1]).rglob("*.py"):
+    text = path.read_text(encoding="utf-8")
+    if "st.data_editor" in text or "data_editor" in text:
+        matches.append(str(path))
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute) or node.func.attr != "TextColumn":
+            continue
+        disabled = next(
+            (keyword.value for keyword in node.keywords if keyword.arg == "disabled"),
+            None,
+        )
+        if not isinstance(disabled, ast.Constant) or disabled.value is not True:
+            matches.append(f"{path}:{node.lineno}: TextColumn missing disabled=True")
+if matches:
+    raise SystemExit("deprecated or editable table source found: " + ", ".join(matches))
+PY
+  assert_success
 
   run grep -q 'st.table(' "${ui_file}"
   assert_failure
