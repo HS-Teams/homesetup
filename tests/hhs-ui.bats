@@ -1429,7 +1429,7 @@ PY
   run grep -q 'UI_COMMAND_DEFAULT_TIMEOUT_SECONDS = UI_COMMAND_LOCAL_TIMEOUT_SECONDS' "${constants_file}"
   assert_success
 
-  run grep -q 'UI_COMMAND_SEARCH_TIMEOUT_SECONDS = 120' "${constants_file}"
+  run grep -q 'UI_COMMAND_SEARCH_TIMEOUT_SECONDS = 300' "${constants_file}"
   assert_success
 
   run grep -q 'FOOTER_DISMISS_STATUS_QUERY_PARAM' "${constants_file}"
@@ -1642,11 +1642,13 @@ assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"' in constants_source
 assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cache"' in constants_source
 assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"' in constants_source
 assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM = "hhs_clear_ai_history"' in constants_source
+assert 'COMMAND_PRELOADER_CANCEL_QUERY_PARAM = "hhs_cancel_preloader"' in constants_source
 assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 1.0' in constants_source
 assert 'AI_TERMINAL_CONTEXT_MAX_CHARS = 12000' in constants_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in constants_source
 assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS' in init_source
 assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in init_source
+assert 'COMMAND_PRELOADER_CANCEL_QUERY_PARAM' in init_source
 assert 'FOOTER_ASK_TERMINAL_QUERY_PARAM' not in init_source
 assert 'FOOTER_ASK_TERMINAL_PROMPT_QUERY_PARAM' not in init_source
 assert 'FOOTER_ASK_TERMINAL_REQUEST_QUERY_PARAM' not in init_source
@@ -1869,6 +1871,7 @@ assert 'hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in footer_actions_body
 assert 'hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in footer_actions_body
+assert 'handle_command_preloader_cancel_action()' in footer_actions_body
 assert 'hhs_ui.FOOTER_ASK_TERMINAL_QUERY_PARAM' not in footer_actions_body
 assert 'hhs_ui.FOOTER_ASK_TERMINAL_PROMPT_QUERY_PARAM' not in footer_actions_body
 assert 'hhs_ui.FOOTER_ASK_TERMINAL_REQUEST_QUERY_PARAM' not in footer_actions_body
@@ -2099,7 +2102,9 @@ assert "height: 1.18rem" in terminal_ai_trigger_block
 assert "list-style: none" in terminal_ai_trigger_block
 assert "padding: 0 0.12rem" in terminal_ai_trigger_block
 assert "color: var(--hhs-warning)" in terminal_ai_trigger_block
+assert "color: var(--hhs-theme-text-muted-color)" in terminal_ai_disabled_menu_block
 assert "opacity: 0.45" in terminal_ai_disabled_menu_block
+assert "color: var(--hhs-theme-text-muted-color)" in terminal_ai_disabled_trigger_block
 assert "cursor: not-allowed" in terminal_ai_disabled_trigger_block
 assert "pointer-events: none" in terminal_ai_disabled_trigger_block
 assert ".hhs-footer-glyph-button" in base_css
@@ -6246,12 +6251,15 @@ rendered = namespace["command_loader_html"](
     'loader"id',
     123,
     30,
+    "search_command:token&1",
 )
 assert "%primary_color%" not in rendered
 assert "%secondary_color%" not in rendered
 assert '<span class="hhs-loader-primary">*.mp4</span>' in rendered
 assert '<span class="hhs-loader-secondary">/tmp/a&amp;b</span>' in rendered
 assert 'data-loader-id="loader&quot;id"' in rendered
+assert 'class="hhs-command-loader-close"' in rendered
+assert 'data-hhs-preloader-token="search_command:token&amp;1"' in rendered
 PY
   assert_success
 
@@ -6288,11 +6296,34 @@ assert payload["timeoutSeconds"] == 30
 assert '<span class="hhs-loader-primary">needle</span>' in payload["messageHtml"]
 
 renderer_body = source.split("def render_command_preloader_events", 1)[1].split("\ndef ", 1)[0]
+background_status_body = source.split("def render_background_job_status", 1)[1].split("\ndef ", 1)[0]
 assert 'parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout' not in renderer_body
 assert 'removeOverlay(String(detail.token || ""))' in renderer_body
 assert 'overlay.className = "hhs-tab-loader";' in renderer_body
 assert 'overlay.className = "hhs-tab-loader hhs-tab-loader-transient";' not in renderer_body
 assert 'overlay.classList.remove("hhs-tab-loader-transient")' in renderer_body
+assert "def command_elapsed_helper_js" in source
+assert 'typeof parentWindow.__hhsRenderCommandElapsed !== "function"' in source
+assert "def command_overlay_close_button_html" in source
+assert "def command_overlay_close_helper_js" in source
+assert "def stop_background_job_by_preloader_token" in source
+assert "def handle_command_preloader_cancel_action" in source
+assert "hhs_ui.COMMAND_PRELOADER_CANCEL_QUERY_PARAM" in source
+assert 'class="hhs-tab-loader-close"' in source
+assert "bindCommandOverlayClose(overlay)" in source
+assert "bindCommandLoaderClose(loader)" in source
+assert "parentWindow.__hhsDismissCommandOverlay" in source
+assert 'cleanToken.includes(":")' in source
+assert source.count("elapsedSeconds > 25 && elapsedSeconds < 60") == 1
+assert source.count("elapsedSeconds >= 60") == 1
+assert "elapsed_ratio >=" not in source
+assert "elapsedRatio >=" not in source
+assert "job[\"preloader_finished\"] = True" in source
+assert "def dismiss_background_job_preloader" in source
+assert 'dismiss_background_job_preloader(job_name, job, "error")' in background_status_body
+assert "process.poll() is not None" in background_status_body
+assert "background_job_result(job_name)" not in background_status_body
+assert background_status_body.count("render_command_preloader_events()") == 1
 PY
   assert_success
 
@@ -6317,11 +6348,23 @@ PY
   run grep -q 'data-timeout-seconds' "${ui_file}"
   assert_success
 
-  run grep -q 'elapsed_ratio >= 0.3 && elapsed_ratio < 0.6' "${ui_file}"
+  run grep -q 'hhs-tab-loader-close' "${ui_file}"
   assert_success
 
-  run grep -q 'elapsed_ratio >= 0.6' "${ui_file}"
+  run grep -q 'hhs_ui.COMMAND_PRELOADER_CANCEL_QUERY_PARAM' "${ui_file}"
   assert_success
+
+  run grep -q 'elapsedSeconds > 25 && elapsedSeconds < 60' "${ui_file}"
+  assert_success
+
+  run grep -q 'elapsedSeconds >= 60' "${ui_file}"
+  assert_success
+
+  run grep -q 'elapsed_ratio >= 0.3 && elapsed_ratio < 0.6' "${ui_file}"
+  assert_failure
+
+  run grep -q 'elapsedRatio >= 0.3 && elapsedRatio < 0.6' "${ui_file}"
+  assert_failure
 
   run grep -q 'hhs-loader-elapsed-warning' "${ui_file}"
   assert_success
@@ -6353,10 +6396,31 @@ PY
   run grep -q 'hhs-tab-loader' "${css_file}"
   assert_success
 
+  run grep -q '.hhs-tab-loader-close' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-command-loader-close:hover' "${css_file}"
+  assert_success
+
+  run grep -q 'border-color: #ff5555' "${css_file}"
+  assert_success
+
+  run grep -q 'color: #ff5555' "${css_file}"
+  assert_success
+
+  run grep -q 'margin: var(--hhs-element-std-gap, 1rem)' "${css_file}"
+  assert_success
+
+  run grep -q 'width: max-content' "${css_file}"
+  assert_success
+
+  run grep -q 'overflow-wrap: anywhere' "${css_file}"
+  assert_success
+
   run grep -q '.hhs-command-loader {' "${css_file}"
   assert_success
 
-  run grep -q 'margin: 0.5rem auto' "${css_file}"
+  run grep -q 'margin: var(--hhs-element-std-gap, 1rem) auto' "${css_file}"
   assert_success
 
   run grep -q 'justify-content: center' "${css_file}"
@@ -10843,7 +10907,7 @@ namespace = {
         SEARCH_TERM_HISTORY_TTL_SECONDS=900,
         SEARCH_PAGE_SIZE=20,
         UI_CACHE_NORMAL_TTL_SECONDS=300,
-        UI_COMMAND_SEARCH_TIMEOUT_SECONDS=120,
+        UI_COMMAND_SEARCH_TIMEOUT_SECONDS=300,
         UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS=30,
         SEARCH_TYPE_LABELS={
             "Files": "Files",

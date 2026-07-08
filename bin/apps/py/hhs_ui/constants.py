@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.38"
+VERSION = "0.1.43"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -44,7 +44,7 @@ UI_COMMAND_LOCAL_TIMEOUT_SECONDS = 30
 UI_COMMAND_REMOTE_TIMEOUT_SECONDS = 60
 UI_COMMAND_DEFAULT_TIMEOUT_SECONDS = UI_COMMAND_LOCAL_TIMEOUT_SECONDS
 UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS = 30
-UI_COMMAND_SEARCH_TIMEOUT_SECONDS = 120
+UI_COMMAND_SEARCH_TIMEOUT_SECONDS = 300
 UI_COMMAND_DISK_TIMEOUT_SECONDS = 45
 UI_COMMAND_SERVICE_ACTION_TIMEOUT_SECONDS = 180
 UI_COMMAND_LONG_ACTION_TIMEOUT_SECONDS = 1800
@@ -270,6 +270,8 @@ PERSISTED_UI_KEYS = (
     "search_ignore_case",
     "search_other_filter",
     "search_path",
+    "search_replace",
+    "search_replacement",
     "search_type",
     "search_words",
     SSH_RECONNECT_HOST_KEY,
@@ -418,6 +420,7 @@ FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"
 FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cache"
 FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"
 FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM = "hhs_clear_ai_history"
+COMMAND_PRELOADER_CANCEL_QUERY_PARAM = "hhs_cancel_preloader"
 SEARCH_OPEN_RESULT_QUERY_PARAM = "hhs_open_search_result"
 PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"
 FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY = "footer_status_log_handler"

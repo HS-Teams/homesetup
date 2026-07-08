@@ -1415,14 +1415,23 @@ def render_sidebar() -> None:
 
 
 def command_loader_html(
-    message: str, loader_id: str, started_at_millis: int, timeout_seconds: int
+    message: str,
+    loader_id: str,
+    started_at_millis: int,
+    timeout_seconds: int,
+    preloader_token: str = "",
 ) -> str:
     """Return reusable banner loader markup for command-data waits."""
     safe_message = loader_label_html(message)
     safe_loader_id = html.escape(loader_id, quote=True)
+    safe_preloader_token = html.escape(str(preloader_token or "").strip(), quote=True)
     safe_timeout = max(1, int(timeout_seconds))
     return f"""
-    <div class="hhs-command-loader" data-loader-id="{safe_loader_id}" role="status" aria-live="polite">
+    <div class="hhs-command-loader" data-loader-id="{safe_loader_id}"
+         data-hhs-preloader-token="{safe_preloader_token}" role="status" aria-live="polite">
+      <button class="hhs-command-loader-close" type="button"
+              title="Interrupt command" aria-label="Interrupt command"
+              data-hhs-preloader-token="{safe_preloader_token}">x</button>
       <span class="hhs-command-loader-spinner" aria-hidden="true"></span>
       <span class="hhs-command-loader-copy">
         <span class="hhs-command-loader-label">{safe_message}</span>
@@ -1616,6 +1625,113 @@ def emit_command_preloader_finish(token: str, status: str = "success") -> None:
     )
 
 
+def command_elapsed_helper_js() -> str:
+    """Return the shared browser helper for command elapsed-time display."""
+    return """
+            if (typeof parentWindow.__hhsRenderCommandElapsed !== "function") {
+              parentWindow.__hhsRenderCommandElapsed = (node, startedAt) => {
+                if (!node) {
+                  return;
+                }
+                const elapsedSeconds = Math.max(
+                  0,
+                  Math.floor((Date.now() - Number(startedAt || Date.now())) / 1000)
+                );
+                const minutes = Math.floor(elapsedSeconds / 60);
+                const seconds = String(elapsedSeconds % 60).padStart(2, "0");
+                node.textContent = `time elapsed: ${minutes}m:${seconds}s`;
+                node.classList.toggle(
+                  "hhs-loader-elapsed-warning",
+                  elapsedSeconds > 25 && elapsedSeconds < 60
+                );
+                node.classList.toggle("hhs-loader-elapsed-danger", elapsedSeconds >= 60);
+              };
+            }
+    """.rstrip()
+
+
+def command_overlay_close_button_html() -> str:
+    """Return the micro close button markup for command overlay preloaders."""
+    return (
+        '<button class="hhs-tab-loader-close" type="button" '
+        'title="Interrupt command" aria-label="Interrupt command">x</button>'
+    )
+
+
+def command_overlay_close_helper_js() -> str:
+    """Return shared browser helpers for dismissing command overlay preloaders."""
+    cancel_param = json.dumps(hhs_ui.COMMAND_PRELOADER_CANCEL_QUERY_PARAM)
+    return f"""
+            if (typeof parentWindow.__hhsClearCommandOverlayTimers !== "function") {{
+              parentWindow.__hhsClearCommandOverlayTimers = () => {{
+                if (parentWindow.__hhsCommandOverlayTimer) {{
+                  parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
+                  parentWindow.__hhsCommandOverlayTimer = null;
+                }}
+                if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
+                  parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
+                  parentWindow.__hhsCommandOverlayExpiryTimer = null;
+                }}
+                if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
+                  parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
+                  parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
+                }}
+              }};
+            }}
+            if (typeof parentWindow.__hhsDismissCommandOverlay !== "function") {{
+              parentWindow.__hhsDismissCommandOverlay = (token = "") => {{
+                const cleanToken = String(token || "").trim();
+                parentWindow.__hhsCommandOverlayClearedAt = Date.now();
+                parentWindow.__hhsCommandOverlayToken = "";
+                parentWindow.__hhsClearCommandOverlayTimers();
+                doc.body.dataset.hhsCommandOverlayHidden = "true";
+                const overlay = doc.getElementById("hhs-command-overlay");
+                if (overlay) {{
+                  overlay.remove();
+                }}
+                if (!cleanToken || !cleanToken.includes(":")) {{
+                  return;
+                }}
+                const url = new parentWindow.URL(parentWindow.location.href);
+                url.searchParams.set({cancel_param}, cleanToken);
+                parentWindow.location.href = url.toString();
+              }};
+            }}
+            const bindCommandOverlayClose = (overlay) => {{
+              const closeButton = overlay?.querySelector(".hhs-tab-loader-close");
+              if (!closeButton || closeButton.dataset.closeHandlerInstalled === "true") {{
+                return;
+              }}
+              closeButton.dataset.closeHandlerInstalled = "true";
+              closeButton.addEventListener("click", (event) => {{
+                event.preventDefault();
+                event.stopPropagation();
+                parentWindow.__hhsDismissCommandOverlay(
+                  String(overlay.dataset.hhsOverlayToken || "")
+                );
+              }});
+            }};
+            const bindCommandLoaderClose = (loader) => {{
+              const closeButton = loader?.querySelector(".hhs-command-loader-close");
+              if (!closeButton || closeButton.dataset.closeHandlerInstalled === "true") {{
+                return;
+              }}
+              closeButton.dataset.closeHandlerInstalled = "true";
+              closeButton.addEventListener("click", (event) => {{
+                event.preventDefault();
+                event.stopPropagation();
+                const token = String(
+                  closeButton.dataset.hhsPreloaderToken ||
+                  loader.dataset.hhsPreloaderToken ||
+                  ""
+                );
+                loader.remove();
+                parentWindow.__hhsDismissCommandOverlay(token);
+              }});
+            }};
+    """.rstrip()
+
+
 def render_command_preloader_events() -> None:
     """Flush queued command preloader events to browser CustomEvents."""
     queued_events = command_preloader_event_queue()
@@ -1630,6 +1746,8 @@ def render_command_preloader_events() -> None:
             const parentWindow = window.parent;
             const doc = parentWindow.document;
             const events = {json.dumps(events)};
+{command_elapsed_helper_js()}
+{command_overlay_close_helper_js()}
             const clearOverlayTimers = () => {{
               if (parentWindow.__hhsCommandOverlayTimer) {{
                 parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
@@ -1638,6 +1756,10 @@ def render_command_preloader_events() -> None:
               if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
                 parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
                 parentWindow.__hhsCommandOverlayExpiryTimer = null;
+              }}
+              if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
+                parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
+                parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
               }}
             }};
             const removeOverlay = (token) => {{
@@ -1661,13 +1783,7 @@ def render_command_preloader_events() -> None:
               if (!node) {{
                 return;
               }}
-              const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-              const elapsedRatio = elapsedSeconds / Math.max(1, timeoutSeconds);
-              const minutes = Math.floor(elapsedSeconds / 60);
-              const seconds = String(elapsedSeconds % 60).padStart(2, "0");
-              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
-              node.classList.toggle("hhs-loader-elapsed-warning", elapsedRatio >= 0.3 && elapsedRatio < 0.6);
-              node.classList.toggle("hhs-loader-elapsed-danger", elapsedRatio >= 0.6);
+              parentWindow.__hhsRenderCommandElapsed(node, startedAt);
             }};
             const showOverlay = (detail) => {{
               const token = String(detail.token || "");
@@ -1692,6 +1808,7 @@ def render_command_preloader_events() -> None:
                 overlay.style.zIndex = "1000010";
                 overlay.innerHTML = `
                   <div class="hhs-tab-loader-panel">
+                    {command_overlay_close_button_html()}
                     <span class="hhs-tab-loader-spinner"></span>
                     <span class="hhs-tab-loader-copy">
                       <span class="hhs-tab-loader-label"></span>
@@ -1704,6 +1821,7 @@ def render_command_preloader_events() -> None:
                 doc.body.appendChild(overlay);
               }}
               overlay.classList.remove("hhs-tab-loader-transient");
+              bindCommandOverlayClose(overlay);
               overlay.dataset.hhsOverlayToken = token;
               overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
               overlay.dataset.hhsOverlayStartedAt = String(createdAt);
@@ -1754,24 +1872,24 @@ def render_command_loader_timer(loader_id: str) -> None:
         f"""
         <script>
           (() => {{
-            const doc = window.parent.document;
+            const parentWindow = window.parent;
+            const doc = parentWindow.document;
             const loader_id = {json.dumps(loader_id)};
-            const selector = `[data-loader-id="${{loader_id}}"] .hhs-command-loader-elapsed`;
-            const node = doc.querySelector(selector);
+{command_elapsed_helper_js()}
+{command_overlay_close_helper_js()}
+            const selector = `[data-loader-id="${{loader_id}}"]`;
+            const loader = doc.querySelector(selector);
+            if (loader) {{
+              bindCommandLoaderClose(loader);
+            }}
+            const node = loader?.querySelector(".hhs-command-loader-elapsed");
             if (!node || node.dataset.timerStarted === "true") {{
               return;
             }}
             node.dataset.timerStarted = "true";
             const started_at = Number(node.dataset.startedAt || Date.now());
             const render_elapsed = () => {{
-              const elapsed_seconds = Math.max(0, Math.floor((Date.now() - started_at) / 1000));
-              const timeout_seconds = Math.max(1, Number(node.dataset.timeoutSeconds || 1));
-              const elapsed_ratio = elapsed_seconds / timeout_seconds;
-              const minutes = Math.floor(elapsed_seconds / 60);
-              const seconds = String(elapsed_seconds % 60).padStart(2, "0");
-              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
-              node.classList.toggle("hhs-loader-elapsed-warning", elapsed_ratio >= 0.3 && elapsed_ratio < 0.6);
-              node.classList.toggle("hhs-loader-elapsed-danger", elapsed_ratio >= 0.6);
+              parentWindow.__hhsRenderCommandElapsed(node, started_at);
             }};
             render_elapsed();
             window.setInterval(render_elapsed, 1000);
@@ -1784,14 +1902,23 @@ def render_command_loader_timer(loader_id: str) -> None:
 
 
 def render_command_loader(
-    message: str, started_at: float | None = None, timeout_seconds: int | None = None
+    message: str,
+    started_at: float | None = None,
+    timeout_seconds: int | None = None,
+    preloader_token: str = "",
 ) -> None:
     """Render the reusable banner loader for command-data waits."""
     loader_id = f"hhs-command-loader-{secrets.token_hex(8)}"
     started_at_millis = int((started_at or time.time()) * 1000)
     safe_timeout = int(timeout_seconds or command_timeout_seconds())
     st.markdown(
-        command_loader_html(message, loader_id, started_at_millis, safe_timeout),
+        command_loader_html(
+            message,
+            loader_id,
+            started_at_millis,
+            safe_timeout,
+            preloader_token,
+        ),
         unsafe_allow_html=True,
     )
     render_command_loader_timer(loader_id)
@@ -1817,6 +1944,8 @@ def render_preloader(
             const parentWindow = window.parent;
             const doc = window.parent.document;
             const createdAt = {created_at_millis};
+{command_elapsed_helper_js()}
+{command_overlay_close_helper_js()}
             const clearedAt = Number(parentWindow.__hhsCommandOverlayClearedAt || 0);
             if (clearedAt && createdAt <= clearedAt) {{
               return;
@@ -1828,6 +1957,10 @@ def render_preloader(
             if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
               parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
               parentWindow.__hhsCommandOverlayExpiryTimer = null;
+            }}
+            if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
+              parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
+              parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
             }}
             const overlayToken = {json.dumps(overlay_token)};
             parentWindow.__hhsCommandOverlayToken = overlayToken;
@@ -1851,6 +1984,7 @@ def render_preloader(
             overlay.style.zIndex = "1000010";
             overlay.innerHTML = `
               <div class="hhs-tab-loader-panel">
+                {command_overlay_close_button_html()}
                 <span class="hhs-tab-loader-spinner"></span>
                 <span class="hhs-tab-loader-copy">
                   <span class="hhs-tab-loader-label"></span>
@@ -1863,6 +1997,7 @@ def render_preloader(
             if (label) {{
               label.innerHTML = {json.dumps(safe_message_html)};
             }}
+            bindCommandOverlayClose(overlay);
             doc.body.appendChild(overlay);
             const node = overlay.querySelector(".hhs-tab-loader-elapsed");
             if (!node || node.dataset.timerStarted === "true") {{
@@ -1898,14 +2033,7 @@ def render_preloader(
                 remove_if_current();
                 return;
               }}
-              const elapsed_seconds = Math.max(0, Math.floor((Date.now() - started_at) / 1000));
-              const timeout_seconds = Math.max(1, Number(node.dataset.timeoutSeconds || 1));
-              const elapsed_ratio = elapsed_seconds / timeout_seconds;
-              const minutes = Math.floor(elapsed_seconds / 60);
-              const seconds = String(elapsed_seconds % 60).padStart(2, "0");
-              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
-              node.classList.toggle("hhs-loader-elapsed-warning", elapsed_ratio >= 0.3 && elapsed_ratio < 0.6);
-              node.classList.toggle("hhs-loader-elapsed-danger", elapsed_ratio >= 0.6);
+              parentWindow.__hhsRenderCommandElapsed(node, started_at);
             }};
             render_elapsed();
             parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(render_elapsed, 1000);
@@ -3161,6 +3289,7 @@ def render_path_picker_listing_loader(job_name: str) -> None:
         PATH_PICKER_LISTING_LOADER_MESSAGE,
         started_at or None,
         int(background_job_timeout_seconds(job) or command_timeout_seconds()),
+        str(job.get("preloader_token", "")),
     )
     poll_background_job_completion(job_name)
 
@@ -3188,6 +3317,8 @@ def render_path_picker_open_preloader_script() -> None:
               '[class*="st-key-"][class*="_folder_picker_button"] button',
             ].join(", ");
             const timeoutSeconds = {timeout_seconds};
+{command_elapsed_helper_js()}
+{command_overlay_close_helper_js()}
             const clearOverlayTimers = () => {{
               if (parentWindow.__hhsCommandOverlayTimer) {{
                 parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
@@ -3197,19 +3328,17 @@ def render_path_picker_open_preloader_script() -> None:
                 parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
                 parentWindow.__hhsCommandOverlayExpiryTimer = null;
               }}
+              if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
+                parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
+                parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
+              }}
             }};
             const renderElapsed = (overlay, startedAt) => {{
               const node = overlay.querySelector(".hhs-tab-loader-elapsed");
               if (!node) {{
                 return;
               }}
-              const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-              const elapsedRatio = elapsedSeconds / Math.max(1, timeoutSeconds);
-              const minutes = Math.floor(elapsedSeconds / 60);
-              const seconds = String(elapsedSeconds % 60).padStart(2, "0");
-              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
-              node.classList.toggle("hhs-loader-elapsed-warning", elapsedRatio >= 0.3 && elapsedRatio < 0.6);
-              node.classList.toggle("hhs-loader-elapsed-danger", elapsedRatio >= 0.6);
+              parentWindow.__hhsRenderCommandElapsed(node, startedAt);
             }};
             const showOverlay = () => {{
               clearOverlayTimers();
@@ -3236,6 +3365,7 @@ def render_path_picker_open_preloader_script() -> None:
               overlay.style.zIndex = "1000010";
               overlay.innerHTML = `
                 <div class="hhs-tab-loader-panel">
+                  {command_overlay_close_button_html()}
                   <span class="hhs-tab-loader-spinner"></span>
                   <span class="hhs-tab-loader-copy">
                     <span class="hhs-tab-loader-label">Loading directories and files...</span>
@@ -3245,6 +3375,7 @@ def render_path_picker_open_preloader_script() -> None:
                   </span>
                 </div>
               `;
+              bindCommandOverlayClose(overlay);
               doc.body.appendChild(overlay);
               renderElapsed(overlay, createdAt);
               parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(
@@ -5043,8 +5174,19 @@ def remove_footer_cache_clear_query_params() -> None:
         remove_query_param(name)
 
 
+def handle_command_preloader_cancel_action() -> None:
+    """Cancel a background command requested by the overlay close button."""
+    preloader_token = query_param_value(hhs_ui.COMMAND_PRELOADER_CANCEL_QUERY_PARAM)
+    if not preloader_token:
+        return
+    remove_query_param(hhs_ui.COMMAND_PRELOADER_CANCEL_QUERY_PARAM)
+    if stop_background_job_by_preloader_token(preloader_token):
+        push_floating_status("Command interrupted.", "warn")
+
+
 def handle_footer_actions() -> None:
     """Run footer actions requested through Streamlit query parameters."""
+    handle_command_preloader_cancel_action()
     updater_completed = background_job_result(UPDATER_UPDATE_JOB)
     if updater_completed is not None:
         result, metadata = updater_completed
@@ -10458,6 +10600,24 @@ def stop_background_job(job_name: str) -> None:
     cleanup_background_job_files(job)
 
 
+def stop_background_job_by_preloader_token(preloader_token: str) -> bool:
+    """Stop the background job that owns a command-preloader token."""
+    clean_token = preloader_token.strip()
+    if not clean_token:
+        return False
+    for state_key, job in background_job_session_items():
+        if str(job.get("preloader_token", "")).strip() != clean_token:
+            continue
+        finish_background_job_preloader(job, "cancelled")
+        process = background_job_process(job)
+        if process is not None:
+            stop_process(process)
+        st.session_state.pop(state_key, None)
+        cleanup_background_job_files(job)
+        return True
+    return False
+
+
 def stop_background_jobs(job_names: tuple[str, ...]) -> None:
     """Stop and forget each named background job."""
     for job_name in job_names:
@@ -10500,8 +10660,19 @@ def finish_background_job_preloader(
 ) -> None:
     """Emit the finish event for one background job command preloader."""
     preloader_token = str(job.get("preloader_token", "")).strip()
-    if preloader_token:
-        emit_command_preloader_finish(preloader_token, status)
+    if not preloader_token or bool(job.get("preloader_finished")):
+        return
+    emit_command_preloader_finish(preloader_token, status)
+    job["preloader_finished"] = True
+
+
+def dismiss_background_job_preloader(
+    job_name: str, job: dict[str, object], status: str = "error"
+) -> None:
+    """Dismiss one background job preloader without consuming its command result."""
+    finish_background_job_preloader(job, status)
+    st.session_state[background_job_state_key(job_name)] = job
+    render_command_preloader_events()
 
 
 def start_background_bash_command(
@@ -10669,30 +10840,38 @@ def background_job_result(
 
 def render_background_job_status(job_name: str, message: str = "") -> None:
     """Render a compact status line for a background command."""
-    render_command_preloader_events()
     job = background_job_state(job_name)
-    if not job:
-        return
-    process = background_job_process(job)
-    if (
-        process is not None
-        and process.poll() is None
-        and background_job_has_timed_out(job)
-    ):
-        stop_process(process)
-        return
-    if not background_job_is_running(job_name):
-        return
-    description = message.strip() or str(job.get("description", "Command")).strip()
-    try:
-        started_at = float(job.get("started_at", 0.0) or 0.0)
-    except (TypeError, ValueError):
-        started_at = 0.0
-    render_command_loader(
-        description or "Command running...",
-        started_at or None,
-        int(background_job_timeout_seconds(job) or command_timeout_seconds()),
-    )
+    if job:
+        process = background_job_process(job)
+        if (
+            process is not None
+            and process.poll() is None
+            and background_job_has_timed_out(job)
+        ):
+            stop_process(process)
+            dismiss_background_job_preloader(job_name, job, "error")
+            return
+        if process is not None and process.poll() is not None:
+            dismiss_background_job_preloader(
+                job_name,
+                job,
+                "success" if int(process.returncode or 0) == 0 else "error",
+            )
+            return
+        if background_job_is_running(job_name):
+            description = message.strip() or str(
+                job.get("description", "Command")
+            ).strip()
+            try:
+                started_at = float(job.get("started_at", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                started_at = 0.0
+            render_command_loader(
+                description or "Command running...",
+                started_at or None,
+                int(background_job_timeout_seconds(job) or command_timeout_seconds()),
+                str(job.get("preloader_token", "")),
+            )
     render_command_preloader_events()
 
 
@@ -17933,6 +18112,8 @@ def render_search_submit_preloader_script() -> None:
             const pathSelector = ".st-key-search_path [role='combobox'], .st-key-search_path input";
             const timeoutSeconds = {timeout_seconds};
             const delayMs = {delay_ms};
+{command_elapsed_helper_js()}
+{command_overlay_close_helper_js()}
             const clearOverlayTimers = () => {{
               if (parentWindow.__hhsCommandOverlayTimer) {{
                 parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
@@ -17983,13 +18164,7 @@ def render_search_submit_preloader_script() -> None:
               if (!node) {{
                 return;
               }}
-              const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-              const elapsedRatio = elapsedSeconds / Math.max(1, timeoutSeconds);
-              const minutes = Math.floor(elapsedSeconds / 60);
-              const seconds = String(elapsedSeconds % 60).padStart(2, "0");
-              node.textContent = `time elapsed: ${{minutes}}m:${{seconds}}s`;
-              node.classList.toggle("hhs-loader-elapsed-warning", elapsedRatio >= 0.3 && elapsedRatio < 0.6);
-              node.classList.toggle("hhs-loader-elapsed-danger", elapsedRatio >= 0.6);
+              parentWindow.__hhsRenderCommandElapsed(node, startedAt);
             }};
             const showOverlay = (query, searchPath) => {{
               if (!query) {{
@@ -18019,6 +18194,7 @@ def render_search_submit_preloader_script() -> None:
               overlay.style.zIndex = "1000010";
               overlay.innerHTML = `
                 <div class="hhs-tab-loader-panel">
+                  {command_overlay_close_button_html()}
                   <span class="hhs-tab-loader-spinner"></span>
                   <span class="hhs-tab-loader-copy">
                     <span class="hhs-tab-loader-label"></span>
@@ -18038,6 +18214,7 @@ def render_search_submit_preloader_script() -> None:
                 pathNode.textContent = searchPath;
                 label.append("Searching for ", queryNode, " in ", pathNode);
               }}
+              bindCommandOverlayClose(overlay);
               doc.body.appendChild(overlay);
               renderElapsed(overlay, createdAt);
               parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(

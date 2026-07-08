@@ -1733,6 +1733,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 .hhs-tab-loader {
   align-items: center;
   bottom: 0;
+  box-sizing: border-box;
   display: flex;
   justify-content: center;
   left: 0;
@@ -1750,11 +1751,49 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 .hhs-tab-loader-panel {
   align-items: center;
   border-radius: 0.5rem;
+  box-sizing: border-box;
   display: flex;
   gap: 0.75rem;
   justify-content: center;
-  min-width: 10rem;
-  padding: 1rem 1.2rem;
+  margin: var(--hhs-element-std-gap, 1rem);
+  max-height: calc(100dvh - (var(--hhs-element-std-gap, 1rem) * 2));
+  max-width: calc(100vw - (var(--hhs-element-std-gap, 1rem) * 2));
+  min-width: min(10rem, calc(100vw - (var(--hhs-element-std-gap, 1rem) * 2)));
+  overflow: auto;
+  padding: 1rem 2.2rem 1rem 1.2rem;
+  position: relative;
+  width: max-content;
+}
+
+.hhs-tab-loader-close,
+.hhs-command-loader-close {
+  align-items: center;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--hhs-theme-border-color) 70%, transparent);
+  border-radius: 999px;
+  color: var(--hhs-theme-text-muted-color);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.62rem;
+  font-weight: 700;
+  height: 1rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  right: 0.35rem;
+  text-decoration: none;
+  top: 0.35rem;
+  width: 1rem;
+}
+
+.hhs-tab-loader-close:hover,
+.hhs-tab-loader-close:focus,
+.hhs-command-loader-close:hover,
+.hhs-command-loader-close:focus {
+  border-color: #ff5555;
+  color: #ff5555;
+  outline: none;
 }
 
 .hhs-tab-loader-spinner {
@@ -1767,6 +1806,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 .hhs-tab-loader-label {
   font-size: 0.95rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .hhs-loader-primary {
@@ -1781,6 +1821,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   display: flex;
   flex-direction: column;
   gap: 0.22rem;
+  min-width: 0;
 }
 
 .hhs-tab-loader-elapsed {
@@ -1805,9 +1846,13 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   display: flex;
   gap: 0.75rem;
   justify-content: center;
-  margin: 0.5rem auto;
-  max-width: min(34rem, 100%);
-  padding: 0.85rem 1rem;
+  margin: var(--hhs-element-std-gap, 1rem) auto;
+  max-width: calc(100% - (var(--hhs-element-std-gap, 1rem) * 2));
+  min-width: min(10rem, calc(100% - (var(--hhs-element-std-gap, 1rem) * 2)));
+  overflow: auto;
+  padding: 0.85rem 2.2rem 0.85rem 1rem;
+  position: relative;
+  width: max-content;
 }
 
 .hhs-command-loader-spinner {
@@ -1831,9 +1876,8 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 .hhs-command-loader-label {
   font-size: 0.95rem;
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 @keyframes hhs-loader-spin {
@@ -2266,10 +2310,12 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 }
 
 .hhs-footer-terminal-ai-menu--disabled {
+  color: var(--hhs-theme-text-muted-color);
   opacity: 0.45;
 }
 
 .hhs-footer-terminal-ai-menu--disabled .hhs-footer-terminal-ai-trigger {
+  color: var(--hhs-theme-text-muted-color);
   cursor: not-allowed;
   pointer-events: none;
 }
