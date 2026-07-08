@@ -1381,7 +1381,7 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
   max-height: var(--hhs-ttyd-max-height, 760px);
   min-height: 360px;
   overflow: hidden;
-  padding: 5px;
+  padding: 10px;
   width: 100%;
 }
 
@@ -1394,8 +1394,8 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
 }
 
 .hhs-ttyd-terminal-placeholder {
-  height: calc(100% - 10px);
-  width: calc(100% - 10px);
+  height: calc(100% - 20px);
+  width: calc(100% - 20px);
 }
 
 .hhs-log-output {

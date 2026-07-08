@@ -6611,13 +6611,40 @@ PY
   run grep -q 'def ttyd_font_face_style' "${ui_file}"
   assert_success
 
+  run grep -q 'def ttyd_background_image_file' "${ui_file}"
+  assert_success
+
+  run grep -q 'def ttyd_background_image_data_url' "${ui_file}"
+  assert_success
+
+  run grep -q 'APP_TERMINAL_BACKGROUND_FILE' "${ui_file}"
+  assert_success
+
+  run grep -q 'data:image/png;base64,{encoded_image}' "${ui_file}"
+  assert_success
+
   run grep -q 'data:{mime_type};base64,{encoded_font}' "${ui_file}"
   assert_success
 
   run grep -q 'background:#000000!important;' "${ui_file}"
   assert_success
 
-  run grep -q 'hhs-ttyd-font-index-v17-selection-cache-v1' "${ui_file}"
+  run grep -q 'background-image:linear-gradient(rgba(0,0,0,0.90),rgba(0,0,0,0.90))' "${ui_file}"
+  assert_success
+
+  run grep -q 'background-size:cover!important;' "${ui_file}"
+  assert_success
+
+  run grep -q 'background-position:center center!important;' "${ui_file}"
+  assert_success
+
+  run grep -q 'body::before' "${ui_file}"
+  assert_success
+
+  run grep -q '.xterm .xterm-screen,.xterm .xterm-rows,.xterm .xterm-screen canvas' "${ui_file}"
+  assert_success
+
+  run grep -q 'hhs-ttyd-font-index-v22-terminal-bg-alpha-v1' "${ui_file}"
   assert_success
 
   run grep -q 'padding:0!important;' "${ui_file}"
@@ -6644,7 +6671,7 @@ PY
   run grep -q 'transform:translate(5px,5px)!important;' "${ui_file}"
   assert_failure
 
-  run grep -q 'const inset = 5' "${ui_file}"
+  run grep -q 'const inset = 10' "${ui_file}"
   assert_success
 
   run grep -Fq 'frame.style.left = `${{rect.left + inset}}px`' "${ui_file}"
@@ -6660,6 +6687,21 @@ PY
   assert_failure
 
   run grep -q 'def ttyd_bridge_script' "${ui_file}"
+  assert_success
+
+  run grep -q "const transparentBackground='rgba(0,0,0,0)'" "${ui_file}"
+  assert_success
+
+  run grep -q "applyTransparentTerminalBackground" "${ui_file}"
+  assert_success
+
+  run grep -q "scheduleTransparentTerminalBackground" "${ui_file}"
+  assert_success
+
+  run grep -q "term.options.theme={...theme,background:transparentBackground}" "${ui_file}"
+  assert_success
+
+  run grep -q "term.refresh(0,Math.max(0,Number(term.rows||1)-1))" "${ui_file}"
   assert_success
 
   run grep -q 'registerOscHandler(777' "${ui_file}"
@@ -6798,6 +6840,12 @@ PY
   assert_failure
 
   run grep -q 'TTYD_INDEX_FILE = HHS_CACHE_DIR / ".streamlit-ttyd-index.html"' "${constants_file}"
+  assert_success
+
+  run grep -q 'APP_TERMINAL_BACKGROUND_FILE = APP_DIR / "assets/images/term-bg.png"' "${constants_file}"
+  assert_success
+
+  run grep -q '"APP_TERMINAL_BACKGROUND_FILE"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
   assert_success
 
   run grep -q '"TTYD_INDEX_FILE"' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py"
@@ -7116,7 +7164,7 @@ PY
   run grep -q '.hhs-ttyd-terminal-placeholder' "${css_file}"
   assert_success
 
-  run grep -q 'padding: 5px' "${css_file}"
+  run grep -q 'padding: 10px' "${css_file}"
   assert_success
 
   run grep -q 'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem)' "${css_file}"
@@ -7128,10 +7176,10 @@ PY
   run grep -q 'background: var(--hhs-terminal-background-color, #000000)' "${css_file}"
   assert_success
 
-  run grep -q 'height: calc(100% - 10px)' "${css_file}"
+  run grep -q 'height: calc(100% - 20px)' "${css_file}"
   assert_success
 
-  run grep -q 'width: calc(100% - 10px)' "${css_file}"
+  run grep -q 'width: calc(100% - 20px)' "${css_file}"
   assert_success
 
   for theme_file in "${HHS_REPO_DIR}"/bin/apps/py/hhs_ui/themes/*.css; do

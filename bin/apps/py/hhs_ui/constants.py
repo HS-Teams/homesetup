@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.30"
+VERSION = "0.1.35"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -24,6 +24,7 @@ APP_AI_USER_AVATAR_FILE = APP_DIR / "assets/images/user.png"
 APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"
 APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"
 APP_FAVICON_FILE = APP_DIR / "assets/images/favicon.png"
+APP_TERMINAL_BACKGROUND_FILE = APP_DIR / "assets/images/term-bg.png"
 PORTS_DEFAULT_FILE = (
     Path(os.environ.get("HHS_HOME", APP_DIR.parents[4]))
     / "assets/devel/ports-default.csv"

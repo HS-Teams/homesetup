@@ -6951,11 +6951,26 @@ def ttyd_font_format(font_file: Path) -> str:
     return "woff2"
 
 
+def ttyd_background_image_file() -> Path:
+    """Return the image file used as the ttyd terminal background."""
+    return hhs_ui.APP_TERMINAL_BACKGROUND_FILE
+
+
+def ttyd_background_image_data_url() -> str:
+    """Return a PNG data URL for the ttyd terminal background image."""
+    background_file = ttyd_background_image_file()
+    if not background_file.is_file():
+        return ""
+    encoded_image = b64encode(background_file.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded_image}"
+
+
 def ttyd_index_signature(binary: str, event_url: str = "") -> str:
     """Return a stable cache signature for the ttyd index and terminal font."""
     font_file = ttyd_font_file()
-    parts = ["hhs-ttyd-font-index-v17-selection-cache-v1", binary, event_url]
-    for path in (Path(binary), font_file):
+    background_file = ttyd_background_image_file()
+    parts = ["hhs-ttyd-font-index-v22-terminal-bg-alpha-v1", binary, event_url]
+    for path in (Path(binary), font_file, background_file):
         try:
             stat = path.stat()
             parts.append(f"{path}:{stat.st_mtime_ns}:{stat.st_size}")
@@ -7013,28 +7028,55 @@ def fetch_ttyd_default_index(binary: str) -> str:
 def ttyd_font_face_style() -> str:
     """Return the CSS that loads the HomeSetup terminal font inside ttyd."""
     font_file = ttyd_font_file()
-    if not font_file.is_file():
-        return ""
-    encoded_font = b64encode(font_file.read_bytes()).decode("ascii")
-    family = html.escape(hhs_ui.APP_FONT_FAMILY, quote=True)
-    mime_type = ttyd_font_mime_type(font_file)
-    font_format = ttyd_font_format(font_file)
+    family = html.escape(ttyd_font_family(), quote=True)
+    font_face = ""
+    if font_file.is_file():
+        encoded_font = b64encode(font_file.read_bytes()).decode("ascii")
+        mime_type = ttyd_font_mime_type(font_file)
+        font_format = ttyd_font_format(font_file)
+        font_face = (
+            "@font-face{"
+            f'font-family:"{family}";'
+            f'src:url("data:{mime_type};base64,{encoded_font}") format("{font_format}");'
+            "font-weight:normal;"
+            "font-style:normal;"
+            "font-display:block;"
+            "}"
+        )
+    background_image = html.escape(ttyd_background_image_data_url(), quote=True)
+    background_layer = (
+        "background-image:linear-gradient(rgba(0,0,0,0.90),rgba(0,0,0,0.90)),"
+        f'url("{background_image}")!important;'
+        "background-position:center center!important;"
+        "background-size:cover!important;"
+        "background-repeat:no-repeat!important;"
+    )
+    if not background_image:
+        background_layer = ""
     return (
         "<style>"
-        "@font-face{"
-        f'font-family:"{family}";'
-        f'src:url("data:{mime_type};base64,{encoded_font}") format("{font_format}");'
-        "font-weight:normal;"
-        "font-style:normal;"
-        "font-display:block;"
-        "}"
+        f"{font_face}"
         "html,body,#terminal,.terminal,.xterm,.xterm-viewport,.xterm-screen,.xterm-rows{"
         f'font-family:"{family}",monospace!important;'
         "}"
-        "html,body,#terminal,.terminal,.xterm,.xterm-viewport{"
+        "html,body{"
         "background:#000000!important;"
+        "min-height:100%!important;"
         "}"
-        ".xterm .xterm-screen,.xterm .xterm-rows{"
+        "body::before{"
+        "content:\"\";"
+        "position:fixed!important;"
+        "inset:0!important;"
+        "pointer-events:none!important;"
+        "z-index:0!important;"
+        f"{background_layer}"
+        "}"
+        "#terminal,.terminal,.xterm,.xterm-viewport{"
+        "background:transparent!important;"
+        "position:relative!important;"
+        "z-index:1!important;"
+        "}"
+        ".xterm .xterm-screen,.xterm .xterm-rows,.xterm .xterm-screen canvas{"
         "background:transparent!important;"
         "}"
         "#terminal,.terminal,.xterm{"
@@ -7072,15 +7114,42 @@ def ttyd_bridge_script(event_url: str) -> str:
         f"const eventUrl={json.dumps(event_url)};"
         f"const maxContentLength={int(hhs_ui.AI_TERMINAL_CONTEXT_MAX_CHARS)};"
         "const prefix='HHS_TTYD_EVENT|';"
+        "const transparentBackground='rgba(0,0,0,0)';"
         "const selectionSnapshotAgeMs=300000;"
         "let lastSelectedContent='';"
         "let lastSelectedAt=0;"
         "let lastMiddlePasteAt=0;"
+        "let transparentBackgroundTimer=null;"
+        "let transparentBackgroundAttempts=0;"
         "const decode=(value)=>{try{return decodeURIComponent(escape(atob(value)));}catch(_error){return '';}};"
         "const cleanContent=(value)=>String(value||'').replace(/\\r\\n?/g,'\\n').trim();"
         "const limitContent=(value)=>{const content=cleanContent(value);"
         "if(content.length<=maxContentLength){return {content,truncated:false};}"
         "return {content:content.slice(content.length-maxContentLength),truncated:true};};"
+        "const applyTransparentTerminalBackground=()=>{"
+        "const term=window.term;"
+        "if(!term||!term.options){return false;}"
+        "const theme=(term.options.theme&&typeof term.options.theme==='object')?term.options.theme:{};"
+        "if(theme.background!==transparentBackground){"
+        "term.options.theme={...theme,background:transparentBackground};"
+        "}"
+        "if(typeof term.refresh==='function'){"
+        "try{term.refresh(0,Math.max(0,Number(term.rows||1)-1));}catch(_error){}"
+        "}"
+        "return true;"
+        "};"
+        "const scheduleTransparentTerminalBackground=()=>{"
+        "if(transparentBackgroundTimer){return;}"
+        "transparentBackgroundAttempts=0;"
+        "transparentBackgroundTimer=window.setInterval(()=>{"
+        "transparentBackgroundAttempts+=1;"
+        "applyTransparentTerminalBackground();"
+        "if(transparentBackgroundAttempts>=20){"
+        "window.clearInterval(transparentBackgroundTimer);"
+        "transparentBackgroundTimer=null;"
+        "}"
+        "},250);"
+        "};"
         "const parse=(data)=>{"
         "if(!data||!data.startsWith(prefix)){return null;}"
         "const parts=data.split('|');"
@@ -7187,7 +7256,10 @@ def ttyd_bridge_script(event_url: str) -> str:
         "});"
         "const install=()=>{"
         "const term=window.term;"
-        "if(!term||!term.parser||window.__hhsTtydBridgeInstalled){return !!window.__hhsTtydBridgeInstalled;}"
+        "if(!term){return false;}"
+        "applyTransparentTerminalBackground();"
+        "scheduleTransparentTerminalBackground();"
+        "if(!term.parser||window.__hhsTtydBridgeInstalled){return !!window.__hhsTtydBridgeInstalled;}"
         "window.__hhsTtydBridgeInstalled=true;"
         "term.parser.registerOscHandler(777,(data)=>{const event=parse(String(data||''));if(event){publish(event);return true;}return false;});"
         "const scheduleRememberSelection=()=>{window.setTimeout(rememberSelection,0);};"
@@ -7584,7 +7656,7 @@ def render_ttyd_terminal_frame(ttyd_url: str) -> None:
             }}
             const syncFrame = () => {{
               const rect = anchor.getBoundingClientRect();
-              const inset = 5;
+              const inset = 10;
               const visible = rect.width > 0 && rect.height > 0;
               frame.style.display = visible ? "block" : "none";
               frame.style.left = `${{rect.left + inset}}px`;
