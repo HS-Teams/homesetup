@@ -1413,7 +1413,7 @@ def command_loader_html(
     message: str, loader_id: str, started_at_millis: int, timeout_seconds: int
 ) -> str:
     """Return reusable banner loader markup for command-data waits."""
-    safe_message = html.escape(message.strip() or "Loading...")
+    safe_message = loader_label_html(message)
     safe_loader_id = html.escape(loader_id, quote=True)
     safe_timeout = max(1, int(timeout_seconds))
     return f"""
@@ -1676,7 +1676,7 @@ def render_command_preloader_events() -> None:
               if (!overlay) {{
                 overlay = doc.createElement("div");
                 overlay.id = "hhs-command-overlay";
-                overlay.className = "hhs-tab-loader hhs-tab-loader-transient";
+                overlay.className = "hhs-tab-loader";
                 overlay.style.position = "fixed";
                 overlay.style.inset = "0";
                 overlay.style.width = "auto";
@@ -1698,6 +1698,7 @@ def render_command_preloader_events() -> None:
                 `;
                 doc.body.appendChild(overlay);
               }}
+              overlay.classList.remove("hhs-tab-loader-transient");
               overlay.dataset.hhsOverlayToken = token;
               overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
               overlay.dataset.hhsOverlayStartedAt = String(createdAt);
@@ -4333,15 +4334,39 @@ def render_footer_cache_clear_menu_script() -> None:
               }
               closeMenu();
             };
+            const outsideFocusHandler = () => {
+              window.setTimeout(() => {
+                const activeElement = doc.activeElement;
+                if (!menu || !menu.open || !activeElement || menu.contains(activeElement)) {
+                  return;
+                }
+                closeMenu();
+              }, 0);
+            };
             if (window.parent.__hhsFooterCacheClearOutsideHandler) {
               doc.removeEventListener(
                 "pointerdown",
                 window.parent.__hhsFooterCacheClearOutsideHandler,
                 true
               );
+              doc.removeEventListener(
+                "focusin",
+                window.parent.__hhsFooterCacheClearOutsideHandler,
+                true
+              );
+            }
+            if (window.parent.__hhsFooterCacheClearOutsideFocusHandler) {
+              window.parent.removeEventListener(
+                "blur",
+                window.parent.__hhsFooterCacheClearOutsideFocusHandler,
+                true
+              );
             }
             window.parent.__hhsFooterCacheClearOutsideHandler = outsidePointerHandler;
+            window.parent.__hhsFooterCacheClearOutsideFocusHandler = outsideFocusHandler;
             doc.addEventListener("pointerdown", outsidePointerHandler, true);
+            doc.addEventListener("focusin", outsidePointerHandler, true);
+            window.parent.addEventListener("blur", outsideFocusHandler, true);
             menu?.addEventListener("toggle", () => {
               if (menu.open) {
                 doc.querySelectorAll(".hhs-footer-terminal-ai-menu[open]").forEach((otherMenu) => {
@@ -4680,12 +4705,81 @@ def render_footer_terminal_ai_menu_script() -> None:
     )
 
 
+def open_working_directory_endpoint_url() -> str:
+    """Return the local browser-to-UI endpoint URL for opening the working directory."""
+    update_browser_cleanup_registration()
+    token = browser_cleanup_token()
+    port = ensure_ttyd_cleanup_server()
+    return f"http://{hhs_ui.TTYD_HOST}:{port}/open-working-directory?token={token}"
+
+
+def render_footer_working_directory_open_script() -> None:
+    """Install the no-navigation footer working-directory opener."""
+    open_url = open_working_directory_endpoint_url()
+    render_script_html(
+        f"""
+        <script>
+          (() => {{
+            const doc = window.parent.document;
+            const openUrl = {json.dumps(open_url)};
+            if (window.parent.__hhsFooterWorkingDirOpenHandler) {{
+              doc.removeEventListener(
+                "click",
+                window.parent.__hhsFooterWorkingDirOpenHandler,
+                true
+              );
+            }}
+            const handler = (event) => {{
+              const target = event.target;
+              const selector = ".hhs-footer-working-dir-link[data-open-working-dir-url]";
+              const link = target?.closest?.(selector);
+              if (!link) {{
+                return;
+              }}
+              const fallback = () => {{
+                const href = String(link.getAttribute("href") || "");
+                if (href && href !== "#") {{
+                  window.parent.location.href = href;
+                }}
+              }};
+              event.preventDefault();
+              event.stopPropagation();
+              fetch(link.dataset.openWorkingDirUrl || openUrl, {{
+                method: "POST",
+                keepalive: true,
+              }})
+                .then((response) => {{
+                  if (!response.ok) {{
+                    fallback();
+                  }}
+                }})
+                .catch(fallback);
+            }};
+            window.parent.__hhsFooterWorkingDirOpenHandler = handler;
+            doc.addEventListener("click", handler, true);
+          }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def render_footer() -> None:
     """Render the HomeSetup UI footer."""
     version = homesetup_version()
     working_dir = html.escape(footer_working_directory())
     repository_url = html.escape(os.environ.get("HHS_GITHUB_URL", "#"), quote=True)
+    connected_to_ssh = bool(connected_ssh_host())
     working_dir_url = f"?{hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM}=1"
+    working_dir_attrs = ""
+    if not connected_to_ssh:
+        working_dir_open_url = html.escape(
+            open_working_directory_endpoint_url(), quote=True
+        )
+        working_dir_attrs = (
+            f' data-open-working-dir-url="{working_dir_open_url}" role="button"'
+        )
     update_url = f"?{hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM}=1"
     shell_version_url = f"?{hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM}=1"
     updater_markup = ""
@@ -4748,10 +4842,14 @@ def render_footer() -> None:
             <a class="hhs-footer-link hhs-footer-repository-link" href="{repository_url}" target="_blank" rel="noopener noreferrer">HomeSetup - v{version}</a>{updater_markup}
           </span>
           <span class="hhs-footer-glyph"></span>
-          <a class="hhs-footer-link hhs-footer-working-dir-link" href="{working_dir_url}" target="_self">Working dir: <span class="hhs-footer-working-dir-value">{working_dir}</span></a>
+          <a class="hhs-footer-link hhs-footer-working-dir-link"
+             href="{working_dir_url}"
+             target="_self"{working_dir_attrs}>Working dir: <span class="hhs-footer-working-dir-value">{working_dir}</span></a>
           {status_group_markup}
         </footer>
         """)
+    if not connected_to_ssh:
+        render_footer_working_directory_open_script()
     if shell_name:
         render_footer_cache_clear_menu_script()
         render_footer_terminal_ai_menu_script()
@@ -6856,7 +6954,7 @@ def ttyd_font_format(font_file: Path) -> str:
 def ttyd_index_signature(binary: str, event_url: str = "") -> str:
     """Return a stable cache signature for the ttyd index and terminal font."""
     font_file = ttyd_font_file()
-    parts = ["hhs-ttyd-font-index-v15-terminal-cancel-command-v1", binary, event_url]
+    parts = ["hhs-ttyd-font-index-v17-selection-cache-v1", binary, event_url]
     for path in (Path(binary), font_file):
         try:
             stat = path.stat()
@@ -6977,6 +7075,7 @@ def ttyd_bridge_script(event_url: str) -> str:
         "const selectionSnapshotAgeMs=300000;"
         "let lastSelectedContent='';"
         "let lastSelectedAt=0;"
+        "let lastMiddlePasteAt=0;"
         "const decode=(value)=>{try{return decodeURIComponent(escape(atob(value)));}catch(_error){return '';}};"
         "const cleanContent=(value)=>String(value||'').replace(/\\r\\n?/g,'\\n').trim();"
         "const limitContent=(value)=>{const content=cleanContent(value);"
@@ -7017,13 +7116,17 @@ def ttyd_bridge_script(event_url: str) -> str:
         "const term=window.term;"
         "return term&&typeof term.getSelection==='function'?cleanContent(term.getSelection()):'';"
         "};"
-        "const rememberSelection=()=>{"
-        "const selected=selectionContent();"
+        "const cacheSelection=(value)=>{"
+        "const selected=cleanContent(value);"
         "if(selected){lastSelectedContent=selected;lastSelectedAt=Date.now();}"
+        "return selected;"
+        "};"
+        "const rememberSelection=()=>{"
+        "cacheSelection(selectionContent());"
         "};"
         "const recentSelection=()=>{"
-        "const current=selectionContent();"
-        "if(current){lastSelectedContent=current;lastSelectedAt=Date.now();return current;}"
+        "const current=cacheSelection(selectionContent());"
+        "if(current){return current;}"
         "if(lastSelectedContent&&Date.now()-lastSelectedAt<=selectionSnapshotAgeMs){return lastSelectedContent;}"
         "return '';"
         "};"
@@ -7045,6 +7148,24 @@ def ttyd_bridge_script(event_url: str) -> str:
         "textarea.dispatchEvent(new InputEvent('input',{inputType:'insertText',data:String(text||''),bubbles:true}));"
         "return true;}"
         "return false;"
+        "};"
+        "const pasteSelectedTerminalText=()=>{"
+        "const selected=selectionContent();"
+        "if(!selected){return false;}"
+        "lastSelectedContent=selected;"
+        "lastSelectedAt=Date.now();"
+        "try{if(navigator.clipboard&&navigator.clipboard.writeText){"
+        "navigator.clipboard.writeText(selected).catch(()=>{});}}catch(_error){}"
+        "return sendTerminalInput(selected);"
+        "};"
+        "const middleClickPasteHandler=(event)=>{"
+        "if(Number(event.button)!==1){return;}"
+        "event.preventDefault();"
+        "event.stopPropagation();"
+        "if(event.type!=='mousedown'){return;}"
+        "const now=Date.now();"
+        "if(now-lastMiddlePasteAt<250){return;}"
+        "if(pasteSelectedTerminalText()){lastMiddlePasteAt=now;}"
         "};"
         "const submitTerminalCommand=(command)=>{"
         "const cleanCommand=String(command||'').trim();"
@@ -7071,8 +7192,12 @@ def ttyd_bridge_script(event_url: str) -> str:
         "term.parser.registerOscHandler(777,(data)=>{const event=parse(String(data||''));if(event){publish(event);return true;}return false;});"
         "const scheduleRememberSelection=()=>{window.setTimeout(rememberSelection,0);};"
         "window.addEventListener('mouseup',scheduleRememberSelection,true);"
+        "window.addEventListener('mousedown',middleClickPasteHandler,true);"
+        "window.addEventListener('auxclick',middleClickPasteHandler,true);"
         "window.addEventListener('keyup',scheduleRememberSelection,true);"
         "window.addEventListener('touchend',scheduleRememberSelection,true);"
+        "if(typeof term.onSelectionChange==='function'){"
+        "window.__hhsTtydSelectionChangeDisposable=term.onSelectionChange(scheduleRememberSelection);}"
         "if(window.document){window.document.addEventListener('selectionchange',scheduleRememberSelection,true);}"
         "window.addEventListener('keydown',(event)=>{"
         "if((event.metaKey||event.ctrlKey)&&String(event.key||'').toLowerCase()==='k'){"
@@ -7734,6 +7859,9 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
         if request_path == "/ttyd-event":
             self.handle_ttyd_event_request()
             return
+        if request_path == "/open-working-directory":
+            self.handle_open_working_directory_request()
+            return
         self.handle_cleanup_request()
 
     def handle_cleanup_request(self) -> None:
@@ -7762,6 +7890,21 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
             store_ttyd_event(token, event)
         self.send_response(204)
         self.end_headers()
+
+    def handle_open_working_directory_request(self) -> None:
+        """Open the registered local working directory without a Streamlit rerun."""
+        parsed_url = urllib.parse.urlparse(self.path)
+        token = urllib.parse.parse_qs(parsed_url.query).get("token", [""])[0]
+        entry = TTYD_CLEANUP_REGISTRY.get(token, {})
+        if not token or entry.get("ssh_host"):
+            self.send_response(409)
+            self.end_headers()
+            return
+        directory = str(entry.get("working_dir") or os.getcwd()).strip() or os.getcwd()
+        result = run_cleanup_bash_command(build_open_directory_command(directory), 10)
+        self.send_response(204 if result.returncode == 0 else 500)
+        self.end_headers()
+
 
 def cleanup_all_registered_sessions() -> None:
     """Close all registered ttyd and SSH resources on Streamlit process exit."""
@@ -7819,6 +7962,7 @@ def update_browser_cleanup_registration() -> str:
         {
             "ttyd_process": st.session_state.get(hhs_ui_constants.TTYD_PROCESS_KEY),
             "ssh_host": connected_ssh_host(),
+            "working_dir": footer_working_directory(),
         }
     )
     return token
@@ -10437,6 +10581,7 @@ def poll_background_job_completion(job_name: str) -> None:
 @st.fragment(run_every="2s")
 def render_background_job_polling_fragment() -> None:
     """Poll all background jobs from one always-mounted fragment."""
+    update_ollama_service_availability_refresh()
     if background_jobs_completion_needs_app_rerun():
         st.rerun()
 
@@ -10772,6 +10917,7 @@ def expire_host_scoped_command_state() -> None:
         st.session_state.pop(state_key, None)
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = False
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = False
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY] = 0.0
     for table_key in (
         hhs_ui.ENV_TABLE_KEY,
         hhs_ui.PROCESS_TABLE_KEY,
@@ -11018,7 +11164,7 @@ def cached_hhs_services_result() -> (
 def start_hhs_services_list_refresh() -> bool:
     """Start a background refresh for the services list."""
     command, _command_to_run, _remote_host, _cache_key = hhs_services_command_context()
-    return start_cached_background_command(
+    started = start_cached_background_command(
         SERVICE_LIST_JOB,
         command,
         "Loading services",
@@ -11026,6 +11172,11 @@ def start_hhs_services_list_refresh() -> bool:
         hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
         hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
     )
+    if started:
+        st.session_state[
+            hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY
+        ] = time.time()
+    return started
 
 
 def complete_hhs_services_list_refresh() -> subprocess.CompletedProcess[str] | None:
@@ -11057,6 +11208,9 @@ def update_ollama_service_availability_refresh() -> None:
         st.rerun()
     if background_job_is_running(SERVICE_LIST_JOB):
         poll_background_job_completion(SERVICE_LIST_JOB)
+        return
+    if ollama_service_availability_refresh_due():
+        start_hhs_services_list_refresh()
 
 
 def monitor_metric_job_name(metric: str) -> str:
@@ -11302,10 +11456,10 @@ def run_ssh_tunnels(host: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_open_working_directory() -> subprocess.CompletedProcess[str]:
-    """Open the current working directory in the operating system file explorer."""
+def run_open_working_directory(directory: str) -> subprocess.CompletedProcess[str]:
+    """Open a working directory in the operating system file explorer."""
     return run_bash_command(
-        build_open_directory_command(os.getcwd()),
+        build_open_directory_command(directory),
         "Opening working directory...",
         ttl_seconds=0,
         use_cache=False,
@@ -11315,15 +11469,15 @@ def run_open_working_directory() -> subprocess.CompletedProcess[str]:
 
 def open_footer_working_directory() -> None:
     """Open the footer working directory locally or in the remote SSH explorer."""
+    working_dir = footer_working_directory()
     if connected_ssh_host():
-        working_dir = footer_working_directory()
         st.session_state["active_view"] = hhs_ui.SSH_VIEW
         st.session_state["ssh_view"] = "FILES"
         open_remote_explorer_path(working_dir)
         push_floating_status("Opened remote working directory in SSH Explorer.", "info")
         return
 
-    result = run_open_working_directory()
+    result = run_open_working_directory(working_dir)
     if result.returncode != 0:
         message = result.stderr or "Unable to open working directory."
         push_floating_status(message, "error")
@@ -14275,6 +14429,24 @@ def remember_ollama_service_availability(
     available = ollama_service_is_available_from_output(result.stdout)
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = available
     return available
+
+
+def ollama_service_availability_refresh_due() -> bool:
+    """Return whether AI tab visibility should recheck Ollama service status."""
+    if ollama_service_is_available():
+        return False
+    try:
+        refreshed_at = float(
+            st.session_state.get(
+                hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY,
+                0.0,
+            )
+            or 0.0
+        )
+    except (TypeError, ValueError):
+        refreshed_at = 0.0
+    elapsed = time.time() - refreshed_at if refreshed_at else float("inf")
+    return elapsed >= hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS
 
 
 def ollama_service_is_available() -> bool:
@@ -18462,6 +18634,10 @@ def main() -> None:
     st.session_state.setdefault(
         hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY,
         False,
+    )
+    st.session_state.setdefault(
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY,
+        0.0,
     )
     if not isinstance(st.session_state["ai_chat_messages"], list):
         st.session_state["ai_chat_messages"] = []

@@ -5,6 +5,9 @@
   --hhs-footer-guard-height: 3.5rem;
   --hhs-theme-footer-glyph-button: 1.5rem;
   --hhs-floating-status-height: calc(1.85em + 20px);
+  --hhs-floating-status-z-index: 999999;
+  --hhs-footer-z-index: 1000000;
+  --hhs-footer-panel-z-index: 1000001;
   --hhs-log-chrome-height: 8.5rem;
   --hhs-log-expander-collapsed-height: 3.4rem;
   --hhs-log-expander-open-height: 230px;
@@ -1900,7 +1903,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
-  z-index: 1000001;
+  z-index: var(--hhs-floating-status-z-index);
 }
 
 .hhs-floating-status-kind-info {
@@ -1975,7 +1978,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   padding: 0 2rem 0 var(--hhs-sidebar-inline-inset);
   position: fixed;
   right: 0;
-  z-index: 1000000;
+  z-index: var(--hhs-footer-z-index);
 }
 
 .hhs-footer-glyph {
@@ -2177,7 +2180,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   position: fixed;
   right: 1rem;
   width: min(22rem, calc(100vw - 2rem)) !important;
-  z-index: 10060;
+  z-index: var(--hhs-footer-panel-z-index);
 }
 
 .hhs-footer-cache-clear-panel label {
@@ -2284,7 +2287,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   position: fixed;
   right: 1rem;
   width: min(22rem, calc(100vw - 2rem)) !important;
-  z-index: 10060;
+  z-index: var(--hhs-footer-panel-z-index);
 }
 
 .hhs-footer-terminal-ai-panel label {

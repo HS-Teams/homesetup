@@ -1661,10 +1661,16 @@ assert '"updater_update_available"' in constants_source
 assert 'class="hhs-footer-link hhs-footer-repository-link"' in ui_source
 assert 'class="hhs-footer-link hhs-footer-working-dir-link"' in ui_source
 assert 'class="hhs-footer-working-dir-value"' in ui_source
-assert 'href="{working_dir_url}" target="_self">Working dir: <span class="hhs-footer-working-dir-value">' in ui_source
+assert 'href="{working_dir_url}"' in ui_source
+assert 'target="_self"{working_dir_attrs}>Working dir: <span class="hhs-footer-working-dir-value">' in ui_source
 render_footer_body = ui_source.split("def render_footer()", 1)[1].split("\ndef ", 1)[0]
+cache_clear_script_body = ui_source.split("def render_footer_cache_clear_menu_script", 1)[1].split("\ndef ", 1)[0]
 assert 'working_dir = html.escape(footer_working_directory())' in render_footer_body
 assert 'os.getcwd()' not in render_footer_body
+assert 'connected_to_ssh = bool(connected_ssh_host())' in render_footer_body
+assert 'working_dir_url = f"?{hhs_ui.FOOTER_OPEN_WORKING_DIR_QUERY_PARAM}=1"' in render_footer_body
+assert 'data-open-working-dir-url="{working_dir_open_url}" role="button"' in render_footer_body
+assert 'render_footer_working_directory_open_script()' in render_footer_body
 assert 'class="hhs-footer-version-group"' in ui_source
 assert 'class="hhs-footer-spacer"' not in ui_source
 assert 'class="hhs-footer-update-link"' in ui_source
@@ -1694,6 +1700,9 @@ assert '<button type="button">OK</button>' in ui_source
 assert 'panel.querySelectorAll(\'input[type="checkbox"][data-param]:checked\')' in ui_source
 assert 'params.set(panel.dataset.clearParam, "1")' in ui_source
 assert 'window.parent.__hhsFooterCacheClearOutsideHandler' in ui_source
+assert 'window.parent.__hhsFooterCacheClearOutsideFocusHandler' in cache_clear_script_body
+assert 'doc.addEventListener("focusin", outsidePointerHandler, true)' in cache_clear_script_body
+assert 'window.parent.addEventListener("blur", outsideFocusHandler, true)' in cache_clear_script_body
 assert 'doc.querySelectorAll(".hhs-footer-terminal-ai-menu[open]")' in ui_source
 assert 'doc.addEventListener("pointerdown", outsidePointerHandler, true)' in ui_source
 assert 'terminal_ai_ask_command_prefix = build_hhs_ask_plugin_command(' not in ui_source
@@ -1775,14 +1784,30 @@ assert '>Clear application states</span>' in ui_source
 assert '>Clear AI history</span>' in ui_source
 assert '>OK</button>' in ui_source
 assert 'def build_open_directory_command' in ui_source
+assert 'def open_working_directory_endpoint_url' in ui_source
+open_working_directory_endpoint_body = ui_source.split("def open_working_directory_endpoint_url", 1)[1].split("\ndef ", 1)[0]
+assert 'update_browser_cleanup_registration()' in open_working_directory_endpoint_body
+assert 'def render_footer_working_directory_open_script' in ui_source
+working_dir_open_script_body = ui_source.split("def render_footer_working_directory_open_script", 1)[1].split("\ndef ", 1)[0]
+assert 'open-working-directory?token={token}' in ui_source
+assert 'window.parent.__hhsFooterWorkingDirOpenHandler' in working_dir_open_script_body
+assert 'const selector = ".hhs-footer-working-dir-link[data-open-working-dir-url]"' in working_dir_open_script_body
+assert 'const fallback = () =>' in working_dir_open_script_body
+assert 'window.parent.location.href = href' in working_dir_open_script_body
+assert 'event.preventDefault()' in working_dir_open_script_body
+assert 'fetch(link.dataset.openWorkingDirUrl || openUrl' in working_dir_open_script_body
+assert 'if (!response.ok)' in working_dir_open_script_body
+assert '.catch(fallback)' in working_dir_open_script_body
+assert 'window.parent.location.search' not in working_dir_open_script_body
 assert 'def run_open_working_directory' in ui_source
 assert 'def open_footer_working_directory' in ui_source
 open_footer_working_directory_body = ui_source.split("def open_footer_working_directory", 1)[1].split("\ndef ", 1)[0]
+assert 'working_dir = footer_working_directory()' in open_footer_working_directory_body
 assert 'if connected_ssh_host():' in open_footer_working_directory_body
 assert 'st.session_state["active_view"] = hhs_ui.SSH_VIEW' in open_footer_working_directory_body
 assert 'st.session_state["ssh_view"] = "FILES"' in open_footer_working_directory_body
 assert 'open_remote_explorer_path(working_dir)' in open_footer_working_directory_body
-assert 'run_open_working_directory()' in open_footer_working_directory_body
+assert 'run_open_working_directory(working_dir)' in open_footer_working_directory_body
 assert 'def build_footer_working_directory_command' in ui_source
 assert 'return r' in ui_source and '__HHS_UI_PWD__' in ui_source and '\\pwd' in ui_source
 assert 'def run_footer_working_directory' in ui_source
@@ -1957,6 +1982,8 @@ shell_name_hover_block = re.search(r"\.hhs-footer-shell-status:hover \.hhs-foote
 remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", base_css).group(1)
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
 shell_group_block = re.search(r"\.hhs-footer-shell-group\s*\{([^}]*)\}", base_css).group(1)
+floating_status_block = re.search(r"\.hhs-floating-status\s*\{([^}]*)\}", base_css).group(1)
+app_footer_block = re.search(r"\.hhs-app-footer\s*\{([^}]*)\}", base_css).group(1)
 sidebar_title_block = re.search(r"\.hhs-sidebar-title\s*\{([^}]*)\}", base_css).group(1)
 sidebar_title_separator_block = re.search(r"\.hhs-sidebar-title::after\s*\{([^}]*)\}", base_css).group(1)
 cache_menu_block = re.search(r"\.hhs-footer-cache-clear-menu\s*\{([^}]*)\}", base_css).group(1)
@@ -2266,6 +2293,13 @@ assert "justify-content: center" in base_css
 assert "text-align: center" in base_css
 assert "--hhs-footer-guard-height: 3.5rem" in base_css
 assert "--hhs-floating-status-height: calc(1.85em + 20px)" in base_css
+assert "--hhs-floating-status-z-index: 999999" in base_css
+assert "--hhs-footer-z-index: 1000000" in base_css
+assert "--hhs-footer-panel-z-index: 1000001" in base_css
+assert "z-index: var(--hhs-floating-status-z-index)" in floating_status_block
+assert "z-index: var(--hhs-footer-z-index)" in app_footer_block
+assert "z-index: var(--hhs-footer-panel-z-index)" in cache_panel_block
+assert "z-index: var(--hhs-footer-panel-z-index)" in terminal_ai_panel_block
 assert "bottom: 3.25rem" in base_css
 assert "font-size: 0.84rem" in base_css
 assert "min-height: 3.25rem" in base_css
@@ -6181,6 +6215,31 @@ PY
 from pathlib import Path
 import html
 import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def command_loader_html(")
+end = source.index("def command_preloader_event_queue(")
+namespace = {"html": html}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+rendered = namespace["command_loader_html"](
+    "Searching for %primary_color%*.mp4%primary_color% "
+    "in %secondary_color%/tmp/a&b%secondary_color%",
+    'loader"id',
+    123,
+    30,
+)
+assert "%primary_color%" not in rendered
+assert "%secondary_color%" not in rendered
+assert '<span class="hhs-loader-primary">*.mp4</span>' in rendered
+assert '<span class="hhs-loader-secondary">/tmp/a&amp;b</span>' in rendered
+assert 'data-loader-id="loader&quot;id"' in rendered
+PY
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import html
+import sys
 import types
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -6212,6 +6271,9 @@ assert '<span class="hhs-loader-primary">needle</span>' in payload["messageHtml"
 renderer_body = source.split("def render_command_preloader_events", 1)[1].split("\ndef ", 1)[0]
 assert 'parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout' not in renderer_body
 assert 'removeOverlay(String(detail.token || ""))' in renderer_body
+assert 'overlay.className = "hhs-tab-loader";' in renderer_body
+assert 'overlay.className = "hhs-tab-loader hhs-tab-loader-transient";' not in renderer_body
+assert 'overlay.classList.remove("hhs-tab-loader-transient")' in renderer_body
 PY
   assert_success
 
@@ -6555,7 +6617,7 @@ PY
   run grep -q 'background:#000000!important;' "${ui_file}"
   assert_success
 
-  run grep -q 'hhs-ttyd-font-index-v15-terminal-cancel-command-v1' "${ui_file}"
+  run grep -q 'hhs-ttyd-font-index-v17-selection-cache-v1' "${ui_file}"
   assert_success
 
   run grep -q 'padding:0!important;' "${ui_file}"
@@ -6616,6 +6678,30 @@ PY
   assert_failure
 
   run grep -q "const sendTerminalInput=(text)" "${ui_file}"
+  assert_success
+
+  run grep -q "pasteSelectedTerminalText" "${ui_file}"
+  assert_success
+
+  run grep -q "middleClickPasteHandler" "${ui_file}"
+  assert_success
+
+  run grep -Fq "if(Number(event.button)!==1){return;}" "${ui_file}"
+  assert_success
+
+  run grep -q "navigator.clipboard.writeText(selected)" "${ui_file}"
+  assert_success
+
+  run grep -q "sendTerminalInput(selected)" "${ui_file}"
+  assert_success
+
+  run grep -q "lastMiddlePasteAt" "${ui_file}"
+  assert_success
+
+  run grep -Fq "window.addEventListener('mousedown',middleClickPasteHandler,true)" "${ui_file}"
+  assert_success
+
+  run grep -Fq "window.addEventListener('auxclick',middleClickPasteHandler,true)" "${ui_file}"
   assert_success
 
   run grep -Fq "sendTerminalInput('\\\\x03')" "${ui_file}"
@@ -6681,7 +6767,16 @@ PY
   run grep -q "lastSelectedContent" "${ui_file}"
   assert_success
 
+  run grep -q "cacheSelection" "${ui_file}"
+  assert_success
+
   run grep -q "rememberSelection" "${ui_file}"
+  assert_success
+
+  run grep -q "term.onSelectionChange" "${ui_file}"
+  assert_success
+
+  run grep -q "__hhsTtydSelectionChangeDisposable" "${ui_file}"
   assert_success
 
   run grep -q "selectionchange" "${ui_file}"
@@ -6856,10 +6951,23 @@ PY
   run grep -q 'parentWindow.removeEventListener(' "${ui_file}"
   assert_success
 
+  run grep -q '"/open-working-directory"' "${ui_file}"
+  assert_success
+
+  run grep -q 'def handle_open_working_directory_request' "${ui_file}"
+  assert_success
+
   run python3 - <<'PY'
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+assert '"working_dir": footer_working_directory()' in ui_source
+assert 'if request_path == "/open-working-directory":' in ui_source
+open_working_dir_body = ui_source.split("def handle_open_working_directory_request", 1)[1].split("\n    def ", 1)[0]
+assert 'entry = TTYD_CLEANUP_REGISTRY.get(token, {})' in open_working_dir_body
+assert 'entry.get("ssh_host")' in open_working_dir_body
+assert 'build_open_directory_command(directory)' in open_working_dir_body
+assert 'self.send_response(204 if result.returncode == 0 else 500)' in open_working_dir_body
 handler_body = ui_source.split("def handle_cleanup_request", 1)[1].split("\n    def ", 1)[0]
 assert handler_body.index("self.send_response(204)") < handler_body.index(
     "schedule_cleanup_session_resources(token)"
@@ -10497,6 +10605,17 @@ remember_calls = {
 }
 assert "ollama_service_is_available_from_output" in remember_calls
 
+refresh_due = functions["ollama_service_availability_refresh_due"]
+refresh_due_calls = {
+    call.func.id
+    for call in ast.walk(refresh_due)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "ollama_service_is_available" in refresh_due_calls
+assert "time" not in refresh_due_calls
+refresh_due_source = ast.get_source_segment(Path(sys.argv[1]).read_text(encoding="utf-8"), refresh_due)
+assert "AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS" in refresh_due_source
+
 schedule = functions["schedule_ollama_service_availability_refresh"]
 schedule_calls = {
     call.func.id
@@ -10516,6 +10635,16 @@ update_calls = {
 assert "complete_hhs_services_list_refresh" in update_calls
 assert "background_job_is_running" in update_calls
 assert "poll_background_job_completion" in update_calls
+assert "ollama_service_availability_refresh_due" in update_calls
+assert "start_hhs_services_list_refresh" in update_calls
+
+polling = functions["render_background_job_polling_fragment"]
+polling_calls = {
+    call.func.id
+    for call in ast.walk(polling)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "update_ollama_service_availability_refresh" in polling_calls
 
 main = functions["main"]
 main_calls = {
@@ -10526,6 +10655,37 @@ main_calls = {
 assert "initialize_ollama_service_availability" in main_calls
 assert "main_views" in main_calls
 assert "update_ollama_service_availability_refresh" in main_calls
+PY
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import types
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def ollama_service_availability_refresh_due(")
+end = source.index("def initialize_ollama_service_availability(")
+session_state = {}
+namespace = {
+    "hhs_ui": types.SimpleNamespace(),
+    "hhs_ui_constants": types.SimpleNamespace(
+        AI_SERVICE_AVAILABLE_KEY="_available",
+        AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY="_refreshed_at",
+        AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS=5.0,
+    ),
+    "st": types.SimpleNamespace(session_state=session_state),
+    "time": types.SimpleNamespace(time=lambda: 100.0),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+refresh_due = namespace["ollama_service_availability_refresh_due"]
+assert refresh_due() is True
+session_state["_refreshed_at"] = 98.0
+assert refresh_due() is False
+session_state["_refreshed_at"] = 94.0
+assert refresh_due() is True
+session_state["_available"] = True
+assert refresh_due() is False
 PY
   assert_success
 }
