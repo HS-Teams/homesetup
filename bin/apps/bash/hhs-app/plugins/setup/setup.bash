@@ -24,7 +24,7 @@ UNSETS=(
 
 # Usage message
 read -r -d '' USAGE <<EOF
-usage: ${APP_NAME} ${PLUGIN_NAME} [-restore] [options]
+usage: ${APP_NAME} ${PLUGIN_NAME} [-restore | -apply <0|1>...] [options]
 
  ____       _
 / ___|  ___| |_ _   _ _ __
@@ -36,6 +36,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} [-restore] [options]
   HomeSetup initialization setup v${VERSION}.
 
     options:
+      -apply <0|1>...           : Apply setup values in file order without opening the menu.
       -restore                 : Restore HomeSetup defaults.
       -h | --help              : Display this help message.
       -v | --version           : Display current plugin version.
@@ -46,6 +47,8 @@ usage: ${APP_NAME} ${PLUGIN_NAME} [-restore] [options]
     examples:
       Restore default settings:
         => ${APP_NAME} ${PLUGIN_NAME} -restore
+      Apply setup options from CLI:
+        => ${APP_NAME} ${PLUGIN_NAME} -apply 1 0 1 1 0 0 1 1 1 1 0 0 0 1
       Review setup options interactively:
         => ${APP_NAME} ${PLUGIN_NAME}
 
@@ -85,16 +88,13 @@ function cleanup() {
 function execute() {
 
   local file_ver name title value minput_file sel_settings all_items=()
+  local apply_idx=0 apply_raw apply_value apply_values=() setting
 
   if list_contains "${*}" "-restore"; then
     \cp -f "${HHS_HOME}/dotfiles/homesetup.toml" "${HHS_SETUP_FILE}"
     quit 0
   elif [[ ! -s "${HHS_SETUP_FILE}" ]]; then
     \cp -f "${HHS_HOME}/dotfiles/homesetup.toml" "${HHS_SETUP_FILE}"
-  fi
-
-  if [[ ${#} -gt 0 ]]; then
-    quit 2 "Command not found: ${*}"
   fi
 
   # Read all settings, but first, check the file version.
@@ -112,6 +112,38 @@ function execute() {
     value="${value//false/False}"
     all_items+=("${name}=${value}")
   done < <(__hhs_toml_get_all "${HHS_SETUP_FILE}" "setup")
+
+  if [[ "${1}" == "-apply" ]]; then
+    shift
+    for apply_raw in "$@"; do
+      apply_raw="${apply_raw//[/}"
+      apply_raw="${apply_raw//]/}"
+      [[ -n "${apply_raw}" ]] && apply_values+=("${apply_raw}")
+    done
+
+    if [[ "${#apply_values[@]}" -ne "${#all_items[@]}" ]]; then
+      quit 1 "Expected ${#all_items[@]} setup values, received ${#apply_values[@]}."
+    fi
+
+    for setting in "${all_items[@]}"; do
+      name="${setting%%=*}"
+      apply_value="${apply_values[apply_idx]}"
+      case "${apply_value}" in
+        1|true|True|TRUE) value='true' ;;
+        0|false|False|FALSE) value='false' ;;
+        *) quit 1 "Invalid setup value: ${apply_value}. Use 0 or 1." ;;
+      esac
+      if ! __hhs_toml_set "${HHS_SETUP_FILE}" "${name}=${value}" "setup"; then
+        quit 2 "Unable to change setting: ${setting}!"
+      fi
+      ((apply_idx += 1))
+    done
+    quit 0 "${GREEN}HomeSetup settings (${#all_items[@]}) applied!${NC}"
+  fi
+
+  if [[ ${#} -gt 0 ]]; then
+    quit 2 "Command not found: ${*}"
+  fi
 
   title="${BLUE}HomeSetup Initialization Settings${ORANGE} ${GREEN}v${VERSION}\n"
   title+="${ORANGE}Please mark the preferred startup settings:"

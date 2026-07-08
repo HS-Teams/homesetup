@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.46"
+VERSION = "0.1.48"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -115,12 +115,13 @@ AI_CONTEXT_UPLOAD_TYPES = (
 )
 RUN_SHELL_ENV_KEY = "RUN_SHELL"
 APP_CSS = ""
-VIEWS = ("Home", "Configs", "Services", "Monitor", "Search", "History")
+VIEWS = ("Home", "Configs", "HHS", "Services", "Monitor", "Search", "History")
 AI_VIEW = "AI"
 SSH_VIEW = "SSH"
 VIEW_LABELS = {
     "Home": " System",
     "Configs": " Configs",
+    "HHS": " HHS",
     "Services": " Services",
     "Monitor": " Monitor",
     "Search": " Search",
@@ -140,6 +141,14 @@ HOME_VIEW_LABELS = {
     "Docker": " Docker",
     "Tools": " Tools",
     "SHOPTS": " Shell Options",
+}
+HHS_VIEWS = ("SETUP", "STARSHIP", "SETTINGS", "HSPM", "Firebase")
+HHS_VIEW_LABELS = {
+    "SETUP": " Setup",
+    "STARSHIP": "留 Starship",
+    "SETTINGS": "שּׂ Settings",
+    "HSPM": " HSPM",
+    "Firebase": " Firebase",
 }
 CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")
 CONFIG_VIEW_LABELS = {
@@ -247,6 +256,7 @@ PERSISTED_UI_KEYS = (
     "home_tools_other_filter",
     "home_shopts_filter",
     "home_shopts_other_filter",
+    "hhs_view",
     "history_commands_filter",
     "history_commands_other_filter",
     "history_directories_filter",

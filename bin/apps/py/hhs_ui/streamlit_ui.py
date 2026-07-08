@@ -275,6 +275,7 @@ UI_CACHE_MEMORY_MTIME: float | None = None
 HOME_TOOL_ACTION_JOB = "home_tool_action"
 HOME_TOOL_TLDR_JOB = "home_tool_tldr"
 CONFIG_ACTION_JOB = "config_action"
+HHS_SETUP_ACTION_JOB = "hhs_setup_action"
 DOCKER_ACTION_JOB = "docker_action"
 ALIAS_LIST_JOB = "alias_list"
 SERVICE_LIST_JOB = "service_list"
@@ -303,6 +304,22 @@ SEARCH_OPEN_JOB = "search_open"
 PATH_PICKER_LISTING_JOB_PREFIX = "path_picker_listing"
 BACKGROUND_JOB_STATE_KEY_PREFIX = "_hhs_background_job_"
 PATH_PICKER_LISTING_LOADER_MESSAGE = "Loading directories and files..."
+HHS_SETUP_SETTINGS = (
+    "hhs_set_locales",
+    "hhs_export_settings",
+    "hhs_restore_last_dir",
+    "hhs_load_shell_options",
+    "homebrew_no_auto_update",
+    "hhs_no_auto_update",
+    "hhs_load_completions",
+    "hhs_load_key_bindings",
+    "hhs_python_venv_enabled",
+    "hhs_use_starship",
+    "hhs_use_blesh",
+    "hhs_use_atuin",
+    "hhs_verbose_logs",
+    "hhs_ollama_ai_autostart",
+)
 COMMAND_PRELOADER_BUS = "hhs-ui-command-preloader"
 COMMAND_PRELOADER_START_EVENT = "command:start"
 COMMAND_PRELOADER_FINISH_EVENT = "command:finish"
@@ -12102,6 +12119,52 @@ def build_hhs_updater_command(operation: str) -> str:
     )
 
 
+def build_hhs_setup_plugin_command(arguments: list[str]) -> str:
+    """Build a Bash command that invokes the HomeSetup setup plug-in."""
+    safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
+    return (
+        'export HHS_HOME="${HHS_HOME}"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'export HHS_SETUP_FILE="${HHS_SETUP_FILE:-${HHS_DIR}/.homesetup.toml}"; '
+        'export HHS_LOG_DIR="${HHS_LOG_DIR:-${HHS_DIR}/log}"; '
+        'export HHS_LOG_FILE="${HHS_LOG_FILE:-${HHS_LOG_DIR}/hhs-ui.log}"; '
+        'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
+        'export APP_NAME="${APP_NAME:-hhs-ui}"; '
+        "export IS_PIPED=0; "
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_colors.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-toml.bash"; '
+        'source "${HHS_HOME}/bin/apps/bash/app-commons.bash"; '
+        'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/setup/setup.bash"; '
+        'function __hhs() { if [[ "$1" == "setup" ]]; then shift; execute "$@"; else return 127; fi; }; '
+        f"__hhs setup {safe_arguments}"
+    )
+
+
+def build_hhs_setup_settings_command() -> str:
+    """Build the Bash command used to read HomeSetup setup settings."""
+    return (
+        'export HHS_HOME="${HHS_HOME}"; '
+        'export HHS_DIR="${HHS_DIR}"; '
+        'export HHS_SETUP_FILE="${HHS_SETUP_FILE:-${HHS_DIR}/.homesetup.toml}"; '
+        '[[ -s "${HHS_SETUP_FILE}" ]] || cp -f "${HHS_HOME}/dotfiles/homesetup.toml" "${HHS_SETUP_FILE}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-toml.bash"; '
+        '__hhs_toml_get_all "${HHS_SETUP_FILE}" "setup"'
+    )
+
+
+def build_hhs_setup_apply_command(settings: dict[str, bool]) -> str:
+    """Build the setup plug-in apply command for a settings mapping."""
+    values = ["1" if settings.get(name, False) else "0" for name in HHS_SETUP_SETTINGS]
+    return build_hhs_setup_plugin_command(["-apply", *values])
+
+
+def build_hhs_setup_restore_command() -> str:
+    """Build the setup plug-in command that restores default settings."""
+    return build_hhs_setup_plugin_command(["-restore"])
+
+
 def build_ssh_tunnels_command(host: str) -> str:
     """Build a local command that lists configured and active SSH tunnel data."""
     safe_host = shlex.quote(host)
@@ -13385,6 +13448,21 @@ def parse_hhs_aliases(output: str) -> list[dict[str, str]]:
                 {"Name": match.group(1).strip(), "Value": match.group(2).strip()}
             )
     return rows
+
+
+def parse_hhs_setup_settings(output: str) -> dict[str, bool]:
+    """Parse setup TOML key/value output into a settings mapping."""
+    settings: dict[str, bool] = {}
+    for line in strip_ansi(output).splitlines():
+        clean_line = line.strip()
+        if "=" not in clean_line:
+            continue
+        name, value = clean_line.split("=", 1)
+        clean_name = name.strip()
+        if clean_name not in HHS_SETUP_SETTINGS:
+            continue
+        settings[clean_name] = value.strip().lower() in {"1", "true", "yes", "on"}
+    return settings
 
 
 def parse_hhs_services(output: str) -> list[dict[str, str]]:
@@ -14710,6 +14788,67 @@ def execute_pending_config_action() -> None:
     complete_config_action_job()
 
 
+def queue_hhs_setup_action(
+    command: str,
+    description: str,
+    metadata: dict[str, object],
+) -> bool:
+    """Queue a HomeSetup setup plug-in mutation for background execution."""
+    st.session_state["hhs_setup_action_execute_pending"] = {
+        **metadata,
+        "command": command,
+        "description": description,
+    }
+    save_ui_state()
+    return True
+
+
+def start_pending_hhs_setup_action() -> None:
+    """Start a queued HomeSetup setup action background job, when present."""
+    pending = st.session_state.pop("hhs_setup_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        HHS_SETUP_ACTION_JOB,
+        command,
+        description,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        pending,
+        "Another setup action is already running.",
+    )
+    if not started:
+        st.session_state["hhs_setup_action_execute_pending"] = pending
+
+
+def complete_hhs_setup_action_job() -> None:
+    """Complete a HomeSetup setup action and refresh setup settings."""
+    completed = background_job_result(HHS_SETUP_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    if result.returncode == 0:
+        cache_delete_tag("hhs_setup")
+        st.session_state.pop("_hhs_setup_loaded_token", None)
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+    if result.returncode == 0:
+        fallback = str(metadata.get("success_fallback", "Setup updated."))
+        push_floating_status(status_message or fallback, "info")
+    else:
+        fallback = str(metadata.get("error_fallback", "Setup update failed."))
+        push_floating_status(status_message or fallback, "error")
+    save_ui_state()
+
+
+def execute_pending_hhs_setup_action() -> None:
+    """Start or complete the current HomeSetup setup action."""
+    start_pending_hhs_setup_action()
+    complete_hhs_setup_action_job()
+
+
 def apply_selected_path_value(
     old_path: str,
     new_path: str,
@@ -15833,6 +15972,7 @@ def complete_background_action_jobs() -> None:
     execute_pending_home_tool_action()
     execute_pending_home_tool_tldr()
     execute_pending_config_action()
+    execute_pending_hhs_setup_action()
     execute_pending_docker_action()
     execute_pending_service_action()
     execute_pending_monitor_process_action()
@@ -16741,6 +16881,213 @@ def render_monitor_logs_once(
 def config_view_label(config_view: str) -> str:
     """Return the display label for a configuration view key."""
     return hhs_ui.CONFIG_VIEW_LABELS.get(config_view, config_view)
+
+
+def hhs_view_label(hhs_view: str) -> str:
+    """Return the display label for a HomeSetup application view key."""
+    return hhs_ui.HHS_VIEW_LABELS.get(hhs_view, hhs_view)
+
+
+def hhs_setup_setting_key(setting_name: str) -> str:
+    """Return the Session State key for a setup setting checkbox."""
+    return f"hhs_setup_setting_{setting_name}"
+
+
+def normalized_hhs_setup_settings(settings: dict[str, bool]) -> dict[str, bool]:
+    """Return setup settings with every known option present."""
+    return {name: bool(settings.get(name, False)) for name in HHS_SETUP_SETTINGS}
+
+
+def hhs_setup_settings_token(settings: dict[str, bool]) -> str:
+    """Return a stable token for the loaded setup settings."""
+    normalized_settings = normalized_hhs_setup_settings(settings)
+    return json.dumps(
+        [normalized_settings[name] for name in HHS_SETUP_SETTINGS],
+        separators=(",", ":"),
+    )
+
+
+def sync_hhs_setup_form_state(settings: dict[str, bool]) -> None:
+    """Initialize setup checkbox state when the loaded settings change."""
+    normalized_settings = normalized_hhs_setup_settings(settings)
+    token = hhs_setup_settings_token(normalized_settings)
+    if st.session_state.get("_hhs_setup_loaded_token") == token:
+        return
+    st.session_state["_hhs_setup_loaded_token"] = token
+    st.session_state["_hhs_setup_original_settings"] = normalized_settings
+    for setting_name, enabled in normalized_settings.items():
+        st.session_state[hhs_setup_setting_key(setting_name)] = enabled
+
+
+def apply_pending_hhs_setup_form_revert() -> None:
+    """Apply a queued setup form revert before rendering checkbox widgets."""
+    if not st.session_state.pop("_hhs_setup_revert_pending", False):
+        return
+    original_settings = st.session_state.get("_hhs_setup_original_settings", {})
+    if not isinstance(original_settings, dict):
+        return
+    for setting_name in HHS_SETUP_SETTINGS:
+        st.session_state[hhs_setup_setting_key(setting_name)] = bool(
+            original_settings.get(setting_name, False)
+        )
+
+
+def selected_hhs_setup_settings() -> dict[str, bool]:
+    """Return setup settings selected in the form."""
+    return {
+        setting_name: bool(st.session_state.get(hhs_setup_setting_key(setting_name)))
+        for setting_name in HHS_SETUP_SETTINGS
+    }
+
+
+def request_hhs_setup_apply() -> None:
+    """Queue applying the selected setup settings."""
+    queue_hhs_setup_action(
+        build_hhs_setup_apply_command(selected_hhs_setup_settings()),
+        "Applying HomeSetup settings",
+        {
+            "operation": "apply",
+            "success_fallback": "HomeSetup settings applied.",
+            "error_fallback": "Unable to apply HomeSetup settings.",
+        },
+    )
+
+
+def request_hhs_setup_revert() -> None:
+    """Queue reverting the setup form to the loaded settings."""
+    st.session_state["_hhs_setup_revert_pending"] = True
+    save_ui_state()
+
+
+def request_hhs_setup_restore() -> None:
+    """Queue restoring HomeSetup setup defaults."""
+    queue_hhs_setup_action(
+        build_hhs_setup_restore_command(),
+        "Restoring HomeSetup settings",
+        {
+            "operation": "restore",
+            "success_fallback": "HomeSetup settings restored.",
+            "error_fallback": "Unable to restore HomeSetup settings.",
+        },
+    )
+
+
+def render_hhs_setup_panel() -> None:
+    """Render the HomeSetup setup settings form."""
+    execute_pending_hhs_setup_action()
+    render_background_job_status(HHS_SETUP_ACTION_JOB)
+    st.markdown(
+        """
+        <section class="hhs-view-heading hhs-view-heading--direct-content">
+          <h2>SETUP</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    result = render_cached_command_result(
+        build_hhs_setup_settings_command(),
+        "Loading setup settings",
+        "hhs_setup",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load setup settings.",
+    )
+    if result is None:
+        return
+    if result.returncode != 0:
+        st.error(
+            clean_command_status_message(
+                result.stderr or result.stdout or "Unable to load setup settings."
+            )
+        )
+        return
+
+    sync_hhs_setup_form_state(parse_hhs_setup_settings(result.stdout))
+    apply_pending_hhs_setup_form_revert()
+    action_running = background_job_is_running(HHS_SETUP_ACTION_JOB)
+    with st.form("hhs_setup_form"):
+        for index, setting_name in enumerate(HHS_SETUP_SETTINGS, start=1):
+            number_column, setting_column = st.columns(
+                [0.25, 4.0],
+                gap="small",
+                vertical_alignment="center",
+            )
+            with number_column:
+                st.markdown(f"{index}")
+            with setting_column:
+                st.checkbox(
+                    setting_name,
+                    key=hhs_setup_setting_key(setting_name),
+                    disabled=action_running,
+                )
+        _spacer, ok_column, revert_column, restore_column = st.columns(
+            [1.0, 0.16, 0.16, 0.16],
+            gap="small",
+            vertical_alignment="center",
+        )
+        with ok_column:
+            ok_clicked = st.form_submit_button(
+                "",
+                help="Apply",
+                disabled=action_running,
+            )
+        with revert_column:
+            revert_clicked = st.form_submit_button(
+                "",
+                help="Revert",
+                disabled=action_running,
+            )
+        with restore_column:
+            restore_clicked = st.form_submit_button(
+                "",
+                help="Restore",
+                disabled=action_running,
+            )
+
+    if ok_clicked:
+        request_hhs_setup_apply()
+        st.rerun()
+    elif revert_clicked:
+        request_hhs_setup_revert()
+        st.rerun()
+    elif restore_clicked:
+        request_hhs_setup_restore()
+        st.rerun()
+
+
+def render_hhs_placeholder_panel(hhs_view: str) -> None:
+    """Render a title-only placeholder HHS sub-page."""
+    st.markdown(
+        f"""
+        <section class="hhs-view-heading hhs-view-heading--direct-content">
+          <h2>{html.escape(hhs_view)}</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_hhs_view() -> None:
+    """Render the HomeSetup application view."""
+    st.markdown(
+        """
+        <section class="hhs-view-heading hhs-view-heading--with-tabs">
+          <h2>HomeSetup Application</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    hhs_view = render_view_segmented_control(
+        "HHS view",
+        hhs_ui.HHS_VIEWS,
+        "hhs_view",
+        "SETUP",
+        format_func=hhs_view_label,
+    )
+    if hhs_view == "SETUP":
+        render_hhs_setup_panel()
+    else:
+        render_hhs_placeholder_panel(hhs_view)
 
 
 def render_configs_view() -> None:
@@ -19837,6 +20184,8 @@ def render_main_view() -> None:
         render_home_view()
     elif active_view == "Configs":
         render_configs_view()
+    elif active_view == "HHS":
+        render_hhs_view()
     elif active_view == "Services":
         render_service_view()
     elif active_view == hhs_ui.SSH_VIEW:
@@ -19962,6 +20311,9 @@ def main() -> None:
     st.session_state.setdefault("home_view", "System")
     if st.session_state["home_view"] not in hhs_ui.HOME_VIEWS:
         st.session_state["home_view"] = "System"
+    st.session_state.setdefault("hhs_view", "SETUP")
+    if st.session_state["hhs_view"] not in hhs_ui.HHS_VIEWS:
+        st.session_state["hhs_view"] = "SETUP"
     st.session_state.setdefault("home_tools_filter", "All")
     if st.session_state["home_tools_filter"] == "Not Found":
         st.session_state["home_tools_filter"] = "Not Installed"
@@ -19979,6 +20331,7 @@ def main() -> None:
     st.session_state.setdefault("home_tool_action_execute_pending", None)
     st.session_state.setdefault("home_tool_tldr_execute_pending", None)
     st.session_state.setdefault("config_action_execute_pending", None)
+    st.session_state.setdefault("hhs_setup_action_execute_pending", None)
     st.session_state.setdefault("docker_action_execute_pending", None)
     st.session_state.setdefault("config_view", "ENV")
     if st.session_state["config_view"] not in hhs_ui.CONFIG_VIEWS:
