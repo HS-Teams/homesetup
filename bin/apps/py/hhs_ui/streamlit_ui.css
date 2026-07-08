@@ -2265,6 +2265,15 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   font-size: calc((var(--hhs-theme-footer-glyph-button) * 0.5) + 5px);
 }
 
+.hhs-footer-terminal-ai-menu--disabled {
+  opacity: 0.45;
+}
+
+.hhs-footer-terminal-ai-menu--disabled .hhs-footer-terminal-ai-trigger {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .hhs-footer-terminal-ai-trigger:hover,
 .hhs-footer-terminal-ai-trigger:focus,
 .hhs-footer-terminal-ai-menu[open] .hhs-footer-terminal-ai-trigger {

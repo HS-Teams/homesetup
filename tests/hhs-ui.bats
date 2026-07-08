@@ -391,7 +391,7 @@ PY
     export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/log"
     mkdir -p "${HHS_DIR}/cache" "${HHS_LOG_DIR}"
-    printf "%s\n" "{\"theme_selected\":\"homesetup\"}" > "${HHS_DIR}/cache/.streamlit-ui-state"
+    printf "%s\n" "{\"theme_selected\":\"homesetup\"}" > "${HHS_DIR}/cache/streamlit-ui-state.json"
     source "${3}"
     streamlit_theme_args
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
@@ -411,7 +411,7 @@ PY
     export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/fallback-log"
     mkdir -p "${HHS_DIR}/cache" "${HHS_LOG_DIR}"
-    printf "%s\n" "{\"theme_selected\":\"missing-theme\"}" > "${HHS_DIR}/cache/.streamlit-ui-state"
+    printf "%s\n" "{\"theme_selected\":\"missing-theme\"}" > "${HHS_DIR}/cache/streamlit-ui-state.json"
     source "${3}"
     streamlit_theme_args
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
@@ -1393,10 +1393,10 @@ PY
   run grep -q 'HHS_CACHE_DIR = Path(os.environ.get("HHS_CACHE_DIR", str(HHS_DIR / "cache")))' "${constants_file}"
   assert_success
 
-  run grep -q 'UI_STATE_FILE = HHS_CACHE_DIR / ".streamlit-ui-state"' "${constants_file}"
+  run grep -q 'UI_STATE_FILE = HHS_CACHE_DIR / "streamlit-ui-state.json"' "${constants_file}"
   assert_success
 
-  run grep -q 'UI_CACHE_FILE = HHS_CACHE_DIR / ".streamlit-ui-cache"' "${constants_file}"
+  run grep -q 'UI_CACHE_FILE = HHS_CACHE_DIR / "streamlit-ui-cache.json"' "${constants_file}"
   assert_success
 
   run grep -q 'UI_CACHE_SSH_CONNECTION_KEY = "ui:ssh_connection"' "${constants_file}"
@@ -1679,12 +1679,16 @@ assert '' in ui_source
 assert 'class="hhs-footer-shell-group"' in ui_source
 assert 'def footer_cache_clear_menu_markup' in ui_source
 assert 'def render_footer_cache_clear_menu_script' in ui_source
-assert 'def footer_terminal_ai_menu_markup' in ui_source
+assert 'def footer_terminal_ai_menu_markup(enabled: bool)' in ui_source
 assert 'def render_footer_terminal_ai_menu_script' in ui_source
 assert '<details class="hhs-footer-cache-clear-menu">' in ui_source
 assert '<summary class="hhs-footer-cache-clear-trigger"' in ui_source
 assert '<details class="hhs-footer-terminal-ai-menu">' in ui_source
 assert '<summary class="hhs-footer-terminal-ai-trigger"' in ui_source
+assert 'hhs-footer-terminal-ai-menu--disabled' in ui_source
+assert 'hhs-footer-terminal-ai-trigger--disabled' in ui_source
+assert 'aria-disabled="true"' in ui_source
+assert 'Open Terminal to ask AI about terminal output' in ui_source
 assert '<form class="hhs-footer-cache-clear-form" method="get">' not in ui_source
 assert '<div class="hhs-footer-cache-clear-panel" data-clear-param="{clear_param}">' in ui_source
 assert '<div class="hhs-footer-terminal-ai-panel" data-default-prompt="{default_prompt}">' in ui_source
@@ -1760,6 +1764,9 @@ assert "context: terminalEvent || {{}}" not in terminal_ai_script_body
 assert ".st-key-footer_terminal_ai_bridge_container" not in terminal_ai_script_body
 assert 'render_footer_cache_clear_menu_script()' in ui_source
 assert 'render_footer_terminal_ai_menu_script()' in ui_source
+assert 'terminal_ai_enabled = terminal_document_view_is_active()' in render_footer_body
+assert 'footer_terminal_ai_menu_markup(terminal_ai_enabled)' in render_footer_body
+assert 'if terminal_ai_enabled:\n            render_footer_terminal_ai_menu_script()' in render_footer_body
 assert 'key=FOOTER_TERMINAL_AI_BRIDGE_BUTTON_KEY' not in ui_source
 assert 'key=FOOTER_TERMINAL_AI_BRIDGE_CONTAINER_KEY' not in ui_source
 assert 'on_click=handle_footer_terminal_ai_bridge_button' not in ui_source
@@ -1899,7 +1906,8 @@ assert "pop_footer_terminal_ai_request" not in ui_source
 assert "terminal_ai_request_endpoint_url" not in ui_source
 assert '"/terminal-ai-request"' not in ui_source
 state_clear_body = ui_source.split("def clear_application_state_data", 1)[1].split("\ndef ", 1)[0]
-assert "hhs_ui.UI_STATE_FILE.unlink" in state_clear_body
+assert "for state_file in ui_state_files()" in state_clear_body
+assert "state_file.unlink" in state_clear_body
 assert "is_persisted_ui_key" in state_clear_body
 assert 'def updater_output_has_updates' in ui_source
 assert 'def updater_check_due' in ui_source
@@ -1995,6 +2003,14 @@ cache_panel_button_block = re.search(r"\.hhs-footer-cache-clear-panel button\s*\
 footer_glyph_button_block = re.search(r"\.hhs-footer-glyph-button\s*\{([^}]*)\}", base_css).group(1)
 terminal_ai_menu_block = re.search(r"\.hhs-footer-terminal-ai-menu\s*\{([^}]*)\}", base_css).group(1)
 terminal_ai_trigger_block = re.search(r"\.hhs-footer-terminal-ai-trigger\s*\{([^}]*)\}", base_css).group(1)
+terminal_ai_disabled_menu_block = re.search(
+    r"\.hhs-footer-terminal-ai-menu--disabled\s*\{([^}]*)\}",
+    base_css,
+).group(1)
+terminal_ai_disabled_trigger_block = re.search(
+    r"\.hhs-footer-terminal-ai-menu--disabled \.hhs-footer-terminal-ai-trigger\s*\{([^}]*)\}",
+    base_css,
+).group(1)
 terminal_ai_glyph_button_block = re.search(
     r"\.hhs-footer-terminal-ai-trigger \.hhs-footer-glyph-button\s*\{([^}]*)\}",
     base_css,
@@ -2083,6 +2099,9 @@ assert "height: 1.18rem" in terminal_ai_trigger_block
 assert "list-style: none" in terminal_ai_trigger_block
 assert "padding: 0 0.12rem" in terminal_ai_trigger_block
 assert "color: var(--hhs-warning)" in terminal_ai_trigger_block
+assert "opacity: 0.45" in terminal_ai_disabled_menu_block
+assert "cursor: not-allowed" in terminal_ai_disabled_trigger_block
+assert "pointer-events: none" in terminal_ai_disabled_trigger_block
 assert ".hhs-footer-glyph-button" in base_css
 assert ".hhs-footer-cache-refresh-glyph" not in base_css
 assert ".hhs-footer-terminal-ai-glyph" not in base_css
@@ -2471,7 +2490,7 @@ homesetup-css
 tokyo-night-css
 """, encoding="utf-8")
     ui.hhs_ui.APP_THEME_CSS_FILE = themes_dir / "dracula.css"
-    ui.hhs_ui.UI_STATE_FILE = tmp_path / "hhs-dir" / ".streamlit-ui-state"
+    ui.hhs_ui.UI_STATE_FILE = tmp_path / "hhs-dir" / "streamlit-ui-state.json"
 
     ui.persist_theme_selection("tokyo-night")
     assert json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))["theme_selected"] == "tokyo-night"
@@ -2528,7 +2547,7 @@ tokyo-night-css
     assert homesetup_options["theme.backgroundColor"] == "#07111f"
     assert homesetup_options["theme.codeBackgroundColor"] == "#0b1628"
 
-    app_state_file = tmp_path / ".streamlit-ui-state"
+    app_state_file = tmp_path / "streamlit-ui-state.json"
     app_state_file.write_text('{"theme_selected": "dracula"}', encoding="utf-8")
     streamlit.session_state.clear()
     ui.restore_ui_state()
@@ -6839,7 +6858,7 @@ PY
   run grep -q 'TTYD_INDEX_FILE = (' "${constants_file}"
   assert_failure
 
-  run grep -q 'TTYD_INDEX_FILE = HHS_CACHE_DIR / ".streamlit-ttyd-index.html"' "${constants_file}"
+  run grep -q 'TTYD_INDEX_FILE = HHS_CACHE_DIR / "streamlit-ttyd-index.html"' "${constants_file}"
   assert_success
 
   run grep -q 'APP_TERMINAL_BACKGROUND_FILE = APP_DIR / "assets/images/term-bg.png"' "${constants_file}"
@@ -7920,6 +7939,49 @@ PY
 
   run grep -q 'build_ollama_download_and_select_model_command' "${ui_file}"
   assert_failure
+}
+
+@test "when UI creates disposable files then cache paths should be deterministic" {
+  run python3 - "${ui_file}" "${constants_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = (
+    Path(sys.argv[1]).read_text(encoding="utf-8")
+    + "\n"
+    + Path(sys.argv[2]).read_text(encoding="utf-8")
+)
+required_fragments = (
+    "def ui_disposable_files_dir() -> Path:",
+    "hhs_ui.HHS_CACHE_DIR.mkdir(parents=True, exist_ok=True)",
+    "return hhs_ui.HHS_CACHE_DIR",
+    'UI_STATE_FILE = HHS_CACHE_DIR / "streamlit-ui-state.json"',
+    'UI_CACHE_FILE = HHS_CACHE_DIR / "streamlit-ui-cache.json"',
+    'TTYD_INDEX_FILE = HHS_CACHE_DIR / "streamlit-ttyd-index.html"',
+    "def ai_context_upload_path(file_name: str) -> Path:",
+    "hhs-ai-context-upload",
+    "tmp_file_path.write_bytes(uploaded_file.getvalue())",
+    "run_hhs_ask_ingest(str(tmp_file_path))",
+    "def safe_background_job_name(job_name: str) -> str:",
+    "def background_job_output_path(job_name: str, stream_name: str) -> Path:",
+    'stdout_path = str(background_job_output_path(job_name, "stdout"))',
+    'stderr_path = str(background_job_output_path(job_name, "stderr"))',
+    'download_dir = ui_disposable_files_dir() / "hhs-search-open.dir"',
+    "shutil.rmtree(download_dir, ignore_errors=True)",
+    "download_dir.mkdir(parents=True, exist_ok=True)",
+)
+for fragment in required_fragments:
+    assert fragment in source, fragment
+
+random_temp_fragments = (
+    "import tempfile",
+    "tempfile.NamedTemporaryFile",
+    "tempfile.mkdtemp",
+)
+for fragment in random_temp_fragments:
+    assert fragment not in source, fragment
+PY
+  assert_success
 }
 
 # TC - 15
@@ -11075,7 +11137,7 @@ assert (
 )
 
 namespace["create_search_result_download_dir"] = lambda: Path(
-    "/tmp/hhs-search-open"
+    "/tmp/hhs-search-open.dir"
 )
 remote_commands.clear()
 statuses.clear()
@@ -11094,17 +11156,17 @@ namespace["connected_host"] = "remote-box"
 namespace["open_search_result_path"]("/remote/report.txt")
 assert (
     remote_commands[0][0]
-    == "scp-download remote-box /remote/report.txt /tmp/hhs-search-open"
+    == "scp-download remote-box /remote/report.txt /tmp/hhs-search-open.dir"
 )
 assert remote_commands[0][1]["force_local"] is True
 assert remote_commands[0][1]["timeout_seconds"] == 30
-assert remote_commands[1][0].endswith("__hhs_open /tmp/hhs-search-open/report.txt")
+assert remote_commands[1][0].endswith("__hhs_open /tmp/hhs-search-open.dir/report.txt")
 assert remote_commands[1][1]["force_local"] is True
 assert statuses == [
     ("Downloading remote result /remote/report.txt.", "info"),
-    ("Downloaded remote result to /tmp/hhs-search-open/report.txt.", "info"),
-    ("Opening downloaded result /tmp/hhs-search-open/report.txt.", "info"),
-    ("Opened /tmp/hhs-search-open/report.txt.", "info"),
+    ("Downloaded remote result to /tmp/hhs-search-open.dir/report.txt.", "info"),
+    ("Opening downloaded result /tmp/hhs-search-open.dir/report.txt.", "info"),
+    ("Opened /tmp/hhs-search-open.dir/report.txt.", "info"),
 ]
 
 def failing_open_command(command, *args, **kwargs):

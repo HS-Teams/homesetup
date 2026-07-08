@@ -52,34 +52,14 @@ setup() {
     reset
   ' -- "${HHS_HOME}" "${choices_file}"
   assert_success
-  run grep -Fx "${HHS_CACHE_DIR}/.streamlit-ui-state" "${choices_file}"
+  run grep -Fx "${HHS_CACHE_DIR}/*.*" "${choices_file}"
   assert_success
-  run grep -Fx "${HHS_CACHE_DIR}/.streamlit-ui-cache" "${choices_file}"
-  assert_success
-  run grep -Fx "${HHS_CACHE_DIR}/.streamlit-ttyd-index.html" "${choices_file}"
-  assert_success
-  run grep -Fx "${HHS_CACHE_DIR}/.streamlit-ui-ssh-connection" "${choices_file}"
-  assert_success
-  run grep -Fx "${HHS_DIR}/.streamlit-ui.pid" "${choices_file}"
-  assert_success
-  run grep -Fx "${HHS_DIR}/.streamlit-ui.processes" "${choices_file}"
-  assert_success
-  run grep -Fx "${HHS_DIR}/.streamlit-ui-ssh-connection" "${choices_file}"
-  assert_success
-  run grep -Fx "${TMPDIR%/}/hhs-ai-context-*" "${choices_file}"
-  assert_success
-  run grep -Fx "${TMPDIR%/}/hhs-search-open-*" "${choices_file}"
-  assert_success
-  run grep -Fx "${TMPDIR%/}/search_command-stdout-*" "${choices_file}"
-  assert_success
-  run grep -Fx "${TMPDIR%/}/ai_ask-stderr-*" "${choices_file}"
-  assert_success
-  run grep -Fx "${TMPDIR%/}/cached_*-stdout-*" "${choices_file}"
-  assert_success
+  run grep -Fx "${HHS_CACHE_DIR}/.*" "${choices_file}"
+  assert_failure
 }
 
-@test "when-resetting-selected-ui-temp-directory-then-reset-should-remove-it" {
-  local search_dir stdout_file
+@test "when-resetting-selected-ui-cache-pattern-then-reset-should-remove-cache-artifacts" {
+  local search_dir stdout_file state_file
 
   export HHS_BACKUP_DIR="${BATS_TEST_TMPDIR}/backup"
   export HHS_CACHE_DIR="${BATS_TEST_TMPDIR}/cache"
@@ -91,17 +71,19 @@ setup() {
   export HHS_SHOPTS_FILE="${BATS_TEST_TMPDIR}/shopts"
   export TMPDIR="${BATS_TEST_TMPDIR}/tmp"
   mkdir -p "${HHS_BACKUP_DIR}" "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}" "${TMPDIR}"
-  search_dir="${TMPDIR}/hhs-search-open-test"
-  stdout_file="${TMPDIR}/search_command-stdout-test"
+  search_dir="${HHS_CACHE_DIR}/hhs-search-open.dir"
+  stdout_file="${HHS_CACHE_DIR}/search_command-stdout.log"
+  state_file="${HHS_CACHE_DIR}/streamlit-ui-state.json"
   mkdir -p "${search_dir}"
   printf '%s\n' "output" > "${stdout_file}"
+  printf '%s\n' "{}" > "${state_file}"
 
   run bash --noprofile --norc -c '
     source "${1}/bin/apps/bash/hhs-app/functions/built-ins.bash"
     function clear() { :; }
     function __hhs_has() { return 1; }
     function __hhs_mchoose() {
-      printf "%s " "${TMPDIR}/hhs-search-open-*" "${TMPDIR}/search_command-stdout-*" > "$1"
+      printf "%s " "${HHS_CACHE_DIR}/*.*" > "$1"
       return 0
     }
     reset
@@ -109,6 +91,7 @@ setup() {
   assert_success
   [[ ! -e "${search_dir}" ]]
   [[ ! -e "${stdout_file}" ]]
+  [[ ! -e "${state_file}" ]]
 }
 
 # TC - 1

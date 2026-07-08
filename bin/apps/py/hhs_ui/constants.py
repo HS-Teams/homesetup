@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.35"
+VERSION = "0.1.38"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -31,11 +31,11 @@ PORTS_DEFAULT_FILE = (
 )
 HHS_DIR = Path(os.environ.get("HHS_DIR", str(APP_DIR)))
 HHS_CACHE_DIR = Path(os.environ.get("HHS_CACHE_DIR", str(HHS_DIR / "cache")))
-UI_STATE_FILE = HHS_CACHE_DIR / ".streamlit-ui-state"
-UI_CACHE_FILE = HHS_CACHE_DIR / ".streamlit-ui-cache"
+UI_STATE_FILE = HHS_CACHE_DIR / "streamlit-ui-state.json"
+UI_CACHE_FILE = HHS_CACHE_DIR / "streamlit-ui-cache.json"
 UI_CACHE_SSH_CONNECTION_KEY = "ui:ssh_connection"
 SSH_RECONNECT_HOST_KEY = "ssh_reconnect_host"
-TTYD_INDEX_FILE = HHS_CACHE_DIR / ".streamlit-ttyd-index.html"
+TTYD_INDEX_FILE = HHS_CACHE_DIR / "streamlit-ttyd-index.html"
 UI_CACHE_REALTIME_TTL_SECONDS = 30
 UI_CACHE_NORMAL_TTL_SECONDS = 300
 UI_CACHE_LOW_CHANGE_TTL_SECONDS = 900

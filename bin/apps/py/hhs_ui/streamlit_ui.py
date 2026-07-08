@@ -35,7 +35,6 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import textwrap
 import threading
 import time
@@ -498,6 +497,7 @@ def persist_theme_selection(theme_name: str) -> None:
     data[hhs_ui.THEME_SELECTED_KEY] = selected_theme
     hhs_ui.UI_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     hhs_ui.UI_STATE_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    unlink_legacy_ui_state_files()
 
 
 def request_theme_reload() -> None:
@@ -1022,6 +1022,17 @@ def uploaded_context_suffix(file_name: str) -> str:
     return ".txt"
 
 
+def ui_disposable_files_dir() -> Path:
+    """Return the cache directory used for disposable HomeSetup UI files."""
+    hhs_ui.HHS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    return hhs_ui.HHS_CACHE_DIR
+
+
+def ai_context_upload_path(file_name: str) -> Path:
+    """Return the deterministic cache path for an uploaded AI context file."""
+    return ui_disposable_files_dir() / f"hhs-ai-context-upload{uploaded_context_suffix(file_name)}"
+
+
 def ingest_ai_context_upload(uploaded_file: object) -> None:
     """Ingest an uploaded text file into the backend ask context."""
     if uploaded_file is None:
@@ -1030,17 +1041,11 @@ def ingest_ai_context_upload(uploaded_file: object) -> None:
         return
 
     file_name = str(getattr(uploaded_file, "name", "context.txt"))
-    with tempfile.NamedTemporaryFile(
-        "wb",
-        delete=False,
-        prefix="hhs-ai-context-",
-        suffix=uploaded_context_suffix(file_name),
-    ) as tmp_file:
-        tmp_file.write(uploaded_file.getvalue())
-        tmp_path = tmp_file.name
+    tmp_file_path = ai_context_upload_path(file_name)
 
     try:
-        result = run_hhs_ask_ingest(tmp_path)
+        tmp_file_path.write_bytes(uploaded_file.getvalue())
+        result = run_hhs_ask_ingest(str(tmp_file_path))
         output = strip_ansi(result.stdout or result.stderr or "").strip()
         if result.returncode != 0:
             st.session_state["ai_context_error"] = output or "Unable to ingest context."
@@ -1052,7 +1057,7 @@ def ingest_ai_context_upload(uploaded_file: object) -> None:
         push_floating_status(output or f"Ingested context: {file_name}", "info")
     finally:
         try:
-            Path(tmp_path).unlink(missing_ok=True)
+            tmp_file_path.unlink(missing_ok=True)
         except OSError:
             pass
         save_ui_state()
@@ -3882,10 +3887,11 @@ def is_persistable_ui_value(value: object) -> bool:
 
 def load_ui_state() -> dict[str, object]:
     """Load persisted Streamlit UI selections from disk."""
-    if not hhs_ui.UI_STATE_FILE.exists():
+    state_file = ui_state_source_file()
+    if state_file is None:
         return {}
     try:
-        data = json.loads(hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(state_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     if not isinstance(data, dict):
@@ -3897,6 +3903,33 @@ def load_ui_state() -> dict[str, object]:
         and is_persisted_ui_key(key)
         and is_persistable_ui_value(value)
     }
+
+
+def ui_state_files() -> tuple[Path, ...]:
+    """Return current and legacy UI state file paths."""
+    return (hhs_ui.UI_STATE_FILE, *legacy_ui_state_files())
+
+
+def legacy_ui_state_files() -> tuple[Path, ...]:
+    """Return legacy hidden UI state file paths."""
+    return (hhs_ui.HHS_CACHE_DIR / ".streamlit-ui-state",)
+
+
+def unlink_legacy_ui_state_files() -> None:
+    """Remove legacy hidden UI state files after writing the visible state file."""
+    for state_file in legacy_ui_state_files():
+        try:
+            state_file.unlink(missing_ok=True)
+        except OSError:
+            continue
+
+
+def ui_state_source_file() -> Path | None:
+    """Return the first existing current or legacy UI state file path."""
+    for state_file in ui_state_files():
+        if state_file.exists():
+            return state_file
+    return None
 
 
 def persisted_theme_name() -> str:
@@ -3967,6 +4000,7 @@ def save_ui_state() -> None:
         return
     hhs_ui.UI_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     hhs_ui.UI_STATE_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    unlink_legacy_ui_state_files()
 
 
 def push_floating_status(
@@ -4397,9 +4431,20 @@ def render_footer_cache_clear_menu_script() -> None:
     )
 
 
-def footer_terminal_ai_menu_markup() -> str:
+def footer_terminal_ai_menu_markup(enabled: bool) -> str:
     """Return the native HTML footer terminal AI prompt menu."""
     default_prompt = html.escape(TERMINAL_AI_DEFAULT_PROMPT, quote=True)
+    if not enabled:
+        return """
+      <span class="hhs-footer-terminal-ai-menu hhs-footer-terminal-ai-menu--disabled"
+            title="Open Terminal to ask AI about terminal output"
+            aria-disabled="true">
+        <span class="hhs-footer-terminal-ai-trigger hhs-footer-terminal-ai-trigger--disabled"
+              aria-label="Ask AI about terminal disabled">
+          <span class="hhs-footer-glyph-button"></span>
+        </span>
+      </span>
+    """.strip()
     return f"""
       <details class="hhs-footer-terminal-ai-menu">
         <summary class="hhs-footer-terminal-ai-trigger"
@@ -4792,6 +4837,7 @@ def render_footer() -> None:
     shell_status_markup = ""
     cache_clear_markup = ""
     terminal_ai_markup = ""
+    terminal_ai_enabled = terminal_document_view_is_active()
     if shell_name:
         shell_status_markup = (
             f'<a class="hhs-footer-shell-status" href="{shell_version_url}" '
@@ -4805,7 +4851,7 @@ def render_footer() -> None:
         )
         terminal_ai_markup = (
             f'<span class="hhs-footer-glyph"></span>'
-            f"{footer_terminal_ai_menu_markup()}"
+            f"{footer_terminal_ai_menu_markup(terminal_ai_enabled)}"
         )
     connected_host = str(st.session_state.get("ssh_connection_host", "")).strip()
     remote_status_markup = ""
@@ -4852,7 +4898,8 @@ def render_footer() -> None:
         render_footer_working_directory_open_script()
     if shell_name:
         render_footer_cache_clear_menu_script()
-        render_footer_terminal_ai_menu_script()
+        if terminal_ai_enabled:
+            render_footer_terminal_ai_menu_script()
 
 
 @st.fragment(run_every="5s")
@@ -4928,10 +4975,11 @@ def render_footer_shell_version_dialog() -> bool:
 
 def clear_application_state_data() -> None:
     """Delete persisted UI state and remove persistable selections from this session."""
-    try:
-        hhs_ui.UI_STATE_FILE.unlink(missing_ok=True)
-    except OSError as error:
-        push_floating_status(f"Unable to clear application states: {error}", "error")
+    for state_file in ui_state_files():
+        try:
+            state_file.unlink(missing_ok=True)
+        except OSError as error:
+            push_floating_status(f"Unable to clear application states: {error}", "error")
     for state_key in list(st.session_state):
         if is_persisted_ui_key(str(state_key)):
             st.session_state.pop(state_key, None)
@@ -10330,8 +10378,22 @@ def run_bash_subprocess(
 
 def background_job_state_key(job_name: str) -> str:
     """Return the Streamlit session key used for a background command job."""
+    return f"{BACKGROUND_JOB_STATE_KEY_PREFIX}{safe_background_job_name(job_name)}"
+
+
+def safe_background_job_name(job_name: str) -> str:
+    """Return a filesystem-safe background command job name."""
     safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", job_name.strip())
-    return f"{BACKGROUND_JOB_STATE_KEY_PREFIX}{safe_name or 'job'}"
+    return safe_name or "job"
+
+
+def background_job_output_path(job_name: str, stream_name: str) -> Path:
+    """Return the deterministic cache path for one background job output stream."""
+    safe_stream_name = re.sub(r"[^A-Za-z0-9_-]+", "_", stream_name.strip())
+    return (
+        ui_disposable_files_dir()
+        / f"{safe_background_job_name(job_name)}-{safe_stream_name or 'output'}.log"
+    )
 
 
 def background_job_state(job_name: str) -> dict[str, object] | None:
@@ -10456,16 +10518,8 @@ def start_background_bash_command(
     if background_job_is_running(job_name):
         return False
 
-    stdout_file = tempfile.NamedTemporaryFile(
-        "w", delete=False, prefix=f"{job_name}-stdout-", encoding="utf-8"
-    )
-    stderr_file = tempfile.NamedTemporaryFile(
-        "w", delete=False, prefix=f"{job_name}-stderr-", encoding="utf-8"
-    )
-    stdout_path = stdout_file.name
-    stderr_path = stderr_file.name
-    stdout_file.close()
-    stderr_file.close()
+    stdout_path = str(background_job_output_path(job_name, "stdout"))
+    stderr_path = str(background_job_output_path(job_name, "stderr"))
 
     remote_host = command_remote_host(force_local=force_local)
     effective_timeout = effective_command_timeout_seconds(
@@ -10528,7 +10582,7 @@ def read_background_job_file(job: dict[str, object], key: str) -> str:
 
 
 def cleanup_background_job_files(job: dict[str, object]) -> None:
-    """Remove temporary output files owned by a background command job."""
+    """Remove disposable output files owned by a background command job."""
     for key in ("stdout_path", "stderr_path"):
         raw_path = str(job.get(key, ""))
         if not raw_path:
@@ -10665,12 +10719,13 @@ def load_ui_cache() -> dict[str, dict[str, object]]:
     if UI_CACHE_MEMORY_MTIME == cache_mtime:
         UI_CACHE_MEMORY = prune_ui_cache_entries(UI_CACHE_MEMORY)
         return dict(UI_CACHE_MEMORY)
-    if not hhs_ui.UI_CACHE_FILE.exists():
+    cache_file = ui_cache_source_file()
+    if cache_file is None:
         UI_CACHE_MEMORY = {}
         UI_CACHE_MEMORY_MTIME = 0.0
         return {}
     try:
-        data = json.loads(hhs_ui.UI_CACHE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(cache_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         UI_CACHE_MEMORY = {}
         UI_CACHE_MEMORY_MTIME = cache_mtime
@@ -10690,10 +10745,40 @@ def load_ui_cache() -> dict[str, dict[str, object]]:
     return pruned_cache
 
 
+def ui_cache_files() -> tuple[Path, ...]:
+    """Return current and legacy UI cache file paths."""
+    return (hhs_ui.UI_CACHE_FILE, *legacy_ui_cache_files())
+
+
+def legacy_ui_cache_files() -> tuple[Path, ...]:
+    """Return legacy hidden UI cache file paths."""
+    return (hhs_ui.HHS_CACHE_DIR / ".streamlit-ui-cache",)
+
+
+def unlink_legacy_ui_cache_files() -> None:
+    """Remove legacy hidden UI cache files after writing the visible cache file."""
+    for cache_file in legacy_ui_cache_files():
+        try:
+            cache_file.unlink(missing_ok=True)
+        except OSError:
+            continue
+
+
+def ui_cache_source_file() -> Path | None:
+    """Return the first existing current or legacy UI cache file path."""
+    for cache_file in ui_cache_files():
+        if cache_file.exists():
+            return cache_file
+    return None
+
+
 def ui_cache_mtime() -> float:
     """Return the UI cache file modification time used for memory cache coherency."""
+    cache_file = ui_cache_source_file()
+    if cache_file is None:
+        return 0.0
     try:
-        return hhs_ui.UI_CACHE_FILE.stat().st_mtime
+        return cache_file.stat().st_mtime
     except OSError:
         return 0.0
 
@@ -10706,6 +10791,7 @@ def save_ui_cache(cache: dict[str, dict[str, object]]) -> None:
         hhs_ui.UI_CACHE_FILE.write_text(
             json.dumps(cache, indent=2) + "\n", encoding="utf-8"
         )
+        unlink_legacy_ui_cache_files()
         UI_CACHE_MEMORY = dict(cache)
         UI_CACHE_MEMORY_MTIME = ui_cache_mtime()
     except OSError:
@@ -16926,8 +17012,11 @@ def search_result_download_name(path: str) -> str:
 
 
 def create_search_result_download_dir() -> Path:
-    """Create a local temp directory for one downloaded remote Search result."""
-    return Path(tempfile.mkdtemp(prefix="hhs-search-open-"))
+    """Create the stable local cache directory for downloaded remote Search results."""
+    download_dir = ui_disposable_files_dir() / "hhs-search-open.dir"
+    shutil.rmtree(download_dir, ignore_errors=True)
+    download_dir.mkdir(parents=True, exist_ok=True)
+    return download_dir
 
 
 def search_result_download_path(remote_path: str, download_dir: Path) -> Path:

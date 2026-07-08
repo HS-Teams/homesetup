@@ -13,7 +13,8 @@ APP_DIR = Path(__file__).resolve().parent
 HHS_HOME = Path(os.environ.get("HHS_HOME", str(APP_DIR.parents[3]))).expanduser()
 HHS_DIR = Path(os.environ.get("HHS_DIR", str(APP_DIR))).expanduser()
 HHS_CACHE_DIR = Path(os.environ.get("HHS_CACHE_DIR", str(HHS_DIR / "cache"))).expanduser()
-UI_STATE_FILE = HHS_CACHE_DIR / ".streamlit-ui-state"
+UI_STATE_FILE = HHS_CACHE_DIR / "streamlit-ui-state.json"
+LEGACY_UI_STATE_FILE = HHS_CACHE_DIR / ".streamlit-ui-state"
 THEMES_DIR = HHS_HOME / "bin/apps/py/hhs_ui/themes"
 DEFAULT_THEME_NAME = "dracula"
 THEME_SELECTED_KEY = "theme_selected"
@@ -38,8 +39,9 @@ THEME_OPTION_TOKENS = (
 
 def load_ui_state() -> dict[str, object]:
     """Return persisted UI state values from the HomeSetup cache file."""
+    state_file = UI_STATE_FILE if UI_STATE_FILE.exists() else LEGACY_UI_STATE_FILE
     try:
-        data = json.loads(UI_STATE_FILE.read_text(encoding="utf-8"))
+        data = json.loads(state_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
