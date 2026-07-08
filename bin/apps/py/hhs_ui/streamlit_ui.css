@@ -256,6 +256,8 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 .st-key-search_other_filter_clear button,
 .st-key-search_path_folder_picker_button button,
 .st-key-search_load_more_button button,
+.st-key-search_replace_toggle_idle button,
+.st-key-search_replace_toggle_selected button,
 .st-key-search_ignore_case_toggle_idle button,
 .st-key-search_ignore_case_toggle_selected button,
 .st-key-search_words_toggle_idle button,
@@ -278,6 +280,8 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
 
 .st-key-search_path_folder_picker_button,
 .st-key-search_other_filter_clear,
+.st-key-search_replace_toggle_idle,
+.st-key-search_replace_toggle_selected,
 .st-key-search_ignore_case_toggle_idle,
 .st-key-search_ignore_case_toggle_selected,
 .st-key-search_words_toggle_idle,
@@ -307,6 +311,7 @@ div[class*="st-key-ai_delete_model_button_"][class*="_selected"] button {
   width: 2rem;
 }
 
+.st-key-search_replace_toggle_selected button,
 .st-key-search_ignore_case_toggle_selected button,
 .st-key-search_words_toggle_selected button,
 .st-key-search_binary_toggle_selected button {
@@ -378,17 +383,26 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value) {
   align-items: end;
   display: grid !important;
   gap: var(--hhs-element-std-gap) !important;
-  grid-template-columns: minmax(9rem, 1.15fr) minmax(0, 3fr) minmax(0, 3fr) 2rem 2rem;
+  grid-template-columns: minmax(9rem, 1.15fr) minmax(0, 3fr) 2rem minmax(0, 3fr) 2rem;
+}
+
+.st-key-search_replace_controls [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]) {
+  align-items: center;
+  display: grid !important;
+  gap: var(--hhs-element-std-gap) !important;
+  grid-template-columns: max-content minmax(0, 1fr);
 }
 
 .st-key-search_filter_controls [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]) {
   align-items: center;
   display: grid !important;
   gap: var(--hhs-element-std-gap) !important;
-  grid-template-columns: max-content minmax(0, 1fr) 2rem 2rem 2rem 2rem;
+  grid-template-columns: max-content minmax(0, 1fr) 2rem 2rem 2rem 2rem 2rem;
 }
 
 .st-key-search_controls [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"],
+.st-key-search_replace_controls [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
   > div[data-testid="stColumn"],
 .st-key-search_filter_controls [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
   > div[data-testid="stColumn"] {
@@ -399,11 +413,25 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value) {
 
 .st-key-search_controls
   [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
-  > div[data-testid="stColumn"]:nth-child(4),
+  > div[data-testid="stColumn"]:nth-child(3),
 .st-key-search_controls
   [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
   > div[data-testid="stColumn"]:nth-child(5) {
   margin-bottom: 0.28rem;
+}
+
+.st-key-search_replace_controls
+  [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"]:nth-child(2) {
+  grid-column: 2 / -1;
+}
+
+.hhs-search-replace-label {
+  color: var(--hhs-theme-text-color);
+  display: inline-flex;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .st-key-search_filter_controls {

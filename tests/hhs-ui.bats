@@ -1453,6 +1453,15 @@ PY
   run grep -q '"search_binary"' "${constants_file}"
   assert_success
 
+  run grep -q '"_hhs_search_home_context"' "${constants_file}"
+  assert_failure
+
+  run grep -q '"search_replace"' "${constants_file}"
+  assert_success
+
+  run grep -q '"search_replacement"' "${constants_file}"
+  assert_success
+
   run grep -q '"search_result_query"' "${constants_file}"
   assert_failure
 
@@ -2701,7 +2710,7 @@ PY
   run grep -q '<h2> Activity Monitor</h2>' "${ui_file}"
   assert_success
 
-  run grep -q '<h2> Search</h2>' "${ui_file}"
+  run grep -q '<h2> Global Search</h2>' "${ui_file}"
   assert_success
 
   run grep -q '<h2> History</h2>' "${ui_file}"
@@ -3195,7 +3204,7 @@ PY
   run grep -q 'st.container(key="search_controls")' "${ui_file}"
   assert_success
 
-  run grep -q 'with st.expander("Search", expanded=True):' "${ui_file}"
+  run grep -q 'with st.expander("Search Parameters", expanded=True):' "${ui_file}"
   assert_success
 
   run grep -q 'def render_search_panel' "${ui_file}"
@@ -3224,22 +3233,29 @@ source = Path(sys.argv[1]).read_text(encoding="utf-8")
 body = source.split("def render_search_filters", 1)[1].split("\ndef ", 1)[0]
 assert "render_table_filter_controls" not in body
 assert "return selected_filter" not in body
-assert "[1.15, 3.0, 0.22, 0.22, 0.22, 0.22]" in body
+assert "[1.15, 3.0, 0.22, 0.22, 0.22, 0.22, 0.22]" in body
 assert 'vertical_alignment="center"' in body
 assert "key=\"search_filter\"" in body
 assert "key=\"search_other_filter\"" in body
 for expected_toggle in (
+    '"search_replace",\n'
+    '                "﯒",\n'
+    '                "Replace matches (-r)"',
     '"search_ignore_case", "Aa", "Ignore case (-i)"',
-    '"search_words", "", "Match words (-w)"',
+    '"search_words",\n'
+    '                "",\n'
+    '                "Match words (-w)"',
     '"search_binary", "", "Search binary files (-b)"',
 ):
     assert expected_toggle in body
+assert 'disabled=bool(st.session_state.get("search_replace", False))' in body
 assert "key=\"search_other_filter_clear\"" in body
 assert "width=\"stretch\"" in body
 panel_decorator = source[: source.index("def render_search_panel")].rstrip().splitlines()[-1]
 assert panel_decorator == "@st.fragment()"
 panel_body = source.split("def render_search_panel", 1)[1].split("\ndef ", 1)[0]
 assert "render_search_controls()" in panel_body
+assert "render_search_replace_controls()" in panel_body
 assert "render_search_filters()" in panel_body
 assert "render_search_results()" in panel_body
 assert "search_filter, search_text_filter" not in panel_body
@@ -3258,7 +3274,7 @@ PY
   run grep -q 'st.columns(' "${ui_file}"
   assert_success
 
-  run grep -q '\[1.15, 3.0, 3.0, 0.22, 0.22\], vertical_alignment="bottom"' "${ui_file}"
+  run grep -q '\[1.15, 3.0, 0.22, 3.0, 0.22\], vertical_alignment="bottom"' "${ui_file}"
   assert_success
 
   run python3 - "${ui_file}" <<'PY'
@@ -3267,12 +3283,13 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 body = source.split("def render_search_controls", 1)[1].split("\ndef ", 1)[0]
-assert '[1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment="bottom"' in body
+assert '[1.15, 3.0, 0.22, 3.0, 0.22], vertical_alignment="bottom"' in body
 assert (
     '"Kind",\n'
     '                options=hhs_ui_constants.SEARCH_TYPES,\n'
     '                key="search_type",'
 ) in body
+assert "on_change=apply_search_type_change" in body
 assert (
     '"Search terms",\n'
     '                options=search_term_options(),\n'
@@ -3294,11 +3311,30 @@ assert (
 assert 'st.text_input(\n                "Search terms"' not in body
 assert 'st.text_input(\n                "Search directory"' not in body
 assert 'label_visibility="collapsed"' not in body
-assert body.index('key="search_path_folder_picker_button"') < body.index(
-    'key="search_submit_button"'
+assert body.index('key="search_path"') < body.index(
+    'key="search_path_folder_picker_button"'
 )
+assert body.index('key="search_path_folder_picker_button"') < body.index(
+    'key="search_query"'
+)
+assert body.index('key="search_query"') < body.index('key="search_submit_button"')
 assert "render_search_submit_preloader_script()" in body
 PY
+  assert_success
+
+  run grep -q 'def render_search_replace_controls' "${ui_file}"
+  assert_success
+
+  run grep -q 'st.container(key="search_replace_controls")' "${ui_file}"
+  assert_success
+
+  run grep -q '<span class="hhs-search-replace-label">Replace by:</span>' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="search_replacement"' "${ui_file}"
+  assert_success
+
+  run grep -q 'placeholder="Replacement string"' "${ui_file}"
   assert_success
 
   run grep -q '\[5.0, 0.85\], vertical_alignment="center"' "${ui_file}"
@@ -3578,17 +3614,20 @@ assert 'st.session_state["search_result_words"] = bool(' in submit_body
 assert 'st.session_state.get("search_words", False)' in submit_body
 assert 'st.session_state["search_result_binary"] = bool(' in submit_body
 assert 'st.session_state.get("search_binary", False)' in submit_body
+assert 'st.session_state["search_result_replace"] = replace' in submit_body
+assert 'st.session_state["search_result_replacement"] = replacement' in submit_body
+assert 'push_floating_status("Enter replacement text before replacing.", "warn")' in submit_body
 
 results_body = source.split("def render_search_results", 1)[1].split("\ndef ", 1)[0]
 assert "search_filter = selected_search_result_filter()" in results_body
 assert "text_filter = selected_search_result_text_filter()" in results_body
 assert (
     "build_hhs_search_command(\n"
-    "        search_type, query, search_path, ignore_case, words, binary"
+    "        search_type, query, search_path, ignore_case, words, binary, replace, replacement"
 ) in results_body
 assert (
     "search_command_cache_key(\n"
-    "        search_type, query, search_path, ignore_case, words, binary"
+    "        search_type, query, search_path, ignore_case, words, binary, replace, replacement"
 ) in results_body
 PY
   assert_success
@@ -3877,6 +3916,18 @@ PY
   run grep -q '.st-key-search_ignore_case_toggle_idle button' "${css_file}"
   assert_success
 
+  run grep -q '.st-key-search_replace_toggle_idle button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_replace_toggle_selected button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-search_replace_controls' "${css_file}"
+  assert_success
+
+  run grep -q '.hhs-search-replace-label' "${css_file}"
+  assert_success
+
   run grep -q '.st-key-search_ignore_case_toggle_selected button' "${css_file}"
   assert_success
 
@@ -3901,7 +3952,7 @@ PY
   run grep -q 'align-items: end' "${css_file}"
   assert_success
 
-  run grep -q '> div\[data-testid="stColumn"\]:nth-child(4)' "${css_file}"
+  run grep -q '> div\[data-testid="stColumn"\]:nth-child(3)' "${css_file}"
   assert_success
 
   run grep -q '> div\[data-testid="stColumn"\]:nth-child(5)' "${css_file}"
@@ -3916,10 +3967,16 @@ PY
   run grep -q 'grid-template-columns: minmax(9rem, 1.15fr)' "${css_file}"
   assert_success
 
+  run grep -q 'grid-template-columns: max-content minmax(0, 1fr)' "${css_file}"
+  assert_success
+
   run grep -q 'grid-template-columns: max-content minmax(0, 1fr) 2rem 2rem 2rem 2rem' "${css_file}"
   assert_success
 
   run grep -q 'grid-column: 2' "${css_file}"
+  assert_success
+
+  run grep -q 'white-space: nowrap' "${css_file}"
   assert_success
 
   run grep -q '.st-key-search_filter_controls \[role="radiogroup"\]\[aria-label$="filter"\]' "${css_file}"
@@ -10982,6 +11039,9 @@ assert (
     '                width="stretch",'
 ) in controls_body
 submit_body = source.split("def submit_search_query", 1)[1].split("\ndef ", 1)[0]
+type_change_body = source.split("def apply_search_type_change", 1)[1].split("\ndef ", 1)[0]
+assert 'st.session_state["search_replace"] = False' in type_change_body
+assert 'save_ui_state()' in type_change_body
 assert 'st.session_state["search_type"] =' not in submit_body
 assert 'st.session_state["search_result_type"] = search_type' in submit_body
 assert "query = remember_search_term(query)" in submit_body
@@ -11003,16 +11063,26 @@ assert "hhs_ui_constants.UI_COMMAND_SEARCH_TIMEOUT_SECONDS" in start_search_body
 assert "show_preloader_event=True" in start_search_body
 assert namespace["normalized_search_type"]("Folders") == "Folders"
 assert namespace["normalized_search_type"]("Unknown") == "Files"
+namespace["st"].session_state["search_type"] = "Files"
+namespace["st"].session_state["search_replace"] = True
+namespace["apply_search_type_change"]()
+assert namespace["st"].session_state["search_type"] == "Files"
+assert namespace["st"].session_state["search_replace"] is False
+namespace["st"].session_state["search_type"] = "Strings"
+namespace["st"].session_state["search_replace"] = True
+namespace["apply_search_type_change"]()
+assert namespace["st"].session_state["search_replace"] is True
 assert namespace["search_glob_from_query"]("report") == "*report*"
 assert namespace["search_glob_from_query"]("*.md") == "*.md"
 local_home = str(Path.home().resolve())
 assert namespace["default_search_directory"]() == local_home
 namespace["st"].session_state["search_path"] = "/persisted/path"
 namespace["st"].session_state["search_directories"] = ["/persisted/path", "/tmp"]
+namespace["st"].session_state["_hhs_search_home_context"] = "ssh:old-box"
 namespace["initialize_search_directory_home_default"]()
-assert namespace["st"].session_state["search_path"] == local_home
-assert namespace["st"].session_state["search_result_path"] == local_home
-assert namespace["st"].session_state["search_result_query"] == ""
+assert namespace["st"].session_state["search_path"] == "/persisted/path"
+assert namespace["st"].session_state.get("search_result_path", "") == ""
+assert namespace["st"].session_state.get("search_result_query", "") == ""
 assert namespace["st"].session_state["_hhs_search_home_context"] == "local"
 namespace["st"].session_state["search_path"] = "$HOME/projects"
 assert namespace["remember_search_directory"]("$HOME/projects") == f"{local_home}/projects"
@@ -11021,7 +11091,7 @@ namespace["st"].session_state["search_result_query"] = "homeselect"
 namespace["initialize_search_directory_home_default"]()
 assert namespace["st"].session_state["search_path"] == "/srv/homeselect"
 namespace["connected_host"] = "remote-box"
-namespace["initialize_search_directory_home_default"]()
+namespace["reset_search_directory_to_home"]()
 assert namespace["st"].session_state["search_path"] == "/remote/home"
 assert namespace["st"].session_state["search_result_query"] == ""
 assert namespace["st"].session_state["_hhs_search_home_context"] == "ssh:remote-box"
@@ -11103,13 +11173,29 @@ assert namespace["normalized_search_option_values"]("Files", True, True, True) =
     False,
     False,
     False,
+    False,
+    "",
 )
 assert namespace["normalized_search_option_values"]("Strings", True, False, True) == (
     True,
     False,
     True,
+    False,
+    "",
+)
+assert namespace["normalized_search_option_values"](
+    "Strings", True, True, True, True, "replacement value"
+) == (
+    True,
+    False,
+    True,
+    True,
+    "replacement value",
 )
 assert namespace["search_string_option_flags"](True, True, True) == ["-i", "-w", "-b"]
+assert namespace["search_string_option_flags"](
+    True, False, True, True, "replacement value"
+) == ["-i", "-b", "-r", "replacement value"]
 files_command = namespace["build_hhs_search_command"](
     "Files", "report", "/tmp/search root"
 )
@@ -11121,6 +11207,16 @@ strings_command = namespace["build_hhs_search_command"](
 )
 strings_options_command = namespace["build_hhs_search_command"](
     "Strings", "needle value", "/tmp/search root", True, True, True
+)
+strings_replace_command = namespace["build_hhs_search_command"](
+    "Strings",
+    "needle value",
+    "/tmp/search root",
+    True,
+    True,
+    True,
+    True,
+    "replacement value",
 )
 home_files_command = namespace["build_hhs_search_command"]("Files", "report", "$HOME")
 home_child_command = namespace["build_hhs_search_command"](
@@ -11141,6 +11237,9 @@ assert strings_command.endswith("__hhs_search_string '/tmp/search root' 'needle 
 assert strings_options_command.endswith(
     "__hhs_search_string '/tmp/search root' -i -w -b 'needle value'"
 )
+assert strings_replace_command.endswith(
+    "__hhs_search_string '/tmp/search root' -i -b -r 'replacement value' 'needle value'"
+)
 assert '__hhs_search_file "${HOME:-.}"' in home_files_command
 assert '__hhs_search_file "${HOME:-.}"/' in home_child_command
 assert "'Project Files'" in home_child_command
@@ -11149,6 +11248,7 @@ assert namespace["search_command_cache_key"]("Files", "*.mp4", "/tmp/search root
     "command_tag:search:"
     + hashlib.md5(
         "Files\n*.mp4\n/tmp/search root\nFalse\nFalse\nFalse".encode("utf-8")
+        + b"\nFalse\n"
     ).hexdigest()
 )
 assert namespace["search_command_cache_key"](
@@ -11156,7 +11256,24 @@ assert namespace["search_command_cache_key"](
 ) == (
     "command_tag:search:"
     + hashlib.md5(
-        "Strings\nneedle\n/tmp/search root\nTrue\nTrue\nTrue".encode("utf-8")
+        "Strings\nneedle\n/tmp/search root\nTrue\nTrue\nTrue\nFalse\n".encode("utf-8")
+    ).hexdigest()
+)
+assert namespace["search_command_cache_key"](
+    "Strings",
+    "needle",
+    "/tmp/search root",
+    True,
+    True,
+    True,
+    True,
+    "replacement value",
+) == (
+    "command_tag:search:"
+    + hashlib.md5(
+        "Strings\nneedle\n/tmp/search root\nTrue\nFalse\nTrue\nTrue\nreplacement value".encode(
+            "utf-8"
+        )
     ).hexdigest()
 )
 namespace["st"].session_state.update(

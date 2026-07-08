@@ -17021,19 +17021,30 @@ def normalized_search_option_values(
     ignore_case: bool = False,
     words: bool = False,
     binary: bool = False,
-) -> tuple[bool, bool, bool]:
+    replace: bool = False,
+    replacement: object = "",
+) -> tuple[bool, bool, bool, bool, str]:
     """Return Search option flags that apply to the selected Search type."""
     if normalized_search_type(search_type) != "Strings":
-        return (False, False, False)
-    return (bool(ignore_case), bool(words), bool(binary))
+        return (False, False, False, False, "")
+    should_replace = bool(replace)
+    return (
+        bool(ignore_case),
+        bool(words) and not should_replace,
+        bool(binary),
+        should_replace,
+        str(replacement or "") if should_replace else "",
+    )
 
 
 def search_string_option_flags(
     ignore_case: bool = False,
     words: bool = False,
     binary: bool = False,
+    replace: bool = False,
+    replacement: object = "",
 ) -> list[str]:
-    """Return __hhs_search_string option flags for selected Search toggles."""
+    """Return __hhs_search_string option arguments for selected Search toggles."""
     flags: list[str] = []
     if ignore_case:
         flags.append("-i")
@@ -17041,6 +17052,8 @@ def search_string_option_flags(
         flags.append("-w")
     if binary:
         flags.append("-b")
+    if replace:
+        flags.extend(("-r", str(replacement or "")))
     return flags
 
 
@@ -17051,6 +17064,8 @@ def build_hhs_search_command(
     ignore_case: bool = False,
     words: bool = False,
     binary: bool = False,
+    replace: bool = False,
+    replacement: object = "",
 ) -> str:
     """Build the HomeSetup search command for the selected Search type."""
     setup_command = build_hhs_search_setup_command()
@@ -17062,7 +17077,7 @@ def build_hhs_search_command(
         return build_hhs_search_modified_results_command(search_command)
     if search_type == "Strings":
         option_values = normalized_search_option_values(
-            search_type, ignore_case, words, binary
+            search_type, ignore_case, words, binary, replace, replacement
         )
         option_args = " ".join(
             shlex.quote(flag) for flag in search_string_option_flags(*option_values)
@@ -17082,10 +17097,12 @@ def search_command_cache_key(
     ignore_case: bool = False,
     words: bool = False,
     binary: bool = False,
+    replace: bool = False,
+    replacement: object = "",
 ) -> str:
     """Return the tagged MD5 command cache key for one Search execution."""
     option_values = normalized_search_option_values(
-        search_type, ignore_case, words, binary
+        search_type, ignore_case, words, binary, replace, replacement
     )
     key_material = "\n".join(
         (
@@ -17888,6 +17905,7 @@ def remember_search_directory(search_path: object) -> str:
         else default_search_directory()
     )
     st.session_state["search_path"] = clean_path
+    st.session_state["_hhs_search_home_context"] = search_host_context()
     st.session_state["search_directories"] = normalize_search_directories(
         st.session_state.get("search_directories", []),
         clean_path,
@@ -17931,12 +17949,12 @@ def apply_pending_search_directory_home_reset() -> None:
 def initialize_search_directory_home_default() -> None:
     """Ensure Search starts at home for the current host context."""
     current_context = search_host_context()
-    search_context = str(st.session_state.get("_hhs_search_home_context", ""))
-    if search_context != current_context:
-        reset_search_directory_to_home()
+    search_path = clean_recent_search_value(st.session_state.get("search_path", ""))
+    if search_path:
+        st.session_state["search_path"] = search_path
+        st.session_state["_hhs_search_home_context"] = current_context
         return
-    if not clean_recent_search_value(st.session_state.get("search_path", "")):
-        reset_search_directory_to_home()
+    reset_search_directory_to_home()
 
 
 def search_directory_options() -> list[str]:
@@ -17991,6 +18009,19 @@ def search_term_options() -> list[str]:
 def toggle_search_option(state_key: str) -> None:
     """Toggle one boolean Search option and persist the form state."""
     st.session_state[state_key] = not bool(st.session_state.get(state_key, False))
+    if state_key == "search_replace" and st.session_state[state_key]:
+        st.session_state["search_words"] = False
+    elif state_key == "search_words" and st.session_state[state_key]:
+        st.session_state["search_replace"] = False
+    save_ui_state()
+
+
+def apply_search_type_change() -> None:
+    """Normalize Search kind changes and clear incompatible Search options."""
+    search_type = normalized_search_type(st.session_state.get("search_type"))
+    st.session_state["search_type"] = search_type
+    if search_type != "Strings":
+        st.session_state["search_replace"] = False
     save_ui_state()
 
 
@@ -18021,9 +18052,18 @@ def submit_search_query() -> None:
     if not query:
         st.session_state["search_result_query"] = ""
         push_floating_status("Enter a search query before searching.", "warn")
+        save_ui_state()
         return
     query = remember_search_term(query)
     search_type = normalized_search_type(st.session_state.get("search_type"))
+    replace = search_type == "Strings" and bool(
+        st.session_state.get("search_replace", False)
+    )
+    replacement = str(st.session_state.get("search_replacement", "")) if replace else ""
+    if replace and replacement == "":
+        push_floating_status("Enter replacement text before replacing.", "warn")
+        save_ui_state()
+        return
     st.session_state["search_result_type"] = search_type
     st.session_state["search_result_path"] = search_path
     st.session_state["search_result_query"] = query
@@ -18036,6 +18076,8 @@ def submit_search_query() -> None:
     st.session_state["search_result_binary"] = bool(
         st.session_state.get("search_binary", False)
     )
+    st.session_state["search_result_replace"] = replace
+    st.session_state["search_result_replacement"] = replacement
     st.session_state["search_visible_count"] = hhs_ui_constants.SEARCH_PAGE_SIZE
     cache_delete_tag("search")
     save_ui_state()
@@ -18044,8 +18086,8 @@ def submit_search_query() -> None:
 def render_search_controls() -> None:
     """Render the Search controls in one compact row."""
     with st.container(key="search_controls"):
-        kind_column, term_column, path_column, picker_column, search_column = (
-            st.columns([1.15, 3.0, 3.0, 0.22, 0.22], vertical_alignment="bottom")
+        kind_column, path_column, picker_column, term_column, search_column = (
+            st.columns([1.15, 3.0, 0.22, 3.0, 0.22], vertical_alignment="bottom")
         )
         with kind_column:
             st.selectbox(
@@ -18053,17 +18095,7 @@ def render_search_controls() -> None:
                 options=hhs_ui_constants.SEARCH_TYPES,
                 key="search_type",
                 format_func=search_type_label,
-            )
-        with term_column:
-            st.selectbox(
-                "Search terms",
-                options=search_term_options(),
-                index=None,
-                key="search_query",
-                placeholder="Search for files, folders, or strings",
-                accept_new_options=True,
-                on_change=submit_search_query,
-                width="stretch",
+                on_change=apply_search_type_change,
             )
         with path_column:
             st.selectbox(
@@ -18083,6 +18115,17 @@ def render_search_controls() -> None:
                 args=("search_path", st.session_state.get("search_path", ""), "folder"),
                 width="stretch",
             )
+        with term_column:
+            st.selectbox(
+                "Search terms",
+                options=search_term_options(),
+                index=None,
+                key="search_query",
+                placeholder="Search for files, folders, or strings",
+                accept_new_options=True,
+                on_change=submit_search_query,
+                width="stretch",
+            )
         with search_column:
             st.button(
                 "",
@@ -18092,6 +18135,39 @@ def render_search_controls() -> None:
                 width="stretch",
             )
     render_search_submit_preloader_script()
+
+
+def search_replace_enabled() -> bool:
+    """Return whether the Search replace row should be visible."""
+    return (
+        normalized_search_type(st.session_state.get("search_type")) == "Strings"
+        and bool(st.session_state.get("search_replace", False))
+    )
+
+
+def render_search_replace_controls() -> None:
+    """Render the Search replacement input row when replace mode is enabled."""
+    if not search_replace_enabled():
+        return
+    with st.container(key="search_replace_controls"):
+        label_column, replacement_column = st.columns(
+            [1.15, 6.44],
+            vertical_alignment="center",
+        )
+        with label_column:
+            st.markdown(
+                '<span class="hhs-search-replace-label">Replace by:</span>',
+                unsafe_allow_html=True,
+            )
+        with replacement_column:
+            st.text_input(
+                "Replacement",
+                key="search_replacement",
+                label_visibility="collapsed",
+                on_change=save_ui_state,
+                placeholder="Replacement string",
+                width="stretch",
+            )
 
 
 def render_search_submit_preloader_script() -> None:
@@ -18306,13 +18382,17 @@ def render_search_filters() -> None:
         (
             filter_column,
             other_filter_column,
+            replace_column,
             ignore_case_column,
             words_column,
             binary_column,
             clear_column,
         ) = st.columns(
-            [1.15, 3.0, 0.22, 0.22, 0.22, 0.22],
+            [1.15, 3.0, 0.22, 0.22, 0.22, 0.22, 0.22],
             vertical_alignment="center",
+        )
+        strings_selected = (
+            normalized_search_type(st.session_state.get("search_type")) == "Strings"
         )
         with filter_column:
             selected_filter = st.radio(
@@ -18336,10 +18416,22 @@ def render_search_filters() -> None:
                     placeholder="Type result filter text",
                     width="stretch",
                 )
+        with replace_column:
+            render_search_option_toggle(
+                "search_replace",
+                "﯒",
+                "Replace matches (-r)",
+                disabled=not strings_selected,
+            )
         with ignore_case_column:
             render_search_option_toggle("search_ignore_case", "Aa", "Ignore case (-i)")
         with words_column:
-            render_search_option_toggle("search_words", "", "Match words (-w)")
+            render_search_option_toggle(
+                "search_words",
+                "",
+                "Match words (-w)",
+                disabled=bool(st.session_state.get("search_replace", False)),
+            )
         with binary_column:
             render_search_option_toggle(
                 "search_binary", "", "Search binary files (-b)"
@@ -18368,11 +18460,13 @@ def render_search_results() -> None:
     ignore_case = bool(st.session_state.get("search_result_ignore_case", False))
     words = bool(st.session_state.get("search_result_words", False))
     binary = bool(st.session_state.get("search_result_binary", False))
+    replace = bool(st.session_state.get("search_result_replace", False))
+    replacement = str(st.session_state.get("search_result_replacement", ""))
     command = build_hhs_search_command(
-        search_type, query, search_path, ignore_case, words, binary
+        search_type, query, search_path, ignore_case, words, binary, replace, replacement
     )
     cache_key = search_command_cache_key(
-        search_type, query, search_path, ignore_case, words, binary
+        search_type, query, search_path, ignore_case, words, binary, replace, replacement
     )
     loader_message = search_loader_message(query, search_path)
     result = complete_search_command_result(cache_key)
@@ -18411,8 +18505,9 @@ def render_search_results() -> None:
 @st.fragment()
 def render_search_panel() -> None:
     """Render Search controls and results with Session State communication."""
-    with st.expander("Search", expanded=True):
+    with st.expander("Search Parameters", expanded=True):
         render_search_controls()
+        render_search_replace_controls()
         render_search_filters()
     render_folder_picker_dialog("search")
     render_search_results()
@@ -18423,7 +18518,7 @@ def render_search_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading hhs-view-heading--direct-content">
-          <h2> Search</h2>
+          <h2> Global Search</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -19092,6 +19187,8 @@ def main() -> None:
     st.session_state.setdefault("search_ignore_case", False)
     st.session_state.setdefault("search_words", False)
     st.session_state.setdefault("search_binary", False)
+    st.session_state.setdefault("search_replace", False)
+    st.session_state.setdefault("search_replacement", "")
     st.session_state.setdefault("search_result_type", st.session_state["search_type"])
     st.session_state["search_result_type"] = normalized_search_type(
         st.session_state.get("search_result_type")
@@ -19103,6 +19200,8 @@ def main() -> None:
     st.session_state.setdefault("search_result_ignore_case", False)
     st.session_state.setdefault("search_result_words", False)
     st.session_state.setdefault("search_result_binary", False)
+    st.session_state.setdefault("search_result_replace", False)
+    st.session_state.setdefault("search_result_replacement", "")
     st.session_state.setdefault("search_filter", "All")
     if st.session_state["search_filter"] not in hhs_ui.SEARCH_FILTERS:
         st.session_state["search_filter"] = "All"
