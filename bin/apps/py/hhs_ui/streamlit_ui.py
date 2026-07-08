@@ -176,6 +176,8 @@ def resolve_run_shell() -> str:
                 capture_output=True,
                 check=False,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=5,
             )
             if brew_result.returncode == 0:
@@ -6894,6 +6896,92 @@ def config_filter_return_value(
     return selected_label if filter_value is None else str(filter_value)
 
 
+CONFIG_FILE_DEFINITIONS = {
+    "ENV": ("HHS_ENV_FILE", ".env"),
+    "PATH": ("HHS_PATHS_FILE", ".path"),
+    "DIR": ("HHS_SAVED_DIRS_FILE", ".saved_dirs"),
+    "CMD": ("HHS_CMD_FILE", ".cmd_file"),
+    "ALIAS": ("HHS_ALIASES_FILE", ".aliases"),
+}
+CONFIG_FILE_PAGE_LABELS = {
+    "ENV": "Environment",
+    "PATH": "Paths",
+    "DIR": "Saved Dirs",
+    "CMD": "Saved Cmds",
+    "ALIAS": "Aliases",
+}
+
+
+def default_config_file_path(file_name: str) -> str:
+    """Return a default HomeSetup config file path for the active host."""
+    if connected_ssh_host():
+        values = remote_environment_values(["HHS_DIR", "HOME"])
+        hhs_dir = values.get("HHS_DIR", "").strip()
+        if not hhs_dir:
+            home_dir = values.get("HOME", "").strip() or "~"
+            hhs_dir = posixpath.join(home_dir, ".config/hhs")
+        return posixpath.normpath(posixpath.join(hhs_dir, file_name))
+    return str((hhs_ui.HHS_DIR / file_name).expanduser())
+
+
+def config_file_path(config_view: str) -> str:
+    """Return the backing custom config file path for one Configs page."""
+    env_name, file_name = CONFIG_FILE_DEFINITIONS.get(
+        config_view,
+        CONFIG_FILE_DEFINITIONS["ENV"],
+    )
+    if connected_ssh_host():
+        values = remote_environment_values([env_name, "HHS_DIR", "HOME"])
+        raw_path = values.get(env_name, "").strip()
+        if raw_path:
+            return expand_path_with_environment(raw_path, values)
+        return default_config_file_path(file_name)
+
+    raw_path = os.environ.get(env_name, "").strip()
+    if raw_path:
+        return os.path.expandvars(os.path.expanduser(raw_path))
+    return default_config_file_path(file_name)
+
+
+def file_uri_for_path(path_value: str) -> str:
+    """Return a file URI for a POSIX-style absolute path."""
+    clean_path = posixpath.normpath(path_value.strip())
+    return f"file://{urllib.parse.quote(clean_path, safe='/')}"
+
+
+def search_open_href(path_or_uri: str) -> str:
+    """Return a Search-style open link for a path or file URI."""
+    query = urllib.parse.urlencode(
+        {hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM: path_or_uri}
+    )
+    return f"?{query}"
+
+
+def render_config_file_pill(config_view: str) -> None:
+    """Render a clickable pill for the custom config file used by a Configs page."""
+    file_path = config_file_path(config_view)
+    if not file_path:
+        return
+    file_name = posixpath.basename(file_path.rstrip("/")) or file_path
+    file_uri = file_uri_for_path(file_path)
+    href = html.escape(search_open_href(file_uri), quote=True)
+    safe_file_uri = html.escape(file_uri, quote=True)
+    page_label = CONFIG_FILE_PAGE_LABELS.get(config_view, "Environment")
+    st.markdown(
+        (
+            '<div class="hhs-config-file-pill-row">'
+            f'<span class="hhs-config-file-pill-label">Custom {html.escape(page_label)} file:</span>'
+            f'<a class="hhs-config-file-pill" href="{href}" '
+            'target="_self" '
+            f'title="{safe_file_uri}" '
+            f'data-hhs-open-path="{safe_file_uri}">'
+            f'<span aria-hidden="true"></span>{html.escape(file_name)}</a>'
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def render_filters_and_controls(
     name_label: str | None = "Name",
     value_label: str | None = "Value",
@@ -8299,6 +8387,8 @@ def run_cleanup_bash_command(
             capture_output=True,
             check=False,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_seconds,
         )
     except subprocess.TimeoutExpired as error:
@@ -10718,6 +10808,8 @@ def run_bash_subprocess(
         stderr=subprocess.PIPE,
         env=command_env(),
         text=True,
+        encoding="utf-8",
+        errors="replace",
         start_new_session=True,
     )
     try:
@@ -10973,7 +11065,7 @@ def read_background_job_file(job: dict[str, object], key: str) -> str:
         return ""
     file_path = Path(raw_path)
     try:
-        return file_path.read_text(encoding="utf-8")
+        return file_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""
 
@@ -13988,6 +14080,22 @@ def path_types(output: str) -> list[str]:
     return types
 
 
+def path_statuses(output: str) -> list[str]:
+    """Parse __hhs_paths output into path status glyphs."""
+    statuses = []
+    for line in strip_ansi(output).splitlines():
+        clean_line = line.strip()
+        if not hhs_ui.PATH_SOURCE_PATTERN.search(clean_line):
+            continue
+        if "" in clean_line:
+            statuses.append("")
+        elif "" in clean_line:
+            statuses.append("")
+        else:
+            statuses.append("")
+    return statuses
+
+
 def path_entries(output: str = "") -> list[str]:
     """Return PATH entries emitted by __hhs_paths or fall back to the UI process."""
     entries = []
@@ -14005,11 +14113,20 @@ def parse_hhs_paths(output: str) -> list[dict[str, str]]:
     """Parse __hhs_paths terminal output into PATH rows."""
     sources = path_sources(output)
     types = path_types(output)
+    statuses = path_statuses(output)
     rows = []
     for index, path_entry in enumerate(path_entries(output)):
         source = sources[index] if index < len(sources) else "PATH entry"
         path_type = types[index] if index < len(types) else ""
-        rows.append({"Type": path_type, "Origin": source, "Path Value": path_entry})
+        status = statuses[index] if index < len(statuses) else ""
+        rows.append(
+            {
+                "Type": path_type,
+                "Origin": source,
+                "Path Value": path_entry,
+                "_Path Status": status,
+            }
+        )
     return rows
 
 
@@ -15048,11 +15165,76 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
     )
 
 
+def path_origin_cell_style(value: object) -> str:
+    """Return the dataframe cell style for PATH origin labels."""
+    origin = str(value).strip().lower()
+    if origin.startswith("custom path"):
+        return "color: #8be9fd;"
+    if origin.startswith("private system path"):
+        return "color: #ff79c6;"
+    return ""
+
+
+def path_type_style_value(row: dict[str, str]) -> str:
+    """Return the PATH Type value with status metadata for styling."""
+    return f"{row.get('_Path Status', '')}{row.get('Type', '')}"
+
+
+def path_type_display_value(value: object) -> str:
+    """Return the visible PATH Type value without status metadata."""
+    return re.sub(r"^[]", "", str(value), count=1)
+
+
+def path_type_cell_style(value: object) -> str:
+    """Return the dataframe cell style for PATH type values."""
+    path_type = str(value)
+    if "" in path_type:
+        return "color: #ffb86c;"
+    if "" in path_type:
+        return "color: #50fa7b;"
+    return ""
+
+
+def path_column_config() -> dict[str, object]:
+    """Return column settings for the Configs Paths table."""
+    return {
+        "Type": st.column_config.TextColumn(
+            "Type",
+            disabled=True,
+            width=hhs_ui_constants.PATH_TYPE_COLUMN_WIDTH,
+        ),
+        "Origin": st.column_config.TextColumn("Origin", disabled=True),
+        "Path Value": st.column_config.TextColumn("Path Value", disabled=True),
+    }
+
+
+def styled_path_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
+    """Return PATH rows with styled Type and Origin cells."""
+    visible_rows = display_table_rows(rows)
+    for index, row in enumerate(visible_rows):
+        if index < len(rows):
+            row["Type"] = path_type_style_value(rows[index])
+    dataframe = pd.DataFrame(
+        visible_rows,
+        columns=["Type", "Origin", "Path Value"],
+    )
+    styler = dataframe.style
+    if "Type" in dataframe:
+        styler = styler.map(path_type_cell_style, subset=["Type"])
+        styler = styler.format(path_type_display_value, subset=["Type"])
+    if "Origin" in dataframe:
+        styler = styler.map(path_origin_cell_style, subset=["Origin"])
+    return styler
+
+
 def render_path_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable read-only PATH rows."""
     render_table(
         rows,
         key=path_table_key(),
+        headers=["Type", "Origin", "Path Value"],
+        table_data=styled_path_rows(rows),
+        column_config=path_column_config(),
         height=hhs_ui.PATH_TABLE_HEIGHT,
         width=hhs_ui.PATH_TABLE_WIDTH,
         selected_label=lambda row, _index: f"Selected: {row['Path Value']}",
@@ -15739,6 +15921,7 @@ def render_envs_table() -> None:
         on_submit=apply_env_add_form_value,
         default_filter="HHS",
     )
+    render_config_file_pill("ENV")
 
     result = render_cached_command_result(
         build_hhs_envs_command(None),
@@ -15775,6 +15958,7 @@ def render_paths_table() -> None:
         on_submit=apply_path_add_form_value,
     )
     render_folder_picker_dialog("path")
+    render_config_file_pill("PATH")
     result = render_cached_command_result(
         build_hhs_paths_command(),
         "Loading PATH entries",
@@ -15811,6 +15995,7 @@ def render_dirs_table() -> None:
         on_submit=apply_dir_add_form_value,
     )
     render_folder_picker_dialog("dir")
+    render_config_file_pill("DIR")
     result = render_cached_command_result(
         build_hhs_dirs_command(),
         "Loading saved directories",
@@ -15847,6 +16032,7 @@ def render_cmds_table() -> None:
         value_placeholder="Command value",
         on_submit=apply_cmd_add_form_value,
     )
+    render_config_file_pill("CMD")
     result = render_cached_command_result(
         build_hhs_commands_command(),
         "Loading saved commands",
@@ -15884,6 +16070,7 @@ def render_aliases_table() -> None:
         value_placeholder="Alias expression",
         on_submit=apply_alias_add_form_value,
     )
+    render_config_file_pill("ALIAS")
     result, fresh_cache = cached_aliases_result()
     if not fresh_cache and not background_job_is_running(ALIAS_LIST_JOB):
         start_aliases_list_refresh()
@@ -16566,6 +16753,7 @@ def render_configs_view() -> None:
         """,
         unsafe_allow_html=True,
     )
+    render_background_job_status(SEARCH_OPEN_JOB)
     config_view = render_view_segmented_control(
         "Configuration view",
         hhs_ui.CONFIG_VIEWS,
@@ -18089,9 +18277,18 @@ def open_remote_search_result_path(path: str, host: str) -> None:
     )
 
 
+def path_from_file_uri(path_or_uri: str) -> str:
+    """Return the filesystem path from a plain path or file URI."""
+    clean_value = path_or_uri.strip()
+    parsed_uri = urllib.parse.urlparse(clean_value)
+    if parsed_uri.scheme != "file":
+        return clean_value
+    return urllib.parse.unquote(parsed_uri.path)
+
+
 def open_search_result_path(path: str) -> None:
     """Open one Search result path through the HomeSetup generic opener."""
-    clean_path = path.strip()
+    clean_path = path_from_file_uri(path)
     if not clean_path:
         return
     host = connected_ssh_host()

@@ -496,6 +496,47 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value) {
   text-decoration: underline;
 }
 
+.hhs-config-file-pill-row {
+  align-items: center;
+  display: flex;
+  gap: var(--hhs-element-std-gap);
+  margin: var(--hhs-element-std-gap) 0;
+  max-width: 100%;
+}
+
+.hhs-config-file-pill-label {
+  color: var(--hhs-theme-text-color);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.hhs-config-file-pill,
+.hhs-config-file-pill:visited {
+  align-items: center;
+  background: var(--hhs-theme-secondary-background-color);
+  border: 1px solid var(--hhs-theme-dataframe-border-color);
+  border-radius: 999px;
+  color: var(--hhs-theme-link-color);
+  display: inline-flex;
+  gap: 0.45rem;
+  max-width: 100%;
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.hhs-config-file-pill:hover,
+.hhs-config-file-pill:focus {
+  color: var(--hhs-theme-link-color);
+  filter: brightness(1.15);
+  text-decoration: underline;
+}
+
+.hhs-config-file-pill span {
+  line-height: 1;
+}
+
 .hhs-search-results table {
   background: transparent;
   border-collapse: collapse;

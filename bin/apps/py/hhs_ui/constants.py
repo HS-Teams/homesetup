@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.44"
+VERSION = "0.1.46"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -400,6 +400,7 @@ HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX = "history_directory_selected_value"
 PATH_TABLE_HEIGHT = ENV_TABLE_HEIGHT
 PATH_TABLE_KEY = "path_vars_table"
 PATH_TABLE_RESET_COUNTER_KEY = "path_vars_table_reset_counter"
+PATH_TYPE_COLUMN_WIDTH = 80
 PATH_TABLE_WIDTH = ENV_TABLE_WIDTH
 SERVICE_TABLE_KEY = "service_vars_table"
 SERVICE_TABLE_RESET_COUNTER_KEY = "service_vars_table_reset_counter"
