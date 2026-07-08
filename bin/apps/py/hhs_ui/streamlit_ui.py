@@ -7173,7 +7173,7 @@ def ttyd_index_signature(binary: str, event_url: str = "") -> str:
     """Return a stable cache signature for the ttyd index and terminal font."""
     font_file = ttyd_font_file()
     background_file = ttyd_background_image_file()
-    parts = ["hhs-ttyd-font-index-v22-terminal-bg-alpha-v1", binary, event_url]
+    parts = ["hhs-ttyd-font-index-v23-terminal-scroll-v1", binary, event_url]
     for path in (Path(binary), font_file, background_file):
         try:
             stat = path.stat()
@@ -7260,7 +7260,7 @@ def ttyd_font_face_style() -> str:
     return (
         "<style>"
         f"{font_face}"
-        "html,body,#terminal,.terminal,.xterm,.xterm-viewport,.xterm-screen,.xterm-rows{"
+        "html,body,#terminal,.terminal,.xterm,.xterm-screen,.xterm-rows{"
         f'font-family:"{family}",monospace!important;'
         "}"
         "html,body{"
@@ -7275,7 +7275,7 @@ def ttyd_font_face_style() -> str:
         "z-index:0!important;"
         f"{background_layer}"
         "}"
-        "#terminal,.terminal,.xterm,.xterm-viewport{"
+        "#terminal,.terminal,.xterm{"
         "background:transparent!important;"
         "position:relative!important;"
         "z-index:1!important;"
@@ -7288,6 +7288,8 @@ def ttyd_font_face_style() -> str:
         "padding:0!important;"
         "}"
         ".xterm .xterm-viewport{"
+        "background:transparent!important;"
+        "overflow-y:scroll!important;"
         "left:0!important;"
         "top:0!important;"
         "right:0!important;"
@@ -9806,6 +9808,7 @@ def restore_registered_ssh_connection_on_session_start() -> None:
     reset_updater_remote_check_state()
     update_remote_footer_working_directory()
     reset_search_directory_to_home()
+    schedule_ollama_service_availability_refresh()
     save_ui_state()
 
 
@@ -11268,6 +11271,7 @@ def expire_host_scoped_command_state() -> None:
         st.session_state.pop(state_key, None)
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = False
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = False
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY] = ""
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY] = 0.0
     for table_key in (
         hhs_ui.ENV_TABLE_KEY,
@@ -11532,11 +11536,19 @@ def start_hhs_services_list_refresh() -> bool:
 
 def complete_hhs_services_list_refresh() -> subprocess.CompletedProcess[str] | None:
     """Complete a background services-list refresh and cache successful output."""
-    result = complete_cached_background_command(
-        SERVICE_LIST_JOB,
-        "service_list_error",
-        "Unable to list services.",
-    )
+    completed = background_job_result(SERVICE_LIST_JOB)
+    if completed is None:
+        return None
+    result, metadata = completed
+    if str(metadata.get("remote_host", "")).strip() != command_remote_host():
+        return None
+    if result.returncode == 0:
+        cache_background_command_result(metadata, result)
+        st.session_state["service_list_error"] = ""
+    else:
+        st.session_state["service_list_error"] = strip_ansi(
+            result.stderr or result.stdout or "Unable to list services."
+        )
     remember_ollama_service_availability(result)
     return result
 
@@ -11548,6 +11560,9 @@ def schedule_ollama_service_availability_refresh() -> None:
     st.session_state["service_list_error"] = ""
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = False
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = True
+    st.session_state[
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY
+    ] = ai_service_availability_context()
     start_hhs_services_list_refresh()
 
 
@@ -14769,23 +14784,41 @@ def ollama_service_is_available_from_output(output: str) -> bool:
     return False
 
 
+def ai_service_availability_context() -> str:
+    """Return the active execution-host key for Ollama availability state."""
+    remote_host = command_remote_host()
+    return f"ssh:{remote_host}" if remote_host else "local"
+
+
+def ai_service_availability_context_matches_active_host() -> bool:
+    """Return whether stored Ollama availability belongs to the active host."""
+    stored_context = str(
+        st.session_state.get(
+            hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY,
+            "",
+        )
+    ).strip()
+    return stored_context == ai_service_availability_context()
+
+
 def remember_ollama_service_availability(
     result: subprocess.CompletedProcess[str] | None,
 ) -> bool:
     """Store Ollama service availability when a successful services result exists."""
     if result is None or result.returncode != 0:
-        return bool(
-            st.session_state.get(hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY, False)
-        )
+        return ollama_service_is_available()
     available = ollama_service_is_available_from_output(result.stdout)
+    st.session_state[
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY
+    ] = ai_service_availability_context()
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = available
     return available
 
 
 def ollama_service_availability_refresh_due() -> bool:
     """Return whether AI tab visibility should recheck Ollama service status."""
-    if ollama_service_is_available():
-        return False
+    if not ai_service_availability_context_matches_active_host():
+        return True
     try:
         refreshed_at = float(
             st.session_state.get(
@@ -14802,14 +14835,22 @@ def ollama_service_availability_refresh_due() -> bool:
 
 def ollama_service_is_available() -> bool:
     """Return the last known Ollama service availability without starting commands."""
-    return bool(st.session_state.get(hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY, False))
+    return ai_service_availability_context_matches_active_host() and bool(
+        st.session_state.get(hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY, False)
+    )
 
 
 def initialize_ollama_service_availability() -> None:
     """Seed and refresh AI tab visibility from service availability data."""
-    if st.session_state.get(hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY):
+    if st.session_state.get(
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY
+    ) and ai_service_availability_context_matches_active_host():
         return
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = True
+    st.session_state[
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY
+    ] = ai_service_availability_context()
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = False
     _result, fresh_cache = cached_hhs_services_result()
     if not fresh_cache and not background_job_is_running(SERVICE_LIST_JOB):
         start_hhs_services_list_refresh()
@@ -19081,6 +19122,10 @@ def main() -> None:
     st.session_state.setdefault(
         hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY,
         False,
+    )
+    st.session_state.setdefault(
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY,
+        "",
     )
     st.session_state.setdefault(
         hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY,

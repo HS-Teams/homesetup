@@ -2003,6 +2003,14 @@ remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", bas
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
 shell_group_block = re.search(r"\.hhs-footer-shell-group\s*\{([^}]*)\}", base_css).group(1)
 floating_status_block = re.search(r"\.hhs-floating-status\s*\{([^}]*)\}", base_css).group(1)
+floating_status_dismiss_block = re.search(
+    r"\.hhs-floating-status-dismiss\s*\{([^}]*)\}",
+    base_css,
+).group(1)
+floating_status_dismiss_hover_block = re.search(
+    r"\.hhs-floating-status-dismiss:hover,\s*\.hhs-floating-status-dismiss:focus-visible\s*\{([^}]*)\}",
+    base_css,
+).group(1)
 app_footer_block = re.search(r"\.hhs-app-footer\s*\{([^}]*)\}", base_css).group(1)
 sidebar_title_block = re.search(r"\.hhs-sidebar-title\s*\{([^}]*)\}", base_css).group(1)
 sidebar_title_separator_block = re.search(r"\.hhs-sidebar-title::after\s*\{([^}]*)\}", base_css).group(1)
@@ -2354,6 +2362,10 @@ assert "width: var(--hhs-sidebar-title-separator-width)" in sidebar_title_separa
 assert "border-radius: 50%" in base_css
 assert "height: 1.35rem" in base_css
 assert "text-decoration: none !important" in base_css
+assert "color: var(--hhs-theme-footer-status-error-color)" in floating_status_dismiss_block
+assert "var(--hhs-theme-footer-status-error-color) 48%" in floating_status_dismiss_block
+assert "color: var(--hhs-theme-footer-status-error-color)" in floating_status_dismiss_hover_block
+assert "var(--hhs-theme-footer-status-error-color) 18%" in floating_status_dismiss_hover_block
 assert '[data-testid="stApp"]' in base_css
 assert '[data-testid="stMainBlockContainer"]' in base_css
 assert "--hhs-floating-status-timeout: 5s" in base_css
@@ -4879,12 +4891,17 @@ restore_registered_snapshot_index = restore_body.index("reconnect_state = reconn
 restore_registered_reset_index = restore_body.index("clear_host_scoped_session_state()")
 restore_registered_restore_index = restore_body.index("restore_reconnect_view_state(reconnect_state)")
 restore_registered_status_index = restore_body.index('st.session_state["ssh_connection_status"] = "connected"')
+restore_registered_availability_refresh_index = restore_body.index(
+    "schedule_ollama_service_availability_refresh()"
+)
 assert (
     restore_registered_snapshot_index
     < restore_registered_reset_index
     < restore_registered_restore_index
     < restore_registered_status_index
 )
+assert restore_registered_status_index < restore_registered_availability_refresh_index
+assert restore_registered_availability_refresh_index < restore_body.index("save_ui_state()")
 PY
   assert_success
 
@@ -6784,7 +6801,7 @@ PY
   run grep -q '.xterm .xterm-screen,.xterm .xterm-rows,.xterm .xterm-screen canvas' "${ui_file}"
   assert_success
 
-  run grep -q 'hhs-ttyd-font-index-v22-terminal-bg-alpha-v1' "${ui_file}"
+  run grep -q 'hhs-ttyd-font-index-v23-terminal-scroll-v1' "${ui_file}"
   assert_success
 
   run grep -q 'padding:0!important;' "${ui_file}"
@@ -6804,6 +6821,12 @@ PY
 
   run grep -q 'scrollbar-gutter:stable!important;' "${ui_file}"
   assert_success
+
+  run grep -q 'overflow-y:scroll!important;' "${ui_file}"
+  assert_success
+
+  run grep -q '#terminal,.terminal,.xterm,.xterm-viewport' "${ui_file}"
+  assert_failure
 
   run grep -q '::-webkit-scrollbar-thumb' "${ui_file}"
   assert_success
@@ -10856,7 +10879,9 @@ remember_calls = {
     for call in ast.walk(remember)
     if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
 }
+remember_source = ast.get_source_segment(Path(sys.argv[1]).read_text(encoding="utf-8"), remember)
 assert "ollama_service_is_available_from_output" in remember_calls
+assert "AI_SERVICE_AVAILABILITY_CONTEXT_KEY" in remember_source
 
 refresh_due = functions["ollama_service_availability_refresh_due"]
 refresh_due_calls = {
@@ -10864,7 +10889,7 @@ refresh_due_calls = {
     for call in ast.walk(refresh_due)
     if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
 }
-assert "ollama_service_is_available" in refresh_due_calls
+assert "ai_service_availability_context_matches_active_host" in refresh_due_calls
 assert "time" not in refresh_due_calls
 refresh_due_source = ast.get_source_segment(Path(sys.argv[1]).read_text(encoding="utf-8"), refresh_due)
 assert "AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS" in refresh_due_source
@@ -10878,6 +10903,8 @@ schedule_calls = {
 assert "stop_background_job" in schedule_calls
 assert "cache_delete_tag" in schedule_calls
 assert "start_hhs_services_list_refresh" in schedule_calls
+schedule_source = ast.get_source_segment(Path(sys.argv[1]).read_text(encoding="utf-8"), schedule)
+assert "AI_SERVICE_AVAILABILITY_CONTEXT_KEY" in schedule_source
 
 update = functions["update_ollama_service_availability_refresh"]
 update_calls = {
@@ -10917,27 +10944,44 @@ import types
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-start = source.index("def ollama_service_availability_refresh_due(")
+start = source.index("def ai_service_availability_context(")
 end = source.index("def initialize_ollama_service_availability(")
 session_state = {}
+state = {"remote_host": ""}
 namespace = {
     "hhs_ui": types.SimpleNamespace(),
     "hhs_ui_constants": types.SimpleNamespace(
         AI_SERVICE_AVAILABLE_KEY="_available",
+        AI_SERVICE_AVAILABILITY_CONTEXT_KEY="_context",
         AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY="_refreshed_at",
         AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS=5.0,
     ),
     "st": types.SimpleNamespace(session_state=session_state),
     "time": types.SimpleNamespace(time=lambda: 100.0),
+    "command_remote_host": lambda: state["remote_host"],
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 refresh_due = namespace["ollama_service_availability_refresh_due"]
+available = namespace["ollama_service_is_available"]
+availability_context = namespace["ai_service_availability_context"]
+assert availability_context() == "local"
+session_state["_context"] = "local"
 assert refresh_due() is True
 session_state["_refreshed_at"] = 98.0
 assert refresh_due() is False
 session_state["_refreshed_at"] = 94.0
 assert refresh_due() is True
 session_state["_available"] = True
+assert available() is True
+assert refresh_due() is True
+session_state["_refreshed_at"] = 98.0
+assert refresh_due() is False
+state["remote_host"] = "remote-dev"
+assert availability_context() == "ssh:remote-dev"
+assert available() is False
+assert refresh_due() is True
+session_state["_context"] = "ssh:remote-dev"
+assert available() is True
 assert refresh_due() is False
 PY
   assert_success

@@ -68,6 +68,7 @@ LOG_RENDER_CACHE_KEY = "_hhs_log_render_cache"
 LOG_RENDER_CACHE_LIMIT = 20
 AI_SERVICE_AVAILABLE_KEY = "_hhs_ai_service_available"
 AI_SERVICE_AVAILABILITY_LOADED_KEY = "_hhs_ai_service_availability_loaded"
+AI_SERVICE_AVAILABILITY_CONTEXT_KEY = "_hhs_ai_service_availability_context"
 AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY = "_hhs_ai_service_availability_refreshed_at"
 AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS = 5.0
 AI_TERMINAL_CONTEXT_MAX_CHARS = 12000

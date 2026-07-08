@@ -2010,9 +2010,13 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   appearance: none;
   background: transparent;
   border: 1px solid
-    color-mix(in srgb, var(--hhs-floating-status-color) 48%, transparent);
+    color-mix(
+      in srgb,
+      var(--hhs-theme-footer-status-error-color) 48%,
+      transparent
+    );
   border-radius: 50%;
-  color: var(--hhs-floating-status-color);
+  color: var(--hhs-theme-footer-status-error-color);
   cursor: pointer;
   display: inline-flex;
   font-size: 0.78rem;
@@ -2031,9 +2035,10 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 .hhs-floating-status-dismiss:focus-visible {
   background: color-mix(
     in srgb,
-    var(--hhs-floating-status-color) 18%,
+    var(--hhs-theme-footer-status-error-color) 18%,
     transparent
   );
+  color: var(--hhs-theme-footer-status-error-color);
   outline: none;
   text-decoration: none !important;
 }
