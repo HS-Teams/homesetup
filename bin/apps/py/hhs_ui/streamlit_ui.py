@@ -3093,6 +3093,17 @@ def open_folder_picker_selected_directory() -> None:
     set_folder_picker_current_directory(selected_path)
 
 
+def open_folder_picker_selected_child(selected_widget_key: str) -> None:
+    """Open the selected child folder when the folder list changes."""
+    if path_picker_mode() != "folder":
+        return
+    selected_path = str(st.session_state.get(selected_widget_key, "")).strip()
+    if not selected_path:
+        return
+    st.session_state["_hhs_folder_picker_selected_dir"] = selected_path
+    open_folder_picker_selected_directory()
+
+
 def apply_folder_picker_selection() -> None:
     """Assign the selected folder to the target Streamlit input key."""
     target_key = str(st.session_state.get("_hhs_folder_picker_target_key", ""))
@@ -3210,6 +3221,9 @@ def render_path_picker_body(
         ),
         "disabled": loading_children or not bool(child_directories),
     }
+    if mode == "folder":
+        selectbox_kwargs["on_change"] = open_folder_picker_selected_child
+        selectbox_kwargs["args"] = (selected_widget_key,)
     if not child_directories:
         selectbox_kwargs["index"] = None
     selected_directory = st.selectbox(

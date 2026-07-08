@@ -8939,6 +8939,9 @@ LOGS
   run grep -q 'def apply_folder_picker_selection' "${ui_file}"
   assert_success
 
+  run grep -q 'def open_folder_picker_selected_child' "${ui_file}"
+  assert_success
+
   run grep -q 'sync_folder_picker_child_selection(child_directories)' "${ui_file}"
   assert_success
 
@@ -9847,6 +9850,8 @@ assert "PATH_PICKER_LISTING_LOADER_MESSAGE" in render_body
 assert "render_path_picker_listing_loader(loading_job_name)" in render_body
 assert "disabled=loading_children" in render_body
 assert "loading_children or not bool(child_directories)" in render_body
+assert 'selectbox_kwargs["on_change"] = open_folder_picker_selected_child' in render_body
+assert 'selectbox_kwargs["args"] = (selected_widget_key,)' in render_body
 assert render_body.index("st.selectbox(") < render_body.index("st.checkbox(")
 assert namespace["path_picker_uses_remote"]()
 assert namespace["remote_path_picker_default_directory"]() == "$HOME"
@@ -10047,6 +10052,23 @@ namespace["prune_folder_picker_child_selection_widget_keys"](widget_key)
 assert session_state[widget_key] == str(beta.resolve())
 assert other_widget_key not in session_state
 assert widget_key.startswith("_hhs_folder_picker_selected_dir_widget_")
+
+session_state["_hhs_folder_picker_mode"] = "folder"
+session_state["_hhs_folder_picker_current_dir"] = str(home)
+session_state["_hhs_folder_picker_current_dir_input"] = str(home)
+session_state[widget_key] = str(beta.resolve())
+namespace["open_folder_picker_selected_child"](widget_key)
+assert session_state["_hhs_folder_picker_current_dir"] == str(beta.resolve())
+assert session_state["_hhs_folder_picker_current_dir_input"] == str(beta.resolve())
+assert "_hhs_folder_picker_selected_dir" not in session_state
+
+session_state["_hhs_folder_picker_mode"] = "file"
+session_state["_hhs_folder_picker_current_dir"] = str(home)
+session_state["_hhs_folder_picker_current_dir_input"] = str(home)
+session_state[widget_key] = str(alpha.resolve())
+namespace["open_folder_picker_selected_child"](widget_key)
+assert session_state["_hhs_folder_picker_current_dir"] == str(home)
+assert session_state["_hhs_folder_picker_current_dir_input"] == str(home)
 PY
   assert_success
 }
