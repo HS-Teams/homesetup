@@ -288,7 +288,7 @@ function reset() {
       was_set=$?
       shopt -s nullglob
       if [[ ${#matched_files[@]} -gt 0 ]]; then
-        if \rm -fv -- "${matched_files[@]}" &> /dev/null; then
+        if \rm -rfv -- "${matched_files[@]}" &> /dev/null; then
           echo -e "${GREEN} OK${NC}"
         else
           echo -e "${RED} FAILED${NC}"

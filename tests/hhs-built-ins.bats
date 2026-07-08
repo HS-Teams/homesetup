@@ -25,6 +25,92 @@ setup() {
   export HHS_DIR="${BATS_TEST_TMPDIR}"
 }
 
+@test "when-resetting-then-ui-disposable-files-should-be-selectable" {
+  local choices_file
+
+  export HHS_BACKUP_DIR="${BATS_TEST_TMPDIR}/backup"
+  export HHS_CACHE_DIR="${BATS_TEST_TMPDIR}/cache"
+  export HHS_KEY_BINDINGS="${BATS_TEST_TMPDIR}/key-bindings"
+  export HHS_LOG_DIR="${BATS_TEST_TMPDIR}/log"
+  export HHS_OLLAMA_HISTORY_FILE="${BATS_TEST_TMPDIR}/ollama-history"
+  export HHS_OLLAMA_PROMPT_FILE="${BATS_TEST_TMPDIR}/ollama-prompt"
+  export HHS_SETUP_FILE="${BATS_TEST_TMPDIR}/setup"
+  export HHS_SHOPTS_FILE="${BATS_TEST_TMPDIR}/shopts"
+  export TMPDIR="${BATS_TEST_TMPDIR}/tmp/"
+  choices_file="${BATS_TEST_TMPDIR}/reset-choices"
+  mkdir -p "${HHS_BACKUP_DIR}" "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}" "${TMPDIR}"
+
+  run bash --noprofile --norc -c '
+    choices_file="$2"
+    source "${1}/bin/apps/bash/hhs-app/functions/built-ins.bash"
+    function __hhs_has() { return 1; }
+    function __hhs_mchoose() {
+      shift 2
+      printf "%s\n" "$@" > "${choices_file}"
+      return 1
+    }
+    reset
+  ' -- "${HHS_HOME}" "${choices_file}"
+  assert_success
+  run grep -Fx "${HHS_CACHE_DIR}/.streamlit-ui-state" "${choices_file}"
+  assert_success
+  run grep -Fx "${HHS_CACHE_DIR}/.streamlit-ui-cache" "${choices_file}"
+  assert_success
+  run grep -Fx "${HHS_CACHE_DIR}/.streamlit-ttyd-index.html" "${choices_file}"
+  assert_success
+  run grep -Fx "${HHS_CACHE_DIR}/.streamlit-ui-ssh-connection" "${choices_file}"
+  assert_success
+  run grep -Fx "${HHS_DIR}/.streamlit-ui.pid" "${choices_file}"
+  assert_success
+  run grep -Fx "${HHS_DIR}/.streamlit-ui.processes" "${choices_file}"
+  assert_success
+  run grep -Fx "${HHS_DIR}/.streamlit-ui-ssh-connection" "${choices_file}"
+  assert_success
+  run grep -Fx "${TMPDIR%/}/hhs-ai-context-*" "${choices_file}"
+  assert_success
+  run grep -Fx "${TMPDIR%/}/hhs-search-open-*" "${choices_file}"
+  assert_success
+  run grep -Fx "${TMPDIR%/}/search_command-stdout-*" "${choices_file}"
+  assert_success
+  run grep -Fx "${TMPDIR%/}/ai_ask-stderr-*" "${choices_file}"
+  assert_success
+  run grep -Fx "${TMPDIR%/}/cached_*-stdout-*" "${choices_file}"
+  assert_success
+}
+
+@test "when-resetting-selected-ui-temp-directory-then-reset-should-remove-it" {
+  local search_dir stdout_file
+
+  export HHS_BACKUP_DIR="${BATS_TEST_TMPDIR}/backup"
+  export HHS_CACHE_DIR="${BATS_TEST_TMPDIR}/cache"
+  export HHS_KEY_BINDINGS="${BATS_TEST_TMPDIR}/key-bindings"
+  export HHS_LOG_DIR="${BATS_TEST_TMPDIR}/log"
+  export HHS_OLLAMA_HISTORY_FILE="${BATS_TEST_TMPDIR}/ollama-history"
+  export HHS_OLLAMA_PROMPT_FILE="${BATS_TEST_TMPDIR}/ollama-prompt"
+  export HHS_SETUP_FILE="${BATS_TEST_TMPDIR}/setup"
+  export HHS_SHOPTS_FILE="${BATS_TEST_TMPDIR}/shopts"
+  export TMPDIR="${BATS_TEST_TMPDIR}/tmp"
+  mkdir -p "${HHS_BACKUP_DIR}" "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}" "${TMPDIR}"
+  search_dir="${TMPDIR}/hhs-search-open-test"
+  stdout_file="${TMPDIR}/search_command-stdout-test"
+  mkdir -p "${search_dir}"
+  printf '%s\n' "output" > "${stdout_file}"
+
+  run bash --noprofile --norc -c '
+    source "${1}/bin/apps/bash/hhs-app/functions/built-ins.bash"
+    function clear() { :; }
+    function __hhs_has() { return 1; }
+    function __hhs_mchoose() {
+      printf "%s " "${TMPDIR}/hhs-search-open-*" "${TMPDIR}/search_command-stdout-*" > "$1"
+      return 0
+    }
+    reset
+  ' -- "${HHS_HOME}"
+  assert_success
+  [[ ! -e "${search_dir}" ]]
+  [[ ! -e "${stdout_file}" ]]
+}
+
 # TC - 1
 @test "when-showing-help-then-do-should-print-usage" {
   run __hhs_do --help
