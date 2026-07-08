@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.43"
+VERSION = "0.1.44"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -52,6 +52,11 @@ UI_COMMAND_MODEL_DOWNLOAD_TIMEOUT_SECONDS = 3600
 DEFAULT_TOP_N = 10
 MIN_TOP_N = 1
 MAX_TOP_N = 100
+DEFAULT_LOG_TAIL_LINES = 50
+LEGACY_DEFAULT_LOG_TAIL_LINES = 10
+MIN_LOG_TAIL_LINES = 5
+MAX_LOG_TAIL_LINES = 5000
+LOG_TAIL_LINES_STEP = 5
 UPDATER_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
 FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
@@ -166,7 +171,6 @@ SEARCH_TYPE_LABELS = {
 }
 SEARCH_FILTERS = ("All", "Containing")
 SEARCH_PAGE_SIZE = 20
-SEARCH_SUBMIT_PRELOADER_DELAY_MS = 700
 SEARCH_DIRECTORY_HISTORY_LIMIT = 20
 SEARCH_TERM_HISTORY_LIMIT = 20
 SEARCH_TERM_HISTORY_CACHE_KEY = "search_terms:history"
@@ -256,6 +260,8 @@ PERSISTED_UI_KEYS = (
     "monitor_log_filter",
     "monitor_log_level",
     "monitor_log_other_filter",
+    "monitor_log_tail_lines",
+    "monitor_log_tail_lines_default_migrated",
     "monitor_logs_tail",
     "monitor_mem_top_n",
     "monitor_process_filter",

@@ -1139,6 +1139,40 @@ PY
   assert_success
 }
 
+@test "when main tab is temporarily hidden then persisted tab should be preserved" {
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+start = source.index("def view_segmented_control_widget_key(")
+end = source.index("def save_view_segmented_control_state(")
+session_state = {}
+persisted_state = {"active_view": "Monitor"}
+saved = []
+namespace = {
+    "load_ui_state": lambda: persisted_state,
+    "save_ui_state": lambda: saved.append(dict(session_state)),
+    "st": SimpleNamespace(session_state=session_state),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+assert namespace["normalized_active_view_value"](("Home", "Monitor")) == "Monitor"
+assert session_state["active_view"] == "Monitor"
+
+session_state["active_view"] = "AI"
+persisted_state["active_view"] = "AI"
+assert namespace["normalized_active_view_value"](("Home", "Services")) == "Home"
+assert session_state["active_view"] == "AI"
+
+session_state["active_view_widget"] = "Search"
+namespace["save_active_view_state"]("active_view_widget", ("Home", "Search"))
+assert session_state["active_view"] == "Search"
+assert saved[-1]["active_view"] == "Search"
+PY
+  assert_success
+}
+
 @test "when footer statuses are queued then display timing should start on render" {
   run python3 - "${ui_file}" <<'PY'
 import sys
@@ -1614,6 +1648,8 @@ assert 'status_group_markup = (' in ui_source
 assert 'f"{remote_status_markup}{shell_controls_markup}"' in ui_source
 assert "{status_group_markup}" in footer_template
 assert "st.html(" in ui_source
+assert 'class="hhs-script-only"' in ui_source
+assert "unsafe_allow_javascript=True" in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source
 assert 'Connected to remote  {connected_host_display}' in ui_source
 assert 'os.environ.get("HHS_GITHUB_URL", "#")' in ui_source
@@ -1902,7 +1938,9 @@ assert "push_floating_status" in clear_cache_body
 apply_cache_options_body = ui_source.split("def apply_footer_cache_clear_options", 1)[1].split("\ndef ", 1)[0]
 assert "clear_cached_ui_data_preserving_state(show_status=False)" in apply_cache_options_body
 assert "clear_application_state_data()" in apply_cache_options_body
-assert "clear_ai_chat_history_data()" in apply_cache_options_body
+assert "clear_ai_chat_history()" in apply_cache_options_body
+assert "clear_ai_chat_history_data()" not in apply_cache_options_body
+assert "AI history clear queued." in apply_cache_options_body
 assert "selected_footer_cleanup_labels(" in apply_cache_options_body
 assert "st.rerun()" not in apply_cache_options_body
 remove_cache_params_body = ui_source.split("def remove_footer_cache_clear_query_params", 1)[1].split("\ndef ", 1)[0]
@@ -2011,6 +2049,11 @@ floating_status_dismiss_hover_block = re.search(
     r"\.hhs-floating-status-dismiss:hover,\s*\.hhs-floating-status-dismiss:focus-visible\s*\{([^}]*)\}",
     base_css,
 ).group(1)
+script_only_block = re.search(
+    r"\[data-testid=\"stElementContainer\"\]:has\(\.hhs-script-only\),\s*"
+    r"\[data-testid=\"stHtml\"\]:has\(\.hhs-script-only\)\s*\{([^}]*)\}",
+    base_css,
+).group(1)
 app_footer_block = re.search(r"\.hhs-app-footer\s*\{([^}]*)\}", base_css).group(1)
 sidebar_title_block = re.search(r"\.hhs-sidebar-title\s*\{([^}]*)\}", base_css).group(1)
 sidebar_title_separator_block = re.search(r"\.hhs-sidebar-title::after\s*\{([^}]*)\}", base_css).group(1)
@@ -2042,7 +2085,11 @@ terminal_ai_context_input_block = re.search(r"\.hhs-footer-terminal-ai-context-i
 terminal_ai_panel_button_block = re.search(r"\.hhs-footer-terminal-ai-panel button\s*\{([^}]*)\}", base_css).group(1)
 block_container_block = re.search(r"\.block-container\s*\{([^}]*)\}", base_css).group(1)
 main_block_gap_block = re.search(r"\[data-testid=\"stMainBlockContainer\"\] > \[data-testid=\"stVerticalBlock\"\],[^{]+\{([^}]*)\}", base_css).group(1)
-active_view_block = re.search(r"\.st-key-active_view\s*\{([^}]*)\}", base_css).group(1)
+active_view_block = re.search(
+    r"\.st-key-active_view,\s*\.st-key-active_view_widget\s*\{([^}]*)\}",
+    base_css,
+    re.S,
+).group(1)
 sub_view_button_group_block = re.search(r"\.st-key-home_view \[data-baseweb=\"button-group\"\],[^{]+\{([^}]*)\}", base_css).group(1)
 heading_block = re.search(r"\.hhs-view-heading\s*\{([^}]*)\}", base_css).group(1)
 tabbed_heading_block = re.search(r"\.hhs-view-heading--with-tabs\s*\{([^}]*)\}", base_css).group(1)
@@ -2072,7 +2119,12 @@ for expected in (
 ):
     assert expected in hidden_streamlit_block
 view_key_block = re.search(r"\.st-key-active_view,[^{]+\{([^}]*)\}", base_css).group(1)
-active_view_tabs_block = re.search(r"\.st-key-active_view \[role=\"radiogroup\"\]\s*\{([^}]*)\}", base_css).group(1)
+active_view_tabs_block = re.search(
+    r"\.st-key-active_view \[role=\"radiogroup\"\],\s*"
+    r"\.st-key-active_view_widget \[role=\"radiogroup\"\]\s*\{([^}]*)\}",
+    base_css,
+    re.S,
+).group(1)
 streamlit_chrome_block = re.search(r"\[data-testid=\"stDecoration\"\],[^{]+\{([^}]*)\}", base_css).group(1)
 streamlit_header_block = re.search(r"\[data-testid=\"stHeader\"\]\s*\{([^}]*)\}", base_css).group(1)
 streamlit_toolbar_block = re.search(r"\[data-testid=\"stToolbar\"\]\s*\{([^}]*)\}", base_css).group(1)
@@ -2208,6 +2260,8 @@ assert "--hhs-ttyd-max-height: 760px" in base_css
 assert "--hhs-view-gap: var(--hhs-element-std-gap)" in base_css
 assert "--hhs-view-section-gap: var(--hhs-element-std-gap)" in base_css
 assert "padding-top: 0 !important" in block_container_block
+assert ".block-container:has(#hhs-ttyd-terminal-anchor)" in base_css
+assert "padding-bottom: 0 !important" in base_css
 assert '[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"]' in base_css
 assert ".block-container > [data-testid=\"stVerticalBlock\"]" in base_css
 assert "gap: var(--hhs-element-std-gap) !important" in main_block_gap_block
@@ -2267,6 +2321,7 @@ assert ".st-key-history_view" in base_css
 assert ".st-key-monitor_view" in base_css
 assert ".st-key-ssh_view" in base_css
 assert ".st-key-ai_view" in base_css
+assert ".st-key-active_view_widget" in base_css
 assert ".st-key-home_view_widget" in base_css
 assert ".st-key-config_view_widget" in base_css
 assert ".st-key-history_view_widget" in base_css
@@ -2300,11 +2355,16 @@ for state_key in (
     assert f'"{state_key}"' in ui_source
 assert "padding-right: var(--hhs-streamlit-toolbar-guard-width)" in active_view_tabs_block
 assert '.st-key-active_view [role="radiogroup"] label input[type="radio"]' in base_css
+assert '.st-key-active_view_widget [role="radiogroup"] label input[type="radio"]' in base_css
 assert 'appearance: none !important' in base_css
 assert '.st-key-active_view [role="radiogroup"] label [data-testid="stRadioIcon"]' in base_css
+assert '.st-key-active_view_widget [role="radiogroup"] label [data-testid="stRadioIcon"]' in base_css
 assert '.st-key-active_view [role="radiogroup"] li::marker' in base_css
+assert '.st-key-active_view_widget [role="radiogroup"] li::marker' in base_css
 assert '.st-key-active_view [data-testid="stRadioOption"] > div > div:first-child' in base_css
+assert '.st-key-active_view_widget [data-testid="stRadioOption"] > div > div:first-child' in base_css
 assert '.st-key-active_view [data-testid="stRadioOption"] > div > div:first-child > div:first-child' in base_css
+assert '.st-key-active_view_widget [data-testid="stRadioOption"] > div > div:first-child > div:first-child' in base_css
 assert '[data-testid="stToolbar"]' in base_css
 assert '[data-testid="stDecoration"]' in base_css
 assert '[data-testid="stStatusWidget"]' in base_css
@@ -2366,6 +2426,11 @@ assert "color: var(--hhs-theme-footer-status-error-color)" in floating_status_di
 assert "var(--hhs-theme-footer-status-error-color) 48%" in floating_status_dismiss_block
 assert "color: var(--hhs-theme-footer-status-error-color)" in floating_status_dismiss_hover_block
 assert "var(--hhs-theme-footer-status-error-color) 18%" in floating_status_dismiss_hover_block
+assert "display: none !important" in script_only_block
+assert "height: 0 !important" in script_only_block
+assert "max-height: 0 !important" in script_only_block
+assert "min-height: 0 !important" in script_only_block
+assert "overflow: hidden !important" in script_only_block
 assert '[data-testid="stApp"]' in base_css
 assert '[data-testid="stMainBlockContainer"]' in base_css
 assert "--hhs-floating-status-timeout: 5s" in base_css
@@ -2620,8 +2685,8 @@ PY
   run grep -q 'SEARCH_PAGE_SIZE = 20' "${constants_file}"
   assert_success
 
-  run grep -q 'SEARCH_SUBMIT_PRELOADER_DELAY_MS = 700' "${constants_file}"
-  assert_success
+  run grep -q 'SEARCH_SUBMIT_PRELOADER_DELAY_MS' "${constants_file}"
+  assert_failure
 
   run grep -q 'SEARCH_DIRECTORY_HISTORY_LIMIT = 20' "${constants_file}"
   assert_success
@@ -3330,7 +3395,7 @@ assert body.index('key="search_path_folder_picker_button"') < body.index(
     'key="search_query"'
 )
 assert body.index('key="search_query"') < body.index('key="search_submit_button"')
-assert "render_search_submit_preloader_script()" in body
+assert "render_search_submit_preloader_script()" not in body
 PY
   assert_success
 
@@ -3359,46 +3424,13 @@ PY
   assert_failure
 
   run grep -q 'def render_search_submit_preloader_script' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'parentWindow.__hhsSearchSubmitPreloaderCleanup' "${ui_file}"
-  assert_success
+  assert_failure
 
-  run grep -q 'const buttonSelector = ".st-key-search_submit_button button"' "${ui_file}"
-  assert_success
-
-  run grep -q "const querySelector = \".st-key-search_query \\[role='combobox'\\], .st-key-search_query input\"" "${ui_file}"
-  assert_success
-
-  run grep -q "const pathSelector = \".st-key-search_path \\[role='combobox'\\], .st-key-search_path input\"" "${ui_file}"
-  assert_success
-
-  run grep -q 'delay_ms = int(hhs_ui_constants.SEARCH_SUBMIT_PRELOADER_DELAY_MS)' "${ui_file}"
-  assert_success
-
-  run grep -q 'const delayMs = ' "${ui_file}"
-  assert_success
-
-  run grep -q 'const clearPendingSearchOverlay = ()' "${ui_file}"
-  assert_success
-
-  run grep -q 'parentWindow.__hhsSearchSubmitPreloaderDelayTimer' "${ui_file}"
-  assert_success
-
-  run grep -q 'parentWindow.setTimeout(' "${ui_file}"
-  assert_success
-
-  run grep -q 'showOverlay(query, searchPath)' "${ui_file}"
-  assert_success
-
-  run grep -q 'doc.addEventListener("click", onClick, true)' "${ui_file}"
-  assert_success
-
-  run grep -q 'doc.addEventListener("keydown", onKeydown, true)' "${ui_file}"
-  assert_success
-
-  run grep -q 'event.key === "Enter"' "${ui_file}"
-  assert_success
+  run grep -q 'search-submit-' "${ui_file}"
+  assert_failure
 
   run python3 - "${ui_file}" <<'PY'
 from pathlib import Path
@@ -3427,27 +3459,13 @@ PY
   assert_success
 
   run grep -q 'event.target.closest(".st-key-search_path")' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'clearPendingSearchOverlay();' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'label.append("Searching for ", queryNode, " in ", pathNode)' "${ui_file}"
-  assert_success
-
-  run python3 - "${ui_file}" <<'PY'
-from pathlib import Path
-import sys
-
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-body = source.split("def render_search_submit_preloader_script", 1)[1].split("\ndef ", 1)[0]
-assert 'event.target.closest(".st-key-search_path")' in body
-assert 'clearPendingSearchOverlay();\n                return;' in body
-assert body.index('event.target.closest(".st-key-search_path")') < body.index(
-    'event.target.closest(".st-key-search_query")'
-)
-PY
-  assert_success
+  assert_failure
 
   run grep -q 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-search.bash";' "${ui_file}"
   assert_success
@@ -3472,10 +3490,11 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-search_preloader_body = source.split("def render_search_submit_preloader_script", 1)[1].split("\ndef ", 1)[0]
 start_search_body = source.split("def start_search_command", 1)[1].split("\ndef ", 1)[0]
-assert "show_overlay=False" not in search_preloader_body
+render_controls_body = source.split("def render_search_controls", 1)[1].split("\ndef ", 1)[0]
+assert "render_search_submit_preloader_script()" not in render_controls_body
 assert "show_overlay=False" not in start_search_body
+assert "show_preloader_event=True" in start_search_body
 PY
   assert_success
 
@@ -6339,6 +6358,7 @@ PY
 
   run python3 - "${ui_file}" <<'PY'
 from pathlib import Path
+import ast
 import html
 import sys
 import types
@@ -6398,6 +6418,45 @@ assert 'dismiss_background_job_preloader(job_name, job, "error")' in background_
 assert "process.poll() is not None" in background_status_body
 assert "background_job_result(job_name)" not in background_status_body
 assert background_status_body.count("render_command_preloader_events()") == 1
+
+tree = ast.parse(source)
+parents = {}
+for parent in ast.walk(tree):
+    for child in ast.iter_child_nodes(parent):
+        parents[child] = parent
+
+def enclosing_function_name(node):
+    parent = parents.get(node)
+    while parent is not None:
+        if isinstance(parent, ast.FunctionDef):
+            return parent.name
+        parent = parents.get(parent)
+    return ""
+
+javascript_html_functions = []
+for node in ast.walk(tree):
+    if not isinstance(node, ast.Call):
+        continue
+    func = node.func
+    if not (
+        isinstance(func, ast.Attribute)
+        and func.attr == "html"
+        and isinstance(func.value, ast.Name)
+        and func.value.id == "st"
+    ):
+        continue
+    for keyword in node.keywords:
+        if (
+            keyword.arg == "unsafe_allow_javascript"
+            and isinstance(keyword.value, ast.Constant)
+            and keyword.value.value is True
+        ):
+            javascript_html_functions.append(enclosing_function_name(node))
+
+assert javascript_html_functions == ["render_script_html"]
+render_script_body = source.split("def render_script_html", 1)[1].split("\ndef ", 1)[0]
+assert 'class="hhs-script-only"' in render_script_body
+assert "unsafe_allow_javascript=True" in render_script_body
 PY
   assert_success
 
@@ -6409,6 +6468,9 @@ PY
 
   run grep -q 'components.html(' "${ui_file}"
   assert_failure
+
+  run grep -q 'class="hhs-script-only"' "${ui_file}"
+  assert_success
 
   run grep -q 'overlay.style.zIndex = "1000010"' "${ui_file}"
   assert_success
@@ -7226,7 +7288,6 @@ ssh_dialog_index = main_body.index("render_ssh_connection_dialog()")
 ai_initialize_index = main_body.index("initialize_ollama_service_availability()")
 ai_refresh_index = main_body.index("update_ollama_service_availability_refresh()")
 background_poll_index = main_body.index("render_background_job_polling_fragment()")
-active_view_validation_index = main_body.index('if st.session_state["active_view"] not in main_views():')
 footer_actions_index = main_body.index("handle_footer_actions()")
 updater_status_index = main_body.index("render_background_job_status(UPDATER_UPDATE_JOB)")
 shell_dialog_index = main_body.index("render_footer_shell_version_dialog()")
@@ -7242,9 +7303,10 @@ assert 'st.session_state.setdefault("updater_check_context", "local")' in main_b
 assert 'st.session_state.setdefault("updater_check_started_context", "")' in main_body
 assert 'st.session_state.setdefault("updater_remote_checked_context", "")' in main_body
 assert "execute_due_updater_check()" not in main_body
+assert 'if st.session_state["active_view"] not in main_views():' not in main_body
 assert background_poll_index < disconnect_index < connect_index < ssh_dialog_index
-assert ssh_dialog_index < ai_initialize_index < ai_refresh_index < active_view_validation_index
-assert active_view_validation_index < footer_actions_index < updater_status_index < shell_dialog_index
+assert ssh_dialog_index < ai_initialize_index < ai_refresh_index < footer_actions_index
+assert footer_actions_index < updater_status_index < shell_dialog_index
 assert shell_dialog_index < sidebar_index < main_view_index
 assert footer_index < client_status_index < cleanup_index
 footer_status_body = ui_source.split("def render_footer_status_fragment", 1)[1].split("\ndef ", 1)[0]
@@ -7332,6 +7394,15 @@ PY
 
   run grep -q 'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem)' "${css_file}"
   assert_success
+
+  run grep -q 'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - var(--hhs-ttyd-shell-gap))' "${css_file}"
+  assert_success
+
+  run grep -q 'margin: var(--hhs-ttyd-shell-gap) 0 0' "${css_file}"
+  assert_success
+
+  run grep -q 'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - (var(--hhs-ttyd-shell-gap) \* 2))' "${css_file}"
+  assert_failure
 
   run grep -q 'max-height: var(--hhs-ttyd-max-height, 760px)' "${css_file}"
   assert_success
@@ -7646,15 +7717,20 @@ ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 refresh_body = ui_source.split("def refresh_ai_context", 1)[1].split("\ndef ", 1)[0]
 context_body = ui_source.split("def render_ai_context_panel", 1)[1].split("\ndef ", 1)[0]
 clear_context_body = ui_source.split("def clear_ai_context_history", 1)[1].split("\ndef ", 1)[0]
-assert "run_hhs_ask_context()" in refresh_body
+complete_context_body = ui_source.split("def complete_ai_context_action_job", 1)[1].split("\ndef ", 1)[0]
+assert "queue_ai_context_action(" in refresh_body
+assert "build_hhs_ask_context_command()" in refresh_body
+assert "run_hhs_ask_context()" not in refresh_body
 assert "run_hhs_ask_context()" not in context_body
 assert "run_hhs_ask_prompt()" not in context_body
 assert "render_ai_prompt_file_panel()" in context_body
 assert "render_ai_context_output_panel()" in context_body
-assert "run_hhs_ask_reset(close_dialogs=True)" in clear_context_body
-assert 'st.session_state["ai_context_output"] = ""' in clear_context_body
-assert 'st.session_state["ai_context_error"] = ""' in clear_context_body
-assert 'st.session_state["ai_chat_messages"] = []' not in clear_context_body
+assert "queue_ai_context_action(" in clear_context_body
+assert "build_hhs_ask_reset_command()" in clear_context_body
+assert "run_hhs_ask_reset(close_dialogs=True)" not in clear_context_body
+assert 'st.session_state["ai_context_output"] = ""' in complete_context_body
+assert 'st.session_state["ai_context_error"] = ""' in complete_context_body
+assert 'st.session_state["ai_chat_messages"] = []' in complete_context_body
 PY
   assert_success
 
@@ -7763,8 +7839,11 @@ PY
   run grep -q '" Clear"' "${ui_file}"
   assert_success
 
-  run grep -q 'run_hhs_ask_reset(close_dialogs=True)' "${ui_file}"
+  run grep -q 'build_hhs_ask_reset_command()' "${ui_file}"
   assert_success
+
+  run grep -q 'run_hhs_ask_reset(close_dialogs=True)' "${ui_file}"
+  assert_failure
 
   run grep -q 'st.session_state\["ai_context_output"\] = ""' "${ui_file}"
   assert_success
@@ -8105,7 +8184,8 @@ required_fragments = (
     "def ai_context_upload_path(file_name: str) -> Path:",
     "hhs-ai-context-upload",
     "tmp_file_path.write_bytes(uploaded_file.getvalue())",
-    "run_hhs_ask_ingest(str(tmp_file_path))",
+    "queue_ai_context_action(",
+    "build_hhs_ask_ingest_command(str(tmp_file_path))",
     "def safe_background_job_name(job_name: str) -> str:",
     "def background_job_output_path(job_name: str, stream_name: str) -> Path:",
     'stdout_path = str(background_job_output_path(job_name, "stdout"))',
@@ -8450,6 +8530,21 @@ PY
   run grep -q 'LOG_LEVELS = (' "${constants_file}"
   assert_success
 
+  run grep -q 'DEFAULT_LOG_TAIL_LINES = 50' "${constants_file}"
+  assert_success
+
+  run grep -q 'LEGACY_DEFAULT_LOG_TAIL_LINES = 10' "${constants_file}"
+  assert_success
+
+  run grep -q 'MIN_LOG_TAIL_LINES = 5' "${constants_file}"
+  assert_success
+
+  run grep -q 'MAX_LOG_TAIL_LINES = 5000' "${constants_file}"
+  assert_success
+
+  run grep -q 'LOG_TAIL_LINES_STEP = 5' "${constants_file}"
+  assert_success
+
   run grep -q 'LOG_FILTERS = ("All", "Containing")' "${constants_file}"
   assert_success
 
@@ -8468,6 +8563,12 @@ PY
   run grep -q '"monitor_log_level"' "${constants_file}"
   assert_success
 
+  run grep -q '"monitor_log_tail_lines"' "${constants_file}"
+  assert_success
+
+  run grep -q '"monitor_log_tail_lines_default_migrated"' "${constants_file}"
+  assert_success
+
   run grep -q 'def colorize_log_output' "${ui_file}"
   assert_success
 
@@ -8483,6 +8584,15 @@ PY
   run grep -q 'def monitor_log_level_label' "${ui_file}"
   assert_success
 
+  run grep -q 'def normalized_monitor_log_tail_lines' "${ui_file}"
+  assert_success
+
+  run grep -q 'def normalize_monitor_log_tail_lines_state' "${ui_file}"
+  assert_success
+
+  run grep -q 'def handle_monitor_log_tail_lines_change' "${ui_file}"
+  assert_success
+
   run grep -q 'def clear_monitor_log_file' "${ui_file}"
   assert_success
 
@@ -8495,7 +8605,7 @@ PY
   run grep -q 'def toggle_monitor_logs_tail' "${ui_file}"
   assert_success
 
-  run grep -q 'selected_log, selected_level, tail_enabled, log_filter, log_text_filter = (' "${ui_file}"
+  run grep -q 'tail_lines,' "${ui_file}"
   assert_success
 
   run grep -q 'render_log_controls' "${ui_file}"
@@ -8522,20 +8632,92 @@ PY
   run grep -q 'st.container(key="monitor_log_controls")' "${ui_file}"
   assert_success
 
-  run grep -q '\[0.42, 1.0, 0.52, 1.0, 0.16, 0.16\], vertical_alignment="center"' "${ui_file}"
+  run grep -q 'def render_persisted_expander_state_script' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_persisted_expander_state_script(' "${ui_file}"
+  assert_success
+
+  run grep -q '".st-key-monitor_log_controls"' "${ui_file}"
+  assert_success
+
+  run grep -q '"hhs.monitor.logs.controls.expanded"' "${ui_file}"
+  assert_success
+
+  run grep -q 'parentWindow.localStorage.getItem(storageKey)' "${ui_file}"
+  assert_success
+
+  run grep -q 'marker?.closest("details")' "${ui_file}"
+  assert_success
+
+  run grep -q 'expander.addEventListener("toggle"' "${ui_file}"
+  assert_success
+
+  run grep -q '\[0.32, 1.0, 0.36, 0.85, 0.46, 0.34, 0.16, 0.16\]' "${ui_file}"
+  assert_success
+
+  run grep -q 'File:' "${ui_file}"
   assert_success
 
   run grep -q 'Log file:' "${ui_file}"
+  assert_failure
+
+  run grep -q 'Level:' "${ui_file}"
   assert_success
 
   run grep -q 'Log level:' "${ui_file}"
+  assert_failure
+
+  run grep -q 'Bot N:' "${ui_file}"
   assert_success
 
-  run grep -q 'key="monitor_logs_tail_button"' "${ui_file}"
+  run grep -q 'st.number_input(' "${ui_file}"
   assert_success
 
-  run grep -q '"" if tail_enabled_value else ""' "${ui_file}"
+  run grep -q 'def render_standard_number_spinner' "${ui_file}"
   assert_success
+
+  run grep -q 'render_standard_number_spinner("Top N"' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_standard_number_spinner(' "${ui_file}"
+  assert_success
+
+  run grep -q 'key="monitor_log_tail_lines"' "${ui_file}"
+  assert_success
+
+  run grep -q 'min_value=hhs_ui_constants.MIN_LOG_TAIL_LINES' "${ui_file}"
+  assert_success
+
+  run grep -q 'max_value=hhs_ui_constants.MAX_LOG_TAIL_LINES' "${ui_file}"
+  assert_success
+
+  run grep -q 'step=hhs_ui_constants.LOG_TAIL_LINES_STEP' "${ui_file}"
+  assert_success
+
+  run grep -q 'width=150' "${ui_file}"
+  assert_success
+
+  run grep -q 'monitor_log_tail_lines_decrement_button' "${ui_file}"
+  assert_failure
+
+  run grep -q 'monitor_log_tail_lines_increment_button' "${ui_file}"
+  assert_failure
+
+  run grep -q 'on_change=handle_monitor_log_tail_lines_change' "${ui_file}"
+  assert_success
+
+  run grep -q 'tail_button_state = "selected" if tail_enabled_value else "idle"' "${ui_file}"
+  assert_success
+
+  run grep -q 'key=f"monitor_logs_tail_button_{tail_button_state}"' "${ui_file}"
+  assert_success
+
+  run grep -q '"",' "${ui_file}"
+  assert_success
+
+  run grep -q '""' "${ui_file}"
+  assert_failure
 
   run grep -q 'tail_enabled_value = st.checkbox' "${ui_file}"
   assert_failure
@@ -8546,6 +8728,12 @@ PY
   run grep -q 'key="monitor_log_clear_button"' "${ui_file}"
   assert_success
 
+  run grep -q '"",' "${ui_file}"
+  assert_success
+
+  run grep -q '""' "${ui_file}"
+  assert_failure
+
   run grep -q 'key="monitor_log_level"' "${ui_file}"
   assert_success
 
@@ -8555,8 +8743,17 @@ PY
   run grep -q 'shlex.quote(safe_log_level)' "${ui_file}"
   assert_success
 
-  run grep -q 'run_hhs_logs(selected_log, 200, selected_level)' "${ui_file}"
+  run grep -q 'run_hhs_logs(selected_log, tail_lines, selected_level)' "${ui_file}"
   assert_success
+
+  run grep -q 'build_hhs_logs_command(selected_log, tail_lines, selected_level)' "${ui_file}"
+  assert_success
+
+  run grep -q 'run_hhs_logs(selected_log, 200, selected_level)' "${ui_file}"
+  assert_failure
+
+  run grep -q 'build_hhs_logs_command(selected_log, 200, selected_level)' "${ui_file}"
+  assert_failure
 
   run python3 - <<'PY'
 import ast
@@ -8575,11 +8772,21 @@ selected = [
         "log_filter_highlight_ranges",
         "colorize_log_output",
         "filter_log_output",
+        "normalized_monitor_log_tail_lines",
     }
 ]
 namespace = {
     "html": __import__("html"),
     "re": re,
+    "hhs_ui_constants": type(
+        "HhsUiConstants",
+        (),
+        {
+            "DEFAULT_LOG_TAIL_LINES": 50,
+            "MIN_LOG_TAIL_LINES": 5,
+            "MAX_LOG_TAIL_LINES": 5000,
+        },
+    ),
     "hhs_ui": type(
         "HhsUi",
         (),
@@ -8597,6 +8804,10 @@ assert namespace["filter_log_output"](output, "Containing", "warn") == "WARN ski
 assert namespace["filter_log_output"](output, "Containing", "") == output
 highlighted = namespace["colorize_log_output"]("WARN skipped", "warn")
 assert '<span class="hhs-log-filter-match">WARN</span>' in highlighted
+assert namespace["normalized_monitor_log_tail_lines"](None) == 50
+assert namespace["normalized_monitor_log_tail_lines"]("4") == 5
+assert namespace["normalized_monitor_log_tail_lines"]("25") == 25
+assert namespace["normalized_monitor_log_tail_lines"]("6000") == 5000
 PY
   assert_success
 
@@ -8635,7 +8846,10 @@ LOGS
   run grep -q '.st-key-monitor_log_clear_button button' "${css_file}"
   assert_success
 
-  run grep -q '.st-key-monitor_logs_tail_button button' "${css_file}"
+  run grep -q '.st-key-monitor_logs_tail_button_idle button' "${css_file}"
+  assert_success
+
+  run grep -q '.st-key-monitor_logs_tail_button_selected button' "${css_file}"
   assert_success
 
   run grep -q '.hhs-log-filter-match' "${css_file}"
@@ -8671,10 +8885,16 @@ LOGS
   run grep -q 'flex-wrap: nowrap !important' "${css_file}"
   assert_success
 
-  run grep -q '.st-key-monitor_log_controls \[data-testid="stHorizontalBlock"\] > div\[data-testid="stColumn"\]:nth-child(1)' "${css_file}"
+  run grep -Fq '.st-key-monitor_log_controls [data-testid="stHorizontalBlock"]:has([class*="st-key-monitor_logs_tail_button_"])' "${css_file}"
   assert_success
 
-  run grep -q '.st-key-monitor_log_controls \[data-testid="stHorizontalBlock"\] > div\[data-testid="stColumn"\]:nth-child(3)' "${css_file}"
+  run grep -q '> div\[data-testid="stColumn"\]:nth-child(1)' "${css_file}"
+  assert_success
+
+  run grep -q '> div\[data-testid="stColumn"\]:nth-child(3)' "${css_file}"
+  assert_success
+
+  run grep -q '> div\[data-testid="stColumn"\]:nth-child(5)' "${css_file}"
   assert_success
 
   run grep -q 'min-width: max-content' "${css_file}"
@@ -8683,7 +8903,25 @@ LOGS
   run grep -q 'flex: 1 1 0 !important' "${css_file}"
   assert_success
 
-  run grep -q '.st-key-monitor_log_controls \[data-testid="stHorizontalBlock"\] > div\[data-testid="stColumn"\]:nth-child(5)' "${css_file}"
+  run grep -q '> div\[data-testid="stColumn"\]:nth-child(6)' "${css_file}"
+  assert_success
+
+  run grep -q 'flex: 0 0 150px !important' "${css_file}"
+  assert_success
+
+  run grep -q 'min-width: 150px' "${css_file}"
+  assert_success
+
+  run grep -q 'monitor_log_tail_lines_decrement_button' "${css_file}"
+  assert_failure
+
+  run grep -q 'monitor_log_tail_lines_increment_button' "${css_file}"
+  assert_failure
+
+  run grep -q '> div\[data-testid="stColumn"\]:nth-child(7)' "${css_file}"
+  assert_success
+
+  run grep -q '> div\[data-testid="stColumn"\]:nth-child(8)' "${css_file}"
   assert_success
 
   run grep -q 'flex: 0 0 2rem !important' "${css_file}"
@@ -8695,10 +8933,13 @@ LOGS
   run grep -q -- '--hhs-log-expander-open-height: 230px' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-log-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height) - var(--hhs-log-expander-height))' "${css_file}"
+  run grep -q -- '--hhs-log-height-reduction: 50px' "${css_file}"
   assert_success
 
-  run grep -q -- '--hhs-log-max-height: calc(var(--hhs-ttyd-max-height, 760px) - var(--hhs-log-expander-height))' "${css_file}"
+  run grep -q -- '--hhs-log-height: calc(100dvh - var(--hhs-log-chrome-height) - var(--hhs-footer-guard-height) - var(--hhs-log-expander-height) - var(--hhs-log-height-reduction))' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-log-max-height: calc(var(--hhs-ttyd-max-height, 760px) - var(--hhs-log-expander-height) - var(--hhs-log-height-reduction))' "${css_file}"
   assert_success
 
   run grep -q 'height: var(--hhs-log-height)' "${css_file}"
@@ -8711,6 +8952,9 @@ LOGS
   assert_success
 
   run grep -q '@st.fragment(run_every="5s")' "${ui_file}"
+  assert_success
+
+  run grep -q 'if not bool(st.session_state.get("monitor_logs_tail", True)):' "${ui_file}"
   assert_success
 
   run grep -q 'white-space: pre' "${css_file}"
@@ -9013,8 +9257,11 @@ LOGS
   run grep -q 'def render_path_picker_listing_loader' "${ui_file}"
   assert_success
 
-  run grep -q 'poll_background_job_completion(job_name)' "${ui_file}"
+  run grep -q 'render_background_job_status(job_name, PATH_PICKER_LISTING_LOADER_MESSAGE)' "${ui_file}"
   assert_success
+
+  run grep -q 'poll_background_job_completion(job_name)' "${ui_file}"
+  assert_failure
 
   run grep -q 'stop_path_picker_listing_jobs()' "${ui_file}"
   assert_success
@@ -9154,8 +9401,18 @@ LOGS
   run grep -q 'var(--hhs-element-std-gap)' "${css_file}"
   assert_success
 
-  run grep -q 'nth-child(8)' "${css_file}"
-  assert_failure
+  run python3 - "${css_file}" <<'PY'
+from pathlib import Path
+import sys
+
+css = Path(sys.argv[1]).read_text(encoding="utf-8")
+folder_grid = css[
+    css.index(".st-key-folder_picker_action_grid"):
+    css.index('div[class*="st-key-alias_selected_value_"]')
+]
+assert "nth-child(8)" not in folder_grid
+PY
+  assert_success
 
   run grep -q 'nth-child(5)' "${css_file}"
   assert_success
@@ -9187,19 +9444,19 @@ PY
   assert_success
 
   run grep -q 'def render_path_picker_open_preloader_script' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q 'render_path_picker_open_preloader_script()' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q '__hhsPathPickerOpenPreloaderCleanup' "${ui_file}"
-  assert_success
+  assert_failure
 
-  run grep -q 'path-picker-' "${ui_file}"
-  assert_success
+  run grep -q 'const overlayToken = `path-picker-' "${ui_file}"
+  assert_failure
 
   run grep -Fq '[class*="st-key-"][class*="_folder_picker_button"] button' "${ui_file}"
-  assert_success
+  assert_failure
 
   run grep -q '.st-key-folder_picker_open_button button' "${ui_file}"
   assert_failure
@@ -9436,25 +9693,20 @@ def function_body(function_name):
     function = functions[function_name]
     return "\n".join(source.splitlines()[function.lineno - 1:function.end_lineno])
 
-required_refresh_calls = {
-    "execute_pending_ai_model_selection": "refresh_ai_model_listing",
-    "execute_pending_ai_model_deletion": "refresh_ai_model_listing",
-    "apply_selected_env_value": "refresh_env_listing",
-    "apply_env_delete": "refresh_env_listing",
-    "apply_selected_path_value": "refresh_path_listing",
-    "apply_path_delete": "refresh_path_listing",
-    "apply_selected_dir_value": "refresh_dir_listing",
-    "apply_dir_delete": "refresh_dir_listing",
-    "apply_selected_cmd_value": "refresh_cmd_listing",
-    "apply_cmd_delete": "refresh_cmd_listing",
-    "apply_selected_alias_value": "refresh_alias_listing",
-    "apply_alias_delete": "refresh_alias_listing",
-    "apply_home_shopt_action": "refresh_home_shopts_listing",
-    "execute_pending_home_tool_action": "refresh_home_tools_listing",
-    "apply_selected_service_action": "refresh_service_listing",
-    "apply_selected_process_kill": "refresh_process_listing",
-}
-for function_name, refresh_name in required_refresh_calls.items():
+required_direct_refresh_calls = (
+    ("execute_pending_ai_model_selection", "refresh_ai_model_listing"),
+    ("execute_pending_ai_model_deletion", "refresh_ai_model_listing"),
+    ("apply_successful_config_action_side_effects", "refresh_env_listing"),
+    ("apply_successful_config_action_side_effects", "refresh_path_listing"),
+    ("apply_successful_config_action_side_effects", "refresh_dir_listing"),
+    ("apply_successful_config_action_side_effects", "refresh_cmd_listing"),
+    ("apply_successful_config_action_side_effects", "refresh_alias_listing"),
+    ("apply_successful_config_action_side_effects", "refresh_home_shopts_listing"),
+    ("execute_pending_home_tool_action", "refresh_home_tools_listing"),
+    ("apply_selected_service_action", "refresh_service_listing"),
+    ("complete_monitor_process_action_job", "refresh_process_listing"),
+)
+for function_name, refresh_name in required_direct_refresh_calls:
     function = functions[function_name]
     if not any(
         isinstance(node, ast.Call)
@@ -9464,18 +9716,49 @@ for function_name, refresh_name in required_refresh_calls.items():
     ):
         raise SystemExit(f"{function_name} should call {refresh_name}")
 
+required_config_action_queues = {
+    "apply_selected_env_value": "build_hhs_env_action_command",
+    "apply_env_delete": "build_hhs_env_action_command",
+    "apply_selected_path_value": "build_hhs_path_action_command",
+    "apply_path_delete": "build_hhs_path_action_command",
+    "apply_selected_dir_value": "build_hhs_dir_action_command",
+    "apply_dir_delete": "build_hhs_dir_action_command",
+    "apply_selected_cmd_value": "build_hhs_command_action_command",
+    "apply_cmd_delete": "build_hhs_command_action_command",
+    "apply_selected_alias_value": "build_hhs_alias_action_command",
+    "apply_alias_delete": "build_hhs_alias_action_command",
+    "apply_home_shopt_action": "build_hhs_shopt_action_command",
+}
+for function_name, command_builder_name in required_config_action_queues.items():
+    body = function_body(function_name)
+    if "queue_config_action(" not in body:
+        raise SystemExit(f"{function_name} should queue config action")
+    if command_builder_name not in body:
+        raise SystemExit(f"{function_name} should use {command_builder_name}")
+    if "_listing()" in body:
+        raise SystemExit(f"{function_name} should not refresh synchronously")
+
+process_kill_body = function_body("apply_selected_process_kill")
+if "queue_monitor_process_action(" not in process_kill_body:
+    raise SystemExit("apply_selected_process_kill should queue monitor action")
+
 refresh_cache_body = function_body("refresh_config_listing_cache")
 for expected_fragment in (
     "stop_config_listing_background_jobs(cache_tag)",
     "cache_delete_tag(cache_tag)",
-    "use_cache=False",
-    "show_overlay=False",
-    "background_command_metadata(command, cache_tag)",
-    "cache_background_command_result(metadata, result)",
     "reset_selection()",
 ):
     if expected_fragment not in refresh_cache_body:
         raise SystemExit(f"refresh_config_listing_cache should include {expected_fragment}")
+for forbidden_fragment in (
+    "use_cache=False",
+    "show_overlay=False",
+    "background_command_metadata(command, cache_tag)",
+    "cache_background_command_result(metadata, result)",
+    "run_bash_command(",
+):
+    if forbidden_fragment in refresh_cache_body:
+        raise SystemExit(f"refresh_config_listing_cache should not include {forbidden_fragment}")
 
 stop_jobs_body = function_body("stop_config_listing_background_jobs")
 for expected_fragment in (
@@ -9513,52 +9796,47 @@ for expected_fragment in (
     if expected_fragment not in render_envs_body:
         raise SystemExit(f"render_envs_table should include {expected_fragment}")
 
-def assert_success_refresh_order(function_name, refresh_name, before_fragment=None):
-    body = function_body(function_name)
-    refresh_fragment = f"{refresh_name}()"
-    if body.count(refresh_fragment) != 1:
-        raise SystemExit(f"{function_name} should call {refresh_fragment} exactly once")
-    success_index = body.index("if result.returncode == 0:")
-    refresh_index = body.index(refresh_fragment)
-    if success_index > refresh_index:
-        raise SystemExit(f"{function_name} should refresh only after a successful mutation")
-    if before_fragment is not None and body.index(before_fragment) > refresh_index:
-        raise SystemExit(f"{function_name} should update {before_fragment} before refreshing")
+side_effect_body = function_body("apply_successful_config_action_side_effects")
+for expected_fragment in (
+    "if result.returncode == 0:",
+    "os.environ[name] = value",
+    "os.environ.pop(name, None)",
+    'os.environ["PATH"] =',
+    "refresh_env_listing()",
+    "refresh_path_listing()",
+    "refresh_dir_listing()",
+    "refresh_cmd_listing()",
+    "refresh_alias_listing()",
+    "refresh_home_shopts_listing()",
+    "clear_add_form_fields(",
+):
+    source_to_check = function_body("complete_config_action_job")
+    if expected_fragment not in source_to_check + "\n" + side_effect_body:
+        raise SystemExit(f"config action completion should include {expected_fragment}")
 
-assert_success_refresh_order("apply_selected_env_value", "refresh_env_listing", "os.environ[name] = value")
-assert_success_refresh_order("apply_env_delete", "refresh_env_listing", "os.environ.pop(name, None)")
-assert_success_refresh_order("apply_selected_path_value", "refresh_path_listing", 'os.environ["PATH"] =')
-assert_success_refresh_order("apply_path_delete", "refresh_path_listing", 'os.environ["PATH"] =')
-assert_success_refresh_order("apply_selected_dir_value", "refresh_dir_listing")
-assert_success_refresh_order("apply_dir_delete", "refresh_dir_listing")
-assert_success_refresh_order("apply_selected_cmd_value", "refresh_cmd_listing")
-assert_success_refresh_order("apply_cmd_delete", "refresh_cmd_listing")
-assert_success_refresh_order("apply_selected_alias_value", "refresh_alias_listing")
-assert_success_refresh_order("apply_alias_delete", "refresh_alias_listing")
-
-required_add_success_clears = {
-    "apply_env_add_form_value": ("apply_selected_env_value", "clear_add_form_fields"),
-    "apply_path_add_form_value": ("apply_selected_path_value", "clear_add_form_fields"),
-    "apply_dir_add_form_value": ("apply_selected_dir_value", "clear_add_form_fields"),
-    "apply_cmd_add_form_value": ("apply_selected_cmd_value", "clear_add_form_fields"),
-    "apply_alias_add_form_value": ("apply_selected_alias_value", "clear_add_form_fields"),
+required_add_form_metadata = {
+    "apply_env_add_form_value": (
+        "apply_selected_env_value(name, value, clear_form_key_prefix=\"env\")",
+    ),
+    "apply_path_add_form_value": (
+        "clear_form_key_prefix=\"path\"",
+        "clear_form_include_name=False",
+    ),
+    "apply_dir_add_form_value": (
+        "apply_selected_dir_value(name, value, clear_form_key_prefix=\"dir\")",
+    ),
+    "apply_cmd_add_form_value": (
+        "apply_selected_cmd_value(name, value, clear_form_key_prefix=\"cmd\")",
+    ),
+    "apply_alias_add_form_value": (
+        "apply_selected_alias_value(name, value, clear_form_key_prefix=\"alias\")",
+    ),
 }
-for function_name, (apply_name, clear_name) in required_add_success_clears.items():
-    function = functions[function_name]
-    if not any(
-        isinstance(node, ast.If)
-        and isinstance(node.test, ast.Call)
-        and isinstance(node.test.func, ast.Name)
-        and node.test.func.id == apply_name
-        and any(
-            isinstance(body_node, ast.Call)
-            and isinstance(body_node.func, ast.Name)
-            and body_node.func.id == clear_name
-            for body_node in ast.walk(ast.Module(body=node.body, type_ignores=[]))
-        )
-        for node in ast.walk(function)
-    ):
-        raise SystemExit(f"{function_name} should clear fields after {apply_name} succeeds")
+for function_name, expected_fragments in required_add_form_metadata.items():
+    body = function_body(function_name)
+    for expected_fragment in expected_fragments:
+        if expected_fragment not in body:
+            raise SystemExit(f"{function_name} should include {expected_fragment}")
 
 required_delete_command_fragments = {
     "build_hhs_env_action_command": "--del {safe_name}",
@@ -10914,7 +11192,7 @@ update_calls = {
 }
 assert "complete_hhs_services_list_refresh" in update_calls
 assert "background_job_is_running" in update_calls
-assert "poll_background_job_completion" in update_calls
+assert "poll_background_job_completion" not in update_calls
 assert "ollama_service_availability_refresh_due" in update_calls
 assert "start_hhs_services_list_refresh" in update_calls
 
@@ -10933,8 +11211,16 @@ main_calls = {
     if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
 }
 assert "initialize_ollama_service_availability" in main_calls
-assert "main_views" in main_calls
 assert "update_ollama_service_availability_refresh" in main_calls
+assert "render_main_view" in main_calls
+
+render_main_view = functions["render_main_view"]
+render_main_view_calls = {
+    call.func.id
+    for call in ast.walk(render_main_view)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "main_views" in render_main_view_calls
 PY
   assert_success
 
@@ -10983,6 +11269,44 @@ assert refresh_due() is True
 session_state["_context"] = "ssh:remote-dev"
 assert available() is True
 assert refresh_due() is False
+PY
+  assert_success
+}
+
+@test "when cached content is fresh then background refresh loaders should stay hidden" {
+  run python3 - "${ui_file}" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+tree = ast.parse(source)
+functions = {
+    node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
+}
+
+helper = ast.get_source_segment(
+    source, functions["render_background_job_status_if_blocking"]
+)
+assert "if has_visible_content:" in helper
+assert "poll_background_job_completion(job_name)" not in helper
+assert "render_background_job_status(job_name, message)" in helper
+
+cached_renderer = ast.get_source_segment(
+    source, functions["render_cached_command_result"]
+)
+assert "render_background_job_status_if_blocking(job_name, result is not None)" in cached_renderer
+assert "command_running and not fresh_cache and result is None" in cached_renderer
+assert "render_background_job_status(job_name)" not in cached_renderer
+
+services_table = ast.get_source_segment(source, functions["render_services_table"])
+assert "render_background_job_status(SERVICE_ACTION_JOB)" in services_table
+assert (
+    "render_background_job_status_if_blocking(SERVICE_LIST_JOB, result is not None)"
+    in services_table
+)
+assert "service_list_running and not fresh_cache and result is None" in services_table
+assert "render_background_job_status(SERVICE_LIST_JOB)" not in services_table
 PY
   assert_success
 }
@@ -11124,9 +11448,31 @@ assert "render_background_job_status(SEARCH_COMMAND_JOB, loader_message)" in ren
 assert "complete_search_command_result(cache_key)" in render_results_body
 assert "cached_search_command_result(command, cache_key)" in render_results_body
 assert 'SEARCH_COMMAND_JOB = "search_command"' in source
+assert 'SEARCH_OPEN_JOB = "search_open"' in source
+assert "SEARCH_OPEN_JOB" in source.split("HOST_SWITCH_BACKGROUND_JOBS = (", 1)[1].split(")", 1)[0]
+assert "SEARCH_OPEN_JOB" in source.split("CACHE_CLEAR_BACKGROUND_JOBS = (", 1)[1].split(")", 1)[0]
 start_search_body = source.split("def start_search_command", 1)[1].split("\ndef ", 1)[0]
 assert "hhs_ui_constants.UI_COMMAND_SEARCH_TIMEOUT_SECONDS" in start_search_body
 assert "show_preloader_event=True" in start_search_body
+open_local_body = source.split("def open_local_search_result_path", 1)[1].split("\ndef ", 1)[0]
+open_remote_body = source.split("def open_remote_search_result_path", 1)[1].split("\ndef ", 1)[0]
+start_open_body = source.split("def start_pending_search_open_action", 1)[1].split("\ndef ", 1)[0]
+complete_open_body = source.split("def complete_search_open_action_job", 1)[1].split("\ndef ", 1)[0]
+global_actions_body = source.split("def complete_background_action_jobs", 1)[1].split("\ndef ", 1)[0]
+render_panel_body = source.split("def render_search_panel", 1)[1].split("\ndef ", 1)[0]
+main_body = source.split("def main", 1)[1].split("\n\nif __name__", 1)[0]
+assert "queue_search_open_action(" in open_local_body
+assert "run_bash_command(" not in open_local_body
+assert "queue_search_open_action(" in open_remote_body
+assert "run_bash_command(" not in open_remote_body
+assert "build_open_remote_search_result_command(" in open_remote_body
+assert "start_background_action_job(" in start_open_body
+assert "SEARCH_OPEN_JOB" in start_open_body
+assert "force_local=True" in start_open_body
+assert "background_job_result(SEARCH_OPEN_JOB)" in complete_open_body
+assert "execute_pending_search_open_action()" in global_actions_body
+assert "render_background_job_status(SEARCH_OPEN_JOB)" in render_panel_body
+assert 'st.session_state.setdefault("search_open_execute_pending", None)' in main_body
 assert namespace["normalized_search_type"]("Folders") == "Folders"
 assert namespace["normalized_search_type"]("Unknown") == "Files"
 namespace["st"].session_state["search_type"] = "Files"
@@ -11386,49 +11732,36 @@ assert (
 namespace["create_search_result_download_dir"] = lambda: Path(
     "/tmp/hhs-search-open.dir"
 )
-remote_commands.clear()
+namespace["st"].session_state.pop("search_open_execute_pending", None)
 statuses.clear()
 namespace["connected_host"] = ""
 namespace["open_search_result_path"]("/tmp/search root/report.txt")
-assert remote_commands[-1][0].endswith("__hhs_open '/tmp/search root/report.txt'")
-assert remote_commands[-1][1]["force_local"] is True
-assert statuses == [
-    ("Opening /tmp/search root/report.txt.", "info"),
-    ("Opened /tmp/search root/report.txt.", "info"),
-]
+local_open_pending = namespace["st"].session_state["search_open_execute_pending"]
+assert local_open_pending["action"] == "local_open"
+assert local_open_pending["path"] == "/tmp/search root/report.txt"
+assert local_open_pending["description"] == "Opening /tmp/search root/report.txt"
+assert local_open_pending["command"].endswith("__hhs_open '/tmp/search root/report.txt'")
+assert statuses == []
 
-remote_commands.clear()
+namespace["st"].session_state.pop("search_open_execute_pending", None)
 statuses.clear()
 namespace["connected_host"] = "remote-box"
 namespace["open_search_result_path"]("/remote/report.txt")
-assert (
-    remote_commands[0][0]
-    == "scp-download remote-box /remote/report.txt /tmp/hhs-search-open.dir"
+remote_open_pending = namespace["st"].session_state["search_open_execute_pending"]
+assert remote_open_pending["action"] == "remote_open"
+assert remote_open_pending["path"] == "/remote/report.txt"
+assert remote_open_pending["host"] == "remote-box"
+assert remote_open_pending["local_path"] == "/tmp/hhs-search-open.dir/report.txt"
+assert remote_open_pending["description"] == "Opening remote result /remote/report.txt"
+assert remote_open_pending["command"] == (
+    "scp-download remote-box /remote/report.txt /tmp/hhs-search-open.dir"
+    " && "
+    'export HHS_DIR="${HHS_DIR}"; '
+    'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+    'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
+    "__hhs_open /tmp/hhs-search-open.dir/report.txt"
 )
-assert remote_commands[0][1]["force_local"] is True
-assert remote_commands[0][1]["timeout_seconds"] == 30
-assert remote_commands[1][0].endswith("__hhs_open /tmp/hhs-search-open.dir/report.txt")
-assert remote_commands[1][1]["force_local"] is True
-assert statuses == [
-    ("Downloading remote result /remote/report.txt.", "info"),
-    ("Downloaded remote result to /tmp/hhs-search-open.dir/report.txt.", "info"),
-    ("Opening downloaded result /tmp/hhs-search-open.dir/report.txt.", "info"),
-    ("Opened /tmp/hhs-search-open.dir/report.txt.", "info"),
-]
-
-def failing_open_command(command, *args, **kwargs):
-    remote_commands.append((command, kwargs))
-    return subprocess.CompletedProcess(["search-open"], 1, "", "download failed")
-
-namespace["run_bash_command"] = failing_open_command
-remote_commands.clear()
-statuses.clear()
-namespace["open_search_result_path"]("/remote/missing.txt")
-assert len(remote_commands) == 1
-assert statuses == [
-    ("Downloading remote result /remote/missing.txt.", "info"),
-    ("download failed", "error"),
-]
+assert statuses == []
 assert namespace["search_relative_path"](
     "/tmp/search root/docs/report.txt", "/tmp/search root"
 ) == "docs/report.txt"
@@ -11797,8 +12130,11 @@ search_filter_body = source.split("def render_search_filters", 1)[1].split("\nde
 assert "key=\"search_filter\"" in search_filter_body
 assert "index=None" in search_filter_body
 main_view_body = source.split("def render_main_view", 1)[1].split("\ndef ", 1)[0]
-assert "key=\"active_view\"" in main_view_body
-assert "index=None" in main_view_body
+active_control_body = source.split("def render_active_view_control", 1)[1].split("\ndef ", 1)[0]
+assert "render_active_view_control(visible_views)" in main_view_body
+assert "key=widget_key" in active_control_body
+assert "index=None" in active_control_body
+assert "on_change=save_active_view_state" in active_control_body
 PY
   assert_success
 }

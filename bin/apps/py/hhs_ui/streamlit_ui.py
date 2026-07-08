@@ -271,12 +271,18 @@ TableControlsResult = TypeVar("TableControlsResult")
 UI_CACHE_MEMORY: dict[str, dict[str, object]] = {}
 UI_CACHE_MEMORY_MTIME: float | None = None
 HOME_TOOL_ACTION_JOB = "home_tool_action"
+HOME_TOOL_TLDR_JOB = "home_tool_tldr"
+CONFIG_ACTION_JOB = "config_action"
+DOCKER_ACTION_JOB = "docker_action"
 ALIAS_LIST_JOB = "alias_list"
 SERVICE_LIST_JOB = "service_list"
 SERVICE_ACTION_JOB = "service_action"
 MONITOR_CPU_JOB = "monitor_cpu"
 MONITOR_MEM_JOB = "monitor_mem"
 MONITOR_PROCESS_LIST_JOB = "monitor_process_list"
+MONITOR_PROCESS_ACTION_JOB = "monitor_process_action"
+AI_CONTEXT_ACTION_JOB = "ai_context_action"
+AI_PROMPT_ACTION_JOB = "ai_prompt_action"
 AI_MODEL_SELECT_JOB = "ai_model_select"
 AI_MODEL_DELETE_JOB = "ai_model_delete"
 UPDATER_UPDATE_JOB = "updater_update"
@@ -288,7 +294,10 @@ FOOTER_WORKING_DIR_JOB = "footer_working_dir"
 SSH_CONNECT_JOB = "ssh_connect"
 SSH_DISCONNECT_JOB = "ssh_disconnect"
 SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"
+SSH_EXPLORER_ACTION_JOB = "ssh_explorer_action"
+SSH_EXPLORER_DELETE_JOB = "ssh_explorer_delete"
 SEARCH_COMMAND_JOB = "search_command"
+SEARCH_OPEN_JOB = "search_open"
 PATH_PICKER_LISTING_JOB_PREFIX = "path_picker_listing"
 BACKGROUND_JOB_STATE_KEY_PREFIX = "_hhs_background_job_"
 PATH_PICKER_LISTING_LOADER_MESSAGE = "Loading directories and files..."
@@ -311,25 +320,46 @@ HOST_SWITCH_BACKGROUND_JOBS = (
     SSH_CONNECT_JOB,
     SSH_DISCONNECT_JOB,
     SSH_FILE_TRANSFER_JOB,
+    SSH_EXPLORER_ACTION_JOB,
+    SSH_EXPLORER_DELETE_JOB,
     SEARCH_COMMAND_JOB,
+    SEARCH_OPEN_JOB,
+    CONFIG_ACTION_JOB,
+    DOCKER_ACTION_JOB,
     FOOTER_VERSION_JOB,
+    HOME_TOOL_ACTION_JOB,
+    HOME_TOOL_TLDR_JOB,
     SERVICE_LIST_JOB,
     SERVICE_ACTION_JOB,
     MONITOR_CPU_JOB,
     MONITOR_MEM_JOB,
     MONITOR_PROCESS_LIST_JOB,
+    MONITOR_PROCESS_ACTION_JOB,
+    AI_CONTEXT_ACTION_JOB,
+    AI_PROMPT_ACTION_JOB,
 )
 CACHE_CLEAR_BACKGROUND_JOBS = (
     SSH_CONNECT_JOB,
     SSH_DISCONNECT_JOB,
     SSH_FILE_TRANSFER_JOB,
+    SSH_EXPLORER_ACTION_JOB,
+    SSH_EXPLORER_DELETE_JOB,
     SEARCH_COMMAND_JOB,
+    SEARCH_OPEN_JOB,
+    CONFIG_ACTION_JOB,
+    DOCKER_ACTION_JOB,
     FOOTER_VERSION_JOB,
+    HOME_TOOL_ACTION_JOB,
+    HOME_TOOL_TLDR_JOB,
     ALIAS_LIST_JOB,
     SERVICE_LIST_JOB,
+    SERVICE_ACTION_JOB,
     MONITOR_CPU_JOB,
     MONITOR_MEM_JOB,
     MONITOR_PROCESS_LIST_JOB,
+    MONITOR_PROCESS_ACTION_JOB,
+    AI_CONTEXT_ACTION_JOB,
+    AI_PROMPT_ACTION_JOB,
 )
 HOST_SWITCH_STATE_KEYS = (
     "monitor_cpu_error",
@@ -781,7 +811,66 @@ def render_script_html(
 ) -> None:
     """Render trusted in-app JavaScript without deprecated component HTML."""
     del height, width
-    st.html(body, unsafe_allow_javascript=True)
+    st.html(
+        f'<span class="hhs-script-only" aria-hidden="true"></span>{body}',
+        unsafe_allow_javascript=True,
+    )
+
+
+def render_persisted_expander_state_script(
+    marker_selector: str, storage_key: str, default_expanded: bool = True
+) -> None:
+    """Persist one Streamlit expander open state in browser storage."""
+    render_script_html(
+        f"""
+        <script>
+          (() => {{
+            const parentWindow = window.parent || window;
+            const doc = parentWindow.document;
+            const markerSelector = {json.dumps(marker_selector)};
+            const storageKey = {json.dumps(storage_key)};
+            const defaultExpanded = {json.dumps(default_expanded)};
+            const readExpanded = () => {{
+              try {{
+                const stored = parentWindow.localStorage.getItem(storageKey);
+                return stored === null ? defaultExpanded : stored === "true";
+              }} catch (_error) {{
+                return defaultExpanded;
+              }}
+            }};
+            const writeExpanded = (expanded) => {{
+              try {{
+                parentWindow.localStorage.setItem(storageKey, expanded ? "true" : "false");
+              }} catch (_error) {{}}
+            }};
+            const bindExpander = (attempt = 0) => {{
+              const marker = doc.querySelector(markerSelector);
+              const expander = marker?.closest("details");
+              if (!expander) {{
+                if (attempt < 12) {{
+                  parentWindow.setTimeout(() => bindExpander(attempt + 1), 80);
+                }}
+                return;
+              }}
+              const expanded = readExpanded();
+              if (expander.open !== expanded) {{
+                expander.open = expanded;
+              }}
+              if (expander.dataset.hhsPersistedExpanderStateKey === storageKey) {{
+                return;
+              }}
+              expander.dataset.hhsPersistedExpanderStateKey = storageKey;
+              expander.addEventListener("toggle", () => {{
+                writeExpanded(expander.open);
+              }});
+            }};
+            bindExpander();
+          }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 
 def close_document_view(reset_terminal: bool = False) -> None:
@@ -889,38 +978,29 @@ def terminal_document_view_is_active() -> bool:
 
 
 def clear_ai_chat_history() -> None:
-    """Reset the backend ask history and clear the current AI chat history."""
-    result = clear_ai_chat_history_data()
-    if result.returncode == 0:
-        push_floating_status("AI chat history cleared.", "info")
-    else:
-        push_floating_status("Unable to clear AI chat history.", "error")
-    save_ui_state()
-
-
-def clear_ai_chat_history_data() -> subprocess.CompletedProcess[str]:
-    """Reset backend AI history and clear in-memory AI chat data."""
-    result = run_hhs_ask_reset(close_dialogs=True)
-    cache_delete_tag("ai")
-    st.session_state["ai_chat_messages"] = []
-    st.session_state["ai_context_output"] = ""
-    st.session_state["ai_context_error"] = ""
-    st.session_state["ai_clear_chat_pending"] = False
-    st.session_state["ai_clear_chat_execute_pending"] = False
-    return result
+    """Queue a backend ask reset and current AI chat-history clear."""
+    queue_ai_context_action(
+        "clear_chat",
+        build_hhs_ask_reset_command(),
+        "Resetting Ollama context",
+        {
+            "success_fallback": "AI chat history cleared.",
+            "error_fallback": "Unable to clear AI chat history.",
+        },
+    )
 
 
 def clear_ai_context_history() -> None:
-    """Reset the backend ask history and clear the current context display."""
-    result = run_hhs_ask_reset(close_dialogs=True)
-    cache_delete_tag("ai")
-    st.session_state["ai_context_output"] = ""
-    st.session_state["ai_context_error"] = ""
-    if result.returncode == 0:
-        push_floating_status("AI context history cleared.", "info")
-    else:
-        push_floating_status("Unable to clear AI context history.", "error")
-    save_ui_state()
+    """Queue a backend ask reset and current context display clear."""
+    queue_ai_context_action(
+        "clear_context",
+        build_hhs_ask_reset_command(),
+        "Resetting Ollama context",
+        {
+            "success_fallback": "AI context history cleared.",
+            "error_fallback": "Unable to clear AI context history.",
+        },
+    )
 
 
 def confirm_ai_chat_clear() -> None:
@@ -931,7 +1011,7 @@ def confirm_ai_chat_clear() -> None:
 
 
 def execute_pending_ai_chat_clear() -> None:
-    """Execute a pending AI chat reset after dialogs are closed."""
+    """Queue a pending AI chat reset after dialogs are closed."""
     if st.session_state.get("ai_clear_chat_execute_pending"):
         clear_ai_chat_history()
     st.session_state["ai_clear_chat_execute_pending"] = False
@@ -949,69 +1029,234 @@ def cancel_ai_chat_clear_confirmation() -> None:
 
 
 def refresh_ai_context() -> None:
-    """Fetch and store the current backend ask context for the Context tab."""
-    result = run_hhs_ask_context()
-    output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
-    clean_output = strip_ansi(output or "").strip()
-    st.session_state["ai_context_output"] = (
-        clean_output or "No Ollama context available."
+    """Queue a backend ask context refresh for the Context tab."""
+    queue_ai_context_action(
+        "refresh",
+        build_hhs_ask_context_command(),
+        "Loading Ollama context",
+        {
+            "success_fallback": "AI context refreshed.",
+            "error_fallback": "Unable to load Ollama context.",
+        },
     )
-    st.session_state["ai_context_error"] = (
-        ""
-        if result.returncode == 0
-        else clean_output or "Unable to load Ollama context."
-    )
-    save_ui_state()
 
 
 def refresh_ai_prompt_file() -> None:
-    """Fetch and store the editable backend ask prompt file for the Prompt panel."""
-    result = run_hhs_ask_prompt_file()
-    output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
-    clean_output = strip_ansi(output or "")
-    if result.returncode == 0:
-        st.session_state["ai_prompt_editor"] = clean_output
-        st.session_state["ai_prompt_error"] = ""
-        st.session_state["ai_prompt_loaded"] = True
-    else:
-        st.session_state["ai_prompt_error"] = (
-            clean_output.strip() or "Unable to load Ollama prompt file."
-        )
+    """Invalidate the editable backend ask prompt file so it reloads in background."""
+    cache_delete_tag("ai")
+    st.session_state["ai_prompt_loaded"] = False
     save_ui_state()
 
 
 def save_ai_prompt_file() -> None:
-    """Persist the editable backend ask prompt file from the Prompt panel."""
+    """Queue saving the editable backend ask prompt file from the Prompt panel."""
     prompt_text = str(st.session_state.get("ai_prompt_editor", ""))
-    result = run_hhs_save_ask_prompt_file(prompt_text)
-    output = strip_ansi(result.stdout or result.stderr or "").strip()
-    if result.returncode == 0:
-        cache_delete_tag("ai")
-        st.session_state["ai_prompt_error"] = ""
-        st.session_state["ai_prompt_loaded"] = True
-        push_floating_status(output or "Ollama prompt saved.", "info")
-    else:
-        st.session_state["ai_prompt_error"] = output or "Unable to save Ollama prompt."
-        push_floating_status(st.session_state["ai_prompt_error"], "error")
-    save_ui_state()
+    queue_ai_prompt_action(
+        "save",
+        build_hhs_save_ask_prompt_file_command(prompt_text),
+        "Saving Ollama prompt file",
+        {
+            "success_fallback": "Ollama prompt saved.",
+            "error_fallback": "Unable to save Ollama prompt.",
+        },
+    )
 
 
 def revert_ai_prompt_file() -> None:
-    """Restore the editable backend ask prompt file from the bundled source file."""
-    result = run_hhs_revert_ask_prompt_file()
+    """Queue restoring the editable backend ask prompt file from source."""
+    queue_ai_prompt_action(
+        "revert",
+        build_hhs_revert_ask_prompt_file_command(),
+        "Reverting Ollama prompt file",
+        {
+            "success_fallback": "Ollama prompt reverted.",
+            "error_fallback": "Unable to revert Ollama prompt.",
+        },
+    )
+
+
+def queue_ai_context_action(
+    action: str,
+    command: str,
+    description: str,
+    metadata: dict[str, object] | None = None,
+) -> None:
+    """Queue an AI context mutation or refresh for background execution."""
+    st.session_state["ai_context_action_execute_pending"] = {
+        **(metadata or {}),
+        "action": action,
+        "command": command,
+        "description": description,
+    }
+    save_ui_state()
+
+
+def queue_ai_prompt_action(
+    action: str,
+    command: str,
+    description: str,
+    metadata: dict[str, object] | None = None,
+) -> None:
+    """Queue an AI prompt-file mutation for background execution."""
+    st.session_state["ai_prompt_action_execute_pending"] = {
+        **(metadata or {}),
+        "action": action,
+        "command": command,
+        "description": description,
+    }
+    save_ui_state()
+
+
+def start_pending_ai_context_action() -> None:
+    """Start a queued AI context action background job, when present."""
+    pending = st.session_state.pop("ai_context_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        AI_CONTEXT_ACTION_JOB,
+        command,
+        description,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        pending,
+        "Another AI context action is already running.",
+    )
+    if not started:
+        st.session_state["ai_context_action_execute_pending"] = pending
+
+
+def complete_ai_context_action_job() -> None:
+    """Complete an AI context action and update context state."""
+    completed = background_job_result(AI_CONTEXT_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    action = str(metadata.get("action", "")).strip()
+    output = result.stdout if result.returncode == 0 else result.stderr or result.stdout
+    clean_output = strip_ansi(output or "").strip()
+    upload_path = str(metadata.get("upload_path", "")).strip()
+    if upload_path:
+        try:
+            Path(upload_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+    if result.returncode != 0:
+        st.session_state["ai_context_error"] = (
+            clean_output
+            or str(metadata.get("error_fallback", "Unable to update AI context."))
+        )
+        if action in {"refresh", "ingest", "refresh_after_ingest"}:
+            st.session_state["ai_context_output"] = ""
+        push_floating_status(st.session_state["ai_context_error"], "error")
+        save_ui_state()
+        return
+    if action == "refresh":
+        st.session_state["ai_context_output"] = (
+            clean_output or "No Ollama context available."
+        )
+        st.session_state["ai_context_error"] = ""
+        push_floating_status(
+            str(metadata.get("success_fallback", "AI context refreshed.")), "info"
+        )
+    elif action == "refresh_after_ingest":
+        st.session_state["ai_context_output"] = (
+            clean_output or "No Ollama context available."
+        )
+        st.session_state["ai_context_error"] = ""
+        push_floating_status(
+            str(metadata.get("success_fallback", "Ingested AI context.")), "info"
+        )
+    elif action == "ingest":
+        queue_ai_context_action(
+            "refresh_after_ingest",
+            build_hhs_ask_context_command(),
+            "Loading Ollama context",
+            {
+                "success_fallback": str(
+                    metadata.get("success_fallback", "Ingested AI context.")
+                ),
+                "error_fallback": "Unable to load Ollama context.",
+            },
+        )
+        start_pending_ai_context_action()
+    elif action in {"clear_chat", "clear_context"}:
+        cache_delete_tag("ai")
+        st.session_state["ai_context_output"] = ""
+        st.session_state["ai_context_error"] = ""
+        if action == "clear_chat":
+            st.session_state["ai_chat_messages"] = []
+            st.session_state["ai_clear_chat_pending"] = False
+            st.session_state["ai_clear_chat_execute_pending"] = False
+        push_floating_status(
+            clean_output
+            or str(metadata.get("success_fallback", "AI context cleared.")),
+            "info",
+        )
+    save_ui_state()
+
+
+def execute_pending_ai_context_action() -> None:
+    """Start or complete the current AI context action background job."""
+    start_pending_ai_context_action()
+    complete_ai_context_action_job()
+
+
+def start_pending_ai_prompt_action() -> None:
+    """Start a queued AI prompt-file action background job, when present."""
+    pending = st.session_state.pop("ai_prompt_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        AI_PROMPT_ACTION_JOB,
+        command,
+        description,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        pending,
+        "Another AI prompt action is already running.",
+    )
+    if not started:
+        st.session_state["ai_prompt_action_execute_pending"] = pending
+
+
+def complete_ai_prompt_action_job() -> None:
+    """Complete an AI prompt-file action and update prompt editor state."""
+    completed = background_job_result(AI_PROMPT_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    action = str(metadata.get("action", "")).strip()
     output = strip_ansi(result.stdout or result.stderr or "")
     if result.returncode == 0:
         cache_delete_tag("ai")
-        st.session_state["ai_prompt_editor"] = output
+        if action == "revert":
+            st.session_state["ai_prompt_editor"] = output
         st.session_state["ai_prompt_error"] = ""
         st.session_state["ai_prompt_loaded"] = True
-        push_floating_status("Ollama prompt reverted.", "info")
+        push_floating_status(
+            output.strip()
+            or str(metadata.get("success_fallback", "Ollama prompt updated.")),
+            "info",
+        )
     else:
         st.session_state["ai_prompt_error"] = (
-            output.strip() or "Unable to revert Ollama prompt."
+            output.strip()
+            or str(metadata.get("error_fallback", "Unable to update Ollama prompt."))
         )
         push_floating_status(st.session_state["ai_prompt_error"], "error")
     save_ui_state()
+
+
+def execute_pending_ai_prompt_action() -> None:
+    """Start or complete the current AI prompt-file action background job."""
+    start_pending_ai_prompt_action()
+    complete_ai_prompt_action_job()
 
 
 def uploaded_context_suffix(file_name: str) -> str:
@@ -1045,22 +1290,20 @@ def ingest_ai_context_upload(uploaded_file: object) -> None:
 
     try:
         tmp_file_path.write_bytes(uploaded_file.getvalue())
-        result = run_hhs_ask_ingest(str(tmp_file_path))
-        output = strip_ansi(result.stdout or result.stderr or "").strip()
-        if result.returncode != 0:
-            st.session_state["ai_context_error"] = output or "Unable to ingest context."
-            st.session_state["ai_context_output"] = ""
-            push_floating_status(st.session_state["ai_context_error"], "error")
-            return
-        st.session_state["ai_context_error"] = ""
-        refresh_ai_context()
-        push_floating_status(output or f"Ingested context: {file_name}", "info")
-    finally:
-        try:
-            tmp_file_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+    except OSError:
+        st.session_state["ai_context_error"] = "Unable to store uploaded context."
         save_ui_state()
+        return
+    queue_ai_context_action(
+        "ingest",
+        build_hhs_ask_ingest_command(str(tmp_file_path)),
+        "Ingesting Ollama context",
+        {
+            "upload_path": str(tmp_file_path),
+            "success_fallback": f"Ingested context: {file_name}",
+            "error_fallback": "Unable to ingest context.",
+        },
+    )
 
 
 def request_ai_model_selection(
@@ -1672,10 +1915,6 @@ def command_overlay_close_helper_js() -> str:
                   parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
                   parentWindow.__hhsCommandOverlayExpiryTimer = null;
                 }}
-                if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
-                  parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
-                  parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
-                }}
               }};
             }}
             if (typeof parentWindow.__hhsDismissCommandOverlay !== "function") {{
@@ -1756,10 +1995,6 @@ def render_command_preloader_events() -> None:
               if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
                 parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
                 parentWindow.__hhsCommandOverlayExpiryTimer = null;
-              }}
-              if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
-                parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
-                parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
               }}
             }};
             const removeOverlay = (token) => {{
@@ -1958,10 +2193,6 @@ def render_preloader(
               parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
               parentWindow.__hhsCommandOverlayExpiryTimer = null;
             }}
-            if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
-              parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
-              parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
-            }}
             const overlayToken = {json.dumps(overlay_token)};
             parentWindow.__hhsCommandOverlayToken = overlayToken;
             doc.body.dataset.hhsCommandOverlayHidden = "false";
@@ -2066,10 +2297,6 @@ def clear_preloader() -> None:
             if (parentWindow.__hhsCommandOverlayExpiryTimer) {
               parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
               parentWindow.__hhsCommandOverlayExpiryTimer = null;
-            }
-            if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {
-              parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
-              parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
             }
             doc.body.dataset.hhsCommandOverlayHidden = "true";
             const remove_overlay = () => {
@@ -3292,142 +3519,12 @@ def render_path_picker_body(
 
 def render_path_picker_listing_loader(job_name: str) -> None:
     """Render an in-dialog loader while a remote path picker listing runs."""
-    job = background_job_state(job_name)
-    if not job:
-        return
-    try:
-        started_at = float(job.get("started_at", 0.0) or 0.0)
-    except (TypeError, ValueError):
-        started_at = 0.0
-    render_command_loader(
-        PATH_PICKER_LISTING_LOADER_MESSAGE,
-        started_at or None,
-        int(background_job_timeout_seconds(job) or command_timeout_seconds()),
-        str(job.get("preloader_token", "")),
-    )
-    poll_background_job_completion(job_name)
+    render_background_job_status(job_name, PATH_PICKER_LISTING_LOADER_MESSAGE)
 
 
 def render_folder_picker_dialog(owner_context: str = "") -> bool:
     """Render the reusable path picker dialog when requested."""
     return render_path_picker_dialog(owner_context)
-
-
-def render_path_picker_open_preloader_script() -> None:
-    """Attach a browser-side preloader to remote path picker open buttons."""
-    timeout_seconds = int(hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS)
-    remote_picker_enabled = "true" if connected_ssh_host() else "false"
-    render_script_html(
-        f"""
-        <script>
-          (() => {{
-            const parentWindow = window.parent;
-            const doc = parentWindow.document;
-            if (parentWindow.__hhsPathPickerOpenPreloaderCleanup) {{
-              parentWindow.__hhsPathPickerOpenPreloaderCleanup();
-            }}
-            const enabled = {remote_picker_enabled};
-            const buttonSelector = [
-              '[class*="st-key-"][class*="_folder_picker_button"] button',
-            ].join(", ");
-            const timeoutSeconds = {timeout_seconds};
-{command_elapsed_helper_js()}
-{command_overlay_close_helper_js()}
-            const clearOverlayTimers = () => {{
-              if (parentWindow.__hhsCommandOverlayTimer) {{
-                parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
-                parentWindow.__hhsCommandOverlayTimer = null;
-              }}
-              if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
-                parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
-                parentWindow.__hhsCommandOverlayExpiryTimer = null;
-              }}
-              if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
-                parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
-                parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
-              }}
-            }};
-            const renderElapsed = (overlay, startedAt) => {{
-              const node = overlay.querySelector(".hhs-tab-loader-elapsed");
-              if (!node) {{
-                return;
-              }}
-              parentWindow.__hhsRenderCommandElapsed(node, startedAt);
-            }};
-            const showOverlay = () => {{
-              clearOverlayTimers();
-              const createdAt = Date.now();
-              const overlayToken = `path-picker-${{createdAt}}`;
-              parentWindow.__hhsCommandOverlayToken = overlayToken;
-              doc.body.dataset.hhsCommandOverlayHidden = "false";
-              const existing = doc.getElementById("hhs-command-overlay");
-              if (existing) {{
-                existing.remove();
-              }}
-              const overlay = doc.createElement("div");
-              overlay.id = "hhs-command-overlay";
-              overlay.className = "hhs-tab-loader hhs-tab-loader-transient";
-              overlay.dataset.hhsOverlayToken = overlayToken;
-              overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
-              overlay.style.position = "fixed";
-              overlay.style.inset = "0";
-              overlay.style.width = "auto";
-              overlay.style.height = "100dvh";
-              overlay.style.display = "flex";
-              overlay.style.alignItems = "center";
-              overlay.style.justifyContent = "center";
-              overlay.style.zIndex = "1000010";
-              overlay.innerHTML = `
-                <div class="hhs-tab-loader-panel">
-                  {command_overlay_close_button_html()}
-                  <span class="hhs-tab-loader-spinner"></span>
-                  <span class="hhs-tab-loader-copy">
-                    <span class="hhs-tab-loader-label">Loading directories and files...</span>
-                    <span class="hhs-tab-loader-elapsed" data-timeout-seconds="${{timeoutSeconds}}">
-                      time elapsed: 0m:00s
-                    </span>
-                  </span>
-                </div>
-              `;
-              bindCommandOverlayClose(overlay);
-              doc.body.appendChild(overlay);
-              renderElapsed(overlay, createdAt);
-              parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(
-                () => renderElapsed(overlay, createdAt),
-                1000
-              );
-              parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout(
-                () => {{
-                  const current = doc.getElementById("hhs-command-overlay");
-                  if (current && current.dataset.hhsOverlayToken === overlayToken) {{
-                    current.remove();
-                    doc.body.dataset.hhsCommandOverlayHidden = "true";
-                  }}
-                  clearOverlayTimers();
-                }},
-                Math.max(1, timeoutSeconds + 2) * 1000
-              );
-            }};
-            const onClick = (event) => {{
-              if (!enabled || !event.target) {{
-                return;
-              }}
-              const button = event.target.closest(buttonSelector);
-              if (!button || button.disabled || button.getAttribute("aria-disabled") === "true") {{
-                return;
-              }}
-              showOverlay();
-            }};
-            doc.addEventListener("click", onClick, true);
-            parentWindow.__hhsPathPickerOpenPreloaderCleanup = () => {{
-              doc.removeEventListener("click", onClick, true);
-            }};
-          }})();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
 
 
 def render_combobox_vt100_shortcuts_script() -> None:
@@ -3823,6 +3920,36 @@ def normalized_monitor_disk_top_n(value: object) -> int:
     return normalized_top_n(value)
 
 
+def normalized_monitor_log_tail_lines(value: object) -> int:
+    """Return a valid monitor log bottom-line count."""
+    try:
+        tail_lines = int(value)
+    except (TypeError, ValueError):
+        return hhs_ui_constants.DEFAULT_LOG_TAIL_LINES
+    return max(
+        hhs_ui_constants.MIN_LOG_TAIL_LINES,
+        min(tail_lines, hhs_ui_constants.MAX_LOG_TAIL_LINES),
+    )
+
+
+def normalize_monitor_log_tail_lines_state() -> int:
+    """Normalize and migrate the persisted monitor log bottom-line count."""
+    raw_tail_lines = st.session_state.get("monitor_log_tail_lines")
+    tail_lines = normalized_monitor_log_tail_lines(raw_tail_lines)
+    migrated = bool(
+        st.session_state.get("monitor_log_tail_lines_default_migrated", False)
+    )
+    if (
+        raw_tail_lines is not None
+        and not migrated
+        and tail_lines == hhs_ui_constants.LEGACY_DEFAULT_LOG_TAIL_LINES
+    ):
+        tail_lines = hhs_ui_constants.DEFAULT_LOG_TAIL_LINES
+    st.session_state["monitor_log_tail_lines"] = tail_lines
+    st.session_state["monitor_log_tail_lines_default_migrated"] = True
+    return tail_lines
+
+
 def monitor_process_top_n_state_key(metric: str) -> str:
     """Return the session key for the applied process monitor Top N value."""
     return f"monitor_{metric.lower()}_top_n"
@@ -3854,6 +3981,12 @@ def handle_monitor_process_top_n_change(metric: str) -> None:
     st.session_state[input_key] = normalized_monitor_top_n(
         st.session_state.get(input_key)
     )
+    save_ui_state()
+
+
+def handle_monitor_log_tail_lines_change() -> None:
+    """Persist the pending monitor log bottom-line count."""
+    normalize_monitor_log_tail_lines_state()
     save_ui_state()
 
 
@@ -5161,20 +5294,25 @@ def apply_footer_cache_clear_options(
         push_floating_status("No cleanup option selected.", "warn")
         return
 
-    failed_labels = []
+    completed_labels = []
     if clear_application_cache:
         clear_cached_ui_data_preserving_state(show_status=False)
+        completed_labels.append("application cache")
     if clear_ai_history:
-        result = clear_ai_chat_history_data()
-        if result.returncode != 0:
-            failed_labels.append("AI history")
+        clear_ai_chat_history()
     if clear_application_states:
         clear_application_state_data()
+        completed_labels.append("application states")
 
-    if failed_labels:
-        push_floating_status(f"Unable to clear {', '.join(failed_labels)}.", "error")
+    if clear_ai_history and completed_labels:
+        push_floating_status(
+            f"Cleared {', '.join(completed_labels)}. AI history clear queued.",
+            "info",
+        )
+    elif clear_ai_history:
+        push_floating_status("AI history clear queued.", "info")
     else:
-        push_floating_status(f"Cleared {', '.join(labels)}.", "info")
+        push_floating_status(f"Cleared {', '.join(completed_labels)}.", "info")
 
 
 def remove_footer_cache_clear_query_params() -> None:
@@ -5315,6 +5453,66 @@ def view_segmented_control_widget_key(state_key: str) -> str:
     return f"{state_key}_widget"
 
 
+def active_view_widget_key() -> str:
+    """Return the temporary widget key for the top-level navigation control."""
+    return view_segmented_control_widget_key("active_view")
+
+
+def fallback_main_view(visible_views: tuple[str, ...]) -> str:
+    """Return the non-persistent fallback main view for a temporarily hidden tab."""
+    if "Home" in visible_views:
+        return "Home"
+    return visible_views[0] if visible_views else "Home"
+
+
+def save_active_view_state(
+    widget_key: str,
+    visible_views: tuple[str, ...],
+) -> None:
+    """Copy a user-selected main tab into persisted UI state."""
+    value = st.session_state.get(widget_key)
+    if value in visible_views:
+        st.session_state["active_view"] = value
+    save_ui_state()
+
+
+def normalized_active_view_value(visible_views: tuple[str, ...]) -> str:
+    """Return the active main view without persisting transient visibility fallbacks."""
+    current_value = st.session_state.get("active_view")
+    if current_value in visible_views:
+        return str(current_value)
+    persisted_value = load_ui_state().get("active_view")
+    if persisted_value in visible_views:
+        st.session_state["active_view"] = persisted_value
+        return str(persisted_value)
+    return fallback_main_view(visible_views)
+
+
+def render_active_view_control(visible_views: tuple[str, ...]) -> str:
+    """Render the top-level navigation tabs while preserving durable tab state."""
+    selected_value = normalized_active_view_value(visible_views)
+    widget_key = active_view_widget_key()
+    widget_value = st.session_state.get(widget_key)
+    if widget_value in visible_views and widget_value != selected_value:
+        st.session_state[widget_key] = selected_value
+    elif widget_value not in visible_views:
+        st.session_state[widget_key] = selected_value
+    active_view = st.radio(
+        "View",
+        visible_views,
+        horizontal=True,
+        index=None,
+        key=widget_key,
+        label_visibility="collapsed",
+        format_func=main_view_label,
+        on_change=save_active_view_state,
+        args=(widget_key, visible_views),
+    )
+    if active_view not in visible_views:
+        return selected_value
+    return str(active_view)
+
+
 def save_view_segmented_control_state(
     state_key: str,
     widget_key: str,
@@ -5397,6 +5595,8 @@ def render_home_system_panel() -> None:
 
 def render_home_docker_panel() -> None:
     """Render Docker container and image listings on the Home view."""
+    execute_pending_docker_action()
+    render_background_job_status(DOCKER_ACTION_JOB)
     agent_result = render_cached_command_result(
         build_docker_agent_check_command(),
         "Checking Docker agent",
@@ -6328,6 +6528,11 @@ def render_chart_refresh_button(
     return bool(st.button("", **button_kwargs))
 
 
+def render_standard_number_spinner(label: str, **input_kwargs: object) -> int:
+    """Render the standard compact number spinner used by chart controls."""
+    return int(st.number_input(label, **input_kwargs))
+
+
 def render_chart_top_n_input(
     key: str,
     on_change: Callable[..., None] | None = None,
@@ -6345,7 +6550,7 @@ def render_chart_top_n_input(
     if on_change is not None:
         input_kwargs["on_change"] = on_change
         input_kwargs["args"] = args
-    st.number_input("Top N", **input_kwargs)
+    render_standard_number_spinner("Top N", **input_kwargs)
 
 
 def render_chart_text_input(
@@ -6925,10 +7130,12 @@ def render_alias_add_controls() -> None:
 def render_home_tools_panel() -> None:
     """Render HomeSetup development tool checks on the Home view."""
     execute_pending_home_tool_action()
+    execute_pending_home_tool_tldr()
     home_tool_action_dialog_opened = render_home_tool_action_dialog()
     if not home_tool_action_dialog_opened:
         render_home_tool_tldr_dialog()
     render_background_job_status(HOME_TOOL_ACTION_JOB)
+    render_background_job_status(HOME_TOOL_TLDR_JOB)
 
     result = render_cached_command_result(
         build_hhs_tools_command(),
@@ -7001,6 +7208,8 @@ def render_home_tools_panel() -> None:
 
 def render_home_shopts_panel() -> None:
     """Render shell options on the Home view."""
+    execute_pending_config_action()
+    render_background_job_status(CONFIG_ACTION_JOB)
     result = render_cached_command_result(
         build_hhs_shopt_command(),
         "Loading shell options",
@@ -10892,12 +11101,13 @@ def render_background_job_status(job_name: str, message: str = "") -> None:
     render_command_preloader_events()
 
 
-def poll_background_job_completion(job_name: str) -> None:
-    """Mark one completed background job for an app rerun without rendering UI."""
-    job = background_job_state(job_name)
-    if not job:
+def render_background_job_status_if_blocking(
+    job_name: str, has_visible_content: bool, message: str = ""
+) -> None:
+    """Render a background job loader only when the page is waiting for content."""
+    if has_visible_content:
         return
-    background_job_completion_needs_app_rerun(background_job_state_key(job_name), job)
+    render_background_job_status(job_name, message)
 
 
 @st.fragment(run_every="2s")
@@ -11458,8 +11668,8 @@ def render_cached_command_result(
             force_local=force_local,
         )
     command_running = background_job_is_running(job_name)
-    render_background_job_status(job_name)
-    if command_running and not fresh_cache:
+    render_background_job_status_if_blocking(job_name, result is not None)
+    if command_running and not fresh_cache and result is None:
         return None
     if result is not None:
         return result
@@ -11573,7 +11783,6 @@ def update_ollama_service_availability_refresh() -> None:
     if result is not None and ollama_service_is_available() != previous_availability:
         st.rerun()
     if background_job_is_running(SERVICE_LIST_JOB):
-        poll_background_job_completion(SERVICE_LIST_JOB)
         return
     if ollama_service_availability_refresh_due():
         start_hhs_services_list_refresh()
@@ -12227,11 +12436,13 @@ def build_hhs_process_kill_command(process_name: str) -> str:
 
 
 def build_hhs_logs_command(
-    log_file: str, tail_lines: int = 200, log_level: str = "ALL_LEVELS"
+    log_file: str,
+    tail_lines: int = hhs_ui_constants.DEFAULT_LOG_TAIL_LINES,
+    log_level: str = "ALL_LEVELS",
 ) -> str:
     """Build the Bash command used to run the __hhs logs command."""
     safe_log_file = Path(log_file).name
-    safe_tail_lines = max(1, min(int(tail_lines), 5000))
+    safe_tail_lines = normalized_monitor_log_tail_lines(tail_lines)
     safe_log_level = log_level if log_level in hhs_ui.LOG_LEVELS else "ALL_LEVELS"
     return (
         'export HHS_HOME="${HHS_HOME}"; '
@@ -12248,7 +12459,9 @@ def build_hhs_logs_command(
 
 
 def run_hhs_logs(
-    log_file: str, tail_lines: int = 200, log_level: str = "ALL_LEVELS"
+    log_file: str,
+    tail_lines: int = hhs_ui_constants.DEFAULT_LOG_TAIL_LINES,
+    log_level: str = "ALL_LEVELS",
 ) -> subprocess.CompletedProcess[str]:
     """Run the __hhs logs command and return the completed process."""
     return run_bash_command(
@@ -13616,25 +13829,23 @@ def parse_hhs_history_stats(output: str) -> list[dict[str, int | str]]:
 
 def render_ssh_tunnel_status_loader(job_names: tuple[str, ...]) -> None:
     """Render one polling loader while SSH tunnel status jobs are running."""
-    if any(background_job_is_running(job_name) for job_name in job_names):
-        started_times: list[float] = []
-        for job_name in job_names:
-            job = background_job_state(job_name)
-            if not job:
-                continue
-            try:
-                started_at = float(job.get("started_at", 0.0) or 0.0)
-            except (TypeError, ValueError):
-                started_at = 0.0
-            if started_at:
-                started_times.append(started_at)
-        render_command_loader(
-            "Checking SSH tunnel statuses",
-            min(started_times) if started_times else None,
-        )
+    if not any(background_job_is_running(job_name) for job_name in job_names):
         return
+    started_times: list[float] = []
     for job_name in job_names:
-        poll_background_job_completion(job_name)
+        job = background_job_state(job_name)
+        if not job:
+            continue
+        try:
+            started_at = float(job.get("started_at", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            started_at = 0.0
+        if started_at:
+            started_times.append(started_at)
+    render_command_loader(
+        "Checking SSH tunnel statuses",
+        min(started_times) if started_times else None,
+    )
 
 
 def parse_hhs_disk_usage(output: str) -> list[dict[str, float | str]]:
@@ -14066,26 +14277,12 @@ def refresh_config_listing_cache(
     command: str,
     loader_message: str,
     reset_selection: Callable[[], None],
-) -> subprocess.CompletedProcess[str]:
-    """Invalidate, synchronously reload, and cache one Config listing."""
+) -> None:
+    """Invalidate one Config listing so the background renderer reloads it."""
+    del command, loader_message
     stop_config_listing_background_jobs(cache_tag)
     cache_delete_tag(cache_tag)
-    result = run_bash_command(
-        command,
-        loader_message,
-        use_cache=False,
-        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        cache_tag=cache_tag,
-        show_overlay=False,
-    )
-    if result.returncode == 0:
-        metadata = {
-            **background_command_metadata(command, cache_tag),
-            "ttl_seconds": hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
-        }
-        cache_background_command_result(metadata, result)
     reset_selection()
-    return result
 
 
 def refresh_env_listing() -> None:
@@ -14205,45 +14402,44 @@ def apply_env_value_overrides(rows: list[dict[str, str]]) -> list[dict[str, str]
     ]
 
 
-def apply_selected_env_value(name: str, value: str) -> bool:
+def apply_selected_env_value(
+    name: str,
+    value: str,
+    clear_form_key_prefix: str = "",
+    clear_form_include_name: bool = True,
+) -> bool:
     """Persist a selected environment value and store it for table rerenders."""
-    result = run_hhs_env_action("add", name, value)
-    status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    if result.returncode == 0:
-        os.environ[name] = value
-        env_value_overrides()[name] = value
-        refresh_env_listing()
-        push_floating_status(
-            status_message or f'Environment variable saved: "{name}"',
-            "info",
-        )
-    else:
-        push_floating_status(
-            status_message or f"Unable to save environment variable: {name}",
-            "error",
-        )
-    save_ui_state()
-    return result.returncode == 0
+    return queue_config_action(
+        build_hhs_env_action_command("add", name, value),
+        "Updating environment variables",
+        {
+            "domain": "env",
+            "operation": "add",
+            "name": name,
+            "value": value,
+            "started_message": f'Updating environment variable: "{name}"',
+            "success_fallback": f'Environment variable saved: "{name}"',
+            "error_fallback": f"Unable to save environment variable: {name}",
+            "clear_form_key_prefix": clear_form_key_prefix,
+            "clear_form_include_name": clear_form_include_name,
+        },
+    )
 
 
 def apply_env_delete(name: str) -> None:
     """Delete a custom environment value and reset the table selection."""
-    result = run_hhs_env_action("del", name)
-    status_message = clean_command_status_message(result.stdout or result.stderr or "")
-    if result.returncode == 0:
-        os.environ.pop(name, None)
-        env_value_overrides().pop(name, None)
-        refresh_env_listing()
-        push_floating_status(
-            status_message or f'Environment variable removed: "{name}"',
-            "info",
-        )
-    else:
-        push_floating_status(
-            status_message or f"Unable to delete environment variable: {name}",
-            "error",
-        )
-    save_ui_state()
+    queue_config_action(
+        build_hhs_env_action_command("del", name),
+        "Updating environment variables",
+        {
+            "domain": "env",
+            "operation": "del",
+            "name": name,
+            "started_message": f'Removing environment variable: "{name}"',
+            "success_fallback": f'Environment variable removed: "{name}"',
+            "error_fallback": f"Unable to delete environment variable: {name}",
+        },
+    )
 
 
 def apply_env_add_form_value() -> None:
@@ -14252,8 +14448,7 @@ def apply_env_add_form_value() -> None:
     value = str(st.session_state.get("env_add_value", ""))
     if not name:
         return
-    if apply_selected_env_value(name, value):
-        clear_add_form_fields("env")
+    apply_selected_env_value(name, value, clear_form_key_prefix="env")
 
 
 def push_config_action_status(
@@ -14269,132 +14464,381 @@ def push_config_action_status(
         push_floating_status(status_message or error_fallback, "error")
 
 
-def apply_selected_path_value(old_path: str, new_path: str) -> bool:
-    """Persist a PATH entry and refresh the table listing."""
-    result = run_hhs_path_action("edit", new_path, old_path)
-    if result.returncode == 0:
-        path_values = [entry for entry in path_entries() if entry != old_path]
-        if new_path not in path_values:
-            path_values.insert(0, new_path)
+def start_background_action_job(
+    job_name: str,
+    command: str,
+    description: str,
+    timeout_seconds: int,
+    metadata: dict[str, object],
+    busy_message: str,
+    force_local: bool = False,
+) -> bool:
+    """Start one user-triggered action command as an EventBus-backed background job."""
+    started = start_background_bash_command(
+        job_name,
+        command,
+        description,
+        timeout_seconds,
+        force_local=force_local,
+        metadata=metadata,
+        show_preloader_event=True,
+    )
+    if not started:
+        push_floating_status(busy_message, "warn")
+    return started
+
+
+def queue_config_action(
+    command: str,
+    description: str,
+    metadata: dict[str, object],
+) -> bool:
+    """Queue a Config or shell-option mutation for background execution."""
+    pending = {
+        **metadata,
+        "command": command,
+        "description": description,
+    }
+    st.session_state["config_action_execute_pending"] = pending
+    save_ui_state()
+    return True
+
+
+def start_pending_config_action() -> None:
+    """Start a queued Config mutation background job, when present."""
+    pending = st.session_state.pop("config_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        CONFIG_ACTION_JOB,
+        command,
+        description,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        pending,
+        "Another configuration action is already running.",
+    )
+    if started:
+        started_message = str(pending.get("started_message", "")).strip()
+        if started_message:
+            push_floating_status(started_message, "info")
+    else:
+        st.session_state["config_action_execute_pending"] = pending
+
+
+def apply_successful_config_action_side_effects(
+    metadata: dict[str, object],
+) -> None:
+    """Apply local state and cache updates for a successful Config mutation."""
+    domain = str(metadata.get("domain", "")).strip()
+    operation = str(metadata.get("operation", "")).strip()
+    name = str(metadata.get("name", "")).strip()
+    value = str(metadata.get("value", ""))
+    old_value = str(metadata.get("old_value", "")).strip()
+    if domain == "env":
+        if operation == "del":
+            os.environ.pop(name, None)
+            env_value_overrides().pop(name, None)
+        else:
+            os.environ[name] = value
+            env_value_overrides()[name] = value
+        refresh_env_listing()
+    elif domain == "path":
+        if operation == "del":
+            path_values = [entry for entry in path_entries() if entry != value]
+        else:
+            path_values = [entry for entry in path_entries() if entry != old_value]
+            if value not in path_values:
+                path_values.insert(0, value)
         os.environ["PATH"] = ":".join(path_values)
         refresh_path_listing()
+    elif domain == "dir":
+        refresh_dir_listing()
+    elif domain == "cmd":
+        refresh_cmd_listing()
+    elif domain == "alias":
+        refresh_alias_listing()
+    elif domain == "shopt":
+        refresh_home_shopts_listing()
+    form_prefix = str(metadata.get("clear_form_key_prefix", "")).strip()
+    if form_prefix:
+        clear_add_form_fields(
+            form_prefix,
+            include_name=bool(metadata.get("clear_form_include_name", True)),
+        )
+
+
+def complete_config_action_job() -> None:
+    """Complete a background Config mutation and publish its user status."""
+    completed = background_job_result(CONFIG_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    if result.returncode == 0:
+        apply_successful_config_action_side_effects(metadata)
     push_config_action_status(
         result,
-        f'PATH entry saved: "{new_path}"',
-        f"Unable to save PATH entry: {new_path}",
+        str(metadata.get("success_fallback", "Configuration updated.")),
+        str(metadata.get("error_fallback", "Configuration update failed.")),
     )
     save_ui_state()
-    return result.returncode == 0
+
+
+def execute_pending_config_action() -> None:
+    """Start or complete the current Config mutation background job."""
+    start_pending_config_action()
+    complete_config_action_job()
+
+
+def apply_selected_path_value(
+    old_path: str,
+    new_path: str,
+    clear_form_key_prefix: str = "",
+    clear_form_include_name: bool = True,
+) -> bool:
+    """Persist a PATH entry and refresh the table listing."""
+    return queue_config_action(
+        build_hhs_path_action_command("edit", new_path, old_path),
+        "Updating PATH entries",
+        {
+            "domain": "path",
+            "operation": "edit",
+            "name": new_path,
+            "value": new_path,
+            "old_value": old_path,
+            "started_message": f'Updating PATH entry: "{new_path}"',
+            "success_fallback": f'PATH entry saved: "{new_path}"',
+            "error_fallback": f"Unable to save PATH entry: {new_path}",
+            "clear_form_key_prefix": clear_form_key_prefix,
+            "clear_form_include_name": clear_form_include_name,
+        },
+    )
 
 
 def apply_path_delete(path_value: str) -> None:
     """Delete a PATH entry and reset the table selection."""
-    result = run_hhs_path_action("del", path_value)
-    if result.returncode == 0:
-        os.environ["PATH"] = ":".join(
-            entry for entry in path_entries() if entry != path_value
-        )
-        refresh_path_listing()
-    push_config_action_status(
-        result,
-        f'PATH entry removed: "{path_value}"',
-        f"Unable to remove PATH entry: {path_value}",
+    queue_config_action(
+        build_hhs_path_action_command("del", path_value),
+        "Updating PATH entries",
+        {
+            "domain": "path",
+            "operation": "del",
+            "name": path_value,
+            "value": path_value,
+            "started_message": f'Removing PATH entry: "{path_value}"',
+            "success_fallback": f'PATH entry removed: "{path_value}"',
+            "error_fallback": f"Unable to remove PATH entry: {path_value}",
+        },
     )
-    save_ui_state()
 
 
-def apply_selected_dir_value(name: str, value: str) -> bool:
+def apply_selected_dir_value(
+    name: str,
+    value: str,
+    clear_form_key_prefix: str = "",
+    clear_form_include_name: bool = True,
+) -> bool:
     """Persist a saved directory value."""
-    result = run_hhs_dir_action("add", name, value)
-    if result.returncode == 0:
-        refresh_dir_listing()
-    push_config_action_status(
-        result,
-        f'Saved directory saved: "{name}"',
-        f"Unable to save directory: {name}",
+    return queue_config_action(
+        build_hhs_dir_action_command("add", name, value),
+        "Updating saved directories",
+        {
+            "domain": "dir",
+            "operation": "add",
+            "name": name,
+            "value": value,
+            "started_message": f'Updating saved directory: "{name}"',
+            "success_fallback": f'Saved directory saved: "{name}"',
+            "error_fallback": f"Unable to save directory: {name}",
+            "clear_form_key_prefix": clear_form_key_prefix,
+            "clear_form_include_name": clear_form_include_name,
+        },
     )
-    save_ui_state()
-    return result.returncode == 0
 
 
 def apply_dir_delete(name: str) -> None:
     """Delete a saved directory and reset the table selection."""
-    result = run_hhs_dir_action("del", name)
-    if result.returncode == 0:
-        refresh_dir_listing()
-    push_config_action_status(
-        result,
-        f'Saved directory removed: "{name}"',
-        f"Unable to remove saved directory: {name}",
+    queue_config_action(
+        build_hhs_dir_action_command("del", name),
+        "Updating saved directories",
+        {
+            "domain": "dir",
+            "operation": "del",
+            "name": name,
+            "started_message": f'Removing saved directory: "{name}"',
+            "success_fallback": f'Saved directory removed: "{name}"',
+            "error_fallback": f"Unable to remove saved directory: {name}",
+        },
     )
-    save_ui_state()
 
 
-def apply_selected_cmd_value(name: str, value: str) -> bool:
+def apply_selected_cmd_value(
+    name: str,
+    value: str,
+    clear_form_key_prefix: str = "",
+    clear_form_include_name: bool = True,
+) -> bool:
     """Persist a saved command value."""
-    result = run_hhs_command_action("add", name, value)
-    if result.returncode == 0:
-        refresh_cmd_listing()
-    push_config_action_status(
-        result,
-        f'Saved command saved: "{name}"',
-        f"Unable to save command: {name}",
+    return queue_config_action(
+        build_hhs_command_action_command("add", name, value),
+        "Updating saved commands",
+        {
+            "domain": "cmd",
+            "operation": "add",
+            "name": name,
+            "value": value,
+            "started_message": f'Updating saved command: "{name}"',
+            "success_fallback": f'Saved command saved: "{name}"',
+            "error_fallback": f"Unable to save command: {name}",
+            "clear_form_key_prefix": clear_form_key_prefix,
+            "clear_form_include_name": clear_form_include_name,
+        },
     )
-    save_ui_state()
-    return result.returncode == 0
 
 
 def apply_cmd_delete(name: str) -> None:
     """Delete a saved command and reset the table selection."""
-    result = run_hhs_command_action("del", name)
-    if result.returncode == 0:
-        refresh_cmd_listing()
-    push_config_action_status(
-        result,
-        f'Saved command removed: "{name}"',
-        f"Unable to remove saved command: {name}",
+    queue_config_action(
+        build_hhs_command_action_command("del", name),
+        "Updating saved commands",
+        {
+            "domain": "cmd",
+            "operation": "del",
+            "name": name,
+            "started_message": f'Removing saved command: "{name}"',
+            "success_fallback": f'Saved command removed: "{name}"',
+            "error_fallback": f"Unable to remove saved command: {name}",
+        },
     )
-    save_ui_state()
 
 
-def apply_selected_alias_value(name: str, value: str) -> bool:
+def apply_selected_alias_value(
+    name: str,
+    value: str,
+    clear_form_key_prefix: str = "",
+    clear_form_include_name: bool = True,
+) -> bool:
     """Persist a custom alias value."""
-    result = run_hhs_alias_action("add", name, value)
-    if result.returncode == 0:
-        refresh_alias_listing()
-    push_config_action_status(
-        result,
-        f'Alias saved: "{name}"',
-        f"Unable to save alias: {name}",
+    return queue_config_action(
+        build_hhs_alias_action_command("add", name, value),
+        "Updating custom aliases",
+        {
+            "domain": "alias",
+            "operation": "add",
+            "name": name,
+            "value": value,
+            "started_message": f'Updating alias: "{name}"',
+            "success_fallback": f'Alias saved: "{name}"',
+            "error_fallback": f"Unable to save alias: {name}",
+            "clear_form_key_prefix": clear_form_key_prefix,
+            "clear_form_include_name": clear_form_include_name,
+        },
     )
-    save_ui_state()
-    return result.returncode == 0
 
 
 def apply_alias_delete(name: str) -> None:
     """Delete a custom alias and reset the table selection."""
-    result = run_hhs_alias_action("del", name)
-    if result.returncode == 0:
-        refresh_alias_listing()
-    push_config_action_status(
-        result,
-        f'Alias removed: "{name}"',
-        f"Unable to remove alias: {name}",
+    queue_config_action(
+        build_hhs_alias_action_command("del", name),
+        "Updating custom aliases",
+        {
+            "domain": "alias",
+            "operation": "del",
+            "name": name,
+            "started_message": f'Removing alias: "{name}"',
+            "success_fallback": f'Alias removed: "{name}"',
+            "error_fallback": f"Unable to remove alias: {name}",
+        },
     )
-    save_ui_state()
 
 
 def apply_home_shopt_action(operation: str, option_name: str) -> None:
     """Set or unset a shell option from the Home SHOPTS table."""
-    result = run_hhs_shopt_action(operation, option_name)
-    refresh_home_shopts_listing()
     action_label = "set" if operation == "set" else "unset"
+    queue_config_action(
+        build_hhs_shopt_action_command(operation, option_name),
+        "Updating shell option",
+        {
+            "domain": "shopt",
+            "operation": operation,
+            "name": option_name,
+            "started_message": f"Updating shell option: {option_name}",
+            "success_fallback": f"Shell option {option_name} {action_label}.",
+            "error_fallback": f"Unable to {action_label} shell option: {option_name}",
+        },
+    )
+
+
+def queue_docker_action(
+    command: str,
+    description: str,
+    timeout_seconds: int,
+    metadata: dict[str, object],
+) -> None:
+    """Queue a Docker mutation for background execution."""
+    st.session_state["docker_action_execute_pending"] = {
+        **metadata,
+        "command": command,
+        "description": description,
+        "timeout_seconds": timeout_seconds,
+    }
+    save_ui_state()
+
+
+def start_pending_docker_action() -> None:
+    """Start a queued Docker mutation background job, when present."""
+    pending = st.session_state.pop("docker_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    timeout_seconds = int(
+        pending.get("timeout_seconds", hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS)
+    )
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        DOCKER_ACTION_JOB,
+        command,
+        description,
+        timeout_seconds,
+        pending,
+        "Another Docker action is already running.",
+    )
+    if started:
+        started_message = str(pending.get("started_message", "")).strip()
+        if started_message:
+            push_floating_status(started_message, "info")
+    else:
+        st.session_state["docker_action_execute_pending"] = pending
+
+
+def complete_docker_action_job() -> None:
+    """Complete a Docker mutation background job and refresh Docker listings."""
+    completed = background_job_result(DOCKER_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    cache_delete_tag("docker")
+    if str(metadata.get("action_type", "")).strip() == "image":
+        reset_docker_image_table_selection()
+    else:
+        reset_docker_container_table_selection()
     push_config_action_status(
         result,
-        f"Shell option {option_name} {action_label}.",
-        f"Unable to {action_label} shell option: {option_name}",
+        str(metadata.get("success_fallback", "Docker action completed.")),
+        str(metadata.get("error_fallback", "Docker action failed.")),
     )
     save_ui_state()
+
+
+def execute_pending_docker_action() -> None:
+    """Start or complete the current Docker mutation background job."""
+    start_pending_docker_action()
+    complete_docker_action_job()
 
 
 def apply_docker_container_action(operation: str, container_id: str) -> None:
@@ -14402,15 +14846,21 @@ def apply_docker_container_action(operation: str, container_id: str) -> None:
     clean_container_id = container_id.strip()
     if not clean_container_id:
         return
-    result = run_docker_container_action(operation, clean_container_id)
-    cache_delete_tag("docker")
-    push_config_action_status(
-        result,
-        f"Docker container {operation} completed: {clean_container_id}",
-        f"Docker container {operation} failed: {clean_container_id}",
+    queue_docker_action(
+        build_docker_container_action_command(operation, clean_container_id),
+        f"Running docker {operation}",
+        20,
+        {
+            "action_type": "container",
+            "operation": operation,
+            "container_id": clean_container_id,
+            "started_message": f"Docker container {operation} started: {clean_container_id}",
+            "success_fallback": (
+                f"Docker container {operation} completed: {clean_container_id}"
+            ),
+            "error_fallback": f"Docker container {operation} failed: {clean_container_id}",
+        },
     )
-    reset_docker_container_table_selection()
-    save_ui_state()
 
 
 def apply_docker_image_action(image_id: str) -> None:
@@ -14418,15 +14868,18 @@ def apply_docker_image_action(image_id: str) -> None:
     clean_image_id = image_id.strip()
     if not clean_image_id:
         return
-    result = run_docker_image_delete(clean_image_id)
-    cache_delete_tag("docker")
-    push_config_action_status(
-        result,
-        f"Docker image deleted: {clean_image_id}",
-        f"Docker image deletion failed: {clean_image_id}",
+    queue_docker_action(
+        build_docker_image_delete_command(clean_image_id),
+        "Deleting Docker image",
+        30,
+        {
+            "action_type": "image",
+            "image_id": clean_image_id,
+            "started_message": f"Docker image deletion started: {clean_image_id}",
+            "success_fallback": f"Docker image deleted: {clean_image_id}",
+            "error_fallback": f"Docker image deletion failed: {clean_image_id}",
+        },
     )
-    reset_docker_image_table_selection()
-    save_ui_state()
 
 
 def apply_selected_env_editor_value(name: str, editor_key: str) -> None:
@@ -14461,8 +14914,12 @@ def apply_path_add_form_value() -> None:
     value = str(st.session_state.get("path_add_value", "")).strip()
     if not value:
         return
-    if apply_selected_path_value(value, value):
-        clear_add_form_fields("path", include_name=False)
+    apply_selected_path_value(
+        value,
+        value,
+        clear_form_key_prefix="path",
+        clear_form_include_name=False,
+    )
 
 
 def apply_dir_add_form_value() -> None:
@@ -14471,8 +14928,7 @@ def apply_dir_add_form_value() -> None:
     value = str(st.session_state.get("dir_add_value", "")).strip()
     if not name or not value:
         return
-    if apply_selected_dir_value(name, value):
-        clear_add_form_fields("dir")
+    apply_selected_dir_value(name, value, clear_form_key_prefix="dir")
 
 
 def apply_cmd_add_form_value() -> None:
@@ -14481,8 +14937,7 @@ def apply_cmd_add_form_value() -> None:
     value = str(st.session_state.get("cmd_add_value", ""))
     if not name:
         return
-    if apply_selected_cmd_value(name, value):
-        clear_add_form_fields("cmd")
+    apply_selected_cmd_value(name, value, clear_form_key_prefix="cmd")
 
 
 def apply_alias_add_form_value() -> None:
@@ -14491,8 +14946,7 @@ def apply_alias_add_form_value() -> None:
     value = str(st.session_state.get("alias_add_value", ""))
     if not name:
         return
-    if apply_selected_alias_value(name, value):
-        clear_add_form_fields("alias")
+    apply_selected_alias_value(name, value, clear_form_key_prefix="alias")
 
 
 def scroll_to_env_value_editor(editor_key: str) -> None:
@@ -15000,7 +15454,39 @@ def render_home_tool_action_dialog() -> bool:
 def apply_selected_tool_tldr(tool_name: str) -> None:
     """Load TLDR output for the selected Home tool and open its dialog."""
     close_home_tool_action_dialog()
-    result = run_tool_tldr(tool_name)
+    clean_tool_name = tool_name.strip()
+    if not clean_tool_name:
+        return
+    st.session_state["home_tool_tldr_execute_pending"] = {
+        "tool_name": clean_tool_name,
+    }
+    save_ui_state()
+
+
+def execute_pending_home_tool_tldr() -> None:
+    """Start or complete the selected Home tool TLDR background job."""
+    pending = st.session_state.pop("home_tool_tldr_execute_pending", None) or {}
+    if isinstance(pending, dict):
+        tool_name = str(pending.get("tool_name", "")).strip()
+        if tool_name:
+            started = start_background_action_job(
+                HOME_TOOL_TLDR_JOB,
+                build_tool_tldr_command(tool_name),
+                f"Loading TLDR for {tool_name}",
+                hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+                {"tool_name": tool_name},
+                "Another TLDR load is already running.",
+            )
+            if started:
+                push_floating_status(f"Loading TLDR: {tool_name}", "info")
+            else:
+                st.session_state["home_tool_tldr_execute_pending"] = pending
+
+    completed = background_job_result(HOME_TOOL_TLDR_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    tool_name = str(metadata.get("tool_name", "")).strip()
     st.session_state["home_tool_tldr_name"] = tool_name
     st.session_state["home_tool_tldr_output"] = result.stdout or result.stderr or ""
     st.session_state["home_tool_tldr_succeeded"] = result.returncode == 0
@@ -15008,6 +15494,7 @@ def apply_selected_tool_tldr(tool_name: str) -> None:
         push_floating_status(f"Loaded TLDR: {tool_name}", "info")
     else:
         push_floating_status(f"Unable to load TLDR: {tool_name}", "error")
+    save_ui_state()
 
 
 def close_home_tool_tldr_dialog() -> None:
@@ -15097,9 +15584,47 @@ def execute_pending_service_action() -> None:
         st.rerun()
 
 
-def apply_selected_process_kill(process_name: str) -> None:
-    """Kill the selected process name and store the action result."""
-    result = run_hhs_process_kill(process_name)
+def queue_monitor_process_action(command: str, metadata: dict[str, object]) -> None:
+    """Queue a monitor process mutation for background execution."""
+    st.session_state["monitor_process_action_execute_pending"] = {
+        **metadata,
+        "command": command,
+    }
+    save_ui_state()
+
+
+def start_pending_monitor_process_action() -> None:
+    """Start a queued monitor process mutation background job, when present."""
+    pending = (
+        st.session_state.pop("monitor_process_action_execute_pending", None) or {}
+    )
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    if not command:
+        return
+    process_name = str(pending.get("process_name", "")).strip()
+    started = start_background_action_job(
+        MONITOR_PROCESS_ACTION_JOB,
+        command,
+        "Killing process",
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        pending,
+        "Another process action is already running.",
+    )
+    if started:
+        push_floating_status(f"Killing process: {process_name}", "info")
+    else:
+        st.session_state["monitor_process_action_execute_pending"] = pending
+
+
+def complete_monitor_process_action_job() -> None:
+    """Complete a monitor process mutation and refresh the process listing."""
+    completed = background_job_result(MONITOR_PROCESS_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    process_name = str(metadata.get("process_name", "")).strip()
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
     refresh_process_listing()
     st.session_state["monitor_process_action_message"] = status_message
@@ -15112,6 +15637,39 @@ def apply_selected_process_kill(process_name: str) -> None:
         push_floating_status(
             status_message or f"Unable to kill process: {process_name}", "error"
         )
+    save_ui_state()
+
+
+def execute_pending_monitor_process_action() -> None:
+    """Start or complete the current monitor process action background job."""
+    start_pending_monitor_process_action()
+    complete_monitor_process_action_job()
+
+
+def complete_background_action_jobs() -> None:
+    """Start or complete background jobs created by user action buttons."""
+    execute_pending_home_tool_action()
+    execute_pending_home_tool_tldr()
+    execute_pending_config_action()
+    execute_pending_docker_action()
+    execute_pending_service_action()
+    execute_pending_monitor_process_action()
+    execute_pending_ssh_explorer_action()
+    execute_pending_ssh_explorer_delete()
+    execute_pending_search_open_action()
+    execute_pending_ai_context_action()
+    execute_pending_ai_prompt_action()
+
+
+def apply_selected_process_kill(process_name: str) -> None:
+    """Kill the selected process name and store the action result."""
+    clean_process_name = process_name.strip()
+    if not clean_process_name:
+        return
+    queue_monitor_process_action(
+        build_hhs_process_kill_command(clean_process_name),
+        {"process_name": clean_process_name},
+    )
 
 
 def styled_service_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
@@ -15167,6 +15725,8 @@ def render_service_rows(rows: list[dict[str, str]]) -> None:
 @st.fragment()
 def render_envs_table() -> None:
     """Render environment variables using __hhs_envs."""
+    execute_pending_config_action()
+    render_background_job_status(CONFIG_ACTION_JOB)
     env_filter, other_filter = render_filters_and_controls(
         "Name",
         "Value",
@@ -15201,6 +15761,8 @@ def render_envs_table() -> None:
 @st.fragment()
 def render_paths_table() -> None:
     """Render PATH entries using __hhs_paths."""
+    execute_pending_config_action()
+    render_background_job_status(CONFIG_ACTION_JOB)
     path_filter, other_filter = render_filters_and_controls(
         None,
         "Path",
@@ -15234,6 +15796,8 @@ def render_paths_table() -> None:
 @st.fragment()
 def render_dirs_table() -> None:
     """Render saved directories using __hhs_load_dir."""
+    execute_pending_config_action()
+    render_background_job_status(CONFIG_ACTION_JOB)
     dirs_filter, other_filter = render_filters_and_controls(
         "Name",
         "Path",
@@ -15270,6 +15834,8 @@ def render_dirs_table() -> None:
 @st.fragment()
 def render_cmds_table() -> None:
     """Render saved commands using __hhs_command."""
+    execute_pending_config_action()
+    render_background_job_status(CONFIG_ACTION_JOB)
     cmds_filter, other_filter = render_filters_and_controls(
         "Name",
         "Command",
@@ -15304,6 +15870,8 @@ def render_cmds_table() -> None:
 @st.fragment()
 def render_aliases_table() -> None:
     """Render custom aliases using __hhs_aliases."""
+    execute_pending_config_action()
+    render_background_job_status(CONFIG_ACTION_JOB)
     complete_aliases_list_refresh()
     alias_filter, other_filter = render_filters_and_controls(
         "Name",
@@ -15354,8 +15922,8 @@ def render_services_table() -> None:
     if not fresh_cache and not background_job_is_running(SERVICE_LIST_JOB):
         start_hhs_services_list_refresh()
     service_list_running = background_job_is_running(SERVICE_LIST_JOB)
-    render_background_job_status(SERVICE_LIST_JOB)
-    if service_list_running and not fresh_cache:
+    render_background_job_status_if_blocking(SERVICE_LIST_JOB, result is not None)
+    if service_list_running and not fresh_cache and result is None:
         return
     if result is None:
         service_list_error = str(st.session_state.get("service_list_error", "")).strip()
@@ -15707,6 +16275,8 @@ def render_process_monitor_chart(metric: str) -> None:
 
 def render_monitor_processes_panel() -> None:
     """Render the HomeSetup process list monitor panel."""
+    execute_pending_monitor_process_action()
+    render_background_job_status(MONITOR_PROCESS_ACTION_JOB)
     complete_monitor_process_list_refresh()
     action_message = st.session_state.pop("monitor_process_action_message", "")
     action_succeeded = st.session_state.pop("monitor_process_action_succeeded", None)
@@ -15799,8 +16369,23 @@ def render_monitor_logs_panel() -> None:
         st.session_state["monitor_log_file"] = log_files[0]
     if selected_monitor_log_level() != st.session_state.get("monitor_log_level"):
         st.session_state["monitor_log_level"] = selected_monitor_log_level()
+    normalize_monitor_log_tail_lines_state()
 
-    def render_log_controls() -> tuple[str, str, bool, str, str]:
+    def render_tail_lines_spinner() -> int:
+        """Render the monitor log bottom-line spinner and return its value."""
+        selected_tail_lines = render_standard_number_spinner(
+            "Bot N:",
+            min_value=hhs_ui_constants.MIN_LOG_TAIL_LINES,
+            max_value=hhs_ui_constants.MAX_LOG_TAIL_LINES,
+            step=hhs_ui_constants.LOG_TAIL_LINES_STEP,
+            key="monitor_log_tail_lines",
+            label_visibility="collapsed",
+            on_change=handle_monitor_log_tail_lines_change,
+            width=150,
+        )
+        return normalized_monitor_log_tail_lines(selected_tail_lines)
+
+    def render_log_controls() -> tuple[str, str, int, bool, str, str]:
         """Render log controls and return the selected log viewing options."""
         with st.container(key="monitor_log_controls"):
             (
@@ -15808,19 +16393,22 @@ def render_monitor_logs_panel() -> None:
                 input_col,
                 level_label_col,
                 level_col,
+                tail_lines_label_col,
+                tail_lines_col,
                 tail_col,
                 clear_col,
             ) = st.columns(
-                [0.42, 1.0, 0.52, 1.0, 0.16, 0.16], vertical_alignment="center"
+                [0.32, 1.0, 0.36, 0.85, 0.46, 0.34, 0.16, 0.16],
+                vertical_alignment="center",
             )
             with label_col:
                 st.markdown(
-                    '<span class="hhs-inline-form-label">Log file:</span>',
+                    '<span class="hhs-inline-form-label">File:</span>',
                     unsafe_allow_html=True,
                 )
             with input_col:
                 selected_log_value = st.selectbox(
-                    "Log file:",
+                    "File:",
                     options=log_files,
                     key="monitor_log_file",
                     label_visibility="collapsed",
@@ -15828,25 +16416,33 @@ def render_monitor_logs_panel() -> None:
                 )
             with level_label_col:
                 st.markdown(
-                    '<span class="hhs-inline-form-label">Log level:</span>',
+                    '<span class="hhs-inline-form-label">Level:</span>',
                     unsafe_allow_html=True,
                 )
             with level_col:
                 selected_level_value = st.selectbox(
-                    "Log level:",
+                    "Level:",
                     options=hhs_ui.LOG_LEVELS,
                     key="monitor_log_level",
                     format_func=monitor_log_level_label,
                     label_visibility="collapsed",
                     on_change=save_ui_state,
                 )
+            with tail_lines_label_col:
+                st.markdown(
+                    '<span class="hhs-inline-form-label">Bot N:</span>',
+                    unsafe_allow_html=True,
+                )
+            with tail_lines_col:
+                selected_tail_lines_value = render_tail_lines_spinner()
             with tail_col:
                 tail_enabled_value = bool(
                     st.session_state.get("monitor_logs_tail", True)
                 )
+                tail_button_state = "selected" if tail_enabled_value else "idle"
                 st.button(
-                    "" if tail_enabled_value else "",
-                    key="monitor_logs_tail_button",
+                    "",
+                    key=f"monitor_logs_tail_button_{tail_button_state}",
                     help=(
                         "Disable tail refresh"
                         if tail_enabled_value
@@ -15857,7 +16453,7 @@ def render_monitor_logs_panel() -> None:
                 )
             with clear_col:
                 st.button(
-                    "",
+                    "",
                     key="monitor_log_clear_button",
                     help="Clear selected log file",
                     on_click=clear_monitor_log_file,
@@ -15873,13 +16469,23 @@ def render_monitor_logs_panel() -> None:
         return (
             str(selected_log_value),
             str(selected_level_value),
+            normalized_monitor_log_tail_lines(selected_tail_lines_value),
             bool(tail_enabled_value),
             str(selected_filter_value),
             str(text_filter_value),
         )
 
-    selected_log, selected_level, tail_enabled, log_filter, log_text_filter = (
-        render_table_controls_panel(render_log_controls)
+    (
+        selected_log,
+        selected_level,
+        tail_lines,
+        tail_enabled,
+        log_filter,
+        log_text_filter,
+    ) = render_table_controls_panel(render_log_controls)
+    render_persisted_expander_state_script(
+        ".st-key-monitor_log_controls",
+        "hhs.monitor.logs.controls.expanded",
     )
     render_view_subtitle(
         f"<code>{html.escape(selected_log)}</code>",
@@ -15887,33 +16493,42 @@ def render_monitor_logs_panel() -> None:
     )
     if tail_enabled:
         render_monitor_logs_tail(
-            selected_log, selected_level, log_filter, log_text_filter
+            selected_log, selected_level, tail_lines, log_filter, log_text_filter
         )
     else:
         render_monitor_logs_once(
-            selected_log, selected_level, log_filter, log_text_filter
+            selected_log, selected_level, tail_lines, log_filter, log_text_filter
         )
 
 
 @st.fragment(run_every="5s")
 def render_monitor_logs_tail(
-    selected_log: str, selected_level: str, log_filter: str, log_text_filter: str
+    selected_log: str,
+    selected_level: str,
+    tail_lines: int,
+    log_filter: str,
+    log_text_filter: str,
 ) -> None:
     """Render a tail-like log pane that refreshes only while LOGS is active."""
-    render_monitor_logs_once(selected_log, selected_level, log_filter, log_text_filter)
+    if not bool(st.session_state.get("monitor_logs_tail", True)):
+        return
+    render_monitor_logs_once(
+        selected_log, selected_level, tail_lines, log_filter, log_text_filter
+    )
 
 
 def render_monitor_logs_once(
     selected_log: str,
     selected_level: str,
+    tail_lines: int,
     log_filter: str = "All",
     log_text_filter: str = "",
 ) -> None:
     """Render the selected log once without automatic refresh."""
     if False:
-        run_hhs_logs(selected_log, 200, selected_level)
+        run_hhs_logs(selected_log, tail_lines, selected_level)
     result = render_cached_command_result(
-        build_hhs_logs_command(selected_log, 200, selected_level),
+        build_hhs_logs_command(selected_log, tail_lines, selected_level),
         "Loading logs",
         "monitor_logs",
         hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
@@ -16389,24 +17004,66 @@ def open_ssh_explorer_selection(panel: str, path: str) -> None:
 
 
 def create_remote_explorer_folder(remote_path: str) -> None:
-    """Create the requested remote explorer folder path and parent folders."""
-    result = run_bash_command(
+    """Queue creation of the requested remote explorer folder path."""
+    clean_remote_path = remote_path.strip() or ssh_explorer_remote_default_path()
+    st.session_state["ssh_explorer_action_execute_pending"] = {
+        "action": "create_remote_folder",
+        "remote_path": clean_remote_path,
+    }
+    save_ui_state()
+
+
+def start_pending_ssh_explorer_action() -> None:
+    """Start a queued SSH explorer action background job, when present."""
+    pending = st.session_state.pop("ssh_explorer_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    action = str(pending.get("action", "")).strip()
+    if action != "create_remote_folder":
+        return
+    remote_path = str(pending.get("remote_path", "")).strip()
+    if not remote_path:
+        return
+    started = start_background_action_job(
+        SSH_EXPLORER_ACTION_JOB,
         build_remote_explorer_create_folder_command(remote_path),
         "Creating remote folder",
-        use_cache=False,
-        cache_tag="ssh_files",
+        hhs_ui.UI_COMMAND_REMOTE_TIMEOUT_SECONDS,
+        pending,
+        "Another SSH explorer action is already running.",
     )
+    if started:
+        push_floating_status("Creating remote folder.", "info")
+    else:
+        st.session_state["ssh_explorer_action_execute_pending"] = pending
+
+
+def complete_ssh_explorer_action_job() -> None:
+    """Complete an SSH explorer action and refresh file listings."""
+    completed = background_job_result(SSH_EXPLORER_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    remote_path = str(metadata.get("remote_path", "")).strip()
     if result.returncode != 0:
         push_floating_status(
             strip_ansi(result.stderr or result.stdout or "Unable to create folder."),
             "error",
         )
+        save_ui_state()
         return
     created_dir = parse_remote_explorer_created_dir(result.stdout)
     created_path = created_dir or remote_path
     created_name = posixpath.basename(created_path) or created_path
     open_remote_explorer_path(created_path)
     push_floating_status(f"Folder created on remote {created_name}", "info")
+    save_ui_state()
+
+
+def execute_pending_ssh_explorer_action() -> None:
+    """Start or complete the current SSH explorer action background job."""
+    start_pending_ssh_explorer_action()
+    complete_ssh_explorer_action_job()
 
 
 def create_ssh_explorer_folder(panel: str, local_path: str, remote_path: str) -> None:
@@ -16654,7 +17311,7 @@ def cancel_ssh_explorer_delete_confirmation() -> None:
 
 
 def confirm_ssh_explorer_delete() -> None:
-    """Execute the pending SSH explorer delete request."""
+    """Queue the pending SSH explorer delete request."""
     pending = st.session_state.get("ssh_explorer_delete_pending")
     st.session_state["ssh_explorer_delete_pending"] = None
     if not isinstance(pending, dict):
@@ -16666,22 +17323,62 @@ def confirm_ssh_explorer_delete() -> None:
     if panel not in {"local", "remote"} or not clean_paths:
         push_floating_status("Select files or folders before deleting.", "warn")
         return
-    result = run_bash_command(
+    st.session_state["ssh_explorer_delete_execute_pending"] = {
+        "panel": panel,
+        "paths": clean_paths,
+        "force_local": panel == "local",
+    }
+    save_ui_state()
+
+
+def start_pending_ssh_explorer_delete() -> None:
+    """Start a queued SSH explorer delete background job, when present."""
+    pending = st.session_state.pop("ssh_explorer_delete_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    paths_value = pending.get("paths", [])
+    paths = paths_value if isinstance(paths_value, list) else []
+    clean_paths = [str(path) for path in paths if str(path).strip()]
+    if not clean_paths:
+        return
+    pending["paths"] = clean_paths
+    started = start_background_action_job(
+        SSH_EXPLORER_DELETE_JOB,
         build_recoverable_delete_command(clean_paths),
         "Deleting selected file(s)/folder(s)",
-        ttl_seconds=0,
-        use_cache=False,
-        force_local=panel == "local",
-        cache_tag="ssh_files",
+        hhs_ui.UI_COMMAND_REMOTE_TIMEOUT_SECONDS,
+        pending,
+        "Another SSH explorer delete action is already running.",
+        force_local=bool(pending.get("force_local", False)),
     )
+    if started:
+        push_floating_status("Deleting selected file(s)/folder(s).", "info")
+    else:
+        st.session_state["ssh_explorer_delete_execute_pending"] = pending
+
+
+def complete_ssh_explorer_delete_job() -> None:
+    """Complete an SSH explorer delete job and refresh file listings."""
+    completed = background_job_result(SSH_EXPLORER_DELETE_JOB)
+    if completed is None:
+        return
+    result, _metadata = completed
     if result.returncode != 0:
         push_floating_status(
             strip_ansi(result.stderr or result.stdout or "Unable to delete selection."),
             "error",
         )
+        save_ui_state()
         return
     cache_delete_tag("ssh_files")
     push_floating_status("Deleted selected file(s)/folder(s).", "info")
+    save_ui_state()
+
+
+def execute_pending_ssh_explorer_delete() -> None:
+    """Start or complete the current SSH explorer delete background job."""
+    start_pending_ssh_explorer_delete()
+    complete_ssh_explorer_delete_job()
 
 
 def render_ssh_explorer_delete_dialog() -> bool:
@@ -16882,6 +17579,8 @@ def render_ssh_explorer_component(
 def render_ssh_files_panel() -> None:
     """Render a three-column local/remote file explorer using scp transfers."""
     complete_ssh_explorer_transfer()
+    execute_pending_ssh_explorer_action()
+    execute_pending_ssh_explorer_delete()
     render_ssh_explorer_delete_dialog()
     st.session_state.setdefault(
         "ssh_explorer_local_path", ssh_explorer_local_default_path()
@@ -16908,8 +17607,16 @@ def render_ssh_files_panel() -> None:
     remote_path = str(st.session_state.get("ssh_explorer_remote_path", remote_path))
     if background_job_is_running(SSH_FILE_TRANSFER_JOB):
         render_background_job_status(SSH_FILE_TRANSFER_JOB)
+    if background_job_is_running(SSH_EXPLORER_ACTION_JOB):
+        render_background_job_status(SSH_EXPLORER_ACTION_JOB)
+    if background_job_is_running(SSH_EXPLORER_DELETE_JOB):
+        render_background_job_status(SSH_EXPLORER_DELETE_JOB)
 
-    transfer_running = background_job_is_running(SSH_FILE_TRANSFER_JOB)
+    transfer_running = background_job_is_running(
+        SSH_FILE_TRANSFER_JOB
+    ) or background_job_is_running(SSH_EXPLORER_ACTION_JOB) or background_job_is_running(
+        SSH_EXPLORER_DELETE_JOB
+    )
     event = render_ssh_explorer_component(
         local_rows,
         remote_rows,
@@ -17282,52 +17989,104 @@ def build_download_remote_search_result_command(
     return build_scp_to_local_command(remote_path, str(download_dir), host)
 
 
+def build_open_remote_search_result_command(
+    remote_path: str, local_path: Path, download_dir: Path, host: str
+) -> str:
+    """Build a local command that downloads and opens one remote Search result."""
+    download_command = build_download_remote_search_result_command(
+        remote_path, download_dir, host
+    )
+    open_command = build_hhs_open_search_result_command(str(local_path))
+    return f"{download_command} && {open_command}"
+
+
+def queue_search_open_action(
+    command: str, description: str, metadata: dict[str, object]
+) -> None:
+    """Queue a Search result open action for background execution."""
+    st.session_state["search_open_execute_pending"] = {
+        **metadata,
+        "command": command,
+        "description": description,
+    }
+    save_ui_state()
+
+
+def start_pending_search_open_action() -> None:
+    """Start a queued Search result open background job, when present."""
+    pending = st.session_state.pop("search_open_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        SEARCH_OPEN_JOB,
+        command,
+        description,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        pending,
+        "Another Search open action is already running.",
+        force_local=True,
+    )
+    if not started:
+        st.session_state["search_open_execute_pending"] = pending
+
+
+def complete_search_open_action_job() -> None:
+    """Complete a Search result open action and publish its status."""
+    completed = background_job_result(SEARCH_OPEN_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    path = str(metadata.get("path", "")).strip()
+    action = str(metadata.get("action", "open")).strip()
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+    if result.returncode == 0:
+        if action == "remote_open":
+            fallback = f"Opened downloaded result {path}."
+        else:
+            fallback = f"Opened {path}."
+        push_floating_status(status_message or fallback, "info")
+    else:
+        if action == "remote_open":
+            fallback = f"Unable to download or open remote result {path}."
+        else:
+            fallback = f"Unable to open {path}."
+        push_floating_status(status_message or fallback, "error")
+    save_ui_state()
+
+
+def execute_pending_search_open_action() -> None:
+    """Start or complete the current Search result open background job."""
+    start_pending_search_open_action()
+    complete_search_open_action_job()
+
+
 def open_local_search_result_path(path: str) -> None:
-    """Open one local Search result path through the HomeSetup generic opener."""
-    result = run_bash_command(
+    """Queue opening one local Search result path through HomeSetup."""
+    queue_search_open_action(
         build_hhs_open_search_result_command(path),
         f"Opening {path}",
-        ttl_seconds=0,
-        use_cache=False,
-        force_local=True,
-        cache_tag="search",
+        {"action": "local_open", "path": path},
     )
-    if result.returncode != 0:
-        error_message = clean_command_status_message(result.stderr or result.stdout)
-        push_floating_status(
-            error_message or f"Unable to open {path}.",
-            "error",
-        )
-        return
-    push_floating_status(f"Opened {path}.", "info")
 
 
 def open_remote_search_result_path(path: str, host: str) -> None:
-    """Download one remote Search result to a temp dir and open it locally."""
+    """Queue downloading one remote Search result and opening it locally."""
     download_dir = create_search_result_download_dir()
     local_path = search_result_download_path(path, download_dir)
-    push_floating_status(f"Downloading remote result {path}.", "info")
-    download_result = run_bash_command(
-        build_download_remote_search_result_command(path, download_dir, host),
-        f"Downloading {path}",
-        ttl_seconds=0,
-        use_cache=False,
-        force_local=True,
-        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
-        cache_tag="search",
+    queue_search_open_action(
+        build_open_remote_search_result_command(path, local_path, download_dir, host),
+        f"Opening remote result {path}",
+        {
+            "action": "remote_open",
+            "path": path,
+            "local_path": str(local_path),
+            "host": host,
+        },
     )
-    if download_result.returncode != 0:
-        error_message = clean_command_status_message(
-            download_result.stderr or download_result.stdout
-        )
-        push_floating_status(
-            error_message or f"Unable to download remote result {path}.",
-            "error",
-        )
-        return
-    push_floating_status(f"Downloaded remote result to {local_path}.", "info")
-    push_floating_status(f"Opening downloaded result {local_path}.", "info")
-    open_local_search_result_path(str(local_path))
 
 
 def open_search_result_path(path: str) -> None:
@@ -17339,7 +18098,6 @@ def open_search_result_path(path: str) -> None:
     if host:
         open_remote_search_result_path(clean_path, host)
         return
-    push_floating_status(f"Opening {clean_path}.", "info")
     open_local_search_result_path(clean_path)
 
 
@@ -18189,9 +18947,6 @@ def render_search_controls() -> None:
                 on_click=submit_search_query,
                 width="stretch",
             )
-    render_search_submit_preloader_script()
-
-
 def search_replace_enabled() -> bool:
     """Return whether the Search replace row should be visible."""
     return (
@@ -18223,195 +18978,6 @@ def render_search_replace_controls() -> None:
                 placeholder="Replacement string",
                 width="stretch",
             )
-
-
-def render_search_submit_preloader_script() -> None:
-    """Attach a delayed browser-side preloader for Search submit."""
-    timeout_seconds = int(hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS)
-    delay_ms = int(hhs_ui_constants.SEARCH_SUBMIT_PRELOADER_DELAY_MS)
-    render_script_html(
-        f"""
-        <script>
-          (() => {{
-            const parentWindow = window.parent;
-            const doc = parentWindow.document;
-            if (parentWindow.__hhsSearchSubmitPreloaderCleanup) {{
-              parentWindow.__hhsSearchSubmitPreloaderCleanup();
-            }}
-            const buttonSelector = ".st-key-search_submit_button button";
-            const querySelector = ".st-key-search_query [role='combobox'], .st-key-search_query input";
-            const pathSelector = ".st-key-search_path [role='combobox'], .st-key-search_path input";
-            const timeoutSeconds = {timeout_seconds};
-            const delayMs = {delay_ms};
-{command_elapsed_helper_js()}
-{command_overlay_close_helper_js()}
-            const clearOverlayTimers = () => {{
-              if (parentWindow.__hhsCommandOverlayTimer) {{
-                parentWindow.clearInterval(parentWindow.__hhsCommandOverlayTimer);
-                parentWindow.__hhsCommandOverlayTimer = null;
-              }}
-              if (parentWindow.__hhsCommandOverlayExpiryTimer) {{
-                parentWindow.clearTimeout(parentWindow.__hhsCommandOverlayExpiryTimer);
-                parentWindow.__hhsCommandOverlayExpiryTimer = null;
-              }}
-            }};
-            const clearPendingSearchOverlay = () => {{
-              if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
-                parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
-                parentWindow.__hhsSearchSubmitPreloaderDelayTimer = null;
-              }}
-              const overlay = doc.getElementById("hhs-command-overlay");
-              if (
-                overlay &&
-                String(overlay.dataset.hhsOverlayToken || "").startsWith("search-submit-")
-              ) {{
-                overlay.remove();
-                doc.body.dataset.hhsCommandOverlayHidden = "true";
-                parentWindow.__hhsCommandOverlayClearedAt = Date.now();
-                parentWindow.__hhsCommandOverlayToken = "";
-                clearOverlayTimers();
-              }}
-            }};
-            const searchValue = (selector) => {{
-              const nodes = Array.from(doc.querySelectorAll(selector));
-              for (const node of nodes) {{
-                if ("value" in node) {{
-                  const value = String(node.value || "").trim();
-                  if (value) {{
-                    return value;
-                  }}
-                }}
-              }}
-              for (const node of nodes) {{
-                const value = String(node.textContent || "").trim();
-                if (value) {{
-                  return value;
-                }}
-              }}
-              return "";
-            }};
-            const renderElapsed = (overlay, startedAt) => {{
-              const node = overlay.querySelector(".hhs-tab-loader-elapsed");
-              if (!node) {{
-                return;
-              }}
-              parentWindow.__hhsRenderCommandElapsed(node, startedAt);
-            }};
-            const showOverlay = (query, searchPath) => {{
-              if (!query) {{
-                return;
-              }}
-              clearOverlayTimers();
-              const createdAt = Date.now();
-              const overlayToken = `search-submit-${{createdAt}}`;
-              parentWindow.__hhsCommandOverlayToken = overlayToken;
-              doc.body.dataset.hhsCommandOverlayHidden = "false";
-              const existing = doc.getElementById("hhs-command-overlay");
-              if (existing) {{
-                existing.remove();
-              }}
-              const overlay = doc.createElement("div");
-              overlay.id = "hhs-command-overlay";
-              overlay.className = "hhs-tab-loader hhs-tab-loader-transient";
-              overlay.dataset.hhsOverlayToken = overlayToken;
-              overlay.dataset.hhsOverlayCreatedAt = String(createdAt);
-              overlay.style.position = "fixed";
-              overlay.style.inset = "0";
-              overlay.style.width = "auto";
-              overlay.style.height = "100dvh";
-              overlay.style.display = "flex";
-              overlay.style.alignItems = "center";
-              overlay.style.justifyContent = "center";
-              overlay.style.zIndex = "1000010";
-              overlay.innerHTML = `
-                <div class="hhs-tab-loader-panel">
-                  {command_overlay_close_button_html()}
-                  <span class="hhs-tab-loader-spinner"></span>
-                  <span class="hhs-tab-loader-copy">
-                    <span class="hhs-tab-loader-label"></span>
-                    <span class="hhs-tab-loader-elapsed" data-timeout-seconds="${{timeoutSeconds}}">
-                      time elapsed: 0m:00s
-                    </span>
-                  </span>
-                </div>
-              `;
-              const label = overlay.querySelector(".hhs-tab-loader-label");
-              if (label) {{
-                const queryNode = doc.createElement("span");
-                queryNode.className = "hhs-loader-primary";
-                queryNode.textContent = query;
-                const pathNode = doc.createElement("span");
-                pathNode.className = "hhs-loader-secondary";
-                pathNode.textContent = searchPath;
-                label.append("Searching for ", queryNode, " in ", pathNode);
-              }}
-              bindCommandOverlayClose(overlay);
-              doc.body.appendChild(overlay);
-              renderElapsed(overlay, createdAt);
-              parentWindow.__hhsCommandOverlayTimer = parentWindow.setInterval(
-                () => renderElapsed(overlay, createdAt),
-                1000
-              );
-              parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout(
-                () => {{
-                  const current = doc.getElementById("hhs-command-overlay");
-                  if (current && current.dataset.hhsOverlayToken === overlayToken) {{
-                    current.remove();
-                    doc.body.dataset.hhsCommandOverlayHidden = "true";
-                  }}
-                  clearOverlayTimers();
-                }},
-                Math.max(1, timeoutSeconds + 2) * 1000
-              );
-            }};
-            const scheduleOverlay = () => {{
-              const query = searchValue(querySelector);
-              if (!query) {{
-                return;
-              }}
-              const searchPath = searchValue(pathSelector) || "current directory";
-              if (parentWindow.__hhsSearchSubmitPreloaderDelayTimer) {{
-                parentWindow.clearTimeout(parentWindow.__hhsSearchSubmitPreloaderDelayTimer);
-              }}
-              parentWindow.__hhsSearchSubmitPreloaderDelayTimer = parentWindow.setTimeout(
-                () => showOverlay(query, searchPath),
-                delayMs
-              );
-            }};
-            const onClick = (event) => {{
-              if (event.target && event.target.closest(".st-key-search_path")) {{
-                clearPendingSearchOverlay();
-                return;
-              }}
-              if (event.target && event.target.closest(buttonSelector)) {{
-                scheduleOverlay();
-              }}
-            }};
-            const onKeydown = (event) => {{
-              if (event.target && event.target.closest(".st-key-search_path")) {{
-                clearPendingSearchOverlay();
-                return;
-              }}
-              if (
-                event.key === "Enter" &&
-                event.target &&
-                event.target.closest(".st-key-search_query")
-              ) {{
-                scheduleOverlay();
-              }}
-            }};
-            doc.addEventListener("click", onClick, true);
-            doc.addEventListener("keydown", onKeydown, true);
-            parentWindow.__hhsSearchSubmitPreloaderCleanup = () => {{
-              doc.removeEventListener("click", onClick, true);
-              doc.removeEventListener("keydown", onKeydown, true);
-            }};
-          }})();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
 
 
 def selected_search_result_filter() -> str:
@@ -18560,6 +19126,7 @@ def render_search_results() -> None:
 @st.fragment()
 def render_search_panel() -> None:
     """Render Search controls and results with Session State communication."""
+    render_background_job_status(SEARCH_OPEN_JOB)
     with st.expander("Search Parameters", expanded=True):
         render_search_controls()
         render_search_replace_controls()
@@ -18595,6 +19162,8 @@ def render_ai_models_result() -> subprocess.CompletedProcess[str] | None:
 
 def render_ai_chat_panel() -> None:
     """Render the HomeSetup Ollama chat panel."""
+    execute_pending_ai_context_action()
+    render_background_job_status(AI_CONTEXT_ACTION_JOB)
     if st.session_state.get("ai_clear_chat_pending", False):
         pop_dialog(
             title="Confirm chat clear",
@@ -18735,6 +19304,8 @@ def style_ai_model_row(row: pd.Series) -> list[str]:
 
 def render_ai_prompt_file_panel() -> None:
     """Render the editable runtime Ollama prompt file panel."""
+    execute_pending_ai_prompt_action()
+    render_background_job_status(AI_PROMPT_ACTION_JOB)
     if not st.session_state.get("ai_prompt_loaded"):
         result = render_cached_command_result(
             build_hhs_ask_prompt_file_command(),
@@ -18803,6 +19374,8 @@ def render_ai_prompt_file_panel() -> None:
 
 def render_ai_context_output_panel() -> None:
     """Render the current HomeSetup Ollama context output panel."""
+    execute_pending_ai_context_action()
+    render_background_job_status(AI_CONTEXT_ACTION_JOB)
     upload_col, ingest_col, clear_col, refresh_col = st.columns(
         [1.35, 0.7, 0.7, 0.8], vertical_alignment="center"
     )
@@ -19062,18 +19635,7 @@ def render_main_view() -> None:
         render_document_view()
         return
     visible_views = main_views()
-    if st.session_state.get("active_view") not in visible_views:
-        st.session_state["active_view"] = "Home"
-    active_view = st.radio(
-        "View",
-        visible_views,
-        horizontal=True,
-        index=None,
-        key="active_view",
-        label_visibility="collapsed",
-        format_func=main_view_label,
-        on_change=save_ui_state,
-    )
+    active_view = render_active_view_control(visible_views)
     if active_view == "Home":
         render_home_view()
     elif active_view == "Configs":
@@ -19135,6 +19697,8 @@ def main() -> None:
         st.session_state["ai_chat_messages"] = []
     st.session_state.setdefault("ai_clear_chat_pending", False)
     st.session_state.setdefault("ai_clear_chat_execute_pending", False)
+    st.session_state.setdefault("ai_context_action_execute_pending", None)
+    st.session_state.setdefault("ai_prompt_action_execute_pending", None)
     st.session_state.setdefault("ai_model_select_pending", None)
     st.session_state.setdefault("ai_model_select_execute_pending", None)
     st.session_state.setdefault("ai_model_select_error", "")
@@ -19194,8 +19758,6 @@ def main() -> None:
         return
     initialize_ollama_service_availability()
     update_ollama_service_availability_refresh()
-    if st.session_state["active_view"] not in main_views():
-        st.session_state["active_view"] = "Home"
     handle_footer_actions()
     render_background_job_status(UPDATER_UPDATE_JOB)
     render_footer_shell_version_dialog()
@@ -19218,6 +19780,9 @@ def main() -> None:
     st.session_state.setdefault("home_shopts_other_filter", "")
     st.session_state.setdefault(hhs_ui.HOME_SHOPTS_TABLE_RESET_COUNTER_KEY, 0)
     st.session_state.setdefault("home_tool_action_execute_pending", None)
+    st.session_state.setdefault("home_tool_tldr_execute_pending", None)
+    st.session_state.setdefault("config_action_execute_pending", None)
+    st.session_state.setdefault("docker_action_execute_pending", None)
     st.session_state.setdefault("config_view", "ENV")
     if st.session_state["config_view"] not in hhs_ui.CONFIG_VIEWS:
         st.session_state["config_view"] = "ENV"
@@ -19261,6 +19826,7 @@ def main() -> None:
     st.session_state.setdefault("search_result_binary", False)
     st.session_state.setdefault("search_result_replace", False)
     st.session_state.setdefault("search_result_replacement", "")
+    st.session_state.setdefault("search_open_execute_pending", None)
     st.session_state.setdefault("search_filter", "All")
     if st.session_state["search_filter"] not in hhs_ui.SEARCH_FILTERS:
         st.session_state["search_filter"] = "All"
@@ -19300,6 +19866,7 @@ def main() -> None:
         st.session_state["monitor_process_filter"] = "Containing"
     else:
         st.session_state["monitor_process_filter"] = monitor_process_filter
+    st.session_state.setdefault("monitor_process_action_execute_pending", None)
     st.session_state.setdefault(
         "monitor_disk_directory", monitor_default_disk_directory()
     )
@@ -19326,6 +19893,9 @@ def main() -> None:
     st.session_state.setdefault("monitor_log_other_filter", "")
     st.session_state.setdefault("monitor_log_level", "ALL_LEVELS")
     st.session_state["monitor_log_level"] = selected_monitor_log_level()
+    st.session_state["monitor_log_tail_lines"] = normalized_monitor_log_tail_lines(
+        st.session_state.get("monitor_log_tail_lines")
+    )
     st.session_state.setdefault("monitor_logs_tail", True)
     st.session_state.setdefault("alias_filter", "All")
     st.session_state["alias_filter"] = normalized_table_filter_selection(
@@ -19351,6 +19921,8 @@ def main() -> None:
     st.session_state["service_filter"] = normalized_table_filter_selection(
         st.session_state["service_filter"], hhs_ui.SERVICE_FILTERS
     )
+    st.session_state.setdefault("ssh_explorer_action_execute_pending", None)
+    st.session_state.setdefault("ssh_explorer_delete_execute_pending", None)
     for history_filter_key in (
         "history_commands_filter",
         "history_directories_filter",
@@ -19369,12 +19941,12 @@ def main() -> None:
     st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(
         st.session_state.get("history_stats_top_n")
     )
+    complete_background_action_jobs()
     execute_pending_dialog_callback()
     apply_pending_folder_picker_selection()
     render_sidebar()
     render_main_view()
     render_combobox_vt100_shortcuts_script()
-    render_path_picker_open_preloader_script()
     render_footer_status_fragment()
     render_footer_client_error_bridge_script()
     install_footer_status_log_handler()
