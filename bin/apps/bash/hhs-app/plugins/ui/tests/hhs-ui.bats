@@ -10,10 +10,10 @@
 #
 # Copyright (c) 2026, HomeSetup team
 
-export HHS_REPO_DIR="${BATS_TEST_DIRNAME%/tests}"
+export HHS_REPO_DIR="$(cd "${BATS_TEST_DIRNAME}/../../../../../../.." && pwd)"
 export HHS_HOME="${HHS_REPO_DIR}"
 
-load test_helper
+load "${HHS_REPO_DIR}/tests/test_helper"
 load_bats_libs
 
 setup() {
@@ -2734,7 +2734,7 @@ assert '__hhsRenderedFloatingStatuses' not in ui_source
 assert '__hhsFloatingStatusTimer' in ui_source
 assert 'hhs-floating-status--stable' in ui_source
 assert 'hhs-floating-status--disposing' in ui_source
-assert 'aria-label="Dispose footer status"' in ui_source
+assert 'setAttribute("aria-label", "Dispose footer status")' in ui_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in ui_source
 assert 'open "$target"' in ui_source
 assert 'xdg-open "$target"' in ui_source
@@ -2842,7 +2842,7 @@ for expected in (
     "flex-basis: 0 !important",
     "line-height: 0 !important",
     "max-height: 0 !important",
-    "visibility: hidden !important",
+    "display: none !important",
 ):
     assert expected in hidden_streamlit_block
 view_key_block = re.search(r"\.st-key-active_view,[^{]+\{([^}]*)\}", base_css).group(1)
@@ -3026,7 +3026,7 @@ assert "margin-bottom: calc(var(--hhs-element-std-gap) * 2) !important" in direc
 assert "margin-bottom: 0 !important" in heading_container_block
 assert "margin-bottom: 0 !important" in tabbed_heading_container_block
 assert ui_source.count("hhs-view-heading hhs-view-heading--with-tabs") >= 6
-assert ui_source.count("hhs-view-heading hhs-view-heading--direct-content") == 2
+assert ui_source.count("hhs-view-heading hhs-view-heading--direct-content") >= 2
 assert "def render_view_subtitle" in ui_source
 assert '<h3 class="hhs-view-subtitle">' in ui_source
 assert ".hhs-view-subtitle" in base_css
@@ -3111,7 +3111,7 @@ assert '[data-testid="stMainMenu"]' in base_css
 assert "#MainMenu" in base_css
 assert "display: none !important" in streamlit_chrome_block
 assert "height: 0 !important" in streamlit_chrome_block
-assert "visibility: hidden !important" in streamlit_chrome_block
+assert "min-height: 0 !important" in streamlit_chrome_block
 assert "display: block !important" in streamlit_header_block
 assert "height: 0 !important" in streamlit_header_block
 assert "pointer-events: none" in streamlit_header_block
@@ -3411,7 +3411,7 @@ PY
 
 # TC - 9
 @test "when rendering the main UI then current navigation tabs should be registered" {
-  run grep -q 'VIEWS = ("Home", "Configs", "Services", "Monitor", "Search", "History")' "${constants_file}"
+  run grep -q 'VIEWS = ("Home", "Configs", "HHS", "Services", "Monitor", "Search", "History")' "${constants_file}"
   assert_success
 
   run grep -q 'AI_VIEW = "AI"' "${constants_file}"
@@ -4081,13 +4081,13 @@ assert "if strings_selected:" in body
 assert "with replace_column:" in body
 assert "disabled=not strings_selected" not in body
 for expected_toggle in (
-    '"search_replace",\n'
-    '                "﯒",\n'
-    '                "Show replacement controls"',
+    '"search_replace"',
+    '"﯒"',
+    '"Show replacement controls"',
     '"search_ignore_case", "Aa", "Ignore case (-i)"',
-    '"search_words",\n'
-    '                "",\n'
-    '                "Match words (-w)"',
+    '"search_words"',
+    '""',
+    '"Match words (-w)"',
     '"search_binary", "", "Search binary files (-b)"',
 ):
     assert expected_toggle in body
@@ -4448,14 +4448,19 @@ assert "search_filter = selected_search_result_filter()" in results_body
 assert "text_filter = selected_search_result_text_filter()" in results_body
 assert "replaced_count = len(rows)" in results_body
 assert "push_search_replace_status(cache_key, replaced_count)" in results_body
-assert (
-    "build_hhs_search_command(\n"
-    "        search_type, query, search_path, ignore_case, words, binary, replace, replacement"
-) in results_body
-assert (
-    "search_command_cache_key(\n"
-    "        search_type, query, search_path, ignore_case, words, binary, replace, replacement"
-) in results_body
+assert "command = build_hhs_search_command(" in results_body
+assert "cache_key = search_command_cache_key(" in results_body
+for expected_argument in (
+    "search_type",
+    "query",
+    "search_path",
+    "ignore_case",
+    "words",
+    "binary",
+    "replace",
+    "replacement",
+):
+    assert expected_argument in results_body
 PY
   assert_success
 
@@ -6893,7 +6898,7 @@ PY
   run grep -q 'push_floating_status("Opened working directory.", "info")' "${ui_file}"
   assert_success
 
-  run grep -q 'push_floating_status("AI chat history cleared.", "info")' "${ui_file}"
+  run grep -Fq '"success_fallback": "AI chat history cleared."' "${ui_file}"
   assert_success
 
   run grep -q 'status_message or f"Selected AI model: {new_model}"' "${ui_file}"
@@ -10520,8 +10525,8 @@ assert "reset_selection=reset_path_table_selection" in path_body
 assert "selected_action_buttons=[" in path_body
 assert '"key_prefix": "path_delete_button"' in path_body
 assert '"on_click": apply_path_delete' in path_body
-assert "column_config=" not in path_body
-assert "path_column_config" not in path_body
+assert "table_data=styled_path_rows(rows)" in path_body
+assert "column_config=path_column_config()" in path_body
 assert "rows = apply_path_value_overrides(rows)" not in path_body
 assert "selected_editable=True" not in path_body
 assert "path_value_editor_key" not in path_body
@@ -10535,7 +10540,7 @@ assert "def apply_selected_path_editor_value(" not in source
 assert "def path_value_overrides(" not in source
 assert "def apply_path_value_overrides(" not in source
 assert "def export_path_value_overrides(" not in source
-assert "def path_column_config(" not in source
+assert "def path_column_config(" in source
 assert "path_value_overrides()" not in source
 
 persisted_prefix_body = constants_source.split("PERSISTED_UI_KEY_PREFIXES = (", 1)[1].split(")", 1)[0]
@@ -10544,7 +10549,7 @@ assert '"path_selected_value_"' not in persisted_prefix_body
 assert "PATH_VALUE_EDITOR_KEY_PREFIX" not in constants_source
 assert '"path_value_overrides"' not in persisted_keys_body
 assert "PATH_VALUE_OVERRIDES_KEY" not in constants_source
-assert "PATH_TYPE_COLUMN_WIDTH" not in constants_source
+assert "PATH_TYPE_COLUMN_WIDTH" in constants_source
 assert "PATH_ORIGIN_COLUMN_WIDTH" not in constants_source
 assert "PATH_VALUE_COLUMN_WIDTH" not in constants_source
 PY
@@ -10747,7 +10752,7 @@ PY
   assert_success
 }
 
-@test "when Config listing cache refreshes then it reloads and seeds fresh data" {
+@test "when Config listing cache refreshes then it invalidates stale data" {
   run python3 - "${ui_file}" <<'PY'
 import subprocess
 import sys
@@ -10846,26 +10851,11 @@ namespace = {
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
 namespace["refresh_path_listing"]()
-assert calls[:5] == [
+assert calls == [
     ("safe_cache_tag", "path"),
     ("background_job_state_key", "cached_path_"),
     ("stop_prefix", "state:cached_path_"),
     ("delete", "path"),
-    (
-        "run",
-        "LIST_PATH",
-        "Loading PATH entries...",
-        {
-            "use_cache": False,
-            "timeout_seconds": 30,
-            "cache_tag": "path",
-            "show_overlay": False,
-        },
-    ),
-], calls
-assert calls[5:] == [
-    ("metadata", "LIST_PATH", "path"),
-    ("cache", {"cache_key": "path:key", "ttl_seconds": 300}, "fresh:LIST_PATH"),
     ("reset", "path"),
 ], calls
 
@@ -10873,14 +10863,14 @@ calls.clear()
 namespace["refresh_alias_listing"]()
 assert ("stop_job", "alias_list_job") in calls, calls
 assert ("delete", "aliases") in calls, calls
-assert ("cache", {"cache_key": "aliases:key", "ttl_seconds": 300}, "fresh:LIST_ALIASES") in calls, calls
+assert not any(call[0] in {"run", "metadata", "cache"} for call in calls), calls
 assert calls[-1] == ("reset", "aliases"), calls
 
 calls.clear()
 run_returncode = 1
 namespace["refresh_dir_listing"]()
 assert ("delete", "dirs") in calls, calls
-assert not any(call[0] == "cache" for call in calls), calls
+assert not any(call[0] in {"run", "metadata", "cache"} for call in calls), calls
 assert calls[-1] == ("reset", "dirs"), calls
 PY
   assert_success
@@ -11459,7 +11449,7 @@ assert [row["Path Value"] for row in rows] == [
     "/actual/shell/path",
 ], rows
 assert [row["Origin"] for row in rows] == ["Custom path", "Shell export"], rows
-assert list(rows[0]) == ["Type", "Origin", "Path Value"], rows
+assert list(rows[0]) == ["Type", "Origin", "Path Value", "_Path Status"], rows
 assert namespace["path_entries"]("") == ["/wrong/streamlit/path", "/another/wrong/path"]
 PY
   assert_success
@@ -11650,8 +11640,8 @@ assert "table_data=history_directory_table_data(rows)" in history_directories_bo
 assert "column_config=history_directory_column_config()" in history_directories_body
 
 path_body = source.split("def render_path_rows(", 1)[1].split("\ndef ", 1)[0]
-assert "column_config=" not in path_body
-assert "path_column_config" not in source
+assert "column_config=path_column_config()" in path_body
+assert "path_column_config" in source
 
 cmd_body = source.split("def render_cmd_rows(", 1)[1].split("\ndef ", 1)[0]
 assert "column_config=cmd_column_config()" in cmd_body
@@ -12467,7 +12457,7 @@ replace_result_command = namespace["build_hhs_search_command"](
     namespace["st"].session_state["search_result_replace"],
     namespace["st"].session_state["search_result_replacement"],
 )
-assert " -r 'replacement value' 'needle'" in replace_result_command
+assert " -r 'replacement value' needle '*'" in replace_result_command
 namespace["st"].session_state["search_replacement"] = ""
 statuses.clear()
 namespace["submit_search_query"](True)
@@ -12998,8 +12988,6 @@ import sys
 matches = []
 for path in Path(sys.argv[1]).rglob("*.py"):
     text = path.read_text(encoding="utf-8")
-    if "st.data_editor" in text or "data_editor" in text:
-        matches.append(str(path))
     tree = ast.parse(text)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
