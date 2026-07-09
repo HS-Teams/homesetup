@@ -18882,63 +18882,40 @@ def render_hhs_firebase_title() -> None:
     )
 
 
+def firebase_aliases_export_file() -> Path:
+    """Return the Firebase aliases export JSON file path."""
+    return homesetup_home() / "assets" / "homesetup-37970-export.json"
+
+
 def fetch_firebase_aliases() -> dict[str, object]:
-    """Return Firebase alias data."""
-    return {
-        "databases": [
-            {
-                "homesetup": [
-                    {
-                        "dotfiles": [
-                            {"demo": {}},
-                            {"home": {}},
-                            {"new": {}},
-                            {"work": {}},
-                        ]
-                    },
-                    {
-                        "hspylib-test": [
-                            {"0": {}},
-                            {"1": {}},
-                        ]
-                    },
-                ]
-            }
-        ]
-    }
+    """Return Firebase alias data from the bundled export file."""
+    try:
+        alias_text = firebase_aliases_export_file().read_text(encoding="utf-8")
+        alias_data = json.loads(alias_text)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return alias_data if isinstance(alias_data, dict) else {}
 
 
 def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, str]]:
     """Return Firebase alias rows from the fetched alias payload."""
     rows: list[dict[str, str]] = []
-    databases = alias_data.get("databases", [])
-    if not isinstance(databases, list):
-        return rows
-    for database_entry in databases:
-        if not isinstance(database_entry, dict):
+    for database_name, groups in alias_data.items():
+        if not isinstance(groups, dict):
             continue
-        for database_name, groups in database_entry.items():
-            if not isinstance(groups, list):
+        for group_name, aliases in groups.items():
+            if not isinstance(aliases, dict):
                 continue
-            for group_entry in groups:
-                if not isinstance(group_entry, dict):
-                    continue
-                for group_name, aliases in group_entry.items():
-                    if not isinstance(aliases, list):
-                        continue
-                    for alias_entry in aliases:
-                        if not isinstance(alias_entry, dict):
-                            continue
-                        for alias_name, alias_value in alias_entry.items():
-                            count = len(alias_value) if isinstance(alias_value, dict) else 0
-                            rows.append(
-                                {
-                                    "Database": str(database_name),
-                                    "Group": str(group_name),
-                                    "Alias": str(alias_name),
-                                    "Count": str(count),
-                                }
-                            )
+            for alias_name, alias_value in aliases.items():
+                count = len(alias_value) if isinstance(alias_value, list) else 0
+                rows.append(
+                    {
+                        "Database": str(database_name),
+                        "Group": str(group_name),
+                        "Alias": str(alias_name),
+                        "Count": str(count),
+                    }
+                )
     return rows
 
 

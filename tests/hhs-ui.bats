@@ -1349,11 +1349,13 @@ PY
 
 @test "when rendering HHS Firebase then configurations form should load file values" {
   run python3 - "${ui_file}" "${css_file}" <<'PY'
+import json
 import os
 import posixpath
 import re
 import shlex
 import sys
+import tempfile
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -1469,6 +1471,8 @@ assert 'render_view_subtitle(f"<code>{html.escape(config_display_path)}</code>",
 
 aliases_table_body = source.split("def render_hhs_firebase_aliases_table", 1)[1].split("\ndef ", 1)[0]
 assert "fetch_firebase_aliases()" in source
+assert "def firebase_aliases_export_file(" in source
+assert '"homesetup-37970-export.json"' in source
 assert "def firebase_alias_table_rows(" in source
 assert "render_markdown_table(" in aliases_table_body
 assert '"Firebase Aliases"' in aliases_table_body
@@ -1485,43 +1489,39 @@ assert '"Group": "var(--hhs-secondary)"' in aliases_table_body
 assert '"Alias": "var(--hhs-theme-primary-color)"' in aliases_table_body
 assert "return selected_aliases[0] if selected_aliases else" in aliases_table_body
 
-aliases_start = source.index("def fetch_firebase_aliases(")
+aliases_start = source.index("def firebase_aliases_export_file(")
 aliases_end = source.index("def render_hhs_firebase_aliases_table", aliases_start)
-aliases_namespace = {}
-exec("from __future__ import annotations\n" + source[aliases_start:aliases_end], aliases_namespace)
-firebase_aliases = aliases_namespace["fetch_firebase_aliases"]()
-expected_aliases = {
-    "databases": [
-        {
-            "homesetup": [
-                {
-                    "dotfiles": [
-                        {"demo": {}},
-                        {"home": {}},
-                        {"new": {}},
-                        {"work": {}},
-                    ]
-                },
-                {
-                    "hspylib-test": [
-                        {"0": {}},
-                        {"1": {}},
-                    ]
-                },
-            ]
+with tempfile.TemporaryDirectory() as tmpdir:
+    homesetup_root = Path(tmpdir)
+    export_file = homesetup_root / "assets" / "homesetup-37970-export.json"
+    export_file.parent.mkdir(parents=True, exist_ok=True)
+    expected_aliases = {
+        "homesetup": {
+            "dotfiles": {
+                "demo": [{"path": ".a"}, {"path": ".b"}],
+                "home": [],
+            },
+            "hspylib-test": {
+                "0": [{}],
+            },
         }
+    }
+    export_file.write_text(json.dumps(expected_aliases), encoding="utf-8")
+    aliases_namespace = {
+        "json": json,
+        "Path": Path,
+        "homesetup_home": lambda: homesetup_root,
+    }
+    exec("from __future__ import annotations\n" + source[aliases_start:aliases_end], aliases_namespace)
+    assert aliases_namespace["firebase_aliases_export_file"]() == export_file
+    firebase_aliases = aliases_namespace["fetch_firebase_aliases"]()
+    assert firebase_aliases == expected_aliases
+    alias_rows = aliases_namespace["firebase_alias_table_rows"](firebase_aliases)
+    assert alias_rows == [
+        {"Database": "homesetup", "Group": "dotfiles", "Alias": "demo", "Count": "2"},
+        {"Database": "homesetup", "Group": "dotfiles", "Alias": "home", "Count": "0"},
+        {"Database": "homesetup", "Group": "hspylib-test", "Alias": "0", "Count": "1"},
     ]
-}
-assert firebase_aliases == expected_aliases
-alias_rows = aliases_namespace["firebase_alias_table_rows"](firebase_aliases)
-assert alias_rows == [
-    {"Database": "homesetup", "Group": "dotfiles", "Alias": "demo", "Count": "0"},
-    {"Database": "homesetup", "Group": "dotfiles", "Alias": "home", "Count": "0"},
-    {"Database": "homesetup", "Group": "dotfiles", "Alias": "new", "Count": "0"},
-    {"Database": "homesetup", "Group": "dotfiles", "Alias": "work", "Count": "0"},
-    {"Database": "homesetup", "Group": "hspylib-test", "Alias": "0", "Count": "0"},
-    {"Database": "homesetup", "Group": "hspylib-test", "Alias": "1", "Count": "0"},
-]
 
 command_start = source.index("def build_hhs_firebase_plugin_command(")
 command_end = source.index("def build_hhs_starship_plugin_command", command_start)
