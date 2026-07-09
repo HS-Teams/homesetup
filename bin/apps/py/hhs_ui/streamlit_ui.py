@@ -17027,9 +17027,13 @@ def render_hhs_setup_title() -> None:
     )
 
 
-def render_hhs_setup_table_header() -> None:
-    """Render the setup settings table header."""
-    with st.container(key="hhs_setup_settings_header"):
+def render_markdown_table_header(
+    key_prefix: str,
+    value_column_label: str,
+    item_column_label: str,
+) -> None:
+    """Render a reusable markdown table header."""
+    with st.container(key=f"{key_prefix}_markdown_table_header"):
         index_column, enabled_column, setting_column = st.columns(
             [0.45, 0.85, 5.0],
             gap="small",
@@ -17038,19 +17042,21 @@ def render_hhs_setup_table_header() -> None:
         with index_column:
             st.markdown("**#**")
         with enabled_column:
-            st.markdown("**Mark**")
+            st.markdown(f"**{value_column_label}**")
         with setting_column:
-            st.markdown("**Setting**")
+            st.markdown(f"**{item_column_label}**")
 
 
-def render_hhs_setup_table_row(
+def render_markdown_table_row(
+    key_prefix: str,
     index: int,
-    setting_name: str,
-    action_running: bool,
+    item: str,
+    value_key: str,
+    disabled: bool,
 ) -> None:
-    """Render one setup settings table row."""
+    """Render one reusable markdown table row."""
     parity = "odd" if index % 2 else "even"
-    with st.container(key=f"hhs_setup_settings_row_{index}_{parity}"):
+    with st.container(key=f"{key_prefix}_markdown_table_row_{index}_{parity}"):
         index_column, enabled_column, setting_column = st.columns(
             [0.45, 0.85, 5.0],
             gap="small",
@@ -17060,25 +17066,74 @@ def render_hhs_setup_table_row(
             st.markdown(str(index))
         with enabled_column:
             st.checkbox(
-                f"Mark {setting_name}",
-                key=hhs_setup_setting_key(setting_name),
-                disabled=action_running,
+                f"Mark {item}",
+                key=value_key,
+                disabled=disabled,
                 label_visibility="collapsed",
             )
         with setting_column:
-            st.markdown(f"`{setting_name}`")
+            st.markdown(f"`{item}`")
+
+
+def render_markdown_table(
+    caption: str,
+    items: list[str],
+    values: list[bool],
+    key_prefix: str,
+    value_keys: list[str] | None = None,
+    disabled: bool = False,
+    value_column_label: str = "Mark",
+    item_column_label: str = "Setting",
+) -> list[bool]:
+    """Render a reusable checkbox markdown table and return selected values."""
+    if len(items) != len(values):
+        raise ValueError("items and values must have the same length")
+    if value_keys is not None and len(items) != len(value_keys):
+        raise ValueError("items and value_keys must have the same length")
+
+    checkbox_keys = value_keys or [
+        f"{key_prefix}_markdown_table_value_{index}"
+        for index, _item in enumerate(items, start=1)
+    ]
+    for checkbox_key, value in zip(checkbox_keys, values, strict=True):
+        st.session_state.setdefault(checkbox_key, bool(value))
+
+    with st.container(key=f"{key_prefix}_markdown_table"):
+        st.markdown(
+            f'<div class="hhs-markdown-table-caption">{html.escape(caption)}</div>',
+            unsafe_allow_html=True,
+        )
+        render_markdown_table_header(
+            key_prefix,
+            value_column_label,
+            item_column_label,
+        )
+        for index, (item, checkbox_key) in enumerate(
+            zip(items, checkbox_keys, strict=True),
+            start=1,
+        ):
+            render_markdown_table_row(
+                key_prefix,
+                index,
+                item,
+                checkbox_key,
+                disabled,
+            )
+
+    return [bool(st.session_state.get(checkbox_key, False)) for checkbox_key in checkbox_keys]
 
 
 def render_hhs_setup_settings_table(action_running: bool) -> None:
     """Render the setup settings table."""
-    with st.container(key="hhs_setup_settings_table"):
-        st.markdown(
-            '<div class="hhs-setup-table-caption">Mark the preferred startup settings</div>',
-            unsafe_allow_html=True,
-        )
-        render_hhs_setup_table_header()
-        for index, setting_name in enumerate(HHS_SETUP_SETTINGS, start=1):
-            render_hhs_setup_table_row(index, setting_name, action_running)
+    settings = selected_hhs_setup_settings()
+    render_markdown_table(
+        "Mark the preferred startup settings",
+        list(HHS_SETUP_SETTINGS),
+        [settings[name] for name in HHS_SETUP_SETTINGS],
+        "hhs_setup_settings",
+        [hhs_setup_setting_key(name) for name in HHS_SETUP_SETTINGS],
+        disabled=action_running,
+    )
 
 
 def render_hhs_setup_panel() -> None:
@@ -17107,31 +17162,37 @@ def render_hhs_setup_panel() -> None:
     sync_hhs_setup_form_state(parse_hhs_setup_settings(result.stdout))
     apply_pending_hhs_setup_form_revert()
     action_running = background_job_is_running(HHS_SETUP_ACTION_JOB)
-    with st.form("hhs_setup_form"):
-        render_hhs_setup_settings_table(action_running)
-        _spacer, ok_column, revert_column, restore_column = st.columns(
-            [1.0, 0.34, 0.34, 0.34],
-            gap="small",
-            vertical_alignment="center",
+    render_hhs_setup_settings_table(action_running)
+    left_column, ok_column, revert_column, restore_column, right_column = st.columns(
+        [1.0, 0.38, 0.4, 0.46, 1.0],
+        gap="small",
+        vertical_alignment="center",
+    )
+    with left_column:
+        st.empty()
+    with ok_column:
+        ok_clicked = st.button(
+            " Apply",
+            help="Apply",
+            disabled=action_running,
+            width="stretch",
         )
-        with ok_column:
-            ok_clicked = st.form_submit_button(
-                " Apply",
-                help="Apply",
-                disabled=action_running,
-            )
-        with revert_column:
-            revert_clicked = st.form_submit_button(
-                " Cancel",
-                help="Cancel",
-                disabled=action_running,
-            )
-        with restore_column:
-            restore_clicked = st.form_submit_button(
-                " Restore",
-                help="Restore",
-                disabled=action_running,
-            )
+    with revert_column:
+        revert_clicked = st.button(
+            " Cancel",
+            help="Cancel",
+            disabled=action_running,
+            width="stretch",
+        )
+    with restore_column:
+        restore_clicked = st.button(
+            " Restore",
+            help="Restore",
+            disabled=action_running,
+            width="stretch",
+        )
+    with right_column:
+        st.empty()
 
     if ok_clicked:
         request_hhs_setup_apply()

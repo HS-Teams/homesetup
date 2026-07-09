@@ -1154,17 +1154,21 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
   padding-bottom: 0 !important;
 }
 
-.st-key-hhs_setup_settings_table {
+div[class*="st-key-"][class*="_markdown_table"]:not(
+  [class*="_markdown_table_header"]
+):not([class*="_markdown_table_row_"]) {
   border: 1px solid var(--hhs-theme-dataframe-border-color);
   border-radius: 8px;
   overflow: hidden;
 }
 
-.st-key-hhs_setup_settings_table [data-testid="stVerticalBlock"] {
+div[class*="st-key-"][class*="_markdown_table"]:not(
+  [class*="_markdown_table_header"]
+):not([class*="_markdown_table_row_"]) [data-testid="stVerticalBlock"] {
   gap: 0 !important;
 }
 
-.hhs-setup-table-caption {
+.hhs-markdown-table-caption {
   background: color-mix(in srgb, var(--hhs-theme-dataframe-header-background-color) 78%, transparent);
   border-bottom: 1px solid var(--hhs-theme-dataframe-border-color);
   color: var(--hhs-markdown-table-header);
@@ -1172,39 +1176,39 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
   padding: 0.7rem 0.85rem;
 }
 
-.st-key-hhs_setup_settings_header,
-div[class*="st-key-hhs_setup_settings_row_"] {
+div[class*="st-key-"][class*="_markdown_table_header"],
+div[class*="st-key-"][class*="_markdown_table_row_"] {
   border-bottom: 1px solid var(--hhs-theme-dataframe-border-color);
   padding: 0.35rem 0.85rem;
 }
 
-.st-key-hhs_setup_settings_header {
+div[class*="st-key-"][class*="_markdown_table_header"] {
   background: var(--hhs-theme-dataframe-header-background-color);
   color: var(--hhs-markdown-table-header);
 }
 
-div[class*="st-key-hhs_setup_settings_row_"][class*="_odd"] {
+div[class*="st-key-"][class*="_markdown_table_row_"][class*="_odd"] {
   background: color-mix(in srgb, var(--hhs-theme-text-color) 5%, transparent);
 }
 
-div[class*="st-key-hhs_setup_settings_row_"][class*="_even"] {
+div[class*="st-key-"][class*="_markdown_table_row_"][class*="_even"] {
   background: color-mix(in srgb, var(--hhs-theme-primary-color) 5%, transparent);
 }
 
-div[class*="st-key-hhs_setup_settings_row_"]:hover {
+div[class*="st-key-"][class*="_markdown_table_row_"]:hover {
   background: color-mix(in srgb, var(--hhs-theme-primary-color) 18%, transparent);
 }
 
-div[class*="st-key-hhs_setup_settings_row_"]:last-child {
+div[class*="st-key-"][class*="_markdown_table_row_"]:last-child {
   border-bottom: 0;
 }
 
-.st-key-hhs_setup_settings_header [data-testid="stMarkdownContainer"] p,
-div[class*="st-key-hhs_setup_settings_row_"] [data-testid="stMarkdownContainer"] p {
+div[class*="st-key-"][class*="_markdown_table_header"] [data-testid="stMarkdownContainer"] p,
+div[class*="st-key-"][class*="_markdown_table_row_"] [data-testid="stMarkdownContainer"] p {
   margin: 0;
 }
 
-div[class*="st-key-hhs_setup_settings_row_"] [data-testid="stCheckbox"] {
+div[class*="st-key-"][class*="_markdown_table_row_"] [data-testid="stCheckbox"] {
   min-height: 1.6rem;
 }
 
