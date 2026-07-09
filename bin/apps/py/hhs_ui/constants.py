@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.53"
+VERSION = "0.1.63"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -75,7 +75,7 @@ AI_SERVICE_AVAILABLE_KEY = "_hhs_ai_service_available"
 AI_SERVICE_AVAILABILITY_LOADED_KEY = "_hhs_ai_service_availability_loaded"
 AI_SERVICE_AVAILABILITY_CONTEXT_KEY = "_hhs_ai_service_availability_context"
 AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY = "_hhs_ai_service_availability_refreshed_at"
-AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS = 5.0
+AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS = 30.0
 AI_TERMINAL_CONTEXT_MAX_CHARS = 12000
 TTYD_PROCESS_KEY = "_hhs_ttyd_process"
 TTYD_PORT_KEY = "_hhs_ttyd_port"

@@ -276,6 +276,7 @@ HOME_TOOL_ACTION_JOB = "home_tool_action"
 HOME_TOOL_TLDR_JOB = "home_tool_tldr"
 CONFIG_ACTION_JOB = "config_action"
 HHS_SETUP_ACTION_JOB = "hhs_setup_action"
+HHS_STARSHIP_ACTION_JOB = "hhs_starship_action"
 DOCKER_ACTION_JOB = "docker_action"
 ALIAS_LIST_JOB = "alias_list"
 SERVICE_LIST_JOB = "service_list"
@@ -320,6 +321,12 @@ HHS_SETUP_SETTINGS = (
     "hhs_verbose_logs",
     "hhs_ollama_ai_autostart",
 )
+STARSHIP_CACHE_OUTPUT_MARKER = "__HHS_STARSHIP_CACHE__"
+STARSHIP_CONFIG_OUTPUT_MARKER = "__HHS_STARSHIP_CONFIG__"
+STARSHIP_HHS_DIR_OUTPUT_MARKER = "__HHS_STARSHIP_HHS_DIR__"
+STARSHIP_PRESETS_OUTPUT_MARKER = "__HHS_STARSHIP_PRESETS__"
+STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER = "__HHS_STARSHIP_CONFIG_CONTENT__"
+STARSHIP_END_OUTPUT_MARKER = "__HHS_STARSHIP_END__"
 COMMAND_PRELOADER_BUS = "hhs-ui-command-preloader"
 COMMAND_PRELOADER_START_EVENT = "command:start"
 COMMAND_PRELOADER_FINISH_EVENT = "command:finish"
@@ -655,8 +662,7 @@ def render_sidebar_title() -> None:
 
 def render_sidebar_title_separator_alignment_script() -> None:
     """Align the sidebar title separator with the rendered sidebar controls."""
-    render_script_html(
-        """
+    render_script_html("""
         <script>
         (() => {
           const parentWindow = window.parent || window;
@@ -699,8 +705,7 @@ def render_sidebar_title_separator_alignment_script() -> None:
           }
         })();
         </script>
-        """
-    )
+        """)
 
 
 def document_details(document_key: str) -> tuple[str, Path]:
@@ -1163,9 +1168,8 @@ def complete_ai_context_action_job() -> None:
         except OSError:
             pass
     if result.returncode != 0:
-        st.session_state["ai_context_error"] = (
-            clean_output
-            or str(metadata.get("error_fallback", "Unable to update AI context."))
+        st.session_state["ai_context_error"] = clean_output or str(
+            metadata.get("error_fallback", "Unable to update AI context.")
         )
         if action in {"refresh", "ingest", "refresh_after_ingest"}:
             st.session_state["ai_context_output"] = ""
@@ -1264,9 +1268,8 @@ def complete_ai_prompt_action_job() -> None:
             "info",
         )
     else:
-        st.session_state["ai_prompt_error"] = (
-            output.strip()
-            or str(metadata.get("error_fallback", "Unable to update Ollama prompt."))
+        st.session_state["ai_prompt_error"] = output.strip() or str(
+            metadata.get("error_fallback", "Unable to update Ollama prompt.")
         )
         push_floating_status(st.session_state["ai_prompt_error"], "error")
     save_ui_state()
@@ -1294,7 +1297,10 @@ def ui_disposable_files_dir() -> Path:
 
 def ai_context_upload_path(file_name: str) -> Path:
     """Return the deterministic cache path for an uploaded AI context file."""
-    return ui_disposable_files_dir() / f"hhs-ai-context-upload{uploaded_context_suffix(file_name)}"
+    return (
+        ui_disposable_files_dir()
+        / f"hhs-ai-context-upload{uploaded_context_suffix(file_name)}"
+    )
 
 
 def ingest_ai_context_upload(uploaded_file: object) -> None:
@@ -4402,8 +4408,7 @@ def floating_status_dom_id(status: dict[str, object], message: str, kind: str) -
 def render_floating_status_dispose_script(status_id: str) -> None:
     """Attach browser-only disposal behavior to a rendered floating status."""
     safe_status_id = json.dumps(status_id)
-    render_script_html(
-        f"""
+    render_script_html(f"""
         <script>
         (() => {{
           const statusId = {safe_status_id};
@@ -4437,8 +4442,7 @@ def render_floating_status_dispose_script(status_id: str) -> None:
           }});
         }})();
         </script>
-        """
-    )
+        """)
 
 
 def render_floating_status() -> None:
@@ -5276,7 +5280,9 @@ def clear_application_state_data() -> None:
         try:
             state_file.unlink(missing_ok=True)
         except OSError as error:
-            push_floating_status(f"Unable to clear application states: {error}", "error")
+            push_floating_status(
+                f"Unable to clear application states: {error}", "error"
+            )
     for state_key in list(st.session_state):
         if is_persisted_ui_key(str(state_key)):
             st.session_state.pop(state_key, None)
@@ -6968,9 +6974,7 @@ def file_uri_for_path(path_value: str) -> str:
 
 def search_open_href(path_or_uri: str) -> str:
     """Return a Search-style open link for a path or file URI."""
-    query = urllib.parse.urlencode(
-        {hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM: path_or_uri}
-    )
+    query = urllib.parse.urlencode({hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM: path_or_uri})
     return f"?{query}"
 
 
@@ -7582,7 +7586,7 @@ def ttyd_font_face_style() -> str:
         "min-height:100%!important;"
         "}"
         "body::before{"
-        "content:\"\";"
+        'content:"";'
         "position:fixed!important;"
         "inset:0!important;"
         "pointer-events:none!important;"
@@ -8357,9 +8361,7 @@ def normalize_ttyd_event(value: object) -> dict[str, object]:
             content = content[-max_chars:]
             truncated = True
         event["content"] = content
-        event["mode"] = re.sub(
-            r"[^A-Za-z0-9_-]+", "", str(value.get("mode", ""))
-        )[:32]
+        event["mode"] = re.sub(r"[^A-Za-z0-9_-]+", "", str(value.get("mode", "")))[:32]
         event["requestId"] = re.sub(
             r"[^A-Za-z0-9_.:-]+", "", str(value.get("requestId", ""))
         )[:80]
@@ -8574,7 +8576,9 @@ def render_browser_cleanup_script() -> None:
     token = update_browser_cleanup_registration()
     port = ensure_ttyd_cleanup_server()
     cleanup_url = f"http://{hhs_ui.TTYD_HOST}:{port}/cleanup?token={token}"
-    ttyd_event_request_url = f"http://{hhs_ui.TTYD_HOST}:{port}/ttyd-event?token={token}"
+    ttyd_event_request_url = (
+        f"http://{hhs_ui.TTYD_HOST}:{port}/ttyd-event?token={token}"
+    )
     render_script_html(
         f"""
         <script>
@@ -11111,6 +11115,11 @@ def background_job_completion_needs_app_rerun(
         stop_process(process)
     if process.poll() is None or bool(job.get("completion_rerun_queued")):
         return False
+    metadata = job.get("metadata")
+    if isinstance(metadata, dict) and metadata.get("completion_rerun") is False:
+        job["completion_rerun_queued"] = True
+        st.session_state[state_key] = job
+        return False
     job["completion_rerun_queued"] = True
     st.session_state[state_key] = job
     return True
@@ -11194,9 +11203,9 @@ def render_background_job_status(job_name: str, message: str = "") -> None:
             )
             return
         if background_job_is_running(job_name):
-            description = message.strip() or str(
-                job.get("description", "Command")
-            ).strip()
+            description = (
+                message.strip() or str(job.get("description", "Command")).strip()
+            )
             try:
                 started_at = float(job.get("started_at", 0.0) or 0.0)
             except (TypeError, ValueError):
@@ -11701,11 +11710,13 @@ def start_cached_background_command(
     ttl_seconds: int,
     timeout_seconds: int,
     force_local: bool = False,
+    completion_rerun: bool = True,
 ) -> bool:
     """Start a background command that will be written to command-result cache."""
     metadata = {
         **background_command_metadata(command, cache_tag, force_local=force_local),
         "ttl_seconds": ttl_seconds,
+        "completion_rerun": completion_rerun,
     }
     return start_background_bash_command(
         job_name,
@@ -11835,7 +11846,7 @@ def cached_hhs_services_result() -> (
     return result, fresh_cache
 
 
-def start_hhs_services_list_refresh() -> bool:
+def start_hhs_services_list_refresh(completion_rerun: bool = True) -> bool:
     """Start a background refresh for the services list."""
     command, _command_to_run, _remote_host, _cache_key = hhs_services_command_context()
     started = start_cached_background_command(
@@ -11845,11 +11856,12 @@ def start_hhs_services_list_refresh() -> bool:
         "services",
         hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
         hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        completion_rerun=completion_rerun,
     )
     if started:
-        st.session_state[
-            hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY
-        ] = time.time()
+        st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY] = (
+            time.time()
+        )
     return started
 
 
@@ -11879,9 +11891,9 @@ def schedule_ollama_service_availability_refresh() -> None:
     st.session_state["service_list_error"] = ""
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = False
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = True
-    st.session_state[
-        hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY
-    ] = ai_service_availability_context()
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY] = (
+        ai_service_availability_context()
+    )
     start_hhs_services_list_refresh()
 
 
@@ -11894,7 +11906,7 @@ def update_ollama_service_availability_refresh() -> None:
     if background_job_is_running(SERVICE_LIST_JOB):
         return
     if ollama_service_availability_refresh_due():
-        start_hhs_services_list_refresh()
+        start_hhs_services_list_refresh(completion_rerun=False)
 
 
 def monitor_metric_job_name(metric: str) -> str:
@@ -12123,7 +12135,7 @@ def build_hhs_setup_plugin_command(arguments: list[str]) -> str:
     """Build a Bash command that invokes the HomeSetup setup plug-in."""
     safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
     setup_dispatch = (
-        'function __hhs() { '
+        "function __hhs() { "
         'if [[ "$1" == "setup" ]]; then '
         "shift; "
         'execute "$@"; '
@@ -12173,6 +12185,79 @@ def build_hhs_setup_apply_command(settings: dict[str, bool]) -> str:
 def build_hhs_setup_restore_command() -> str:
     """Build the setup plug-in command that restores default settings."""
     return build_hhs_setup_plugin_command(["-restore"])
+
+
+def build_hhs_starship_info_command() -> str:
+    """Build the Bash command used to read Starship paths, presets, and config."""
+    return (
+        build_hhs_env_environment_command()
+        + 'source "${HHS_HOME}/bin/apps/bash/app-commons.bash"; '
+        + 'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/starship/starship.bash"; '
+        + 'if [[ ! -s "${STARSHIP_CONFIG}" ]]; then '
+        + 'cp -f "${HHS_STARSHIP_PRESETS_DIR}/hhs-starship.toml" "${STARSHIP_CONFIG}" 2>/dev/null || true; '
+        + "fi; "
+        + "add_hhs_presets >/dev/null 2>&1 || true; "
+        + f'printf "%s\\n%s\\n" "{STARSHIP_CACHE_OUTPUT_MARKER}" "${{STARSHIP_CACHE}}"; '
+        + f'printf "%s\\n%s\\n" "{STARSHIP_CONFIG_OUTPUT_MARKER}" "${{STARSHIP_CONFIG}}"; '
+        + f'printf "%s\\n%s\\n" "{STARSHIP_HHS_DIR_OUTPUT_MARKER}" "${{HHS_DIR}}"; '
+        + f'printf "%s\\n" "{STARSHIP_PRESETS_OUTPUT_MARKER}"; '
+        + 'printf "%s\\n" "${STARSHIP_PRESETS[@]}" | awk \'NF && !seen[$0]++\' | sort; '
+        + f'printf "%s\\n" "{STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER}"; '
+        + 'cat "${STARSHIP_CONFIG}" 2>/dev/null || true; '
+        + f'printf "\\n%s\\n" "{STARSHIP_END_OUTPUT_MARKER}"'
+    )
+
+
+def build_hhs_starship_plugin_command(arguments: list[str]) -> str:
+    """Build a Bash command that invokes the HomeSetup Starship plug-in."""
+    safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
+    starship_dispatch = (
+        "function __hhs() { "
+        'if [[ "$1" == "starship" ]]; then '
+        "shift; "
+        'execute "$@"; '
+        "else "
+        "return 127; "
+        "fi; "
+        "}; "
+    )
+    return (
+        build_hhs_env_environment_command()
+        + 'export APP_NAME="${APP_NAME:-hhs-ui}"; '
+        + 'source "${HHS_HOME}/bin/apps/bash/app-commons.bash"; '
+        + 'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/starship/starship.bash"; '
+        + f"{starship_dispatch}"
+        + f"__hhs starship {safe_arguments}"
+    )
+
+
+def build_hhs_starship_preset_command(preset: str) -> str:
+    """Build the Starship plug-in command that applies one preset."""
+    return build_hhs_starship_plugin_command(["preset", preset])
+
+
+def build_hhs_save_starship_config_command(config_content: str) -> str:
+    """Build the Bash command used to save the editable Starship config file."""
+    encoded_config = b64encode(config_content.encode("utf-8")).decode("ascii")
+    return (
+        build_hhs_env_environment_command()
+        + 'source "${HHS_HOME}/bin/apps/bash/app-commons.bash"; '
+        + 'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/starship/starship.bash"; '
+        + f"encoded_config={shlex.quote(encoded_config)}; "
+        + 'config_file="${STARSHIP_CONFIG}"; '
+        + 'mkdir -p "$(dirname "${config_file}")" || exit 2; '
+        + 'tmp_config="$(mktemp "${TMPDIR:-/tmp}/hhs-starship-config.XXXXXX")" || exit 2; '
+        + 'if printf "%s" "${encoded_config}" | base64 --decode >"${tmp_config}" 2>/dev/null '
+        + '|| printf "%s" "${encoded_config}" | base64 -d >"${tmp_config}" 2>/dev/null '
+        + '|| printf "%s" "${encoded_config}" | base64 -D >"${tmp_config}" 2>/dev/null; then '
+        + 'mv "${tmp_config}" "${config_file}" || exit 2; '
+        + 'printf "Saved Starship config: %s\\n" "${config_file}"; '
+        + "else "
+        + 'rm -f "${tmp_config}"; '
+        + 'echo "Unable to decode Starship config content." >&2; '
+        + "exit 2; "
+        + "fi"
+    )
 
 
 def build_ssh_tunnels_command(host: str) -> str:
@@ -13473,6 +13558,44 @@ def parse_hhs_setup_settings(output: str) -> dict[str, bool]:
             continue
         settings[clean_name] = value.strip().lower() in {"1", "true", "yes", "on"}
     return settings
+
+
+def parse_hhs_starship_info(output: str) -> dict[str, object]:
+    """Parse marker-delimited Starship info and config output."""
+    markers = {
+        STARSHIP_CACHE_OUTPUT_MARKER,
+        STARSHIP_CONFIG_OUTPUT_MARKER,
+        STARSHIP_HHS_DIR_OUTPUT_MARKER,
+        STARSHIP_PRESETS_OUTPUT_MARKER,
+        STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER,
+        STARSHIP_END_OUTPUT_MARKER,
+    }
+    sections: dict[str, list[str]] = {marker: [] for marker in markers}
+    current_marker = ""
+    for line in strip_ansi(output).splitlines(keepends=True):
+        clean_line = line.rstrip("\r\n")
+        if clean_line in markers:
+            current_marker = clean_line
+            continue
+        if current_marker and current_marker != STARSHIP_END_OUTPUT_MARKER:
+            sections[current_marker].append(line)
+
+    cache_path = "".join(sections[STARSHIP_CACHE_OUTPUT_MARKER]).strip()
+    config_path = "".join(sections[STARSHIP_CONFIG_OUTPUT_MARKER]).strip()
+    hhs_dir = "".join(sections[STARSHIP_HHS_DIR_OUTPUT_MARKER]).strip()
+    presets = [
+        preset.strip()
+        for preset in "".join(sections[STARSHIP_PRESETS_OUTPUT_MARKER]).splitlines()
+        if preset.strip()
+    ]
+    config_content = "".join(sections[STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER])
+    return {
+        "cache": cache_path,
+        "config": config_path,
+        "hhs_dir": hhs_dir,
+        "presets": presets,
+        "content": config_content.rstrip("\n"),
+    }
 
 
 def parse_hhs_services(output: str) -> list[dict[str, str]]:
@@ -14859,6 +14982,68 @@ def execute_pending_hhs_setup_action() -> None:
     complete_hhs_setup_action_job()
 
 
+def queue_hhs_starship_action(
+    command: str,
+    description: str,
+    metadata: dict[str, object],
+) -> bool:
+    """Queue a HomeSetup Starship plug-in mutation for background execution."""
+    st.session_state["hhs_starship_action_execute_pending"] = {
+        **metadata,
+        "command": command,
+        "description": description,
+    }
+    save_ui_state()
+    return True
+
+
+def start_pending_hhs_starship_action() -> None:
+    """Start a queued HomeSetup Starship action background job, when present."""
+    pending = st.session_state.pop("hhs_starship_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        HHS_STARSHIP_ACTION_JOB,
+        command,
+        description,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        pending,
+        "Another Starship action is already running.",
+    )
+    if not started:
+        st.session_state["hhs_starship_action_execute_pending"] = pending
+
+
+def complete_hhs_starship_action_job() -> None:
+    """Complete a HomeSetup Starship action and refresh Starship info."""
+    completed = background_job_result(HHS_STARSHIP_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    if result.returncode == 0:
+        cache_delete_tag("hhs_starship")
+        if metadata.get("operation") == "save_config":
+            st.session_state["hhs_starship_config_editing"] = False
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+    if result.returncode == 0:
+        fallback = str(metadata.get("success_fallback", "Starship updated."))
+        push_floating_status(status_message or fallback, "info")
+    else:
+        fallback = str(metadata.get("error_fallback", "Starship update failed."))
+        push_floating_status(status_message or fallback, "error")
+    save_ui_state()
+
+
+def execute_pending_hhs_starship_action() -> None:
+    """Start or complete the current HomeSetup Starship action."""
+    start_pending_hhs_starship_action()
+    complete_hhs_starship_action_job()
+
+
 def apply_selected_path_value(
     old_path: str,
     new_path: str,
@@ -15593,9 +15778,9 @@ def remember_ollama_service_availability(
     if result is None or result.returncode != 0:
         return ollama_service_is_available()
     available = ollama_service_is_available_from_output(result.stdout)
-    st.session_state[
-        hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY
-    ] = ai_service_availability_context()
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY] = (
+        ai_service_availability_context()
+    )
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = available
     return available
 
@@ -15627,14 +15812,15 @@ def ollama_service_is_available() -> bool:
 
 def initialize_ollama_service_availability() -> None:
     """Seed and refresh AI tab visibility from service availability data."""
-    if st.session_state.get(
-        hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY
-    ) and ai_service_availability_context_matches_active_host():
+    if (
+        st.session_state.get(hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY)
+        and ai_service_availability_context_matches_active_host()
+    ):
         return
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY] = True
-    st.session_state[
-        hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY
-    ] = ai_service_availability_context()
+    st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY] = (
+        ai_service_availability_context()
+    )
     st.session_state[hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY] = False
     _result, fresh_cache = cached_hhs_services_result()
     if not fresh_cache and not background_job_is_running(SERVICE_LIST_JOB):
@@ -15926,9 +16112,7 @@ def queue_monitor_process_action(command: str, metadata: dict[str, object]) -> N
 
 def start_pending_monitor_process_action() -> None:
     """Start a queued monitor process mutation background job, when present."""
-    pending = (
-        st.session_state.pop("monitor_process_action_execute_pending", None) or {}
-    )
+    pending = st.session_state.pop("monitor_process_action_execute_pending", None) or {}
     if not isinstance(pending, dict):
         return
     command = str(pending.get("command", "")).strip()
@@ -15983,6 +16167,7 @@ def complete_background_action_jobs() -> None:
     execute_pending_home_tool_tldr()
     execute_pending_config_action()
     execute_pending_hhs_setup_action()
+    execute_pending_hhs_starship_action()
     execute_pending_docker_action()
     execute_pending_service_action()
     execute_pending_monitor_process_action()
@@ -16382,9 +16567,7 @@ def render_history_stats_chart() -> None:
         refresh_key="history_stats_refresh_button",
         refresh_on_click=refresh_history_stats_chart,
     )
-    top_n = normalized_history_stats_top_n(
-        st.session_state.get("history_stats_top_n")
-    )
+    top_n = normalized_history_stats_top_n(st.session_state.get("history_stats_top_n"))
     result = render_cached_command_result(
         build_hhs_history_stats_command(int(top_n)),
         "Loading history stats",
@@ -16535,9 +16718,7 @@ def render_process_monitor_chart(metric: str) -> None:
     )
     applied_top_n = normalized_monitor_process_top_n(metric)
     result, fresh_cache = cached_monitor_metric_result(metric)
-    if (refresh_clicked or not fresh_cache) and not background_job_is_running(
-        job_name
-    ):
+    if (refresh_clicked or not fresh_cache) and not background_job_is_running(job_name):
         start_monitor_metric_refresh(metric)
     metric_running = background_job_is_running(job_name)
     render_background_job_status(job_name)
@@ -16987,60 +17168,11 @@ def render_hhs_setup_title() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading hhs-view-heading--direct-content">
-          <h2> HomeSetup Initialization Settings</h2>
+          <h2> Initialization Setup</h2>
         </section>
         """,
         unsafe_allow_html=True,
     )
-
-
-def render_markdown_table_header(
-    key_prefix: str,
-    value_column_label: str,
-    item_column_label: str,
-) -> None:
-    """Render a reusable markdown table header."""
-    with st.container(key=f"{key_prefix}_markdown_table_header"):
-        index_column, enabled_column, setting_column = st.columns(
-            [0.45, 0.85, 5.0],
-            gap="small",
-            vertical_alignment="center",
-        )
-        with index_column:
-            st.markdown("**#**")
-        with enabled_column:
-            st.markdown(f"**{value_column_label}**")
-        with setting_column:
-            st.markdown(f"**{item_column_label}**")
-
-
-def render_markdown_table_row(
-    key_prefix: str,
-    index: int,
-    header: str,
-    item: str,
-    value_key: str,
-    disabled: bool,
-) -> None:
-    """Render one reusable markdown table row."""
-    parity = "odd" if index % 2 else "even"
-    with st.container(key=f"{key_prefix}_markdown_table_row_{index}_{parity}"):
-        index_column, enabled_column, setting_column = st.columns(
-            [0.45, 0.85, 5.0],
-            gap="small",
-            vertical_alignment="center",
-        )
-        with index_column:
-            st.markdown(str(index))
-        with enabled_column:
-            st.checkbox(
-                f"Mark {header or item}",
-                key=value_key,
-                disabled=disabled,
-                label_visibility="collapsed",
-            )
-        with setting_column:
-            st.markdown(f"`{header or item}`")
 
 
 def render_markdown_table(
@@ -17052,6 +17184,7 @@ def render_markdown_table(
     value_keys: list[str] | None = None,
     disabled: bool = False,
     value_column_label: str = "Mark",
+    variable_column_label: str = "Variable",
     item_column_label: str = "Setting",
 ) -> list[bool]:
     """Render a reusable checkbox markdown table and return selected values."""
@@ -17060,41 +17193,65 @@ def render_markdown_table(
     if value_keys is not None and len(items) != len(value_keys):
         raise ValueError("items and value_keys must have the same length")
 
-    checkbox_keys = value_keys or [
-        f"{key_prefix}_markdown_table_value_{index}"
-        for index, _item in enumerate(items, start=1)
-    ]
-    for checkbox_key, value in zip(checkbox_keys, values, strict=True):
-        st.session_state.setdefault(checkbox_key, bool(value))
+    editor_key = f"{key_prefix}_markdown_table_editor"
+    token_key = f"_{editor_key}_token"
+    token = json.dumps(
+        {"headers": headers, "items": items, "values": values},
+        separators=(",", ":"),
+    )
+    if st.session_state.get(token_key) != token:
+        st.session_state.pop(editor_key, None)
+        st.session_state[token_key] = token
 
     with st.container(key=f"{key_prefix}_markdown_table"):
         st.markdown(
             f'<div class="hhs-markdown-table-caption">{html.escape(caption)}</div>',
             unsafe_allow_html=True,
         )
-        render_markdown_table_header(
-            key_prefix,
-            value_column_label,
-            item_column_label,
+        table_data = pd.DataFrame(
+            {
+                value_column_label: [bool(value) for value in values],
+                variable_column_label: [header.upper() for header in headers],
+                item_column_label: headers,
+            }
         )
-        with st.container(key=f"{key_prefix}_markdown_table_body"):
-            for index, (header, item, checkbox_key) in enumerate(
-                zip(headers, items, checkbox_keys, strict=True),
-                start=1,
-            ):
-                render_markdown_table_row(
-                    key_prefix,
-                    index,
-                    header,
-                    item,
-                    checkbox_key,
-                    disabled,
-                )
+        edited_data = st.data_editor(
+            table_data,
+            key=editor_key,
+            hide_index=True,
+            num_rows="fixed",
+            column_order=[
+                value_column_label,
+                item_column_label,
+                variable_column_label,
+            ],
+            height=min(360, 40 + (len(items) + 1) * 44),
+            disabled=(
+                [variable_column_label, item_column_label]
+                if not disabled
+                else True
+            ),
+            column_config={
+                value_column_label: st.column_config.CheckboxColumn(
+                    value_column_label,
+                    disabled=disabled,
+                ),
+                variable_column_label: st.column_config.TextColumn(
+                    variable_column_label,
+                    disabled=True,
+                ),
+                item_column_label: st.column_config.TextColumn(
+                    item_column_label,
+                    disabled=True,
+                ),
+            },
+        )
 
-    return [
-        bool(st.session_state.get(checkbox_key, False))
-        for checkbox_key in checkbox_keys
-    ]
+    edited_values = [bool(value) for value in edited_data[value_column_label].tolist()]
+    if value_keys is not None:
+        for value_key, value in zip(value_keys, edited_values, strict=True):
+            st.session_state[value_key] = value
+    return edited_values
 
 
 def render_hhs_setup_settings_table(action_running: bool) -> None:
@@ -17112,7 +17269,7 @@ def render_hhs_setup_settings_table(action_running: bool) -> None:
 
 
 def render_hhs_setup_panel() -> None:
-    """Render the HomeSetup setup settings form."""
+    """Render the HomeSetup setup settings panel."""
     execute_pending_hhs_setup_action()
     render_background_job_status(HHS_SETUP_ACTION_JOB)
     render_hhs_setup_title()
@@ -17138,8 +17295,14 @@ def render_hhs_setup_panel() -> None:
     apply_pending_hhs_setup_form_revert()
     action_running = background_job_is_running(HHS_SETUP_ACTION_JOB)
     render_hhs_setup_settings_table(action_running)
-    left_column, ok_column, revert_column, restore_column, right_column = st.columns(
-        [1.0, 0.38, 0.4, 0.46, 1.0],
+    (
+        left_column,
+        ok_column,
+        revert_column,
+        restore_column,
+        right_column,
+    ) = st.columns(
+        [1.0, 0.42, 0.42, 0.48, 1.0],
         gap="small",
         vertical_alignment="center",
     )
@@ -17148,6 +17311,7 @@ def render_hhs_setup_panel() -> None:
     with ok_column:
         ok_clicked = st.button(
             " Apply",
+            key="hhs_setup_apply_button",
             help="Apply",
             disabled=action_running,
             width="stretch",
@@ -17155,6 +17319,7 @@ def render_hhs_setup_panel() -> None:
     with revert_column:
         revert_clicked = st.button(
             " Cancel",
+            key="hhs_setup_cancel_button",
             help="Cancel",
             disabled=action_running,
             width="stretch",
@@ -17162,6 +17327,7 @@ def render_hhs_setup_panel() -> None:
     with restore_column:
         restore_clicked = st.button(
             " Restore",
+            key="hhs_setup_restore_button",
             help="Restore",
             disabled=action_running,
             width="stretch",
@@ -17178,6 +17344,220 @@ def render_hhs_setup_panel() -> None:
     elif restore_clicked:
         request_hhs_setup_restore()
         st.rerun()
+
+
+def request_hhs_starship_preset_apply() -> None:
+    """Queue applying the selected Starship preset."""
+    preset = str(st.session_state.get("hhs_starship_preset", "")).strip()
+    if not preset:
+        push_floating_status("Select a Starship preset before applying.", "warn")
+        return
+    queue_hhs_starship_action(
+        build_hhs_starship_preset_command(preset),
+        "Applying Starship preset",
+        {
+            "operation": "preset",
+            "preset": preset,
+            "success_fallback": f"Starship preset applied: {preset}",
+            "error_fallback": f"Unable to apply Starship preset: {preset}",
+        },
+    )
+
+
+def toggle_hhs_starship_config_editing() -> None:
+    """Toggle inline editing for the rendered Starship config file."""
+    st.session_state["hhs_starship_config_editing"] = not bool(
+        st.session_state.get("hhs_starship_config_editing")
+    )
+
+
+def request_hhs_starship_config_save() -> None:
+    """Queue saving the editable Starship config file."""
+    config_content = str(st.session_state.get("hhs_starship_config_editor", ""))
+    queue_hhs_starship_action(
+        build_hhs_save_starship_config_command(config_content),
+        "Saving Starship config",
+        {
+            "operation": "save_config",
+            "success_fallback": "Starship config saved.",
+            "error_fallback": "Unable to save Starship config.",
+        },
+    )
+
+
+def render_hhs_starship_title() -> None:
+    """Render the HomeSetup Starship page title."""
+    st.markdown(
+        """
+        <section class="hhs-view-heading hhs-view-heading--direct-content">
+          <h2> Starship</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def normalize_hhs_starship_preset_state(presets: list[str]) -> None:
+    """Keep the selected Starship preset inside the available preset list."""
+    selected_preset = str(st.session_state.get("hhs_starship_preset", "")).strip()
+    if presets and selected_preset not in presets:
+        st.session_state["hhs_starship_preset"] = presets[0]
+
+
+def display_hhs_starship_config_path(config_path: str, hhs_dir: str) -> str:
+    """Return a Starship config path display value rooted at $HHS_DIR when possible."""
+    clean_config_path = config_path.strip()
+    clean_hhs_dir = hhs_dir.strip().rstrip("/")
+    if not clean_config_path or not clean_hhs_dir:
+        return clean_config_path
+    normalized_config_path = posixpath.normpath(clean_config_path)
+    normalized_hhs_dir = posixpath.normpath(clean_hhs_dir)
+    if normalized_config_path == normalized_hhs_dir:
+        return "$HHS_DIR"
+    prefix = f"{normalized_hhs_dir}/"
+    if normalized_config_path.startswith(prefix):
+        relative_path = normalized_config_path[len(prefix) :]
+        return f"$HHS_DIR/{relative_path}"
+    return clean_config_path
+
+
+def render_hhs_starship_controls(
+    starship_info: dict[str, object], action_running: bool
+) -> None:
+    """Render Starship paths, preset selector, and apply action."""
+    cache_path = str(starship_info.get("cache", "")).strip()
+    config_path = str(starship_info.get("config", "")).strip()
+    hhs_dir = str(starship_info.get("hhs_dir", "")).strip()
+    config_display_path = display_hhs_starship_config_path(config_path, hhs_dir)
+    presets = [
+        str(preset).strip()
+        for preset in starship_info.get("presets", [])
+        if str(preset).strip()
+    ]
+    normalize_hhs_starship_preset_state(presets)
+    preset_options = presets or [""]
+    editing = bool(st.session_state.get("hhs_starship_config_editing"))
+    edit_button_key = (
+        "hhs_starship_edit_config_button_selected"
+        if editing
+        else "hhs_starship_edit_config_button"
+    )
+    with st.container(key="hhs_starship_controls"):
+        cache_col, config_col, preset_col, apply_col, edit_col = st.columns(
+            [1.2, 1.6, 1.1, 0.22, 0.22],
+            gap="small",
+            vertical_alignment="bottom",
+        )
+        with cache_col:
+            st.text_input(
+                "Cache",
+                value=cache_path,
+                disabled=True,
+            )
+        with config_col:
+            st.text_input(
+                "Config",
+                value=config_display_path,
+                disabled=True,
+            )
+        with preset_col:
+            st.selectbox(
+                "Preset",
+                preset_options,
+                key="hhs_starship_preset",
+                disabled=action_running or not presets,
+            )
+        with apply_col:
+            st.button(
+                "",
+                key="hhs_starship_apply_preset_button",
+                help="Apply Starship preset",
+                on_click=request_hhs_starship_preset_apply,
+                disabled=action_running or not presets,
+                width="stretch",
+            )
+        with edit_col:
+            st.button(
+                "",
+                key=edit_button_key,
+                help="Toggle Starship config editing",
+                on_click=toggle_hhs_starship_config_editing,
+                disabled=action_running or not config_path,
+                width="stretch",
+            )
+
+
+def sync_hhs_starship_config_editor_state(config_content: str) -> None:
+    """Keep the read-only Starship editor synchronized with loaded file content."""
+    content_token = hashlib.sha256(config_content.encode("utf-8")).hexdigest()
+    if "hhs_starship_config_editor" not in st.session_state:
+        st.session_state["hhs_starship_config_editor"] = config_content
+    if st.session_state.get("hhs_starship_config_editing"):
+        return
+    if st.session_state.get("hhs_starship_config_content_token") == content_token:
+        return
+    st.session_state["hhs_starship_config_editor"] = config_content
+    st.session_state["hhs_starship_config_content_token"] = content_token
+
+
+def render_hhs_starship_config_editor(
+    starship_info: dict[str, object], action_running: bool
+) -> None:
+    """Render the current Starship config file contents."""
+    config_path = str(starship_info.get("config", "")).strip()
+    hhs_dir = str(starship_info.get("hhs_dir", "")).strip()
+    config_display_path = display_hhs_starship_config_path(config_path, hhs_dir)
+    config_content = str(starship_info.get("content", ""))
+    editing = bool(st.session_state.get("hhs_starship_config_editing"))
+    sync_hhs_starship_config_editor_state(config_content)
+
+    if config_display_path:
+        render_view_subtitle(f"<code>{html.escape(config_display_path)}</code>", True)
+    with st.container(key="hhs_starship_config_editor_panel"):
+        st.text_area(
+            "Starship config",
+            key="hhs_starship_config_editor",
+            height=360,
+            disabled=not editing or action_running,
+            label_visibility="collapsed" if config_display_path else "visible",
+        )
+        if editing:
+            st.button(
+                "",
+                key="hhs_starship_save_config_button",
+                help="Save Starship config",
+                on_click=request_hhs_starship_config_save,
+                disabled=action_running or not config_path,
+            )
+
+
+def render_hhs_starship_panel() -> None:
+    """Render the HomeSetup Starship integration panel."""
+    execute_pending_hhs_starship_action()
+    render_background_job_status(HHS_STARSHIP_ACTION_JOB)
+    render_hhs_starship_title()
+    result = render_cached_command_result(
+        build_hhs_starship_info_command(),
+        "Loading Starship configuration",
+        "hhs_starship",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load Starship configuration.",
+    )
+    if result is None:
+        return
+    if result.returncode != 0:
+        st.error(
+            clean_command_status_message(
+                result.stderr or result.stdout or "Unable to load Starship configuration."
+            )
+        )
+        return
+
+    starship_info = parse_hhs_starship_info(result.stdout)
+    action_running = background_job_is_running(HHS_STARSHIP_ACTION_JOB)
+    render_hhs_starship_controls(starship_info, action_running)
+    render_hhs_starship_config_editor(starship_info, action_running)
 
 
 def render_hhs_placeholder_panel(hhs_view: str) -> None:
@@ -17211,6 +17591,8 @@ def render_hhs_view() -> None:
     )
     if hhs_view == "SETUP":
         render_hhs_setup_panel()
+    elif hhs_view == "STARSHIP":
+        render_hhs_starship_panel()
     else:
         render_hhs_placeholder_panel(hhs_view)
 
@@ -18272,10 +18654,10 @@ def render_ssh_files_panel() -> None:
     if background_job_is_running(SSH_EXPLORER_DELETE_JOB):
         render_background_job_status(SSH_EXPLORER_DELETE_JOB)
 
-    transfer_running = background_job_is_running(
-        SSH_FILE_TRANSFER_JOB
-    ) or background_job_is_running(SSH_EXPLORER_ACTION_JOB) or background_job_is_running(
-        SSH_EXPLORER_DELETE_JOB
+    transfer_running = (
+        background_job_is_running(SSH_FILE_TRANSFER_JOB)
+        or background_job_is_running(SSH_EXPLORER_ACTION_JOB)
+        or background_job_is_running(SSH_EXPLORER_DELETE_JOB)
     )
     event = render_ssh_explorer_component(
         local_rows,
@@ -19616,12 +19998,13 @@ def render_search_controls() -> None:
                 on_click=submit_search_query,
                 width="stretch",
             )
+
+
 def search_replace_enabled() -> bool:
     """Return whether the Search replace row should be visible."""
-    return (
-        normalized_search_type(st.session_state.get("search_type")) == "Strings"
-        and bool(st.session_state.get("search_replace", False))
-    )
+    return normalized_search_type(
+        st.session_state.get("search_type")
+    ) == "Strings" and bool(st.session_state.get("search_replace", False))
 
 
 def render_search_replace_controls() -> None:
@@ -19753,10 +20136,24 @@ def render_search_results() -> None:
     replace = bool(st.session_state.get("search_result_replace", False))
     replacement = str(st.session_state.get("search_result_replacement", ""))
     command = build_hhs_search_command(
-        search_type, query, search_path, ignore_case, words, binary, replace, replacement
+        search_type,
+        query,
+        search_path,
+        ignore_case,
+        words,
+        binary,
+        replace,
+        replacement,
     )
     cache_key = search_command_cache_key(
-        search_type, query, search_path, ignore_case, words, binary, replace, replacement
+        search_type,
+        query,
+        search_path,
+        ignore_case,
+        words,
+        binary,
+        replace,
+        replacement,
     )
     loader_message = search_loader_message(query, search_path)
     result = complete_search_command_result(cache_key)
@@ -20457,6 +20854,7 @@ def main() -> None:
     st.session_state.setdefault("home_tool_tldr_execute_pending", None)
     st.session_state.setdefault("config_action_execute_pending", None)
     st.session_state.setdefault("hhs_setup_action_execute_pending", None)
+    st.session_state.setdefault("hhs_starship_action_execute_pending", None)
     st.session_state.setdefault("docker_action_execute_pending", None)
     st.session_state.setdefault("config_view", "ENV")
     if st.session_state["config_view"] not in hhs_ui.CONFIG_VIEWS:
