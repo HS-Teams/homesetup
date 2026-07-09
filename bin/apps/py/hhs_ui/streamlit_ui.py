@@ -12126,11 +12126,7 @@ def build_hhs_setup_plugin_command(arguments: list[str]) -> str:
         'function __hhs() { '
         'if [[ "$1" == "setup" ]]; then '
         "shift; "
-        'if [[ "${1:-}" == "-v" || "${1:-}" == "--version" ]]; then '
-        "version; "
-        "else "
         'execute "$@"; '
-        "fi; "
         "else "
         "return 127; "
         "fi; "
@@ -12153,11 +12149,6 @@ def build_hhs_setup_plugin_command(arguments: list[str]) -> str:
         f"{setup_dispatch}"
         f"__hhs setup {safe_arguments}"
     )
-
-
-def build_hhs_setup_version_command() -> str:
-    """Build the setup plug-in version command."""
-    return build_hhs_setup_plugin_command(["-v"])
 
 
 def build_hhs_setup_settings_command() -> str:
@@ -13482,13 +13473,6 @@ def parse_hhs_setup_settings(output: str) -> dict[str, bool]:
             continue
         settings[clean_name] = value.strip().lower() in {"1", "true", "yes", "on"}
     return settings
-
-
-def parse_hhs_setup_version(output: str) -> str:
-    """Parse the setup plug-in version output."""
-    clean_output = strip_ansi(output).strip()
-    match = re.search(r"\bv([0-9]+(?:\.[0-9]+){1,2}(?:[-+][A-Za-z0-9.]+)?)", clean_output)
-    return match.group(1) if match else ""
 
 
 def parse_hhs_services(output: str) -> list[dict[str, str]]:
@@ -16998,29 +16982,12 @@ def request_hhs_setup_restore() -> None:
     )
 
 
-def hhs_setup_version() -> str:
-    """Return the setup plug-in version when available."""
-    result = render_cached_command_result(
-        build_hhs_setup_version_command(),
-        "Loading setup version",
-        "hhs_setup_version",
-        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
-        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        "Unable to load setup version.",
-    )
-    if result is None or result.returncode != 0:
-        return ""
-    return parse_hhs_setup_version(result.stdout)
-
-
 def render_hhs_setup_title() -> None:
     """Render the HomeSetup setup page title."""
-    version = hhs_setup_version()
-    version_text = f" v{html.escape(version)}" if version else ""
     st.markdown(
-        f"""
+        """
         <section class="hhs-view-heading hhs-view-heading--direct-content">
-          <h2> HomeSetup Initialization Settings{version_text}</h2>
+          <h2> HomeSetup Initialization Settings</h2>
         </section>
         """,
         unsafe_allow_html=True,
@@ -17110,18 +17077,19 @@ def render_markdown_table(
             value_column_label,
             item_column_label,
         )
-        for index, (header, item, checkbox_key) in enumerate(
-            zip(headers, items, checkbox_keys, strict=True),
-            start=1,
-        ):
-            render_markdown_table_row(
-                key_prefix,
-                index,
-                header,
-                item,
-                checkbox_key,
-                disabled,
-            )
+        with st.container(key=f"{key_prefix}_markdown_table_body"):
+            for index, (header, item, checkbox_key) in enumerate(
+                zip(headers, items, checkbox_keys, strict=True),
+                start=1,
+            ):
+                render_markdown_table_row(
+                    key_prefix,
+                    index,
+                    header,
+                    item,
+                    checkbox_key,
+                    disabled,
+                )
 
     return [
         bool(st.session_state.get(checkbox_key, False))
