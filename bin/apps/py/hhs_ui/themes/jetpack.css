@@ -31,6 +31,8 @@
   --hhs-theme-footer-status-error-color: #ff6188;
   --hhs-theme-footer-status-text-size: 1.176rem;
   --hhs-theme-footer-glyph-button: 1.5rem;
+  --hhs-theme-hhs-action-button-width: 140px;
+  --hhs-theme-input-placeholder-color: #686e7a;
   --hhs-theme-show-widget-border: true;
   --hhs-theme-show-sidebar-border: true;
 

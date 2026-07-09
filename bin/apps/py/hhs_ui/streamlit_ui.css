@@ -4,6 +4,7 @@
   --hhs-element-std-gap: 1rem;
   --hhs-footer-guard-height: 3.5rem;
   --hhs-theme-footer-glyph-button: 1.5rem;
+  --hhs-theme-hhs-action-button-width: 140px;
   --hhs-floating-status-height: calc(1.85em + 20px);
   --hhs-floating-status-z-index: 999999;
   --hhs-markdown-table-max-height: 360px;
@@ -24,6 +25,7 @@
   --hhs-view-section-gap: var(--hhs-element-std-gap);
   --hhs-danger: #dc2626;
   --hhs-theme-text-muted-color: var(--hhs-comment, var(--hhs-theme-text-color));
+  --hhs-theme-input-placeholder-color: #686e7a;
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
   --hhs-sidebar-inline-inset: 20px;
@@ -192,6 +194,14 @@ textarea,
 
 [data-testid="stVegaLiteChart"] > div {
   height: 100% !important;
+}
+
+input::placeholder,
+textarea::placeholder,
+[data-baseweb="input"] input::placeholder,
+[data-baseweb="textarea"] textarea::placeholder {
+  color: var(--hhs-theme-input-placeholder-color) !important;
+  opacity: 1 !important;
 }
 
 [data-testid="stMarkdownContainer"] table th {
@@ -1293,6 +1303,19 @@ div[class*="st-key-"][class*="_markdown_table"] [data-testid="stDataFrame"] > di
   z-index: 2;
 }
 
+.st-key-hhs_starship_save_config_button button,
+.st-key-hhs_setup_apply_button button,
+.st-key-hhs_setup_cancel_button button,
+.st-key-hhs_setup_restore_button button,
+.st-key-hhs_settings_delete_button button,
+.st-key-hhs_settings_truncate_button button,
+.st-key-hhs_firebase_alias_upload_button button,
+.st-key-hhs_firebase_alias_download_button button {
+  max-width: var(--hhs-theme-hhs-action-button-width);
+  min-width: var(--hhs-theme-hhs-action-button-width);
+  width: var(--hhs-theme-hhs-action-button-width);
+}
+
 .st-key-hhs_setup_apply_button,
 .st-key-hhs_setup_cancel_button,
 .st-key-hhs_setup_restore_button {
@@ -1300,24 +1323,70 @@ div[class*="st-key-"][class*="_markdown_table"] [data-testid="stDataFrame"] > di
   justify-content: center;
 }
 
+.st-key-hhs_setup_apply_button,
+.st-key-hhs_setup_cancel_button,
+.st-key-hhs_setup_restore_button,
+.st-key-hhs_settings_delete_button,
+.st-key-hhs_settings_truncate_button,
+.st-key-hhs_starship_save_config_button,
+.st-key-hhs_firebase_alias_upload_button,
+.st-key-hhs_firebase_alias_download_button {
+  max-width: var(--hhs-theme-hhs-action-button-width);
+  min-width: var(--hhs-theme-hhs-action-button-width);
+  width: var(--hhs-theme-hhs-action-button-width);
+}
+
+[data-testid="stHorizontalBlock"]:has(.st-key-hhs_setup_apply_button) {
+  align-items: center;
+  display: grid !important;
+  gap: var(--hhs-element-std-gap) !important;
+  grid-template-columns:
+    minmax(0, 1fr)
+    var(--hhs-theme-hhs-action-button-width)
+    var(--hhs-theme-hhs-action-button-width)
+    var(--hhs-theme-hhs-action-button-width)
+    minmax(0, 1fr);
+}
+
 .st-key-hhs_settings_action_buttons [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"]) {
   align-items: center;
   display: grid !important;
   gap: var(--hhs-element-std-gap) !important;
-  grid-template-columns: minmax(0, 1fr) 130px 130px minmax(0, 1fr);
+  grid-template-columns:
+    minmax(0, 1fr)
+    var(--hhs-theme-hhs-action-button-width)
+    var(--hhs-theme-hhs-action-button-width)
+    minmax(0, 1fr);
 }
 
 .st-key-hhs_settings_action_buttons
   [data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"])
+  > div[data-testid="stColumn"],
+[data-testid="stHorizontalBlock"]:has(.st-key-hhs_setup_apply_button)
   > div[data-testid="stColumn"] {
   flex: initial !important;
   min-width: 0 !important;
   width: auto !important;
 }
 
-.st-key-hhs_settings_delete_button button,
-.st-key-hhs_settings_truncate_button button {
-  width: 130px;
+.st-key-hhs_firebase_aliases_action_buttons
+  [data-testid="stHorizontalBlock"]:has(.st-key-hhs_firebase_alias_upload_button) {
+  align-items: center;
+  display: grid !important;
+  gap: var(--hhs-element-std-gap) !important;
+  grid-template-columns:
+    minmax(0, 1fr)
+    var(--hhs-theme-hhs-action-button-width)
+    var(--hhs-theme-hhs-action-button-width)
+    minmax(0, 1fr);
+}
+
+.st-key-hhs_firebase_aliases_action_buttons
+  [data-testid="stHorizontalBlock"]:has(.st-key-hhs_firebase_alias_upload_button)
+  > div[data-testid="stColumn"] {
+  flex: initial !important;
+  min-width: 0 !important;
+  width: auto !important;
 }
 
 .hhs-view-subtitle {

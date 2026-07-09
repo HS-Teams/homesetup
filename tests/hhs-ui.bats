@@ -1315,29 +1315,75 @@ from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 css = Path(sys.argv[2]).read_text(encoding="utf-8")
+component_html = (
+    Path(sys.argv[1])
+    .parent.joinpath("components", "firebase_config_form", "index.html")
+    .read_text(encoding="utf-8")
+)
 assert 'elif hhs_view == "Firebase":' in source
 assert "render_hhs_firebase_panel()" in source
 assert 'HHS_FIREBASE_CONFIG_FILE:-${HHS_DIR}/firebase.properties' in source
 assert 'with st.expander("Configurations", expanded=True):' in source
 assert '"Firebase": " Firebase"' in Path(sys.argv[1]).with_name("constants.py").read_text(encoding="utf-8")
+assert "FIREBASE_CONFIG_COMPONENT_DIR" in Path(sys.argv[1]).with_name("constants.py").read_text(encoding="utf-8")
 assert "<h2> Firebase</h2>" in source
 assert ".st-key-hhs_firebase_configurations" in css
 assert "gap: var(--hhs-element-std-gap) !important" in css
 assert "HHS_FIREBASE_CONFIG_FILE\\\\t%s" in source
 assert "STARSHIP_CONFIG\\\\t%s" in source
+assert "def firebase_config_component()" in source
+assert '"hhs_firebase_config_form"' in source
+assert "components.declare_component(" in source
+assert "path=str(hhs_ui.FIREBASE_CONFIG_COMPONENT_DIR)" in source
+assert "def handle_hhs_firebase_config_component_event" in source
+assert "apply_hhs_firebase_component_values(event.get(\"values\", {}))" in source
+assert "restore_hhs_firebase_original_values()" in source
 
 render_body = source.split("def render_hhs_firebase_configurations", 1)[1].split("\ndef ", 1)[0]
-assert 'st.text_input(' in render_body
-assert 'st.text_input(\n                        label,' in render_body
-assert "placeholder=placeholder" in render_body
+assert 'st.text_input(' not in render_body
+assert "render_hhs_firebase_config_component(action_running)" in render_body
+assert "handle_hhs_firebase_config_component_event(event)" in render_body
+assert "fields=hhs_firebase_component_fields()" in source
+assert '"placeholder": placeholder' in source
 assert "max_chars" not in render_body
-assert "on_change=mark_hhs_firebase_form_dirty" in render_body
-assert 'key="hhs_firebase_save_button"' in render_body
-assert 'key="hhs_firebase_cancel_button"' in render_body
 assert "        render_hhs_firebase_aliases_table(action_running)" in render_body
 assert "        render_hhs_firebase_aliases_actions(action_running)" in render_body
 assert "            render_hhs_firebase_aliases_table(action_running)" not in render_body
 assert "            render_hhs_firebase_aliases_actions(action_running)" not in render_body
+assert "Press enter to apply" not in component_html
+assert "Press Enter to apply" not in component_html
+assert 'event.key === "Enter"' in component_html
+assert "event.preventDefault()" in component_html
+assert "Streamlit.setComponentValue" in component_html
+assert "background: var(--hhs-bg)" in component_html
+assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in component_html
+assert "padding-left: 1rem" not in component_html
+assert "grid-template-columns: var(--hhs-label-width, max-content) minmax(0, 1fr)" in component_html
+assert ".field:nth-child(odd)" in component_html
+assert "--hhs-label-width: 6ch" in component_html
+assert ".field:nth-child(even)" in component_html
+assert "--hhs-label-width: 5.7rem" in component_html
+assert "text-align: right" in component_html
+assert "function displayLabel(value)" in component_html
+assert 'PROJECT_ID: "Project ID"' in component_html
+assert 'label.textContent = `${labelText}:`' in component_html
+assert "hhs-theme-input-placeholder-color" in source
+assert 'properties, "hhs-theme-input-placeholder-color", "#686e7a"' in source
+assert "input::placeholder" in component_html
+assert "function hasRestorableChanges()" in component_html
+assert "function updateRestoreButtonState()" in component_html
+assert "restoreButton.disabled = Boolean(args.disabled) || !hasRestorableChanges()" in component_html
+assert "updateRestoreButtonState()" in component_html
+assert 'button.type = "button"' in component_html
+assert "button.dataset.action = action" in component_html
+assert 'createButton(" Save", "save", "Save")' in component_html
+assert 'createButton("ﭯ Restore", "restore", "Restore original file values")' in component_html
+assert 'if (action === "restore")' in component_html
+assert "values = fieldValues(args.fields)" in component_html
+assert "render()" in component_html
+assert "--hhs-button-width: 140px" in component_html
+assert '"buttonWidth": resolve_css_custom_property(' in source
+assert "window.sessionStorage" in component_html
 
 aliases_table_body = source.split("def render_hhs_firebase_aliases_table", 1)[1].split("\ndef ", 1)[0]
 assert "render_markdown_table(" in aliases_table_body
@@ -1688,6 +1734,9 @@ PY
   assert_success
 
   run grep -q -- '--hhs-theme-text-muted-color: var(--hhs-comment, var(--hhs-theme-text-color))' "${css_file}"
+  assert_success
+
+  run grep -q -- '--hhs-theme-input-placeholder-color: #686e7a' "${css_file}"
   assert_success
 
   run grep -q 'position: fixed' "${css_file}"
@@ -2584,9 +2633,13 @@ assert ".hhs-footer-cache-refresh-glyph" not in base_css
 assert ".hhs-footer-terminal-ai-glyph" not in base_css
 assert "color: currentColor" in footer_glyph_button_block
 assert "--hhs-theme-footer-glyph-button: 1.5rem" in base_css
+assert "--hhs-theme-hhs-action-button-width: 140px" in base_css
 assert "font-size: var(--hhs-theme-footer-glyph-button)" in footer_glyph_button_block
 assert "height: var(--hhs-theme-footer-glyph-button)" in footer_glyph_button_block
 assert "width: var(--hhs-theme-footer-glyph-button)" in footer_glyph_button_block
+assert "width: var(--hhs-theme-hhs-action-button-width)" in base_css
+assert ".st-key-hhs_firebase_save_button" not in base_css
+assert ".st-key-hhs_firebase_alias_upload_button button" in base_css
 assert "font-size: calc((var(--hhs-theme-footer-glyph-button) * 0.5) + 5px)" in terminal_ai_glyph_button_block
 assert ".st-key-footer_terminal_ai_bridge_button" not in base_css
 assert ".st-key-footer_terminal_ai_bridge_container" not in base_css
@@ -2844,6 +2897,11 @@ assert "--hhs-floating-status-timeout: 5s" in base_css
 assert "animation-delay: 0s, var(--hhs-floating-status-timeout, 5s)" in base_css
 assert "font-family: var(--hhs-ui-font-family)" in base_css
 assert "var(--hhs-font-family)" not in base_css
+assert "--hhs-theme-input-placeholder-color: #686e7a" in base_css
+assert "input::placeholder" in base_css
+assert "textarea::placeholder" in base_css
+assert 'color: var(--hhs-theme-input-placeholder-color) !important' in base_css
+assert "opacity: 1 !important" in base_css
 assert "--hhs-modal-scrim-z-index: 1000001" in base_css
 assert "--hhs-modal-z-index: 1000002" in base_css
 assert "--hhs-command-overlay-z-index: 1000010" in base_css
@@ -2884,12 +2942,16 @@ assert "--hhs-theme-footer-status-error-color" in dracula_css
 assert "--hhs-theme-footer-status-text-size" in dracula_css
 assert "--hhs-theme-footer-status-text-size: 1.176rem" in dracula_css
 assert "--hhs-theme-footer-glyph-button: 1.5rem" in dracula_css
+assert "--hhs-theme-hhs-action-button-width: 140px" in dracula_css
+assert "--hhs-theme-input-placeholder-color: #686e7a" in dracula_css
 assert "--hhs-theme-footer-status-info-color" in homesetup_css
 assert "--hhs-theme-footer-status-warn-color" in homesetup_css
 assert "--hhs-theme-footer-status-error-color" in homesetup_css
 assert "--hhs-theme-footer-status-text-size" in homesetup_css
 assert "--hhs-theme-footer-status-text-size: 1.176rem" in homesetup_css
 assert "--hhs-theme-footer-glyph-button: 1.5rem" in homesetup_css
+assert "--hhs-theme-hhs-action-button-width: 140px" in homesetup_css
+assert "--hhs-theme-input-placeholder-color: #686e7a" in homesetup_css
 assert "--hhs-theme-footer-status-info-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-warn-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-error-color" in tokyo_night_css
@@ -2898,6 +2960,12 @@ assert "--hhs-theme-footer-status-text-size: 1.176rem" in tokyo_night_css
 assert "--hhs-theme-footer-glyph-button: 1.5rem" in tokyo_night_css
 assert "--hhs-theme-footer-glyph-button: 1.5rem" in jetpack_css
 assert "--hhs-theme-footer-glyph-button: 1.5rem" in pastel_powerline_css
+assert "--hhs-theme-hhs-action-button-width: 140px" in tokyo_night_css
+assert "--hhs-theme-hhs-action-button-width: 140px" in jetpack_css
+assert "--hhs-theme-hhs-action-button-width: 140px" in pastel_powerline_css
+assert "--hhs-theme-input-placeholder-color: #686e7a" in tokyo_night_css
+assert "--hhs-theme-input-placeholder-color: #686e7a" in jetpack_css
+assert "--hhs-theme-input-placeholder-color: #686e7a" in pastel_powerline_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in dracula_css
 assert '.stButtonGroup [data-testid="stButtonGroup"] button[aria-checked="true"]' in dracula_css
 assert '.stButtonGroup [data-testid="stButtonGroup"] button[data-selected]' in dracula_css
@@ -5888,6 +5956,18 @@ PY
   assert_success
 
   run grep -q -- '--hhs-panel-bg: color-mix' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '.path-input::placeholder' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q -- '--hhs-placeholder: #686e7a' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q 'color: var(--hhs-placeholder)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_success
+
+  run grep -q '"--hhs-placeholder": themeValues.placeholder || themeValues.placeholderColor' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
   assert_success
 
   run grep -q 'background: var(--hhs-panel-bg)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"

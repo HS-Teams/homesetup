@@ -20,6 +20,7 @@
         --hhs-file: #fcfcfa;
         --hhs-primary: #bd93f9;
         --hhs-muted: rgba(248, 248, 242, 0.62);
+        --hhs-placeholder: #686e7a;
         --hhs-hover: rgba(108, 95, 145, 0.2);
         --hhs-panel-bg: color-mix(in srgb, var(--hhs-bg) 84%, var(--hhs-field) 16%);
         --hhs-selected: rgba(56, 189, 248, 0.13);
@@ -109,6 +110,11 @@
         min-width: 0;
         padding: 0 0.9rem;
         width: 100%;
+      }
+
+      .path-input::placeholder {
+        color: var(--hhs-placeholder);
+        opacity: 1;
       }
 
       .path-input:focus,
@@ -507,6 +513,7 @@
             themeValues.folder || themeValues.linkColor || themeValues.primaryColor,
           "--hhs-file": themeValues.file || themeValues.textColor,
           "--hhs-primary": themeValues.primary || themeValues.primaryColor,
+          "--hhs-placeholder": themeValues.placeholder || themeValues.placeholderColor,
         };
         Object.entries(assignments).forEach(([name, value]) => {
           if (value) {
