@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.67"
+VERSION = "0.1.71"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -57,7 +57,6 @@ LEGACY_DEFAULT_LOG_TAIL_LINES = 10
 MIN_LOG_TAIL_LINES = 5
 MAX_LOG_TAIL_LINES = 5000
 LOG_TAIL_LINES_STEP = 5
-UPDATER_CHECK_INTERVAL_SECONDS = 24 * 60 * 60
 FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
 FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
 FLOATING_STATUS_QUEUE_LIMIT = 20
@@ -298,7 +297,6 @@ PERSISTED_UI_KEYS = (
     "ssh_tunnel_other_filter",
     "ssh_view",
     "theme_selected",
-    "updater_last_check_epoch",
     "updater_last_check_output",
     "updater_update_available",
 )
@@ -378,7 +376,7 @@ ALIAS_VALUE_EDITOR_KEY_PREFIX = "alias_selected_value"
 HHS_SETTINGS_TABLE_KEY = "hhs_settings_table"
 HHS_SETTINGS_TABLE_RESET_COUNTER_KEY = "hhs_settings_table_reset_counter"
 MARKDOWN_TABLE_MARK_COLUMN_WIDTH = 80
-MARKDOWN_TABLE_LAYOUT_VERSION = 2
+MARKDOWN_TABLE_LAYOUT_VERSION = 3
 CMD_TABLE_KEY = "cmd_vars_table"
 CMD_TABLE_RESET_COUNTER_KEY = "cmd_vars_table_reset_counter"
 CMD_INDEX_COLUMN_WIDTH = 80

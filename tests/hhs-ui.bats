@@ -1228,6 +1228,57 @@ PY
   assert_success
 }
 
+@test "when rendering HHS Settings then table height should fit real rows" {
+  run python3 - "${ui_file}" "${css_file}" <<'PY'
+import csv
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+css = Path(sys.argv[2]).read_text(encoding="utf-8")
+render_body = source.split("def render_markdown_table", 1)[1].split("\ndef ", 1)[0]
+assert "height=markdown_table_editor_height(len(items))" in render_body
+assert "40 + (len(items) + 1) * 44" not in render_body
+assert "--hhs-markdown-table-max-height: 360px" in css
+assert "max-height: var(--hhs-markdown-table-max-height) !important" in css
+assert "overflow-y: auto" in css
+
+height_start = source.index("def markdown_table_editor_height(")
+height_end = source.index("def render_hhs_setup_settings_table", height_start)
+height_namespace = {}
+exec("from __future__ import annotations\n" + source[height_start:height_end], height_namespace)
+assert height_namespace["markdown_table_editor_height"](4) < 220
+assert height_namespace["markdown_table_editor_height"](12) == 360
+
+parse_start = source.index("def hhs_setting_variable_name(")
+parse_end = source.index("def parse_hhs_starship_info", parse_start)
+parse_namespace = {
+    "csv": csv,
+    "re": re,
+    "strip_ansi": lambda value: value,
+}
+exec("from __future__ import annotations\n" + source[parse_start:parse_end], parse_namespace)
+
+output = """
+| NAME                     | PREFIX | VALUE                                 | SETTINGS TYPE | MODIFIED            |
+| hhs.clitt.max.rows       |        | 15                                    | environment   | 2026-07-09 02:07:07 |
+| hhs.firebase.config.file |        | $HHS_DIR/firebase.properties          | environment   | 2026-07-09 03:01:16 |
+| hhs.punch.file           |        | $HOME/Dropbox/Documents/Punches/my.punch | environment | 2026-07-09 03:01:57 |
+| hhs.vault.file           |        | $HOME/Dropbox/Documents/.vault        | environment   | 2026-07-09 03:02:55 |
+"""
+rows = parse_namespace["parse_hhs_settings_list"](output)
+assert [row["Setting"] for row in rows] == [
+    "hhs.clitt.max.rows",
+    "hhs.firebase.config.file",
+    "hhs.punch.file",
+    "hhs.vault.file",
+]
+assert all(row["Setting"] and row["Variable"] for row in rows)
+PY
+  assert_success
+}
+
 # TC - 6
 @test "when listing services then HomeSetup UI should be included as a managed service" {
   services_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/services/services.bash"
@@ -1702,7 +1753,7 @@ assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in init_source
 assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in init_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in init_source
-assert '"updater_last_check_epoch"' in constants_source
+assert '"updater_last_check_epoch"' not in constants_source
 assert '"updater_last_check_output"' in constants_source
 assert '"updater_update_available"' in constants_source
 assert 'class="hhs-footer-link hhs-footer-repository-link"' in ui_source
@@ -1960,21 +2011,23 @@ assert "for state_file in ui_state_files()" in state_clear_body
 assert "state_file.unlink" in state_clear_body
 assert "is_persisted_ui_key" in state_clear_body
 assert 'def updater_output_has_updates' in ui_source
-assert 'def updater_check_due' in ui_source
+assert 'def updater_check_due' not in ui_source
 assert 'def updater_check_context' in ui_source
 assert 'def restore_local_updater_status' in ui_source
 assert 'def reset_updater_remote_check_state' in ui_source
 assert 'def start_updater_check' in ui_source
 assert 'def store_updater_check_result' in ui_source
 assert 'def execute_due_updater_check' in ui_source
+assert 'def execute_mount_updater_check' in ui_source
 assert 'execute_due_updater_check()' in ui_source
 constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
-assert "UPDATER_CHECK_INTERVAL_SECONDS = 24 * 60 * 60" in constants_source
+assert "UPDATER_CHECK_INTERVAL_SECONDS" not in constants_source
+assert "UPDATER_CHECK_INTERVAL_SECONDS" not in init_source
 store_updater_body = ui_source.split("def store_updater_check_result", 1)[1].split("\ndef ", 1)[0]
 assert 'context: str = "local"' in store_updater_body
 assert 'st.session_state["updater_check_started_context"] = ""' in store_updater_body
 assert 'st.session_state["updater_check_context"] = context' in store_updater_body
-assert 'st.session_state["updater_last_check_epoch"] = time.time()' in store_updater_body
+assert 'st.session_state["updater_last_check_epoch"]' not in store_updater_body
 assert 'st.session_state["updater_last_check_output"] = output' in store_updater_body
 assert 'result.returncode == 0 and updater_output_has_updates(output)' in store_updater_body
 assert 'if context == "local":' in store_updater_body
@@ -1986,8 +2039,15 @@ assert 'restore_local_updater_status()' in execute_updater_body
 assert 'updater_remote_checked_context' in execute_updater_body
 assert 'start_updater_check(current_context, force_local=False)' in execute_updater_body
 assert 'start_updater_check("local", force_local=True)' in execute_updater_body
+assert 'updater_check_due()' not in execute_updater_body
+mount_updater_body = ui_source.split("def execute_mount_updater_check", 1)[1].split("\ndef ", 1)[0]
+assert 'updater_mount_check_attempted' in mount_updater_body
+assert 'st.session_state["updater_check_attempted"] = True' in mount_updater_body
+assert 'background_job_is_running(UPDATER_CHECK_JOB)' in mount_updater_body
+assert 'start_updater_check("local", force_local=True, show_preloader_event=False)' in mount_updater_body
 start_updater_body = ui_source.split("def start_updater_check", 1)[1].split("\ndef ", 1)[0]
 assert 'metadata={"updater_context": context}' in start_updater_body
+assert 'show_preloader_event=show_preloader_event' in start_updater_body
 assert 'st.session_state["updater_check_started_context"] = context' in start_updater_body
 reset_updater_body = ui_source.split("def reset_updater_remote_check_state", 1)[1].split("\ndef ", 1)[0]
 assert 'st.session_state["updater_check_started_context"] = ""' in reset_updater_body
@@ -2010,11 +2070,16 @@ assert 'def render_floating_status_dispose_script' in ui_source
 assert 'hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY' in ui_source
 assert 'def render_floating_status' in ui_source
 assert 'render_floating_status()' in ui_source
-assert 'class="hhs-floating-status ' in ui_source
-assert 'data-hhs-floating-status-id' in ui_source
-assert '<button class="hhs-floating-status-dismiss"' in ui_source
-assert 'class="hhs-floating-status-dismiss"' in ui_source
+assert 'parentDocument.createElement("div")' in ui_source
+assert 'status.dataset.hhsFloatingStatusId = statusId' in ui_source
+assert 'querySelectorAll(".hhs-floating-status[data-hhs-floating-status-id]")' in ui_source
+assert "parentDocument.body.append(status)" in ui_source
+assert 'button.className = "hhs-floating-status-dismiss"' in ui_source
+assert 'dismiss.className = "hhs-floating-status-dismiss"' in ui_source
 assert '__hhsDisposedFloatingStatuses' in ui_source
+assert '__hhsRenderedFloatingStatuses' not in ui_source
+assert '__hhsFloatingStatusTimer' in ui_source
+assert 'hhs-floating-status--stable' in ui_source
 assert 'hhs-floating-status--disposing' in ui_source
 assert 'aria-label="Dispose footer status"' in ui_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in ui_source
@@ -2041,6 +2106,10 @@ remote_status_block = re.search(r"\.hhs-footer-remote-status\s*\{([^}]*)\}", bas
 status_group_block = re.search(r"\.hhs-footer-status-group\s*\{([^}]*)\}", base_css).group(1)
 shell_group_block = re.search(r"\.hhs-footer-shell-group\s*\{([^}]*)\}", base_css).group(1)
 floating_status_block = re.search(r"\.hhs-floating-status\s*\{([^}]*)\}", base_css).group(1)
+floating_status_stable_block = re.search(
+    r"\.hhs-floating-status--stable\s*\{([^}]*)\}",
+    base_css,
+).group(1)
 floating_status_dismiss_block = re.search(
     r"\.hhs-floating-status-dismiss\s*\{([^}]*)\}",
     base_css,
@@ -2048,6 +2117,11 @@ floating_status_dismiss_block = re.search(
 floating_status_dismiss_hover_block = re.search(
     r"\.hhs-floating-status-dismiss:hover,\s*\.hhs-floating-status-dismiss:focus-visible\s*\{([^}]*)\}",
     base_css,
+).group(1)
+floating_status_slide_up_block = re.search(
+    r"@keyframes hhs-floating-status-slide-up\s*\{(.*?)\n\}",
+    base_css,
+    re.S,
 ).group(1)
 script_only_block = re.search(
     r"\[data-testid=\"stElementContainer\"\]:has\(\.hhs-script-only\),\s*"
@@ -2422,10 +2496,14 @@ assert "width: var(--hhs-sidebar-title-separator-width)" in sidebar_title_separa
 assert "border-radius: 50%" in base_css
 assert "height: 1.35rem" in base_css
 assert "text-decoration: none !important" in base_css
-assert "color: var(--hhs-theme-footer-status-error-color)" in floating_status_dismiss_block
-assert "var(--hhs-theme-footer-status-error-color) 48%" in floating_status_dismiss_block
-assert "color: var(--hhs-theme-footer-status-error-color)" in floating_status_dismiss_hover_block
-assert "var(--hhs-theme-footer-status-error-color) 18%" in floating_status_dismiss_hover_block
+assert "color: var(--hhs-floating-status-color)" in floating_status_dismiss_block
+assert "var(--hhs-floating-status-color) 58%" in floating_status_dismiss_block
+assert "color: var(--hhs-floating-status-color)" in floating_status_dismiss_hover_block
+assert "var(--hhs-floating-status-color) 18%" in floating_status_dismiss_hover_block
+assert "border-color: var(--hhs-floating-status-color)" in floating_status_dismiss_hover_block
+assert "opacity:" not in floating_status_slide_up_block
+assert "hhs-floating-status-slide-up" not in floating_status_stable_block
+assert "animation-delay: var(--hhs-floating-status-timeout, 5s)" in floating_status_stable_block
 assert "display: none !important" in script_only_block
 assert "height: 0 !important" in script_only_block
 assert "max-height: 0 !important" in script_only_block
@@ -6769,6 +6847,8 @@ ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 open_body = ui_source.split("def open_document_view", 1)[1].split("\ndef ", 1)[0]
 close_body = ui_source.split("def close_document_view", 1)[1].split("\ndef ", 1)[0]
 render_main_body = ui_source.split("def render_main_view", 1)[1].split("\ndef ", 1)[0]
+terminal_render_body = ui_source.split("def render_terminal_document_view", 1)[1].split("\ndef ", 1)[0]
+terminal_init_body = ui_source.split("def initialize_terminal_session_state", 1)[1].split("\ndef ", 1)[0]
 deactivate_body = ui_source.split("def deactivate_terminal_document_view", 1)[1].split("\ndef ", 1)[0]
 sync_events_body = ui_source.split("def sync_ttyd_event_state", 1)[1].split("\ndef ", 1)[0]
 ssh_connect_body = ui_source.split("def execute_pending_ssh_connection", 1)[1].split("\ndef ", 1)[0]
@@ -6780,6 +6860,16 @@ assert "deactivate_terminal_document_view()" in close_body
 assert "if not terminal_document_view_is_active():" in render_main_body
 assert "render_ttyd_terminal_frame_hide_script()" in render_main_body
 assert "stop_ttyd_session()" not in render_main_body
+assert "push_floating_status" not in terminal_init_body
+assert terminal_render_body.index(
+    "initialize_terminal_session_state()"
+) < terminal_render_body.index("ttyd_url = ensure_ttyd_session()")
+assert terminal_render_body.index(
+    "render_ttyd_terminal_frame(ttyd_url)"
+) < terminal_render_body.index("render_command_preloader_events()")
+assert terminal_render_body.index(
+    "render_command_preloader_events()"
+) < terminal_render_body.index("show_terminal_ready_status()")
 assert "stop_ttyd_session()" in deactivate_body
 assert "TERMINAL_READY_STATUS_SHOWN_KEY" in deactivate_body
 assert "close_document_view(reset_terminal=True)" in sync_events_body
@@ -7088,13 +7178,13 @@ PY
   run grep -q 'def build_ttyd_hooked_bash_command' "${ui_file}"
   assert_success
 
-  run grep -q '__hhs_ttyd_emit_cwd "cd"' "${ui_file}"
+  run grep -q '__hhs_ttyd_after_command()' "${ui_file}"
   assert_success
 
-  run grep -q '__hhs_ttyd_emit_cwd "pushd"' "${ui_file}"
+  run grep -q 'if \[\[ "${PWD}" != "${__hhs_ttyd_last_pwd}" \]\]; then' "${ui_file}"
   assert_success
 
-  run grep -q '__hhs_ttyd_emit_cwd "popd"' "${ui_file}"
+  run grep -q 'PROMPT_COMMAND="__hhs_ttyd_after_command' "${ui_file}"
   assert_success
 
   run grep -q 'elif \[\[ -r "${HOME}/.bashrc" \]\]; then' "${ui_file}"
@@ -7239,6 +7329,7 @@ assert 'if request_path == "/open-working-directory":' in ui_source
 open_working_dir_body = ui_source.split("def handle_open_working_directory_request", 1)[1].split("\n    def ", 1)[0]
 assert 'entry = TTYD_CLEANUP_REGISTRY.get(token, {})' in open_working_dir_body
 assert 'entry.get("ssh_host")' in open_working_dir_body
+assert 'entry.get("cwd") or entry.get("working_dir")' in open_working_dir_body
 assert 'build_open_directory_command(directory)' in open_working_dir_body
 assert 'self.send_response(204 if result.returncode == 0 else 500)' in open_working_dir_body
 handler_body = ui_source.split("def handle_cleanup_request", 1)[1].split("\n    def ", 1)[0]
@@ -7265,6 +7356,8 @@ assert browser_cleanup_body.index("removeEventListener(") < browser_cleanup_body
     "parentWindow.addEventListener(\"pagehide\", cleanup"
 )
 assert "parentWindow.__hhsTtydCleanupHandler = cleanup" in browser_cleanup_body
+assert 'link.dataset.hhsWorkingDir = cwd' in browser_cleanup_body
+assert 'link.title = `Working dir: ${{cwd}}`' in browser_cleanup_body
 PY
   assert_success
 
@@ -7302,6 +7395,7 @@ assert main_body.index("install_footer_status_log_handler()") < main_body.index(
 assert 'st.session_state.setdefault("updater_check_context", "local")' in main_body
 assert 'st.session_state.setdefault("updater_check_started_context", "")' in main_body
 assert 'st.session_state.setdefault("updater_remote_checked_context", "")' in main_body
+assert 'execute_mount_updater_check()' in main_body
 assert "execute_due_updater_check()" not in main_body
 assert 'if st.session_state["active_view"] not in main_views():' not in main_body
 assert background_poll_index < disconnect_index < connect_index < ssh_dialog_index
@@ -7313,7 +7407,7 @@ footer_status_body = ui_source.split("def render_footer_status_fragment", 1)[1].
 footer_status_decorator = ui_source[: ui_source.index("def render_footer_status_fragment")].rstrip().splitlines()[-1]
 background_poll_decorator = ui_source[: ui_source.index("def render_background_job_polling_fragment")].rstrip().splitlines()[-1]
 background_status_decorator = ui_source[: ui_source.index("def render_background_job_status")].rstrip().splitlines()[-1]
-assert footer_status_decorator == '@st.fragment(run_every="5s")'
+assert not footer_status_decorator.startswith('@st.fragment')
 assert background_poll_decorator == '@st.fragment(run_every="2s")'
 assert background_status_decorator != '@st.fragment(run_every="2s")'
 assert 'execute_due_updater_check()' in footer_status_body

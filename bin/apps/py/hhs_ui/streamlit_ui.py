@@ -4406,41 +4406,107 @@ def floating_status_dom_id(status: dict[str, object], message: str, kind: str) -
     return hashlib.sha256(raw_status.encode("utf-8")).hexdigest()[:16]
 
 
-def render_floating_status_dispose_script(status_id: str) -> None:
-    """Attach browser-only disposal behavior to a rendered floating status."""
+def render_floating_status_dispose_script(
+    status_id: str,
+    message: str,
+    kind: str,
+    glyph: str,
+    timeout: float,
+    remaining_timeout: float,
+) -> None:
+    """Render or update the browser-persistent floating status element."""
     safe_status_id = json.dumps(status_id)
+    safe_message = json.dumps(message)
+    safe_kind = json.dumps(kind)
+    safe_glyph = json.dumps(glyph)
     render_script_html(f"""
         <script>
         (() => {{
           const statusId = {safe_status_id};
+          const message = {safe_message};
+          const kind = {safe_kind};
+          const glyphText = {safe_glyph};
+          const timeout = {timeout:.2f};
+          const remainingTimeout = {remaining_timeout:.2f};
           const parentWindow = window.parent || window;
           const parentDocument = parentWindow.document;
           const disposedStatuses = parentWindow.__hhsDisposedFloatingStatuses;
           if (!(disposedStatuses instanceof Set)) {{
             parentWindow.__hhsDisposedFloatingStatuses = new Set();
           }}
-          const status = parentDocument.querySelector(
+          let status = parentDocument.querySelector(
             `.hhs-floating-status[data-hhs-floating-status-id="${{statusId}}"]`
           );
-          if (!status) {{
+          if (parentWindow.__hhsDisposedFloatingStatuses.has(statusId)) {{
+            if (status) {{
+              status.remove();
+            }}
             return;
           }}
-          if (parentWindow.__hhsDisposedFloatingStatuses.has(statusId)) {{
-            status.remove();
-            return;
+          parentDocument
+            .querySelectorAll(".hhs-floating-status[data-hhs-floating-status-id]")
+            .forEach((node) => {{
+              if (node.dataset.hhsFloatingStatusId !== statusId) {{
+                node.remove();
+              }}
+            }});
+          const statusClass = `hhs-floating-status hhs-floating-status-kind-${{kind}} hhs-floating-status--stable`;
+          if (!status) {{
+            status = parentDocument.createElement("div");
+            status.dataset.hhsFloatingStatusId = statusId;
+            status.className = statusClass;
+            status.style.setProperty(
+              "--hhs-floating-status-timeout",
+              `${{timeout.toFixed(2)}}s`
+            );
+
+            const glyph = parentDocument.createElement("span");
+            glyph.className = "hhs-floating-status-glyph";
+            const text = parentDocument.createElement("span");
+            text.className = "hhs-floating-status-message";
+            const button = parentDocument.createElement("button");
+            button.className = "hhs-floating-status-dismiss";
+            button.type = "button";
+            button.setAttribute("aria-label", "Dispose footer status");
+            button.title = "Dispose footer status";
+            button.textContent = "x";
+            status.append(glyph, text, button);
+            parentDocument.body.append(status);
+          }} else if (status.className !== statusClass) {{
+            status.className = statusClass;
+          }}
+          const glyph = status.querySelector(".hhs-floating-status-glyph");
+          if (glyph && glyph.textContent !== glyphText) {{
+            glyph.textContent = glyphText;
+          }}
+          const text = status.querySelector(".hhs-floating-status-message");
+          if (text && text.textContent !== message) {{
+            text.textContent = message;
           }}
           const button = status.querySelector(".hhs-floating-status-dismiss");
-          if (!button || button.dataset.hhsDisposeAttached === "true") {{
-            return;
-          }}
-          button.dataset.hhsDisposeAttached = "true";
-          button.addEventListener("click", (event) => {{
-            event.preventDefault();
-            event.stopPropagation();
+          const dispose = () => {{
             parentWindow.__hhsDisposedFloatingStatuses.add(statusId);
             status.classList.add("hhs-floating-status--disposing");
             parentWindow.setTimeout(() => status.remove(), 240);
-          }});
+          }};
+          if (button && button.dataset.hhsDisposeAttached !== "true") {{
+            button.dataset.hhsDisposeAttached = "true";
+            button.addEventListener("click", (event) => {{
+              event.preventDefault();
+              event.stopPropagation();
+              if (parentWindow.__hhsFloatingStatusTimer) {{
+                parentWindow.clearTimeout(parentWindow.__hhsFloatingStatusTimer);
+              }}
+              dispose();
+            }});
+          }}
+          if (parentWindow.__hhsFloatingStatusTimer) {{
+            parentWindow.clearTimeout(parentWindow.__hhsFloatingStatusTimer);
+          }}
+          parentWindow.__hhsFloatingStatusTimer = parentWindow.setTimeout(
+            dispose,
+            Math.max(100, remainingTimeout * 1000)
+          );
         }})();
         </script>
         """)
@@ -4451,29 +4517,23 @@ def render_floating_status() -> None:
     status = current_floating_status()
     if not isinstance(status, dict):
         return
-    message = html.escape(str(status.get("message", "")).strip())
+    message = str(status.get("message", "")).strip()
     if not message:
         return
-    kind = str(status.get("kind", "info"))
+    kind = normalize_floating_status_kind(str(status.get("kind", "info")))
     timeout = effective_floating_status_timeout(status)
-    glyph = html.escape(floating_status_glyph(kind))
+    displayed_at = float(status.get("displayed_at", time.time()) or time.time())
+    remaining_timeout = max(0.1, timeout - max(0.0, time.time() - displayed_at))
+    glyph = floating_status_glyph(kind)
     status_id = floating_status_dom_id(status, message, kind)
-    st.markdown(
-        f"""
-        <div class="hhs-floating-status hhs-floating-status-kind-{html.escape(kind)}"
-             data-hhs-floating-status-id="{status_id}"
-             style="--hhs-floating-status-timeout: {timeout:.2f}s;">
-          <span class="hhs-floating-status-glyph">{glyph}</span>
-          <span class="hhs-floating-status-message">{message}</span>
-          <button class="hhs-floating-status-dismiss"
-                  type="button"
-                  aria-label="Dispose footer status"
-                  title="Dispose footer status">x</button>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    render_floating_status_dispose_script(
+        status_id,
+        message,
+        kind,
+        glyph,
+        timeout,
+        remaining_timeout,
     )
-    render_floating_status_dispose_script(status_id)
 
 
 def drain_footer_status_log_records() -> None:
@@ -4535,7 +4595,7 @@ def render_footer_client_error_bridge_script() -> None:
               doc.getElementById("hhs-client-floating-status")?.remove();
               const status = doc.createElement("div");
               status.id = "hhs-client-floating-status";
-              status.className = `hhs-floating-status hhs-floating-status-kind-${kind}`;
+              status.className = `hhs-floating-status hhs-floating-status-kind-${kind} hhs-floating-status--stable`;
               status.style.setProperty("--hhs-floating-status-timeout", "8s");
 
               const glyph = doc.createElement("span");
@@ -4546,7 +4606,21 @@ def render_footer_client_error_bridge_script() -> None:
               text.className = "hhs-floating-status-message";
               text.textContent = cleanMessage;
 
-              status.append(glyph, text);
+              const dismiss = doc.createElement("button");
+              dismiss.className = "hhs-floating-status-dismiss";
+              dismiss.type = "button";
+              dismiss.setAttribute("aria-label", "Dispose footer status");
+              dismiss.title = "Dispose footer status";
+              dismiss.textContent = "x";
+              dismiss.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                status.classList.add("hhs-floating-status--disposing");
+                parentWindow.clearTimeout(parentWindow.__hhsFooterErrorBridgeTimer);
+                parentWindow.setTimeout(() => status.remove(), 240);
+              });
+
+              status.append(glyph, text, dismiss);
               doc.body.append(status);
               parentWindow.clearTimeout(parentWindow.__hhsFooterErrorBridgeTimer);
               parentWindow.__hhsFooterErrorBridgeTimer = parentWindow.setTimeout(() => {
@@ -5204,7 +5278,6 @@ def render_footer() -> None:
             render_footer_terminal_ai_menu_script()
 
 
-@st.fragment(run_every="5s")
 def render_footer_status_fragment() -> None:
     """Poll updater/status state and render the footer status area."""
     execute_due_updater_check()
@@ -5376,7 +5449,6 @@ def handle_footer_actions() -> None:
             st.error(message)
         else:
             if updater_context == "local":
-                st.session_state["updater_last_check_epoch"] = time.time()
                 st.session_state["updater_last_check_output"] = (
                     output or "HomeSetup update command completed."
                 )
@@ -7420,6 +7492,8 @@ def render_terminal_document_view() -> None:
         render_ttyd_unavailable()
         return
     render_ttyd_terminal_frame(ttyd_url)
+    render_command_preloader_events()
+    show_terminal_ready_status()
 
 
 def ttyd_binary() -> str:
@@ -7954,30 +8028,6 @@ __hhs_ttyd_emit_exit() {
 __hhs_ttyd_last_pwd="${PWD}"
 __hhs_ttyd_emit_cwd "init" 0
 
-cd() {
-  builtin cd "$@"
-  local status_code="$?"
-  __hhs_ttyd_last_pwd="${PWD}"
-  __hhs_ttyd_emit_cwd "cd" "${status_code}"
-  return "${status_code}"
-}
-
-pushd() {
-  builtin pushd "$@"
-  local status_code="$?"
-  __hhs_ttyd_last_pwd="${PWD}"
-  __hhs_ttyd_emit_cwd "pushd" "${status_code}"
-  return "${status_code}"
-}
-
-popd() {
-  builtin popd "$@"
-  local status_code="$?"
-  __hhs_ttyd_last_pwd="${PWD}"
-  __hhs_ttyd_emit_cwd "popd" "${status_code}"
-  return "${status_code}"
-}
-
 __hhs_ttyd_after_command() {
   local status_code="$?"
   if [[ "${PWD}" != "${__hhs_ttyd_last_pwd}" ]]; then
@@ -8497,7 +8547,10 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
             self.send_response(409)
             self.end_headers()
             return
-        directory = str(entry.get("working_dir") or os.getcwd()).strip() or os.getcwd()
+        directory = (
+            str(entry.get("cwd") or entry.get("working_dir") or os.getcwd()).strip()
+            or os.getcwd()
+        )
         result = run_cleanup_bash_command(build_open_directory_command(directory), 10)
         self.send_response(204 if result.returncode == 0 else 500)
         self.end_headers()
@@ -8675,9 +8728,14 @@ def render_browser_cleanup_script() -> None:
                 if (!cwd) {{
                   return;
                 }}
+                const link = parentWindow.document.querySelector(".hhs-footer-working-dir-link");
                 const node = parentWindow.document.querySelector(".hhs-footer-working-dir-value");
                 if (node) {{
                   node.textContent = cwd;
+                }}
+                if (link) {{
+                  link.dataset.hhsWorkingDir = cwd;
+                  link.title = `Working dir: ${{cwd}}`;
                 }}
               }});
             }}
@@ -8697,8 +8755,12 @@ def terminal_document_title() -> str:
 
 
 def initialize_terminal_session_state() -> None:
-    """Initialize ttyd terminal working directory and ready status."""
+    """Initialize ttyd terminal working directory state."""
     st.session_state.setdefault(hhs_ui.TERMINAL_CWD_KEY, footer_working_directory())
+
+
+def show_terminal_ready_status() -> None:
+    """Queue the terminal ready status once the ttyd terminal is rendered."""
     if not bool(st.session_state.get(hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY, False)):
         push_floating_status("HomeSetup terminal is ready.", "info")
         st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = True
@@ -8814,26 +8876,6 @@ def updater_output_has_updates(output: str) -> bool:
     return any(marker in clean_output for marker in update_markers)
 
 
-def updater_check_due(now: float | None = None) -> bool:
-    """Return whether the persisted updater check is missing or older than one day."""
-    last_output = str(st.session_state.get("updater_last_check_output", "")).strip()
-    if not last_output:
-        return True
-    try:
-        last_check_epoch = float(
-            st.session_state.get("updater_last_check_epoch", 0) or 0
-        )
-    except (TypeError, ValueError):
-        return True
-    if last_check_epoch <= 0:
-        return True
-    current_time = time.time() if now is None else now
-    return (
-        current_time - last_check_epoch
-        >= hhs_ui_constants.UPDATER_CHECK_INTERVAL_SECONDS
-    )
-
-
 def updater_check_context() -> str:
     """Return the active updater check context for local or SSH execution."""
     host = connected_ssh_host()
@@ -8841,7 +8883,7 @@ def updater_check_context() -> str:
 
 
 def restore_local_updater_status() -> None:
-    """Restore the footer update icon state from the latest local daily check."""
+    """Restore the footer update icon state from the latest local check."""
     output = str(st.session_state.get("updater_last_check_output", ""))
     st.session_state["updater_update_available"] = updater_output_has_updates(output)
     st.session_state["updater_check_context"] = "local"
@@ -8855,7 +8897,9 @@ def reset_updater_remote_check_state() -> None:
     st.session_state["updater_update_available"] = False
 
 
-def start_updater_check(context: str, force_local: bool) -> None:
+def start_updater_check(
+    context: str, force_local: bool, show_preloader_event: bool = True
+) -> None:
     """Start a HomeSetup updater check for the given execution context."""
     started = start_background_bash_command(
         UPDATER_CHECK_JOB,
@@ -8864,7 +8908,7 @@ def start_updater_check(context: str, force_local: bool) -> None:
         hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         force_local=force_local,
         metadata={"updater_context": context},
-        show_preloader_event=True,
+        show_preloader_event=show_preloader_event,
     )
     if started:
         st.session_state["updater_check_started_context"] = context
@@ -8883,7 +8927,6 @@ def store_updater_check_result(
         result.returncode == 0 and updater_output_has_updates(output)
     )
     if context == "local":
-        st.session_state["updater_last_check_epoch"] = time.time()
         st.session_state["updater_last_check_output"] = output
         save_ui_state()
     else:
@@ -8894,7 +8937,7 @@ def store_updater_check_result(
 
 
 def execute_due_updater_check() -> None:
-    """Start or complete the updater check when persisted check state is stale."""
+    """Start or complete one updater check for the active execution context."""
     completed = background_job_result(UPDATER_CHECK_JOB)
     if completed is not None:
         result, metadata = completed
@@ -8919,10 +8962,19 @@ def execute_due_updater_check() -> None:
 
     if bool(st.session_state.get("updater_check_attempted", False)):
         return
-    if not updater_check_due():
-        return
     st.session_state["updater_check_attempted"] = True
     start_updater_check("local", force_local=True)
+
+
+def execute_mount_updater_check() -> None:
+    """Start one local updater check for each Streamlit browser session mount."""
+    if bool(st.session_state.get("updater_mount_check_attempted", False)):
+        return
+    st.session_state["updater_mount_check_attempted"] = True
+    st.session_state["updater_check_attempted"] = True
+    if background_job_is_running(UPDATER_CHECK_JOB):
+        return
+    start_updater_check("local", force_local=True, show_preloader_event=False)
 
 
 def overlaps_existing_range(
@@ -17534,14 +17586,20 @@ def render_markdown_table(
             f'<div class="hhs-markdown-table-caption">{html.escape(caption)}</div>',
             unsafe_allow_html=True,
         )
-        table_data = pd.DataFrame(table_columns)
-        table_data[value_column_label] = table_data[value_column_label].astype(bool)
+        table_data_columns = {
+            value_column_label: pd.Series(
+                table_columns[value_column_label], dtype="bool"
+            ),
+        }
         for text_column_label in [
             variable_column_label,
             item_column_label,
             *extra_column_labels,
         ]:
-            table_data[text_column_label] = table_data[text_column_label].astype(str)
+            table_data_columns[text_column_label] = pd.Series(
+                table_columns[text_column_label], dtype="string"
+            )
+        table_data = pd.DataFrame(table_data_columns)
         edited_data = st.data_editor(
             table_data,
             key=editor_key,
@@ -17553,7 +17611,7 @@ def render_markdown_table(
                 variable_column_label,
                 *extra_column_labels,
             ],
-            height=min(360, 40 + (len(items) + 1) * 44),
+            height=markdown_table_editor_height(len(items)),
             disabled=(
                 [variable_column_label, item_column_label, *extra_column_labels]
                 if not disabled
@@ -17567,6 +17625,16 @@ def render_markdown_table(
         for value_key, value in zip(value_keys, edited_values, strict=True):
             st.session_state[value_key] = value
     return edited_values
+
+
+def markdown_table_editor_height(row_count: int) -> int:
+    """Return a data-editor height that does not expose blank trailing grid rows."""
+    header_height = 38
+    row_height = 36
+    border_height = 4
+    max_height = 360
+    visible_rows = max(0, row_count)
+    return min(max_height, header_height + (visible_rows * row_height) + border_height)
 
 
 def render_hhs_setup_settings_table(action_running: bool) -> None:
@@ -21293,12 +21361,12 @@ def main() -> None:
     )
     restore_ui_state()
     restore_persisted_theme_selection()
-    st.session_state.setdefault("updater_last_check_epoch", 0.0)
     st.session_state.setdefault("updater_last_check_output", "")
     st.session_state.setdefault("updater_update_available", False)
     st.session_state.setdefault("updater_check_context", "local")
     st.session_state.setdefault("updater_check_started_context", "")
     st.session_state.setdefault("updater_remote_checked_context", "")
+    execute_mount_updater_check()
     st.session_state.setdefault("footer_hhs_version_cache_loaded", False)
     st.session_state.setdefault("footer_shell_version_dialog_title", "")
     st.session_state.setdefault("footer_shell_version_output", "")
