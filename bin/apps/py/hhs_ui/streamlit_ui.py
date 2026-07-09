@@ -41,6 +41,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import warnings
 from base64 import b64encode
 from collections.abc import Callable
 from datetime import datetime
@@ -11724,6 +11725,7 @@ def rendered_log_output_cached(
 def clear_render_caches() -> None:
     """Delete in-session render caches derived from command results."""
     clear_parsed_rows_cache()
+    clear_firebase_aliases_cache()
     st.session_state[hhs_ui_constants.LOG_RENDER_CACHE_KEY] = {}
 
 
@@ -15781,6 +15783,7 @@ def complete_hhs_firebase_action_job() -> None:
     result, metadata = completed
     if result.returncode == 0:
         cache_delete_tag("hhs_firebase")
+        clear_firebase_aliases_cache()
         st.session_state.pop("_hhs_firebase_loaded_token", None)
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
     if result.returncode == 0:
@@ -17996,6 +17999,7 @@ def render_markdown_table(
     min_row_count: int = 0,
     multi_selection: bool = True,
     column_text_colors: dict[str, str] | None = None,
+    show_value_column: bool = True,
 ) -> list[bool]:
     """Render a reusable selectable markdown table and return selected values."""
     if len(items) != len(values) or len(items) != len(headers):
@@ -18004,13 +18008,16 @@ def render_markdown_table(
         raise ValueError("items and value_keys must have the same length")
     if variable_values is not None and len(items) != len(variable_values):
         raise ValueError("items and variable_values must have the same length")
+    if multi_selection and not show_value_column:
+        raise ValueError("multi-selection tables require a visible value column")
 
     extra_columns = extra_columns or {}
     base_column_labels = {
-        value_column_label,
         variable_column_label,
         item_column_label,
     }
+    if show_value_column:
+        base_column_labels.add(value_column_label)
     duplicate_column_labels = base_column_labels.intersection(extra_columns)
     if duplicate_column_labels:
         duplicate_labels = ", ".join(sorted(duplicate_column_labels))
@@ -18033,6 +18040,7 @@ def render_markdown_table(
             "headers": headers,
             "items": items,
             "multi_selection": multi_selection,
+            "show_value_column": show_value_column,
             "values": values,
             "variable_values": variable_values,
         },
@@ -18048,18 +18056,14 @@ def render_markdown_table(
         variable_values if variable_values is not None else [header.upper() for header in headers]
     )
     table_columns = {
-        value_column_label: [bool(value) for value in values],
         variable_column_label: rendered_variable_values,
         item_column_label: headers,
     }
+    if show_value_column:
+        table_columns[value_column_label] = [bool(value) for value in values]
     table_columns.update(extra_columns)
     extra_column_labels = list(extra_columns)
     column_config: dict[str, object] = {
-        value_column_label: st.column_config.CheckboxColumn(
-            value_column_label,
-            disabled=disabled,
-            width=hhs_ui_constants.MARKDOWN_TABLE_MARK_COLUMN_WIDTH,
-        ),
         variable_column_label: st.column_config.TextColumn(
             variable_column_label,
             disabled=True,
@@ -18069,6 +18073,12 @@ def render_markdown_table(
             disabled=True,
         ),
     }
+    if show_value_column:
+        column_config[value_column_label] = st.column_config.CheckboxColumn(
+            value_column_label,
+            disabled=disabled,
+            width=hhs_ui_constants.MARKDOWN_TABLE_MARK_COLUMN_WIDTH,
+        )
     for column_label in extra_column_labels:
         column_config[column_label] = st.column_config.TextColumn(
             column_label,
@@ -18081,10 +18091,11 @@ def render_markdown_table(
             unsafe_allow_html=True,
         )
         table_data_columns = {
-            value_column_label: pd.Series(
-                table_columns[value_column_label], dtype="bool"
-            ),
         }
+        if show_value_column:
+            table_data_columns[value_column_label] = pd.Series(
+                table_columns[value_column_label], dtype="bool"
+            )
         for text_column_label in [
             variable_column_label,
             item_column_label,
@@ -18127,35 +18138,39 @@ def render_markdown_table(
                 len(items),
             )
             selection_table_data = table_data.copy()
-            selection_table_data[value_column_label] = pd.Series(
-                markdown_table_single_selection_marks(len(items), selected_index),
-                dtype="string",
-            )
+            if show_value_column:
+                selection_table_data[value_column_label] = pd.Series(
+                    markdown_table_single_selection_marks(len(items), selected_index),
+                    dtype="string",
+                )
+            selection_column_order = [
+                item_column_label,
+                variable_column_label,
+                *extra_column_labels,
+            ]
+            if show_value_column:
+                selection_column_order.insert(0, value_column_label)
+            selection_column_config = {
+                column_label: config
+                for column_label, config in column_config.items()
+                if column_label != value_column_label
+            }
+            if show_value_column:
+                selection_column_config = {
+                    value_column_label: st.column_config.TextColumn(
+                        value_column_label,
+                        disabled=True,
+                        width=hhs_ui_constants.MARKDOWN_TABLE_MARK_COLUMN_WIDTH,
+                    ),
+                    **selection_column_config,
+                }
             selection_args: dict[str, object] = {
                 "key": selection_key,
                 "hide_index": True,
-                "column_order": [
-                    value_column_label,
-                    item_column_label,
-                    variable_column_label,
-                    *extra_column_labels,
-                ],
+                "column_order": selection_column_order,
                 "height": markdown_table_editor_height(max(len(items), min_row_count)),
                 "width": "stretch",
-                "column_config": {
-                    **{
-                        value_column_label: st.column_config.TextColumn(
-                            value_column_label,
-                            disabled=True,
-                            width=hhs_ui_constants.MARKDOWN_TABLE_MARK_COLUMN_WIDTH,
-                        )
-                    },
-                    **{
-                        column_label: config
-                        for column_label, config in column_config.items()
-                        if column_label != value_column_label
-                    },
-                },
+                "column_config": selection_column_config,
             }
             if not disabled:
                 selection_args["on_select"] = "rerun"
@@ -18882,19 +18897,154 @@ def render_hhs_firebase_title() -> None:
     )
 
 
-def firebase_aliases_export_file() -> Path:
-    """Return the Firebase aliases export JSON file path."""
-    return homesetup_home() / "assets" / "homesetup-37970-export.json"
+def hhs_firebase_config_file() -> Path:
+    """Return the HomeSetup Firebase configuration file path."""
+    return Path(
+        os.environ.get(
+            "HHS_FIREBASE_CONFIG_FILE",
+            homesetup_config_dir() / "firebase.properties",
+        )
+    ).expanduser()
+
+
+def hhs_firebase_creds_file(project_id: str) -> Path:
+    """Return the Firebase service account credentials file path."""
+    creds_template = os.environ.get(
+        "HHS_FIREBASE_CREDS_FILE",
+        str(Path.home() / "firebase-credentials.json"),
+    )
+    return Path(creds_template.format(project_id=project_id)).expanduser()
+
+
+def hhs_firebase_configuration() -> object:
+    """Return the hspylib Firebase configuration."""
+    from datasource.firebase.firebase_configuration import FirebaseConfiguration
+
+    return FirebaseConfiguration.of_file(str(hhs_firebase_config_file()))
+
+
+def firebase_authenticate(project_id: str, uid: str) -> None:
+    """Authenticate the configured Firebase user using hspylib."""
+    from firebase.core.firebase_auth import FirebaseAuth
+
+    FirebaseAuth.authenticate(project_id, uid)
+
+
+def firebase_rest_auth_headers(project_id: str) -> list[dict[str, str]]:
+    """Return OAuth headers for Firebase Realtime Database REST requests."""
+    from google.auth.transport.requests import Request
+    from google.oauth2 import service_account
+
+    credentials = service_account.Credentials.from_service_account_file(
+        str(hhs_firebase_creds_file(project_id)),
+        scopes=[
+            "https://www.googleapis.com/auth/firebase.database",
+            "https://www.googleapis.com/auth/userinfo.email",
+        ],
+    )
+    credentials.refresh(Request())
+    return [{"Authorization": f"Bearer {credentials.token}"}]
+
+
+def firebase_root_json_url(firebase_config: object) -> str:
+    """Return the Firebase Realtime Database root JSON URL."""
+    database = str(getattr(firebase_config, "database", "") or "").strip("/")
+    base_url = str(getattr(firebase_config, "base_url", "") or "").rstrip("/")
+    if database and base_url.endswith(f"/{database}"):
+        root_url = base_url[: -(len(database) + 1)]
+    else:
+        scheme = str(getattr(firebase_config, "scheme", "") or "https")
+        hostname = str(getattr(firebase_config, "hostname", "") or "")
+        port = str(getattr(firebase_config, "port", "") or "")
+        root_url = f"{scheme}://{hostname}" + (f":{port}" if port else "")
+    return f"{root_url.rstrip('/')}/.json"
+
+
+def firebase_root_json_response(firebase_config: object) -> object:
+    """Request the Firebase Realtime Database root JSON payload."""
+    from hspylib.modules.fetch.fetch import get
+    from urllib3.exceptions import InsecureRequestWarning
+
+    project_id = str(getattr(firebase_config, "project_id", "") or "")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", InsecureRequestWarning)
+        return get(
+            firebase_root_json_url(firebase_config),
+            headers=firebase_rest_auth_headers(project_id),
+            timeout=10,
+        )
+
+
+def firebase_response_is_success(response: object) -> bool:
+    """Return whether a Firebase REST response succeeded."""
+    status_code = getattr(response, "status_code", None)
+    if hasattr(status_code, "is_2xx"):
+        return bool(status_code.is_2xx())
+    try:
+        return 200 <= int(status_code) < 300
+    except (TypeError, ValueError):
+        return False
+
+
+def firebase_response_json(response: object) -> dict[str, object]:
+    """Return a Firebase REST response body as a dictionary."""
+    body = str(getattr(response, "body", "") or "").strip()
+    if not body or body == "null" or not firebase_response_is_success(response):
+        return {}
+    alias_data = json.loads(body)
+    return alias_data if isinstance(alias_data, dict) else {}
+
+
+def fetch_firebase_aliases_uncached() -> dict[str, object]:
+    """Return Firebase alias data from the live Realtime Database root."""
+    firebase_config = hhs_firebase_configuration()
+    firebase_authenticate(
+        str(getattr(firebase_config, "project_id", "") or ""),
+        str(getattr(firebase_config, "uid", "") or ""),
+    )
+    response = firebase_root_json_response(firebase_config)
+    if not firebase_response_is_success(response):
+        raise RuntimeError(f"Unable to fetch Firebase aliases: {response!r}")
+    return firebase_response_json(response)
+
+
+@lru_cache(maxsize=1)
+def fetch_firebase_aliases_cached() -> dict[str, object]:
+    """Return cached Firebase aliases from the live Realtime Database root."""
+    return fetch_firebase_aliases_uncached()
+
+
+def clear_firebase_aliases_cache() -> None:
+    """Clear cached Firebase aliases."""
+    fetch_firebase_aliases_cached.cache_clear()
+
+
+def firebase_aliases_cache_is_warm() -> bool:
+    """Return whether Firebase aliases are already cached."""
+    return fetch_firebase_aliases_cached.cache_info().currsize > 0
 
 
 def fetch_firebase_aliases() -> dict[str, object]:
-    """Return Firebase alias data from the bundled export file."""
+    """Return cached Firebase alias data from the live Realtime Database root."""
     try:
-        alias_text = firebase_aliases_export_file().read_text(encoding="utf-8")
-        alias_data = json.loads(alias_text)
-    except (OSError, json.JSONDecodeError):
+        return fetch_firebase_aliases_cached()
+    except Exception as err:
+        clear_firebase_aliases_cache()
+        logging.warning("Unable to fetch Firebase aliases: %s", err)
         return {}
-    return alias_data if isinstance(alias_data, dict) else {}
+
+
+def fetch_firebase_aliases_with_preloader() -> dict[str, object]:
+    """Return Firebase aliases while rendering a transient loading message."""
+    if firebase_aliases_cache_is_warm():
+        return fetch_firebase_aliases()
+    loader_placeholder = st.empty()
+    with loader_placeholder.container():
+        render_command_loader("Fetching Firebase aliases")
+    try:
+        return fetch_firebase_aliases()
+    finally:
+        loader_placeholder.empty()
 
 
 def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, str]]:
@@ -18921,7 +19071,7 @@ def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, s
 
 def render_hhs_firebase_aliases_table(action_running: bool) -> str:
     """Render the Firebase aliases table and return the selected alias."""
-    alias_rows = firebase_alias_table_rows(fetch_firebase_aliases())
+    alias_rows = firebase_alias_table_rows(fetch_firebase_aliases_with_preloader())
     alias_keys = [
         f"{row['Database']}:{row['Group']}:{row['Alias']}" for row in alias_rows
     ]
@@ -18940,6 +19090,7 @@ def render_hhs_firebase_aliases_table(action_running: bool) -> str:
             "Count": [row["Count"] for row in alias_rows],
         },
         multi_selection=False,
+        show_value_column=False,
         column_text_colors={
             "Group": "var(--hhs-secondary)",
             "Alias": "var(--hhs-theme-primary-color)",

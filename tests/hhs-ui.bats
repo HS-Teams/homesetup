@@ -1268,11 +1268,16 @@ render_body = source.split("def render_markdown_table", 1)[1].split("\ndef ", 1)
 assert "min_row_count: int = 0" in render_body
 assert "multi_selection: bool = True" in render_body
 assert "column_text_colors: dict[str, str] | None = None" in render_body
+assert "show_value_column: bool = True" in render_body
+assert "if multi_selection and not show_value_column:" in render_body
 assert "height=markdown_table_editor_height(max(len(items), min_row_count))" in render_body
 assert "return hhs_ui_constants.MARKDOWN_TABLE_HEIGHT" in source
 assert "if multi_selection:" in render_body
 assert "st.data_editor(" in render_body
 assert "st.dataframe(" in render_body
+assert '"show_value_column": show_value_column' in render_body
+assert "selection_column_order = [" in render_body
+assert "selection_column_order.insert(0, value_column_label)" in render_body
 assert 'selection_args["on_select"] = "rerun"' in render_body
 assert 'selection_args["selection_mode"] = "single-row"' in render_body
 assert "markdown_table_single_selected_index(" in render_body
@@ -1355,7 +1360,6 @@ import posixpath
 import re
 import shlex
 import sys
-import tempfile
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -1471,8 +1475,29 @@ assert 'render_view_subtitle(f"<code>{html.escape(config_display_path)}</code>",
 
 aliases_table_body = source.split("def render_hhs_firebase_aliases_table", 1)[1].split("\ndef ", 1)[0]
 assert "fetch_firebase_aliases()" in source
-assert "def firebase_aliases_export_file(" in source
-assert '"homesetup-37970-export.json"' in source
+assert "def fetch_firebase_aliases_with_preloader(" in source
+assert "@lru_cache(maxsize=1)" in source
+assert "def fetch_firebase_aliases_cached(" in source
+assert "def clear_firebase_aliases_cache(" in source
+assert "def firebase_aliases_cache_is_warm(" in source
+assert "fetch_firebase_aliases_cached.cache_clear()" in source
+assert "clear_firebase_aliases_cache()" in source.split("def complete_hhs_firebase_action_job", 1)[1].split("\ndef ", 1)[0]
+assert "clear_firebase_aliases_cache()" in source.split("def clear_render_caches", 1)[1].split("\ndef ", 1)[0]
+assert "render_command_loader(\"Fetching Firebase aliases\")" in source
+assert "loader_placeholder.empty()" in source
+assert "if firebase_aliases_cache_is_warm():" in source
+assert "fetch_firebase_aliases_with_preloader()" in aliases_table_body
+assert "def hhs_firebase_config_file(" in source
+assert "def hhs_firebase_creds_file(" in source
+assert "def hhs_firebase_configuration(" in source
+assert "FirebaseConfiguration.of_file" in source
+assert "FirebaseAuth.authenticate" in source
+assert "HHS_FIREBASE_CREDS_FILE" in source
+assert "firebase_root_json_response(firebase_config)" in source
+assert "warnings.catch_warnings()" in source
+assert "InsecureRequestWarning" in source
+assert "def firebase_aliases_export_file(" not in source
+assert '"homesetup-37970-export.json"' not in source
 assert "def firebase_alias_table_rows(" in source
 assert "render_markdown_table(" in aliases_table_body
 assert '"Firebase Aliases"' in aliases_table_body
@@ -1484,44 +1509,111 @@ assert '"Alias": [row["Alias"] for row in alias_rows]' in aliases_table_body
 assert '"Count": [row["Count"] for row in alias_rows]' in aliases_table_body
 assert "min_row_count=4" not in aliases_table_body
 assert "multi_selection=False" in aliases_table_body
+assert "show_value_column=False" in aliases_table_body
 assert '"Database": "var(--hhs-secondary)"' not in aliases_table_body
 assert '"Group": "var(--hhs-secondary)"' in aliases_table_body
 assert '"Alias": "var(--hhs-theme-primary-color)"' in aliases_table_body
 assert "return selected_aliases[0] if selected_aliases else" in aliases_table_body
 
-aliases_start = source.index("def firebase_aliases_export_file(")
+aliases_start = source.index("def hhs_firebase_config_file(")
 aliases_end = source.index("def render_hhs_firebase_aliases_table", aliases_start)
-with tempfile.TemporaryDirectory() as tmpdir:
-    homesetup_root = Path(tmpdir)
-    export_file = homesetup_root / "assets" / "homesetup-37970-export.json"
-    export_file.parent.mkdir(parents=True, exist_ok=True)
-    expected_aliases = {
-        "homesetup": {
-            "dotfiles": {
-                "demo": [{"path": ".a"}, {"path": ".b"}],
-                "home": [],
-            },
-            "hspylib-test": {
-                "0": [{}],
-            },
+aliases_namespace = {
+    "json": json,
+    "logging": __import__("logging"),
+    "lru_cache": __import__("functools").lru_cache,
+    "os": os,
+    "Path": Path,
+    "warnings": __import__("warnings"),
+    "homesetup_config_dir": lambda: Path("/home/user/.config/hhs"),
+}
+exec("from __future__ import annotations\n" + source[aliases_start:aliases_end], aliases_namespace)
+old_config_file = os.environ.get("HHS_FIREBASE_CONFIG_FILE")
+old_creds_file = os.environ.get("HHS_FIREBASE_CREDS_FILE")
+try:
+    os.environ.pop("HHS_FIREBASE_CONFIG_FILE", None)
+    os.environ["HHS_FIREBASE_CREDS_FILE"] = "/secure/{project_id}/firebase-creds.json"
+    assert aliases_namespace["hhs_firebase_config_file"]() == Path(
+        "/home/user/.config/hhs/firebase.properties"
+    )
+    assert aliases_namespace["hhs_firebase_creds_file"]("homesetup-37970") == Path(
+        "/secure/homesetup-37970/firebase-creds.json"
+    )
+finally:
+    if old_config_file is None:
+        os.environ.pop("HHS_FIREBASE_CONFIG_FILE", None)
+    else:
+        os.environ["HHS_FIREBASE_CONFIG_FILE"] = old_config_file
+    if old_creds_file is None:
+        os.environ.pop("HHS_FIREBASE_CREDS_FILE", None)
+    else:
+        os.environ["HHS_FIREBASE_CREDS_FILE"] = old_creds_file
+
+class FirebaseStatus:
+    def is_2xx(self):
+        return True
+
+class FirebaseResponse:
+    status_code = FirebaseStatus()
+    body = json.dumps(
+        {
+            "homesetup": {
+                "dotfiles": {
+                    "demo": [{"path": ".a"}, {"path": ".b"}],
+                    "home": [],
+                },
+                "hspylib-test": {
+                    "0": [{}],
+                },
+            }
         }
-    }
-    export_file.write_text(json.dumps(expected_aliases), encoding="utf-8")
-    aliases_namespace = {
-        "json": json,
-        "Path": Path,
-        "homesetup_home": lambda: homesetup_root,
-    }
-    exec("from __future__ import annotations\n" + source[aliases_start:aliases_end], aliases_namespace)
-    assert aliases_namespace["firebase_aliases_export_file"]() == export_file
-    firebase_aliases = aliases_namespace["fetch_firebase_aliases"]()
-    assert firebase_aliases == expected_aliases
-    alias_rows = aliases_namespace["firebase_alias_table_rows"](firebase_aliases)
-    assert alias_rows == [
-        {"Database": "homesetup", "Group": "dotfiles", "Alias": "demo", "Count": "2"},
-        {"Database": "homesetup", "Group": "dotfiles", "Alias": "home", "Count": "0"},
-        {"Database": "homesetup", "Group": "hspylib-test", "Alias": "0", "Count": "1"},
-    ]
+    )
+
+class FirebaseConfig:
+    project_id = "homesetup-37970"
+    uid = "firebase-user"
+    database = "homesetup"
+    base_url = "https://homesetup-37970.firebaseio.com:443/homesetup"
+    scheme = "https"
+    hostname = "homesetup-37970.firebaseio.com"
+    port = 443
+
+auth_calls = []
+response_calls = []
+aliases_namespace["hhs_firebase_configuration"] = lambda: FirebaseConfig()
+aliases_namespace["firebase_authenticate"] = lambda project_id, uid: auth_calls.append(
+    (project_id, uid)
+)
+aliases_namespace["firebase_rest_auth_headers"] = lambda project_id: [
+    {"Authorization": f"Bearer {project_id}"}
+]
+def firebase_root_json_response(firebase_config):
+    response_calls.append(firebase_config)
+    return FirebaseResponse()
+
+aliases_namespace["firebase_root_json_response"] = firebase_root_json_response
+assert aliases_namespace["firebase_root_json_url"](FirebaseConfig()) == (
+    "https://homesetup-37970.firebaseio.com:443/.json"
+)
+firebase_aliases = aliases_namespace["fetch_firebase_aliases"]()
+firebase_aliases_again = aliases_namespace["fetch_firebase_aliases"]()
+assert auth_calls == [("homesetup-37970", "firebase-user")]
+assert len(response_calls) == 1
+assert firebase_aliases == json.loads(FirebaseResponse.body)
+assert firebase_aliases_again == firebase_aliases
+assert aliases_namespace["firebase_aliases_cache_is_warm"]() is True
+aliases_namespace["clear_firebase_aliases_cache"]()
+assert aliases_namespace["firebase_aliases_cache_is_warm"]() is False
+aliases_namespace["fetch_firebase_aliases"]()
+assert len(response_calls) == 2
+alias_rows = aliases_namespace["firebase_alias_table_rows"](firebase_aliases)
+assert alias_rows == [
+    {"Database": "homesetup", "Group": "dotfiles", "Alias": "demo", "Count": "2"},
+    {"Database": "homesetup", "Group": "dotfiles", "Alias": "home", "Count": "0"},
+    {"Database": "homesetup", "Group": "hspylib-test", "Alias": "0", "Count": "1"},
+]
+assert aliases_namespace["firebase_response_json"](
+    type("BadResponse", (), {"status_code": 500, "body": "{}"})()
+) == {}
 
 command_start = source.index("def build_hhs_firebase_plugin_command(")
 command_end = source.index("def build_hhs_starship_plugin_command", command_start)
