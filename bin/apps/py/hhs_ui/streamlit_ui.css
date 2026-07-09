@@ -1192,6 +1192,14 @@ div[class*="st-key-"][class*="_markdown_table_header"] [data-testid="stHorizonta
   min-height: 1.65rem;
 }
 
+div[class*="st-key-"][class*="_markdown_table_header"] [data-testid="stColumn"],
+div[class*="st-key-"][class*="_markdown_table_header"] [data-testid="stElementContainer"],
+div[class*="st-key-"][class*="_markdown_table_header"] [data-testid="stMarkdownContainer"] {
+  align-items: center;
+  display: flex;
+  min-height: 1.65rem;
+}
+
 div[class*="st-key-"][class*="_markdown_table_body"] {
   max-height: min(28rem, calc(100dvh - 24rem));
   overflow-x: hidden;
