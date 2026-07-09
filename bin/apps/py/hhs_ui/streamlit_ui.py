@@ -12122,6 +12122,20 @@ def build_hhs_updater_command(operation: str) -> str:
 def build_hhs_setup_plugin_command(arguments: list[str]) -> str:
     """Build a Bash command that invokes the HomeSetup setup plug-in."""
     safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
+    setup_dispatch = (
+        'function __hhs() { '
+        'if [[ "$1" == "setup" ]]; then '
+        "shift; "
+        'if [[ "${1:-}" == "-v" || "${1:-}" == "--version" ]]; then '
+        "version; "
+        "else "
+        'execute "$@"; '
+        "fi; "
+        "else "
+        "return 127; "
+        "fi; "
+        "}; "
+    )
     return (
         'export HHS_HOME="${HHS_HOME}"; '
         'export HHS_DIR="${HHS_DIR}"; '
@@ -12136,9 +12150,14 @@ def build_hhs_setup_plugin_command(arguments: list[str]) -> str:
         'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-toml.bash"; '
         'source "${HHS_HOME}/bin/apps/bash/app-commons.bash"; '
         'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/setup/setup.bash"; '
-        'function __hhs() { if [[ "$1" == "setup" ]]; then shift; execute "$@"; else return 127; fi; }; '
+        f"{setup_dispatch}"
         f"__hhs setup {safe_arguments}"
     )
+
+
+def build_hhs_setup_version_command() -> str:
+    """Build the setup plug-in version command."""
+    return build_hhs_setup_plugin_command(["-v"])
 
 
 def build_hhs_setup_settings_command() -> str:
@@ -13463,6 +13482,13 @@ def parse_hhs_setup_settings(output: str) -> dict[str, bool]:
             continue
         settings[clean_name] = value.strip().lower() in {"1", "true", "yes", "on"}
     return settings
+
+
+def parse_hhs_setup_version(output: str) -> str:
+    """Parse the setup plug-in version output."""
+    clean_output = strip_ansi(output).strip()
+    match = re.search(r"\bv([0-9]+(?:\.[0-9]+){1,2}(?:[-+][A-Za-z0-9.]+)?)", clean_output)
+    return match.group(1) if match else ""
 
 
 def parse_hhs_services(output: str) -> list[dict[str, str]]:
@@ -16972,18 +16998,94 @@ def request_hhs_setup_restore() -> None:
     )
 
 
-def render_hhs_setup_panel() -> None:
-    """Render the HomeSetup setup settings form."""
-    execute_pending_hhs_setup_action()
-    render_background_job_status(HHS_SETUP_ACTION_JOB)
+def hhs_setup_version() -> str:
+    """Return the setup plug-in version when available."""
+    result = render_cached_command_result(
+        build_hhs_setup_version_command(),
+        "Loading setup version",
+        "hhs_setup_version",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load setup version.",
+    )
+    if result is None or result.returncode != 0:
+        return ""
+    return parse_hhs_setup_version(result.stdout)
+
+
+def render_hhs_setup_title() -> None:
+    """Render the HomeSetup setup page title."""
+    version = hhs_setup_version()
+    version_text = f" v{html.escape(version)}" if version else ""
     st.markdown(
-        """
+        f"""
         <section class="hhs-view-heading hhs-view-heading--direct-content">
-          <h2>SETUP</h2>
+          <h2> HomeSetup Initialization Settings{version_text}</h2>
         </section>
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_hhs_setup_table_header() -> None:
+    """Render the setup settings table header."""
+    with st.container(key="hhs_setup_settings_header"):
+        index_column, enabled_column, setting_column = st.columns(
+            [0.45, 0.85, 5.0],
+            gap="small",
+            vertical_alignment="center",
+        )
+        with index_column:
+            st.markdown("**#**")
+        with enabled_column:
+            st.markdown("**Mark**")
+        with setting_column:
+            st.markdown("**Setting**")
+
+
+def render_hhs_setup_table_row(
+    index: int,
+    setting_name: str,
+    action_running: bool,
+) -> None:
+    """Render one setup settings table row."""
+    parity = "odd" if index % 2 else "even"
+    with st.container(key=f"hhs_setup_settings_row_{index}_{parity}"):
+        index_column, enabled_column, setting_column = st.columns(
+            [0.45, 0.85, 5.0],
+            gap="small",
+            vertical_alignment="center",
+        )
+        with index_column:
+            st.markdown(str(index))
+        with enabled_column:
+            st.checkbox(
+                f"Mark {setting_name}",
+                key=hhs_setup_setting_key(setting_name),
+                disabled=action_running,
+                label_visibility="collapsed",
+            )
+        with setting_column:
+            st.markdown(f"`{setting_name}`")
+
+
+def render_hhs_setup_settings_table(action_running: bool) -> None:
+    """Render the setup settings table."""
+    with st.container(key="hhs_setup_settings_table"):
+        st.markdown(
+            '<div class="hhs-setup-table-caption">Mark the preferred startup settings</div>',
+            unsafe_allow_html=True,
+        )
+        render_hhs_setup_table_header()
+        for index, setting_name in enumerate(HHS_SETUP_SETTINGS, start=1):
+            render_hhs_setup_table_row(index, setting_name, action_running)
+
+
+def render_hhs_setup_panel() -> None:
+    """Render the HomeSetup setup settings form."""
+    execute_pending_hhs_setup_action()
+    render_background_job_status(HHS_SETUP_ACTION_JOB)
+    render_hhs_setup_title()
     result = render_cached_command_result(
         build_hhs_setup_settings_command(),
         "Loading setup settings",
@@ -17006,40 +17108,27 @@ def render_hhs_setup_panel() -> None:
     apply_pending_hhs_setup_form_revert()
     action_running = background_job_is_running(HHS_SETUP_ACTION_JOB)
     with st.form("hhs_setup_form"):
-        for index, setting_name in enumerate(HHS_SETUP_SETTINGS, start=1):
-            number_column, setting_column = st.columns(
-                [0.25, 4.0],
-                gap="small",
-                vertical_alignment="center",
-            )
-            with number_column:
-                st.markdown(f"{index}")
-            with setting_column:
-                st.checkbox(
-                    setting_name,
-                    key=hhs_setup_setting_key(setting_name),
-                    disabled=action_running,
-                )
+        render_hhs_setup_settings_table(action_running)
         _spacer, ok_column, revert_column, restore_column = st.columns(
-            [1.0, 0.16, 0.16, 0.16],
+            [1.0, 0.34, 0.34, 0.34],
             gap="small",
             vertical_alignment="center",
         )
         with ok_column:
             ok_clicked = st.form_submit_button(
-                "",
+                " Apply",
                 help="Apply",
                 disabled=action_running,
             )
         with revert_column:
             revert_clicked = st.form_submit_button(
-                "",
-                help="Revert",
+                " Cancel",
+                help="Cancel",
                 disabled=action_running,
             )
         with restore_column:
             restore_clicked = st.form_submit_button(
-                "",
+                " Restore",
                 help="Restore",
                 disabled=action_running,
             )
@@ -17072,7 +17161,7 @@ def render_hhs_view() -> None:
     st.markdown(
         """
         <section class="hhs-view-heading hhs-view-heading--with-tabs">
-          <h2>HomeSetup Application</h2>
+          <h2> HomeSetup Application</h2>
         </section>
         """,
         unsafe_allow_html=True,

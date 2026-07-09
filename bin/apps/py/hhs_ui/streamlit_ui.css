@@ -1154,6 +1154,60 @@ div[class*="st-key-service_selected_value_"] [data-testid="stTextInput"] label p
   padding-bottom: 0 !important;
 }
 
+.st-key-hhs_setup_settings_table {
+  border: 1px solid var(--hhs-theme-dataframe-border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.st-key-hhs_setup_settings_table [data-testid="stVerticalBlock"] {
+  gap: 0 !important;
+}
+
+.hhs-setup-table-caption {
+  background: color-mix(in srgb, var(--hhs-theme-dataframe-header-background-color) 78%, transparent);
+  border-bottom: 1px solid var(--hhs-theme-dataframe-border-color);
+  color: var(--hhs-markdown-table-header);
+  font-weight: 750;
+  padding: 0.7rem 0.85rem;
+}
+
+.st-key-hhs_setup_settings_header,
+div[class*="st-key-hhs_setup_settings_row_"] {
+  border-bottom: 1px solid var(--hhs-theme-dataframe-border-color);
+  padding: 0.35rem 0.85rem;
+}
+
+.st-key-hhs_setup_settings_header {
+  background: var(--hhs-theme-dataframe-header-background-color);
+  color: var(--hhs-markdown-table-header);
+}
+
+div[class*="st-key-hhs_setup_settings_row_"][class*="_odd"] {
+  background: color-mix(in srgb, var(--hhs-theme-text-color) 5%, transparent);
+}
+
+div[class*="st-key-hhs_setup_settings_row_"][class*="_even"] {
+  background: color-mix(in srgb, var(--hhs-theme-primary-color) 5%, transparent);
+}
+
+div[class*="st-key-hhs_setup_settings_row_"]:hover {
+  background: color-mix(in srgb, var(--hhs-theme-primary-color) 18%, transparent);
+}
+
+div[class*="st-key-hhs_setup_settings_row_"]:last-child {
+  border-bottom: 0;
+}
+
+.st-key-hhs_setup_settings_header [data-testid="stMarkdownContainer"] p,
+div[class*="st-key-hhs_setup_settings_row_"] [data-testid="stMarkdownContainer"] p {
+  margin: 0;
+}
+
+div[class*="st-key-hhs_setup_settings_row_"] [data-testid="stCheckbox"] {
+  min-height: 1.6rem;
+}
+
 .hhs-view-subtitle {
   border-bottom: 0 !important;
   box-shadow: none !important;

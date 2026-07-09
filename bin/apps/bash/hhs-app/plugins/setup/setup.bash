@@ -36,7 +36,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} [-restore | -apply <0|1>...] [options]
   HomeSetup initialization setup v${VERSION}.
 
     options:
-      -apply <0|1>...           : Apply setup values in file order without opening the menu.
+      -apply [<0|1>, ...]      : Apply setup values in file order without opening the menu.
       -restore                 : Restore HomeSetup defaults.
       -h | --help              : Display this help message.
       -v | --version           : Display current plugin version.
@@ -118,6 +118,7 @@ function execute() {
     for apply_raw in "$@"; do
       apply_raw="${apply_raw//[/}"
       apply_raw="${apply_raw//]/}"
+      apply_raw="${apply_raw//,/}"
       [[ -n "${apply_raw}" ]] && apply_values+=("${apply_raw}")
     done
 
