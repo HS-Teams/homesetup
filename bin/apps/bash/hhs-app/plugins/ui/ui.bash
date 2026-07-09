@@ -15,12 +15,13 @@
 PLUGIN_NAME="ui"
 
 # Current HomeSetup UI plugin version.
-VERSION="0.0.5"
+VERSION="0.0.6"
 
 # Namespace cleanup.
 UNSETS=(
-  help version cleanup execute get_ui_url get_ui_log get_ui_pid_file is_ui_running
-  get_ui_process_registry_file open_ui ui_pids ui_port_pids ui_recorded_processes ui_recorded_pids
+  help version cleanup execute get_ui_url get_ui_log get_ui_pid_file get_legacy_ui_pid_file
+  get_ui_process_registry_file get_legacy_ui_process_registry_file is_ui_running open_ui ui_pids
+  ui_port_pids ui_recorded_processes ui_recorded_pids
   ui_process_token ui_pid_command_name ui_pid_args ui_pid_env ui_pid_owner_env_token
   is_python_or_streamlit_pid is_owned_ui_pid ui_known_pids ui_tracked_processes_alive
   is_managed_ui_running new_ui_owner_token
@@ -34,11 +35,14 @@ STREAMLIT_UI="${HHS_HOME}/bin/apps/py/hhs_ui/streamlit_ui.py"
 # Streamlit UI port.
 HHS_STREAMLIT_UI_PORT="${HHS_STREAMLIT_UI_PORT:-18501}"
 
+# HomeSetup UI disposable runtime directory.
+HHS_STREAMLIT_UI_RUNTIME_DIR="${HHS_STREAMLIT_UI_RUNTIME_DIR:-${HHS_CACHE_DIR:-${HHS_DIR}/cache}}"
+
 # HomeSetup UI pid file.
-HHS_STREAMLIT_UI_PID_FILE="${HHS_STREAMLIT_UI_PID_FILE:-${HHS_DIR}/.streamlit-ui.pid}"
+: "${HHS_STREAMLIT_UI_PID_FILE:=${HHS_STREAMLIT_UI_RUNTIME_DIR}/.streamlit-ui.pid}"
 
 # HomeSetup UI process registry file.
-HHS_STREAMLIT_UI_PROCESS_FILE="${HHS_STREAMLIT_UI_PROCESS_FILE:-${HHS_DIR}/.streamlit-ui.processes}"
+: "${HHS_STREAMLIT_UI_PROCESS_FILE:=${HHS_STREAMLIT_UI_RUNTIME_DIR}/.streamlit-ui.processes}"
 
 # Usage message.
 read -r -d '' USAGE <<EOF
@@ -116,9 +120,19 @@ function get_ui_pid_file() {
   echo "${HHS_STREAMLIT_UI_PID_FILE}"
 }
 
+# @purpose: Get the legacy HomeSetup Streamlit UI pid file.
+function get_legacy_ui_pid_file() {
+  echo "${HHS_DIR}/.streamlit-ui.pid"
+}
+
 # @purpose: Get the HomeSetup Streamlit UI process registry file.
 function get_ui_process_registry_file() {
   echo "${HHS_STREAMLIT_UI_PROCESS_FILE}"
+}
+
+# @purpose: Get the legacy HomeSetup Streamlit UI process registry file.
+function get_legacy_ui_process_registry_file() {
+  echo "${HHS_DIR}/.streamlit-ui.processes"
 }
 
 # @purpose: Check whether the HomeSetup Streamlit UI port is accepting connections.
@@ -164,7 +178,9 @@ function ui_recorded_processes() {
   process_file="$(get_ui_process_registry_file)"
   {
     [[ -s "${pid_file}" ]] && awk '{ print $1, $2 }' "${pid_file}"
+    [[ -s "$(get_legacy_ui_pid_file)" ]] && awk '{ print $1, $2 }' "$(get_legacy_ui_pid_file)"
     [[ -s "${process_file}" ]] && cat "${process_file}"
+    [[ -s "$(get_legacy_ui_process_registry_file)" ]] && cat "$(get_legacy_ui_process_registry_file)"
   } | awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/ && !seen[$1]++ { print $1, $2 }'
 }
 
@@ -305,7 +321,12 @@ function record_ui_process() {
 
 # @purpose: Remove HomeSetup Streamlit UI process tracking files.
 function cleanup_ui_process_files() {
-  rm -f "$(get_ui_pid_file)" "$(get_ui_process_registry_file)" 2>/dev/null || true
+  rm -f \
+    "$(get_ui_pid_file)" \
+    "$(get_ui_process_registry_file)" \
+    "$(get_legacy_ui_pid_file)" \
+    "$(get_legacy_ui_process_registry_file)" \
+    2>/dev/null || true
 }
 
 # @purpose: Print the first process ID listening on the HomeSetup Streamlit UI port.

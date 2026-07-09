@@ -303,7 +303,22 @@ setup() {
   run grep -q 'ui_port_pids' "${ui_plugin_file}"
   assert_success
 
-  run grep -q 'HHS_STREAMLIT_UI_PROCESS_FILE="${HHS_STREAMLIT_UI_PROCESS_FILE:-${HHS_DIR}/.streamlit-ui.processes}"' "${ui_plugin_file}"
+  run grep -q 'HHS_STREAMLIT_UI_RUNTIME_DIR=' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'HHS_CACHE_DIR:-${HHS_DIR}/cache' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'HHS_STREAMLIT_UI_PID_FILE:=' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'HHS_STREAMLIT_UI_RUNTIME_DIR}/.streamlit-ui.pid' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'HHS_STREAMLIT_UI_PROCESS_FILE:=' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q 'HHS_STREAMLIT_UI_RUNTIME_DIR}/.streamlit-ui.processes' "${ui_plugin_file}"
   assert_success
 
   run grep -q 'record_ui_process "${pid}" "${owner_token}"' "${ui_plugin_file}"
@@ -425,13 +440,14 @@ PY
     export APP_NAME="hhs"
     export HHS_HOME="${1}"
     export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/log"
     export HHS_STREAMLIT_UI_PORT="28501"
     export BLUE=""
     export GREEN=""
     export NC=""
     export YELLOW=""
-    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
     function usage() { return "${1:-0}"; }
     function quit() {
       local exit_code="${1:-0}"
@@ -471,13 +487,14 @@ PY
     export APP_NAME="hhs"
     export HHS_HOME="${1}"
     export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/log"
     export HHS_STREAMLIT_UI_PORT="28501"
     export BLUE=""
     export GREEN=""
     export NC=""
     export YELLOW=""
-    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
     function usage() { return "${1:-0}"; }
     function quit() {
       local exit_code="${1:-0}"
@@ -503,13 +520,14 @@ PY
     export APP_NAME="hhs"
     export HHS_HOME="${1}"
     export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/log"
     export HHS_STREAMLIT_UI_PORT="28501"
     export BLUE=""
     export GREEN=""
     export NC=""
     export YELLOW=""
-    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
     function usage() { return "${1:-0}"; }
     function quit() {
       local exit_code="${1:-0}"
@@ -525,7 +543,7 @@ PY
       printf "kill:%s\n" "$*" >&2
       return 0
     }
-    printf "%s\n" "12345 old-token" > "${HHS_DIR}/.streamlit-ui.processes"
+    printf "%s\n" "12345 old-token" > "${HHS_CACHE_DIR}/.streamlit-ui.processes"
     source "${3}"
     function is_ui_running() { return 0; }
     function ui_port_pids() { printf "99999\n"; }
@@ -543,13 +561,14 @@ PY
     export APP_NAME="hhs"
     export HHS_HOME="${1}"
     export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/log"
     export HHS_STREAMLIT_UI_PORT="28501"
     export BLUE=""
     export GREEN=""
     export NC=""
     export YELLOW=""
-    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
     function usage() { return "${1:-0}"; }
     function quit() {
       local exit_code="${1:-0}"
@@ -601,13 +620,14 @@ PY
     export APP_NAME="hhs"
     export HHS_HOME="${1}"
     export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/log"
     export HHS_STREAMLIT_UI_PORT="28501"
     export BLUE=""
     export GREEN=""
     export NC=""
     export YELLOW=""
-    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
     function usage() { return "${1:-0}"; }
     function quit() {
       local exit_code="${1:-0}"
@@ -622,7 +642,7 @@ PY
       [[ "$1" == "-0" ]] && return 0
       return 1
     }
-    printf "%s\n" "12345 token-a" > "${HHS_DIR}/.streamlit-ui.pid"
+    printf "%s\n" "12345 token-a" > "${HHS_CACHE_DIR}/.streamlit-ui.pid"
     source "${3}"
     function ui_pid_args() {
       printf "python3 -m streamlit run %s --server.port %s --server.address 127.0.0.1\n" "${STREAMLIT_UI}" "${HHS_STREAMLIT_UI_PORT}"
@@ -636,7 +656,7 @@ PY
     is_owned_ui_pid 12345 && printf "python-owned\n" || printf "python-rejected\n"
     function ui_pid_command_name() { printf "streamlit\n"; }
     is_owned_ui_pid 12345 && printf "streamlit-owned\n" || printf "streamlit-rejected\n"
-    rm -f "${HHS_DIR}/.streamlit-ui.pid"
+    rm -f "${HHS_CACHE_DIR}/.streamlit-ui.pid"
     function ui_pid_command_name() { printf "Python\n"; }
     function ui_pid_env() { printf "HHS_STREAMLIT_UI_OWNER=hhs-ui.123.456.789\n"; }
     is_owned_ui_pid 12345 && printf "env-owned\n" || printf "env-rejected\n"
@@ -654,13 +674,14 @@ PY
     export APP_NAME="hhs"
     export HHS_HOME="${1}"
     export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/log"
     export HHS_STREAMLIT_UI_PORT="28501"
     export BLUE=""
     export GREEN=""
     export NC=""
     export YELLOW=""
-    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
     function usage() { return "${1:-0}"; }
     function quit() {
       local exit_code="${1:-0}"
@@ -687,13 +708,14 @@ PY
     export APP_NAME="hhs"
     export HHS_HOME="${1}"
     export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/log"
     export HHS_STREAMLIT_UI_PORT="28501"
     export BLUE=""
     export GREEN=""
     export NC=""
     export YELLOW=""
-    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
     function usage() { return "${1:-0}"; }
     function quit() {
       local exit_code="${1:-0}"
@@ -714,8 +736,10 @@ PY
       killed="${killed} $1"
       return 0
     }
-    printf "%s\n" "12345 token-a" > "${HHS_DIR}/.streamlit-ui.pid"
-    printf "%s\n" "12345 token-a" "23456 token-b" > "${HHS_DIR}/.streamlit-ui.processes"
+    printf "%s\n" "12345 token-a" > "${HHS_CACHE_DIR}/.streamlit-ui.pid"
+    printf "%s\n" "12345 token-a" "23456 token-b" > "${HHS_CACHE_DIR}/.streamlit-ui.processes"
+    printf "%s\n" "34567 token-c" > "${HHS_DIR}/.streamlit-ui.pid"
+    printf "%s\n" "34567 token-c" > "${HHS_DIR}/.streamlit-ui.processes"
     source "${3}"
     function is_ui_running() { return 1; }
     function ui_pids() { return 0; }
@@ -731,6 +755,8 @@ PY
   assert_output --partial 'kill:12345'
   assert_output --partial 'kill:23456'
   refute_output --partial 'kill:99999'
+  [[ ! -e "${BATS_TEST_TMPDIR}/hhs/cache/.streamlit-ui.pid" ]]
+  [[ ! -e "${BATS_TEST_TMPDIR}/hhs/cache/.streamlit-ui.processes" ]]
   [[ ! -e "${BATS_TEST_TMPDIR}/hhs/.streamlit-ui.pid" ]]
   [[ ! -e "${BATS_TEST_TMPDIR}/hhs/.streamlit-ui.processes" ]]
 }
@@ -8259,7 +8285,7 @@ PY
 }
 
 @test "when UI creates disposable files then cache paths should be deterministic" {
-  run python3 - "${ui_file}" "${constants_file}" <<'PY'
+  run python3 - "${ui_file}" "${constants_file}" "${ui_plugin_file}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -8267,6 +8293,8 @@ source = (
     Path(sys.argv[1]).read_text(encoding="utf-8")
     + "\n"
     + Path(sys.argv[2]).read_text(encoding="utf-8")
+    + "\n"
+    + Path(sys.argv[3]).read_text(encoding="utf-8")
 )
 required_fragments = (
     "def ui_disposable_files_dir() -> Path:",
@@ -8275,6 +8303,22 @@ required_fragments = (
     'UI_STATE_FILE = HHS_CACHE_DIR / "streamlit-ui-state.json"',
     'UI_CACHE_FILE = HHS_CACHE_DIR / "streamlit-ui-cache.json"',
     'TTYD_INDEX_FILE = HHS_CACHE_DIR / "streamlit-ttyd-index.html"',
+    'return (hhs_ui.HHS_CACHE_DIR / ".streamlit-ui-state",)',
+    'return (hhs_ui.HHS_CACHE_DIR / ".streamlit-ui-cache",)',
+    (
+        'HHS_STREAMLIT_UI_RUNTIME_DIR="${HHS_STREAMLIT_UI_RUNTIME_DIR:-'
+        '${HHS_CACHE_DIR:-${HHS_DIR}/cache}}"'
+    ),
+    (
+        ': "${HHS_STREAMLIT_UI_PID_FILE:='
+        '${HHS_STREAMLIT_UI_RUNTIME_DIR}/.streamlit-ui.pid}"'
+    ),
+    (
+        ': "${HHS_STREAMLIT_UI_PROCESS_FILE:='
+        '${HHS_STREAMLIT_UI_RUNTIME_DIR}/.streamlit-ui.processes}"'
+    ),
+    'function get_legacy_ui_pid_file()',
+    'function get_legacy_ui_process_registry_file()',
     "def ai_context_upload_path(file_name: str) -> Path:",
     "hhs-ai-context-upload",
     "tmp_file_path.write_bytes(uploaded_file.getvalue())",
