@@ -96,8 +96,8 @@ function __hhs_search_dir() {
 function __hhs_search_string() {
 
   local extra_str replace names file_globs_type='regex' gflags='-HnEI' sflags='g'
-  local search_str base_cmd full_cmd dir repl_str file_globs glob ised
-  local -a file_glob_values name_args sed_args
+  local search_str base_cmd full_cmd dir repl_str file_globs glob ised sed_expr
+  local -a file_glob_values name_args sed_args sed_filter_args pipeline_status
 
   if [[ "$#" -lt 2 || "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} <search_path> [options] <regex/string> [file_globs]"
@@ -177,12 +177,15 @@ function __hhs_search_string() {
         if [[ "${HHS_MY_OS:-$(uname -s)}" == "Darwin" ]]; then
           ised="sed -i '' -E"
           sed_args=(sed -i '' -E)
+          sed_filter_args=(sed -E)
         else
           ised="sed -i'' -r"
           sed_args=(sed -i'' -r)
+          sed_filter_args=(sed -r)
         fi
-        full_cmd="${base_cmd} \; -exec $ised \"s/${search_str}/${repl_str}/${sflags}\" {} +"
-        full_cmd="${full_cmd} | sed \"s/${search_str}/${repl_str}/${sflags}\""
+        sed_expr="$(__hhs_sed_substitution_expr "${search_str}" "${repl_str}" "${sflags}")"
+        full_cmd="${base_cmd} \; -exec $ised \"${sed_expr}\" {} +"
+        full_cmd="${full_cmd} | ${sed_filter_args[*]} \"${sed_expr}\""
         full_cmd="${full_cmd} | __hhs_highlight \"${repl_str}\""
       fi
     else
@@ -194,9 +197,11 @@ function __hhs_search_string() {
     if [[ -n "${replace}" ]]; then
       find -L "${dir}" -type f \( "${name_args[@]}" \) \
         -exec grep "${gflags}" "${search_str}" {} \; \
-        -exec "${sed_args[@]}" "s/${search_str}/${repl_str}/${sflags}" {} + |
-        sed "s/${search_str}/${repl_str}/${sflags}" |
+        -exec "${sed_args[@]}" "${sed_expr}" {} + |
+        "${sed_filter_args[@]}" "${sed_expr}" |
         __hhs_highlight "${repl_str}"
+      pipeline_status=("${PIPESTATUS[@]}")
+      return "${pipeline_status[0]}"
     else
       find -L "${dir}" -type f \( "${name_args[@]}" \) \
         -exec grep "${gflags}" "${search_str}" {} + 2>/dev/null |

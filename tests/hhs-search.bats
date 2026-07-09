@@ -165,3 +165,19 @@ teardown() {
   assert_success
   assert_output --partial "mode=beta"
 }
+
+@test "when-search-string-replaces-path-like-values-then-substitutes-content" {
+  printf '%s\n' "# ~/.config/starship.toml" >"${SEARCH_FIXTURES}/configs/path.conf"
+
+  run __hhs_search_string \
+    "${SEARCH_FIXTURES}" \
+    -r "~/.config/hhs/.starship.toml" \
+    "~/.config/starship.toml" \
+    "*.conf"
+  assert_success
+  assert_output --partial "path.conf:1:# ~/.config/hhs/.starship.toml"
+
+  run cat "${SEARCH_FIXTURES}/configs/path.conf"
+  assert_success
+  assert_output --partial "# ~/.config/hhs/.starship.toml"
+}

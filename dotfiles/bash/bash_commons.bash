@@ -247,3 +247,22 @@ function __hhs_clipboard() {
 
   return $?
 }
+
+# @purpose: Build a sed substitution expression from a regex and literal replacement.
+# @param $1 [Req] : The regex search expression.
+# @param $2 [Req] : The replacement string.
+# @param $3 [Req] : The sed substitution flags.
+# @compatible: bash zsh
+function __hhs_sed_substitution_expr() {
+
+  local search_str="${1}" repl_str="${2}" sflags="${3}" delimiter safe_search safe_repl
+
+  delimiter=$'\037'
+  safe_search="${search_str//${delimiter}/\\${delimiter}}"
+  safe_repl="${repl_str//\\/\\\\}"
+  safe_repl="${safe_repl//&/\\&}"
+  safe_repl="${safe_repl//${delimiter}/\\${delimiter}}"
+
+  printf 's%s%s%s%s%s%s' \
+    "${delimiter}" "${safe_search}" "${delimiter}" "${safe_repl}" "${delimiter}" "${sflags}"
+}
