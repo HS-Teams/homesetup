@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.63"
+VERSION = "0.1.67"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parent
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -220,6 +220,7 @@ AI_PERFORMANCE_MIN_SAMPLES = 3
 AI_PERFORMANCE_RECALC_INTERVAL = 5
 AI_PERFORMANCE_TIMING_LIMIT = 100
 PROCESS_TABLE_KEY = "monitor_process_table"
+HHS_STARSHIP_CURRENT_PRESET_KEY = "hhs_starship_current_preset"
 PERSISTED_UI_KEYS = (
     "active_view",
     "ai_chat_messages",
@@ -257,6 +258,7 @@ PERSISTED_UI_KEYS = (
     "home_shopts_filter",
     "home_shopts_other_filter",
     "hhs_view",
+    HHS_STARSHIP_CURRENT_PRESET_KEY,
     "history_commands_filter",
     "history_commands_other_filter",
     "history_directories_filter",
@@ -373,6 +375,10 @@ AI_MODEL_TABLE_RESET_COUNTER_KEY = "ai_model_table_reset_counter"
 ALIAS_TABLE_KEY = "alias_vars_table"
 ALIAS_TABLE_RESET_COUNTER_KEY = "alias_vars_table_reset_counter"
 ALIAS_VALUE_EDITOR_KEY_PREFIX = "alias_selected_value"
+HHS_SETTINGS_TABLE_KEY = "hhs_settings_table"
+HHS_SETTINGS_TABLE_RESET_COUNTER_KEY = "hhs_settings_table_reset_counter"
+MARKDOWN_TABLE_MARK_COLUMN_WIDTH = 80
+MARKDOWN_TABLE_LAYOUT_VERSION = 2
 CMD_TABLE_KEY = "cmd_vars_table"
 CMD_TABLE_RESET_COUNTER_KEY = "cmd_vars_table_reset_counter"
 CMD_INDEX_COLUMN_WIDTH = 80

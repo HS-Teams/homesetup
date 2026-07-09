@@ -12,6 +12,9 @@
 # Current plugin name
 PLUGIN_NAME="settings"
 
+# Current python module name
+MODULE_NAME="setman"
+
 # Namespace cleanup
 UNSETS=(
   help version cleanup execute
@@ -19,13 +22,19 @@ UNSETS=(
 
 # @purpose: HHS plugin required function
 function help() {
-  python3 -m ${PLUGIN_NAME} -h
-  exit $?
+  local ret_val
+
+  python3 -m "${MODULE_NAME}" -h
+  ret_val=$?
+  printf '\nHomeSetup wrapper options:\n'
+  printf '  truncate -f, truncate --force  Remove all settings without interactive confirmation.\n'
+
+  exit "${ret_val}"
 }
 
 # @purpose: HHS plugin required function
 function version() {
-  python3 -m ${PLUGIN_NAME} -v
+  python3 -m "${MODULE_NAME}" -v
   exit $?
 }
 
@@ -39,7 +48,7 @@ function cleanup() {
 # @purpose: HHS plugin required function
 function execute() {
 
-  local args env_file ret_val=0 num
+  local args env_file ret_val=0 num arg_n force operation_index has_filter idx
 
   __hhs_is_venv || quit 1 "Not available when HomeSetup python venv is not active!"
 
@@ -47,7 +56,7 @@ function execute() {
   arg_n=${#}
 
   if [[ "${#}" -eq 0 ]]; then
-    python3 -m setman -h
+    python3 -m "${MODULE_NAME}" -h
   # Hook the setman source command
   elif [[ $1 == 'source' ]]; then
     __hhs_has direnv && env_file='.envrc'
@@ -68,7 +77,7 @@ function execute() {
     env_file=${env_file:-"settings-export-$(date +'%Y%m%d%H%M%S')"}
     if [[ $((arg_n%2)) -eq 0 ]]; then
       quit 1 "Invalid settings syntax: ${*}"
-    elif python3 -m setman source -f "${env_file}" "${args[@]}"; then
+    elif python3 -m "${MODULE_NAME}" source -f "${env_file}" "${args[@]}"; then
       # Remove duplicate entries
       sort | uniq -o "${env_file}"{,}
       # Check if env_file is not empty and count the exported settings
@@ -87,7 +96,38 @@ function execute() {
     fi
   # Execute the setman python app normally
   else
-    python3 -m setman "${@}"
+    force=0
+    args=()
+    while [[ "${#}" -gt 0 ]]; do
+      case "${1}" in
+      -f | --force)
+        force=1
+        ;;
+      *)
+        args+=("${1}")
+        ;;
+      esac
+      shift
+    done
+
+    if [[ "${force}" -eq 1 ]]; then
+      operation_index=-1
+      has_filter=0
+      for idx in "${!args[@]}"; do
+        case "${args[$idx]}" in
+        truncate)
+          operation_index="${idx}"
+          ;;
+        -n | --name | -t | --type)
+          has_filter=1
+          ;;
+        esac
+      done
+      [[ "${operation_index}" -ge 0 ]] || quit 1 "Force option is only supported with truncate."
+      [[ "${has_filter}" -eq 1 ]] || args+=("-n" "*")
+    fi
+
+    python3 -m "${MODULE_NAME}" "${args[@]}"
   fi
   ret_val=$?
   echo -e "${NC}"

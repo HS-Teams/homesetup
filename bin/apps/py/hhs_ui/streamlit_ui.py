@@ -276,6 +276,7 @@ HOME_TOOL_ACTION_JOB = "home_tool_action"
 HOME_TOOL_TLDR_JOB = "home_tool_tldr"
 CONFIG_ACTION_JOB = "config_action"
 HHS_SETUP_ACTION_JOB = "hhs_setup_action"
+HHS_SETTINGS_ACTION_JOB = "hhs_settings_action"
 HHS_STARSHIP_ACTION_JOB = "hhs_starship_action"
 DOCKER_ACTION_JOB = "docker_action"
 ALIAS_LIST_JOB = "alias_list"
@@ -12231,6 +12232,85 @@ def build_hhs_starship_plugin_command(arguments: list[str]) -> str:
     )
 
 
+def build_hhs_settings_plugin_prefix() -> str:
+    """Build the common Bash prefix for invoking the HomeSetup Settings plug-in."""
+    settings_dispatch = (
+        "function __hhs() { "
+        'if [[ "$1" == "settings" ]]; then '
+        "shift; "
+        'local hhs_settings_fn="${1:-execute}"; '
+        'if declare -F "${hhs_settings_fn}" >/dev/null 2>&1; then '
+        "shift || true; "
+        '"${hhs_settings_fn}" "$@"; '
+        "else "
+        'execute "${hhs_settings_fn}" "$@"; '
+        "fi; "
+        "else "
+        "return 127; "
+        "fi; "
+        "}; "
+    )
+    return (
+        build_hhs_env_environment_command()
+        + 'export APP_NAME="${APP_NAME:-hhs-ui}"; '
+        + '[[ -s "${HHS_VENV_PATH}/bin/activate" ]] && source "${HHS_VENV_PATH}/bin/activate" >/dev/null 2>&1 || true; '
+        + 'source "${HHS_HOME}/bin/apps/bash/app-commons.bash"; '
+        + 'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/settings/settings.bash"; '
+        + 'mkdir -p "$(dirname "${HHS_SETMAN_CONFIG_FILE}")"; '
+        + 'printf "hhs.setman.database = %s\\n" "${HHS_SETMAN_DB_FILE}" >"${HHS_SETMAN_CONFIG_FILE}"; '
+        + f"{settings_dispatch}"
+    )
+
+
+def build_hhs_settings_plugin_command(arguments: list[str]) -> str:
+    """Build a Bash command that invokes the HomeSetup Settings plug-in."""
+    safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
+    return build_hhs_settings_plugin_prefix() + f"__hhs settings {safe_arguments}"
+
+
+def build_hhs_settings_list_command() -> str:
+    """Build the command that lists overridden system settings."""
+    return (
+        build_hhs_settings_plugin_prefix()
+        + 'export_file="$(mktemp "${TMPDIR:-/tmp}/hhs-settings.XXXXXX")" || exit 2; '
+        + 'csv_file="${export_file}.csv"; '
+        + 'if python3 -m setman export "${export_file}" >/dev/null; then '
+        + 'cat "${csv_file}"; '
+        + "ret_val=0; "
+        + "else "
+        + 'ret_val="$?"; '
+        + "fi; "
+        + 'rm -f "${export_file}" "${csv_file}"; '
+        + 'exit "${ret_val}"'
+    )
+
+
+def build_hhs_settings_add_command(setting: str, value: str) -> str:
+    """Build the command that stores an environment setting override."""
+    return build_hhs_settings_plugin_command(
+        ["execute", "set", "-n", setting, "-x", "", "-v", value, "-t", "environment"]
+    )
+
+
+def build_hhs_settings_delete_command(setting: str) -> str:
+    """Build the command that deletes one overridden system setting."""
+    return build_hhs_settings_plugin_command(["execute", "del", setting])
+
+
+def build_hhs_settings_delete_many_command(settings: list[str]) -> str:
+    """Build the command that deletes selected overridden system settings."""
+    delete_commands = " ".join(
+        f"__hhs settings execute del {shlex.quote(setting)} || exit $?;"
+        for setting in settings
+    )
+    return build_hhs_settings_plugin_prefix() + delete_commands
+
+
+def build_hhs_settings_truncate_command() -> str:
+    """Build the command that deletes all overridden system settings."""
+    return build_hhs_settings_plugin_command(["execute", "truncate", "-f"])
+
+
 def build_hhs_starship_preset_command(preset: str) -> str:
     """Build the Starship plug-in command that applies one preset."""
     return build_hhs_starship_plugin_command(["preset", preset])
@@ -13560,6 +13640,98 @@ def parse_hhs_setup_settings(output: str) -> dict[str, bool]:
     return settings
 
 
+def hhs_settings_ini_file() -> Path:
+    """Return the bundled settings catalog file."""
+    return homesetup_home() / "assets" / "settings.ini"
+
+
+def load_hhs_settings_defaults() -> dict[str, str]:
+    """Load dotted setting names and default values from assets/settings.ini."""
+    settings_file = hhs_settings_ini_file()
+    if not settings_file.is_file():
+        return {}
+    settings: dict[str, str] = {}
+    for raw_line in settings_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("[") or line.startswith("#"):
+            continue
+        name, separator, value = line.partition("=")
+        clean_name = name.strip()
+        if clean_name and clean_name not in settings:
+            settings[clean_name] = value.strip() if separator else ""
+    return settings
+
+
+def hhs_setting_variable_name(setting: str) -> str:
+    """Return the environment variable name for a dotted setting."""
+    return re.sub(r"[\s.-]+", "_", setting.strip()).upper()
+
+
+def setman_table_cells(line: str) -> list[str]:
+    """Return cells from one Setman box-table row."""
+    clean_line = line.strip()
+    if not clean_line.startswith("|") or not clean_line.endswith("|"):
+        return []
+    cells = [cell.strip() for cell in clean_line.strip("|").split("|")]
+    if len(cells) < 5:
+        return []
+    if cells[0].upper() == "NAME" or "<empty>" in cells[0].lower():
+        return []
+    return cells[:5]
+
+
+def hhs_settings_row_setting(prefix: str, name: str) -> str:
+    """Return one dotted HHS setting name from Setman prefix and name fields."""
+    return ".".join(part for part in (prefix.strip(), name.strip()) if part)
+
+
+def hhs_settings_csv_row(row: dict[str, str]) -> dict[str, str]:
+    """Return one Settings UI table row from a Setman CSV row."""
+    setting = hhs_settings_row_setting(
+        row.get("prefix", ""),
+        row.get("name", ""),
+    )
+    return {
+        "Setting": setting,
+        "Variable": hhs_setting_variable_name(setting),
+        "Value": row.get("value", ""),
+    }
+
+
+def parse_hhs_settings_list(output: str) -> list[dict[str, str]]:
+    """Parse Setman list output into Settings table rows."""
+    clean_output = strip_ansi(output)
+    csv_lines = [
+        line
+        for line in clean_output.splitlines()
+        if line.strip() and not line.lstrip().startswith("[")
+    ]
+    if csv_lines and csv_lines[0].strip().lower().startswith("uuid,name,prefix,value,"):
+        return [
+            hhs_settings_csv_row(row)
+            for row in csv.DictReader(csv_lines)
+            if row.get("name", "").strip()
+        ]
+
+    rows: list[dict[str, str]] = []
+    for line in clean_output.splitlines():
+        cells = setman_table_cells(line)
+        if not cells:
+            continue
+        name, prefix, value, _settings_type, _modified = cells
+        setting = hhs_settings_row_setting(prefix, name)
+        if not setting:
+            continue
+        rows.append(
+            {
+                "Setting": setting,
+                "Variable": hhs_setting_variable_name(setting),
+                "Value": value,
+            }
+        )
+    return rows
+
+
 def parse_hhs_starship_info(output: str) -> dict[str, object]:
     """Parse marker-delimited Starship info and config output."""
     markers = {
@@ -14572,6 +14744,31 @@ def reset_alias_table_selection() -> None:
     st.session_state[hhs_ui.ALIAS_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
 
 
+def hhs_settings_table_key() -> str:
+    """Return the HHS Settings dataframe key for the current selection generation."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui_constants.HHS_SETTINGS_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+        st.session_state[
+            hhs_ui_constants.HHS_SETTINGS_TABLE_RESET_COUNTER_KEY
+        ] = reset_counter
+    return f"{hhs_ui_constants.HHS_SETTINGS_TABLE_KEY}_{reset_counter}"
+
+
+def reset_hhs_settings_table_selection() -> None:
+    """Reset the HHS Settings dataframe selection for the next rerun."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui_constants.HHS_SETTINGS_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[hhs_ui_constants.HHS_SETTINGS_TABLE_RESET_COUNTER_KEY] = (
+        reset_counter + 1
+    )
+
+
 def refresh_ai_model_listing() -> None:
     """Refresh cached AI model listings and reset the AI model selection."""
     cache_delete_tag("ai_models")
@@ -14982,6 +15179,67 @@ def execute_pending_hhs_setup_action() -> None:
     complete_hhs_setup_action_job()
 
 
+def queue_hhs_settings_action(
+    command: str,
+    description: str,
+    metadata: dict[str, object],
+) -> bool:
+    """Queue a HomeSetup Settings plug-in mutation for background execution."""
+    st.session_state["hhs_settings_action_execute_pending"] = {
+        **metadata,
+        "command": command,
+        "description": description,
+    }
+    save_ui_state()
+    return True
+
+
+def start_pending_hhs_settings_action() -> None:
+    """Start a queued HomeSetup Settings action background job, when present."""
+    pending = st.session_state.pop("hhs_settings_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        HHS_SETTINGS_ACTION_JOB,
+        command,
+        description,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        pending,
+        "Another Settings action is already running.",
+    )
+    if not started:
+        st.session_state["hhs_settings_action_execute_pending"] = pending
+
+
+def complete_hhs_settings_action_job() -> None:
+    """Complete a HomeSetup Settings action and refresh Settings data."""
+    completed = background_job_result(HHS_SETTINGS_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    if result.returncode == 0:
+        cache_delete_tag("hhs_settings")
+        reset_hhs_settings_table_selection()
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+    if result.returncode == 0:
+        fallback = str(metadata.get("success_fallback", "Settings updated."))
+        push_floating_status(status_message or fallback, "info")
+    else:
+        fallback = str(metadata.get("error_fallback", "Settings update failed."))
+        push_floating_status(status_message or fallback, "error")
+    save_ui_state()
+
+
+def execute_pending_hhs_settings_action() -> None:
+    """Start or complete the current HomeSetup Settings action."""
+    start_pending_hhs_settings_action()
+    complete_hhs_settings_action_job()
+
+
 def queue_hhs_starship_action(
     command: str,
     description: str,
@@ -15026,6 +15284,12 @@ def complete_hhs_starship_action_job() -> None:
     result, metadata = completed
     if result.returncode == 0:
         cache_delete_tag("hhs_starship")
+        if metadata.get("operation") == "preset":
+            preset = str(metadata.get("preset", "")).strip()
+            if preset:
+                st.session_state[
+                    hhs_ui_constants.HHS_STARSHIP_CURRENT_PRESET_KEY
+                ] = preset
         if metadata.get("operation") == "save_config":
             st.session_state["hhs_starship_config_editing"] = False
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
@@ -16167,6 +16431,7 @@ def complete_background_action_jobs() -> None:
     execute_pending_home_tool_tldr()
     execute_pending_config_action()
     execute_pending_hhs_setup_action()
+    execute_pending_hhs_settings_action()
     execute_pending_hhs_starship_action()
     execute_pending_docker_action()
     execute_pending_service_action()
@@ -17186,35 +17451,97 @@ def render_markdown_table(
     value_column_label: str = "Mark",
     variable_column_label: str = "Variable",
     item_column_label: str = "Setting",
+    variable_values: list[str] | None = None,
+    extra_columns: dict[str, list[str]] | None = None,
 ) -> list[bool]:
     """Render a reusable checkbox markdown table and return selected values."""
     if len(items) != len(values) or len(items) != len(headers):
         raise ValueError("headers, items, and values must have the same length")
     if value_keys is not None and len(items) != len(value_keys):
         raise ValueError("items and value_keys must have the same length")
+    if variable_values is not None and len(items) != len(variable_values):
+        raise ValueError("items and variable_values must have the same length")
 
-    editor_key = f"{key_prefix}_markdown_table_editor"
+    extra_columns = extra_columns or {}
+    base_column_labels = {
+        value_column_label,
+        variable_column_label,
+        item_column_label,
+    }
+    duplicate_column_labels = base_column_labels.intersection(extra_columns)
+    if duplicate_column_labels:
+        duplicate_labels = ", ".join(sorted(duplicate_column_labels))
+        raise ValueError(f"extra columns duplicate base columns: {duplicate_labels}")
+    for column_label, column_values in extra_columns.items():
+        if len(items) != len(column_values):
+            raise ValueError(
+                f"items and extra column {column_label!r} must have the same length"
+            )
+
+    editor_key = (
+        f"{key_prefix}_markdown_table_editor_v"
+        f"{hhs_ui_constants.MARKDOWN_TABLE_LAYOUT_VERSION}"
+    )
     token_key = f"_{editor_key}_token"
     token = json.dumps(
-        {"headers": headers, "items": items, "values": values},
+        {
+            "extra_columns": extra_columns,
+            "headers": headers,
+            "items": items,
+            "values": values,
+            "variable_values": variable_values,
+        },
         separators=(",", ":"),
+        sort_keys=True,
     )
     if st.session_state.get(token_key) != token:
         st.session_state.pop(editor_key, None)
         st.session_state[token_key] = token
+
+    rendered_variable_values = (
+        variable_values if variable_values is not None else [header.upper() for header in headers]
+    )
+    table_columns = {
+        value_column_label: [bool(value) for value in values],
+        variable_column_label: rendered_variable_values,
+        item_column_label: headers,
+    }
+    table_columns.update(extra_columns)
+    extra_column_labels = list(extra_columns)
+    column_config: dict[str, object] = {
+        value_column_label: st.column_config.CheckboxColumn(
+            value_column_label,
+            disabled=disabled,
+            width=hhs_ui_constants.MARKDOWN_TABLE_MARK_COLUMN_WIDTH,
+        ),
+        variable_column_label: st.column_config.TextColumn(
+            variable_column_label,
+            disabled=True,
+        ),
+        item_column_label: st.column_config.TextColumn(
+            item_column_label,
+            disabled=True,
+        ),
+    }
+    for column_label in extra_column_labels:
+        column_config[column_label] = st.column_config.TextColumn(
+            column_label,
+            disabled=True,
+        )
 
     with st.container(key=f"{key_prefix}_markdown_table"):
         st.markdown(
             f'<div class="hhs-markdown-table-caption">{html.escape(caption)}</div>',
             unsafe_allow_html=True,
         )
-        table_data = pd.DataFrame(
-            {
-                value_column_label: [bool(value) for value in values],
-                variable_column_label: [header.upper() for header in headers],
-                item_column_label: headers,
-            }
-        )
+        table_data = pd.DataFrame(table_columns)
+        table_data[value_column_label] = table_data[value_column_label].astype(bool)
+        for text_column_label in [
+            variable_column_label,
+            item_column_label,
+            *extra_column_labels,
+        ]:
+            table_data[text_column_label] = table_data[text_column_label].astype(str)
         edited_data = st.data_editor(
             table_data,
             key=editor_key,
@@ -17224,27 +17551,15 @@ def render_markdown_table(
                 value_column_label,
                 item_column_label,
                 variable_column_label,
+                *extra_column_labels,
             ],
             height=min(360, 40 + (len(items) + 1) * 44),
             disabled=(
-                [variable_column_label, item_column_label]
+                [variable_column_label, item_column_label, *extra_column_labels]
                 if not disabled
                 else True
             ),
-            column_config={
-                value_column_label: st.column_config.CheckboxColumn(
-                    value_column_label,
-                    disabled=disabled,
-                ),
-                variable_column_label: st.column_config.TextColumn(
-                    variable_column_label,
-                    disabled=True,
-                ),
-                item_column_label: st.column_config.TextColumn(
-                    item_column_label,
-                    disabled=True,
-                ),
-            },
+            column_config=column_config,
         )
 
     edited_values = [bool(value) for value in edited_data[value_column_label].tolist()]
@@ -17346,6 +17661,238 @@ def render_hhs_setup_panel() -> None:
         st.rerun()
 
 
+def request_hhs_settings_add() -> None:
+    """Queue adding or updating a system setting override."""
+    setting = str(st.session_state.get("hhs_settings_add_name", "")).strip()
+    value = str(st.session_state.get("hhs_settings_add_value", ""))
+    if not setting:
+        push_floating_status("Select or type a setting before adding it.", "warn")
+        return
+    queue_hhs_settings_action(
+        build_hhs_settings_add_command(setting, value),
+        f"Saving setting: {setting}",
+        {
+            "operation": "set",
+            "setting": setting,
+            "success_fallback": f"Setting saved: {setting}",
+            "error_fallback": f"Unable to save setting: {setting}",
+        },
+    )
+
+
+def request_hhs_settings_delete(settings: str | list[str] | tuple[str, ...]) -> None:
+    """Queue deleting selected system setting overrides."""
+    if isinstance(settings, str):
+        raw_settings = [settings]
+    else:
+        raw_settings = list(settings)
+    clean_settings = list(
+        dict.fromkeys(setting.strip() for setting in raw_settings if setting.strip())
+    )
+    if not clean_settings:
+        push_floating_status("Select settings to delete.", "warn")
+        return
+    if len(clean_settings) == 1:
+        setting_label = clean_settings[0]
+        command = build_hhs_settings_delete_command(setting_label)
+        description = f"Deleting setting: {setting_label}"
+        success_fallback = f"Setting deleted: {setting_label}"
+        error_fallback = f"Unable to delete setting: {setting_label}"
+    else:
+        setting_label = f"{len(clean_settings)} settings"
+        command = build_hhs_settings_delete_many_command(clean_settings)
+        description = f"Deleting settings: {len(clean_settings)} selected"
+        success_fallback = f"Settings deleted: {len(clean_settings)} selected"
+        error_fallback = f"Unable to delete settings: {len(clean_settings)} selected"
+    queue_hhs_settings_action(
+        command,
+        description,
+        {
+            "operation": "delete",
+            "setting": setting_label,
+            "settings": clean_settings,
+            "success_fallback": success_fallback,
+            "error_fallback": error_fallback,
+        },
+    )
+
+
+def request_hhs_settings_truncate() -> None:
+    """Queue deleting all system setting overrides."""
+    queue_hhs_settings_action(
+        build_hhs_settings_truncate_command(),
+        "Truncating system settings",
+        {
+            "operation": "truncate",
+            "success_fallback": "System settings truncated.",
+            "error_fallback": "Unable to truncate system settings.",
+        },
+    )
+
+
+def render_hhs_settings_controls(action_running: bool) -> None:
+    """Render the HHS Settings add/update controls."""
+    setting_defaults = load_hhs_settings_defaults()
+    setting_options = list(setting_defaults)
+    if setting_options:
+        selected_setting = str(st.session_state.get("hhs_settings_add_name", ""))
+        if selected_setting and selected_setting not in setting_options:
+            setting_options = [selected_setting, *setting_options]
+    selected_setting = str(st.session_state.get("hhs_settings_add_name", "")).strip()
+    if not selected_setting and setting_options:
+        selected_setting = setting_options[0]
+    previous_setting = str(
+        st.session_state.get("_hhs_settings_add_previous_name", "")
+    ).strip()
+    if selected_setting != previous_setting:
+        st.session_state["hhs_settings_add_value"] = setting_defaults.get(
+            selected_setting,
+            "",
+        )
+        st.session_state["_hhs_settings_add_previous_name"] = selected_setting
+    st.session_state["hhs_settings_add_variable"] = (
+        hhs_setting_variable_name(selected_setting) if selected_setting else ""
+    )
+    with st.container(key="hhs_settings_controls"):
+        with st.expander("Override", expanded=True):
+            setting_col, variable_col, value_col, add_col = st.columns(
+                [1, 1, 1, 0.22],
+                gap="small",
+                vertical_alignment="bottom",
+            )
+            with setting_col:
+                st.selectbox(
+                    "Setting",
+                    setting_options,
+                    index=0 if setting_options else None,
+                    key="hhs_settings_add_name",
+                    placeholder="setting.name",
+                    accept_new_options=True,
+                    disabled=action_running,
+                )
+            with variable_col:
+                st.text_input(
+                    "Variable",
+                    key="hhs_settings_add_variable",
+                    disabled=True,
+                )
+            with value_col:
+                st.text_input(
+                    "Value",
+                    key="hhs_settings_add_value",
+                    placeholder="value",
+                    disabled=action_running,
+                )
+            with add_col:
+                st.button(
+                    "",
+                    key="hhs_settings_add_button",
+                    help="Override",
+                    on_click=request_hhs_settings_add,
+                    disabled=action_running,
+                    width="stretch",
+                )
+
+
+def render_hhs_settings_table(
+    rows: list[dict[str, str]],
+    action_running: bool,
+) -> list[str]:
+    """Render overridden system settings with the setup table component style."""
+    settings = [row.get("Setting", "") for row in rows]
+    selected_values = render_markdown_table(
+        "System Overrides",
+        settings,
+        settings,
+        [False for _row in rows],
+        hhs_settings_table_key(),
+        disabled=action_running,
+        variable_values=[row.get("Variable", "") for row in rows],
+        extra_columns={"Value": [row.get("Value", "") for row in rows]},
+    )
+    return [
+        setting
+        for setting, selected in zip(settings, selected_values, strict=True)
+        if selected and setting
+    ]
+
+
+def render_hhs_settings_actions(
+    selected_settings: list[str],
+    rows: list[dict[str, str]],
+    action_running: bool,
+) -> None:
+    """Render centered HHS Settings mutation buttons."""
+    with st.container(key="hhs_settings_action_buttons"):
+        left, delete_col, truncate_col, right = st.columns(
+            [1, 0.18, 0.18, 1],
+            gap="small",
+            vertical_alignment="center",
+        )
+        del left, right
+        with delete_col:
+            st.button(
+                " Delete",
+                key="hhs_settings_delete_button",
+                help="Delete",
+                on_click=request_hhs_settings_delete,
+                args=(selected_settings,),
+                disabled=action_running or not selected_settings,
+                width="stretch",
+            )
+        with truncate_col:
+            st.button(
+                " Truncate",
+                key="hhs_settings_truncate_button",
+                help="Truncate",
+                on_click=request_hhs_settings_truncate,
+                disabled=action_running or not rows,
+                width="stretch",
+            )
+
+
+def render_hhs_settings_title() -> None:
+    """Render the HomeSetup Settings page title."""
+    st.markdown(
+        """
+        <section class="hhs-view-heading hhs-view-heading--direct-content">
+          <h2> Settings</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_hhs_settings_panel() -> None:
+    """Render the HomeSetup Settings manager panel."""
+    execute_pending_hhs_settings_action()
+    render_background_job_status(HHS_SETTINGS_ACTION_JOB)
+    render_hhs_settings_title()
+    result = render_cached_command_result(
+        build_hhs_settings_list_command(),
+        "Loading overridden system settings",
+        "hhs_settings",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load overridden system settings.",
+    )
+    if result is None:
+        return
+    if result.returncode != 0:
+        st.error(
+            clean_command_status_message(
+                result.stderr or result.stdout or "Unable to load overridden system settings."
+            )
+        )
+        return
+
+    action_running = background_job_is_running(HHS_SETTINGS_ACTION_JOB)
+    render_hhs_settings_controls(action_running)
+    rows = parse_hhs_settings_list(result.stdout)
+    selected_settings = render_hhs_settings_table(rows, action_running)
+    render_hhs_settings_actions(selected_settings, rows, action_running)
+
+
 def request_hhs_starship_preset_apply() -> None:
     """Queue applying the selected Starship preset."""
     preset = str(st.session_state.get("hhs_starship_preset", "")).strip()
@@ -17400,8 +17947,18 @@ def render_hhs_starship_title() -> None:
 def normalize_hhs_starship_preset_state(presets: list[str]) -> None:
     """Keep the selected Starship preset inside the available preset list."""
     selected_preset = str(st.session_state.get("hhs_starship_preset", "")).strip()
-    if presets and selected_preset not in presets:
+    if selected_preset in presets:
+        return
+
+    current_preset = str(
+        st.session_state.get(hhs_ui_constants.HHS_STARSHIP_CURRENT_PRESET_KEY, "")
+    ).strip()
+    if current_preset in presets:
+        st.session_state["hhs_starship_preset"] = current_preset
+    elif presets:
         st.session_state["hhs_starship_preset"] = presets[0]
+    else:
+        st.session_state["hhs_starship_preset"] = ""
 
 
 def display_hhs_starship_config_path(config_path: str, hhs_dir: str) -> str:
@@ -17593,6 +18150,8 @@ def render_hhs_view() -> None:
         render_hhs_setup_panel()
     elif hhs_view == "STARSHIP":
         render_hhs_starship_panel()
+    elif hhs_view == "SETTINGS":
+        render_hhs_settings_panel()
     else:
         render_hhs_placeholder_panel(hhs_view)
 
@@ -20854,6 +21413,7 @@ def main() -> None:
     st.session_state.setdefault("home_tool_tldr_execute_pending", None)
     st.session_state.setdefault("config_action_execute_pending", None)
     st.session_state.setdefault("hhs_setup_action_execute_pending", None)
+    st.session_state.setdefault("hhs_settings_action_execute_pending", None)
     st.session_state.setdefault("hhs_starship_action_execute_pending", None)
     st.session_state.setdefault("docker_action_execute_pending", None)
     st.session_state.setdefault("config_view", "ENV")
