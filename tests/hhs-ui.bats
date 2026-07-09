@@ -1264,7 +1264,8 @@ from pathlib import Path
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 css = Path(sys.argv[2]).read_text(encoding="utf-8")
 render_body = source.split("def render_markdown_table", 1)[1].split("\ndef ", 1)[0]
-assert "height=markdown_table_editor_height(len(items))" in render_body
+assert "min_row_count: int = 0" in render_body
+assert "height=markdown_table_editor_height(max(len(items), min_row_count))" in render_body
 assert "40 + (len(items) + 1) * 44" not in render_body
 assert "--hhs-markdown-table-max-height: 360px" in css
 assert "max-height: var(--hhs-markdown-table-max-height) !important" in css
@@ -1301,6 +1302,308 @@ assert [row["Setting"] for row in rows] == [
     "hhs.vault.file",
 ]
 assert all(row["Setting"] and row["Variable"] for row in rows)
+PY
+  assert_success
+}
+
+@test "when rendering HHS Firebase then configurations form should load file values" {
+  run python3 - "${ui_file}" "${css_file}" <<'PY'
+import posixpath
+import re
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+css = Path(sys.argv[2]).read_text(encoding="utf-8")
+assert 'elif hhs_view == "Firebase":' in source
+assert "render_hhs_firebase_panel()" in source
+assert 'HHS_FIREBASE_CONFIG_FILE:-${HHS_DIR}/firebase.properties' in source
+assert 'with st.expander("Configurations", expanded=True):' in source
+assert '"Firebase": " Firebase"' in Path(sys.argv[1]).with_name("constants.py").read_text(encoding="utf-8")
+assert "<h2> Firebase</h2>" in source
+assert ".st-key-hhs_firebase_configurations" in css
+assert "gap: var(--hhs-element-std-gap) !important" in css
+assert "HHS_FIREBASE_CONFIG_FILE\\\\t%s" in source
+assert "STARSHIP_CONFIG\\\\t%s" in source
+
+render_body = source.split("def render_hhs_firebase_configurations", 1)[1].split("\ndef ", 1)[0]
+assert 'st.text_input(' in render_body
+assert 'st.text_input(\n                        label,' in render_body
+assert "placeholder=placeholder" in render_body
+assert "max_chars" not in render_body
+assert "on_change=mark_hhs_firebase_form_dirty" in render_body
+assert 'key="hhs_firebase_save_button"' in render_body
+assert 'key="hhs_firebase_cancel_button"' in render_body
+assert "        render_hhs_firebase_aliases_table(action_running)" in render_body
+assert "        render_hhs_firebase_aliases_actions(action_running)" in render_body
+assert "            render_hhs_firebase_aliases_table(action_running)" not in render_body
+assert "            render_hhs_firebase_aliases_actions(action_running)" not in render_body
+
+aliases_table_body = source.split("def render_hhs_firebase_aliases_table", 1)[1].split("\ndef ", 1)[0]
+assert "render_markdown_table(" in aliases_table_body
+assert '"Firebase Aliases"' in aliases_table_body
+assert 'item_column_label="Database"' in aliases_table_body
+assert 'variable_column_label="Group"' in aliases_table_body
+assert '"Alias": []' in aliases_table_body
+assert '"Count": []' in aliases_table_body
+assert "min_row_count=4" in aliases_table_body
+
+aliases_actions_body = source.split("def render_hhs_firebase_aliases_actions", 1)[1].split("\ndef ", 1)[0]
+assert "[1, 0.28, 0.28, 1]" in aliases_actions_body
+assert '" Upload"' in aliases_actions_body
+assert 'key="hhs_firebase_alias_upload_button"' in aliases_actions_body
+assert '" Download"' in aliases_actions_body
+assert 'key="hhs_firebase_alias_download_button"' in aliases_actions_body
+
+for label, property_name, fallback_property_name, state_key, placeholder in (
+    ("UID", "UID", "hhs.firebase.user.uid", "hhs_firebase_uid", "Firebase auth UID"),
+    (
+        "PROJECT_ID",
+        "PROJECT_ID",
+        "hhs.firebase.project.id",
+        "hhs_firebase_project_id",
+        "Firebase project ID",
+    ),
+    (
+        "EMAIL",
+        "EMAIL",
+        "hhs.firebase.username",
+        "hhs_firebase_email",
+        "Firebase account email",
+    ),
+    (
+        "DATABASE",
+        "DATABASE",
+        "hhs.firebase.database",
+        "hhs_firebase_database",
+        "Realtime database name",
+    ),
+):
+    assert label in source
+    assert property_name in source
+    assert fallback_property_name in source
+    assert state_key in source
+    assert placeholder in source
+
+namespace = {
+    "HHS_CONFIG_ENV_OUTPUT_MARKER": "__HHS_CONFIG_ENV__",
+    "STARSHIP_CACHE_OUTPUT_MARKER": "__HHS_STARSHIP_CACHE__",
+    "STARSHIP_CONFIG_OUTPUT_MARKER": "__HHS_STARSHIP_CONFIG__",
+    "STARSHIP_HHS_DIR_OUTPUT_MARKER": "__HHS_STARSHIP_HHS_DIR__",
+    "STARSHIP_PRESETS_OUTPUT_MARKER": "__HHS_STARSHIP_PRESETS__",
+    "STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER": "__HHS_STARSHIP_CONFIG_CONTENT__",
+    "STARSHIP_END_OUTPUT_MARKER": "__HHS_STARSHIP_END__",
+    "FIREBASE_CONFIG_FILE_OUTPUT_MARKER": "__HHS_FIREBASE_CONFIG_FILE__",
+    "FIREBASE_CONFIG_CONTENT_OUTPUT_MARKER": "__HHS_FIREBASE_CONFIG_CONTENT__",
+    "FIREBASE_CONFIG_END_OUTPUT_MARKER": "__HHS_FIREBASE_END__",
+    "HHS_FIREBASE_FIELDS": (
+        ("UID", "UID", "hhs.firebase.user.uid", "hhs_firebase_uid", "Firebase auth UID"),
+        (
+            "PROJECT_ID",
+            "PROJECT_ID",
+            "hhs.firebase.project.id",
+            "hhs_firebase_project_id",
+            "Firebase project ID",
+        ),
+        (
+            "EMAIL",
+            "EMAIL",
+            "hhs.firebase.username",
+            "hhs_firebase_email",
+            "Firebase account email",
+        ),
+        (
+            "DATABASE",
+            "DATABASE",
+            "hhs.firebase.database",
+            "hhs_firebase_database",
+            "Realtime database name",
+        ),
+    ),
+    "re": re,
+    "strip_ansi": lambda value: value,
+}
+parse_start = source.index("def parse_hhs_config_environment(")
+parse_end = source.index("def parse_hhs_services", parse_start)
+exec("from __future__ import annotations\n" + source[parse_start:parse_end], namespace)
+
+display_namespace = {
+    "Path": Path,
+    "posixpath": posixpath,
+    "homesetup_config_dir": lambda: Path("/home/user/.config/hhs"),
+    "homesetup_home": lambda: Path("/home/user/HomeSetup"),
+}
+display_start = source.index("def hhs_config_path_root_values(")
+display_end = source.index("def render_hhs_starship_controls", display_start)
+exec("from __future__ import annotations\n" + source[display_start:display_end], display_namespace)
+
+environment = {
+    "HOME": "/home/user",
+    "HHS_HOME": "/home/user/HomeSetup",
+    "HHS_DIR": "/home/user/.config/hhs",
+}
+display_value = display_namespace["display_hhs_config_path"](
+    "/home/user/.config/hhs/firebase.properties",
+    environment,
+)
+assert display_value == "$HHS_DIR/firebase.properties"
+starship_value = display_namespace["display_hhs_config_path"](
+    "/home/user/.config/starship.toml",
+    environment,
+)
+assert starship_value == "$HOME/.config/starship.toml"
+hhs_home_value = display_namespace["display_hhs_config_path"](
+    "/home/user/HomeSetup/bin/starship.toml",
+    environment,
+)
+assert hhs_home_value == "$HHS_HOME/bin/starship.toml"
+
+starship_output = """__HHS_STARSHIP_CACHE__
+/home/user/.cache/starship
+__HHS_STARSHIP_CONFIG__
+/home/user/.config/starship.toml
+__HHS_STARSHIP_HHS_DIR__
+/home/user/.config/hhs
+__HHS_CONFIG_ENV__
+HHS_DIR	/home/user/.config/hhs
+HOME	/home/user
+HHS_HOME	/home/user/HomeSetup
+STARSHIP_CONFIG	/home/user/.config/starship.toml
+__HHS_STARSHIP_PRESETS__
+hhs-starship.toml
+__HHS_STARSHIP_CONFIG_CONTENT__
+format = "$all"
+__HHS_STARSHIP_END__
+"""
+starship_info = namespace["parse_hhs_starship_info"](starship_output)
+assert starship_info["environment"]["STARSHIP_CONFIG"] == "/home/user/.config/starship.toml"
+
+output = """__HHS_FIREBASE_CONFIG_FILE__
+/home/user/.config/hhs/firebase.properties
+__HHS_CONFIG_ENV__
+HHS_DIR	/home/user/.config/hhs
+HOME	/home/user
+HHS_HOME	/home/user/HomeSetup
+HHS_FIREBASE_CONFIG_FILE	/home/user/.config/hhs/firebase.properties
+__HHS_FIREBASE_CONFIG_CONTENT__
+UID=abc123
+PROJECT_ID=homesetup-37970
+EMAIL=yorevs@gmail.com
+DATABASE=homesetup
+__HHS_FIREBASE_END__
+"""
+info = namespace["parse_hhs_firebase_info"](output)
+assert info["config_file"] == "/home/user/.config/hhs/firebase.properties"
+assert info["environment"]["HHS_FIREBASE_CONFIG_FILE"] == "/home/user/.config/hhs/firebase.properties"
+assert info["values"]["UID"] == "abc123"
+assert info["values"]["PROJECT_ID"] == "homesetup-37970"
+assert info["values"]["EMAIL"] == "yorevs@gmail.com"
+assert info["values"]["DATABASE"] == "homesetup"
+
+legacy_output = """__HHS_FIREBASE_CONFIG_FILE__
+/tmp/firebase.properties
+__HHS_FIREBASE_CONFIG_CONTENT__
+hhs.firebase.user.uid = legacy-uid
+hhs.firebase.project.id = legacy-project
+hhs.firebase.username = legacy@example.com
+hhs.firebase.database = legacy-database
+__HHS_FIREBASE_END__
+"""
+legacy_info = namespace["parse_hhs_firebase_info"](legacy_output)
+assert legacy_info["values"]["UID"] == "legacy-uid"
+assert legacy_info["values"]["PROJECT_ID"] == "legacy-project"
+assert legacy_info["values"]["EMAIL"] == "legacy@example.com"
+assert legacy_info["values"]["DATABASE"] == "legacy-database"
+
+content = namespace["render_hhs_firebase_config_content"](
+    "UID=old\nother.setting = keep\n",
+    {
+        "UID": "new",
+        "PROJECT_ID": "project",
+        "EMAIL": "user@example.com",
+        "DATABASE": "database",
+    },
+)
+assert "UID=new" in content
+assert "other.setting = keep" in content
+assert "PROJECT_ID=project" in content
+assert "EMAIL=user@example.com" in content
+assert "DATABASE=database" in content
+
+legacy_content = namespace["render_hhs_firebase_config_content"](
+    "hhs.firebase.user.uid = old\n",
+    {
+        "UID": "new",
+        "PROJECT_ID": "project",
+        "EMAIL": "user@example.com",
+        "DATABASE": "database",
+    },
+)
+assert "hhs.firebase.user.uid = new" in legacy_content
+assert "UID=new" in legacy_content
+
+class FakeStreamlit:
+    session_state = {}
+
+sync_namespace = {
+    "HHS_FIREBASE_FIELDS": namespace["HHS_FIREBASE_FIELDS"],
+    "json": __import__("json"),
+    "normalize_hhs_firebase_value": namespace["normalize_hhs_firebase_value"],
+    "st": FakeStreamlit(),
+}
+sync_start = source.index("def hhs_firebase_info_token(")
+sync_end = source.index("def request_hhs_firebase_save", sync_start)
+exec("from __future__ import annotations\n" + source[sync_start:sync_end], sync_namespace)
+
+sync_info = {
+    "config_file": "/home/user/.config/hhs/firebase.properties",
+    "content": "UID=abc123\nPROJECT_ID=homesetup-37970\nEMAIL=yorevs@gmail.com\nDATABASE=homesetup\n",
+    "values": {
+        "UID": "abc123",
+        "PROJECT_ID": "homesetup-37970",
+        "EMAIL": "yorevs@gmail.com",
+        "DATABASE": "homesetup",
+    },
+}
+session_state = sync_namespace["st"].session_state
+sync_namespace["sync_hhs_firebase_form_state"](sync_info)
+assert session_state["hhs_firebase_uid"] == "abc123"
+assert session_state["hhs_firebase_project_id"] == "homesetup-37970"
+assert session_state["hhs_firebase_email"] == "yorevs@gmail.com"
+assert session_state["hhs_firebase_database"] == "homesetup"
+assert session_state["_hhs_firebase_form_dirty"] is False
+
+for _label, _property_name, _fallback, state_key, _placeholder in namespace[
+    "HHS_FIREBASE_FIELDS"
+]:
+    session_state.pop(state_key)
+sync_namespace["sync_hhs_firebase_form_state"](sync_info)
+assert session_state["hhs_firebase_uid"] == "abc123"
+assert session_state["hhs_firebase_project_id"] == "homesetup-37970"
+assert session_state["hhs_firebase_email"] == "yorevs@gmail.com"
+assert session_state["hhs_firebase_database"] == "homesetup"
+
+for _label, _property_name, _fallback, state_key, _placeholder in namespace[
+    "HHS_FIREBASE_FIELDS"
+]:
+    session_state[state_key] = ""
+session_state["_hhs_firebase_form_dirty"] = False
+sync_namespace["sync_hhs_firebase_form_state"](sync_info)
+assert session_state["hhs_firebase_uid"] == "abc123"
+assert session_state["hhs_firebase_project_id"] == "homesetup-37970"
+assert session_state["hhs_firebase_email"] == "yorevs@gmail.com"
+assert session_state["hhs_firebase_database"] == "homesetup"
+
+for _label, _property_name, _fallback, state_key, _placeholder in namespace[
+    "HHS_FIREBASE_FIELDS"
+]:
+    session_state[state_key] = ""
+session_state["_hhs_firebase_form_dirty"] = True
+sync_namespace["sync_hhs_firebase_form_state"](sync_info)
+assert session_state["hhs_firebase_uid"] == ""
+assert session_state["hhs_firebase_project_id"] == ""
+assert session_state["hhs_firebase_email"] == ""
+assert session_state["hhs_firebase_database"] == ""
 PY
   assert_success
 }
@@ -3415,13 +3718,17 @@ body = source.split("def render_search_filters", 1)[1].split("\ndef ", 1)[0]
 assert "render_table_filter_controls" not in body
 assert "return selected_filter" not in body
 assert "[1.15, 3.0, 0.22, 0.22, 0.22, 0.22, 0.22]" in body
+assert "[1.15, 3.0, 0.22, 0.22, 0.22, 0.22]" in body
 assert 'vertical_alignment="center"' in body
 assert "key=\"search_filter\"" in body
 assert "key=\"search_other_filter\"" in body
+assert "if strings_selected:" in body
+assert "with replace_column:" in body
+assert "disabled=not strings_selected" not in body
 for expected_toggle in (
     '"search_replace",\n'
     '                "﯒",\n'
-    '                "Replace matches (-r)"',
+    '                "Show replacement controls"',
     '"search_ignore_case", "Aa", "Ignore case (-i)"',
     '"search_words",\n'
     '                "",\n'
@@ -3518,6 +3825,21 @@ PY
   run grep -q 'placeholder="Replacement string"' "${ui_file}"
   assert_success
 
+  run grep -q 'key="search_replace_submit_button"' "${ui_file}"
+  assert_success
+
+  run grep -q '""' "${ui_file}"
+  assert_success
+
+  run grep -q 'help="Search and Replace"' "${ui_file}"
+  assert_success
+
+  run grep -q 'args=(True,)' "${ui_file}"
+  assert_success
+
+  run grep -q '\[1.15, 6.22, 0.22\]' "${ui_file}"
+  assert_success
+
   run grep -q '\[5.0, 0.85\], vertical_alignment="center"' "${ui_file}"
   assert_failure
 
@@ -3544,6 +3866,16 @@ source = Path(sys.argv[1]).read_text(encoding="utf-8")
 body = source.split("def render_combobox_vt100_shortcuts_script", 1)[1].split("\ndef ", 1)[0]
 assert "parentWindow.__hhsComboboxVt100Cleanup" in body
 assert 'node.closest(\'[data-baseweb="select"]\')' in body
+assert 'node.closest(".st-key-search_query")' in body
+assert 'event.key === "Enter"' in body
+assert "!event.ctrlKey" in body
+assert "!event.metaKey" in body
+assert "!event.altKey" in body
+assert "selectPendingSearchTermAddOption(node)" in body
+assert 'lowerText.startsWith("add:")' in body
+assert "lowerText.includes(lowerValue)" in body
+assert 'doc.querySelectorAll(optionSelectors.join(","))' in body.replace("\\n", "")
+assert 'new MouseEvent(eventName' in body
 assert "event.ctrlKey || event.metaKey" in body
 assert 'case "a":' in body
 assert 'case "e":' in body
@@ -3743,6 +4075,8 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 submit_body = source.split("def submit_search_query", 1)[1].split("\ndef ", 1)[0]
+assert "def submit_search_query(replace_requested: bool = False)" in source
+assert "replace = bool(replace_requested) and search_type == \"Strings\" and bool(" in submit_body
 assert 'st.session_state["search_result_ignore_case"] = bool(' in submit_body
 assert 'st.session_state.get("search_ignore_case", False)' in submit_body
 assert 'st.session_state["search_result_words"] = bool(' in submit_body
@@ -3751,11 +4085,14 @@ assert 'st.session_state["search_result_binary"] = bool(' in submit_body
 assert 'st.session_state.get("search_binary", False)' in submit_body
 assert 'st.session_state["search_result_replace"] = replace' in submit_body
 assert 'st.session_state["search_result_replacement"] = replacement' in submit_body
+assert 'st.session_state["_search_replace_status_cache_key"] = ""' in submit_body
 assert 'push_floating_status("Enter replacement text before replacing.", "warn")' in submit_body
 
 results_body = source.split("def render_search_results", 1)[1].split("\ndef ", 1)[0]
 assert "search_filter = selected_search_result_filter()" in results_body
 assert "text_filter = selected_search_result_text_filter()" in results_body
+assert "replaced_count = len(rows)" in results_body
+assert "push_search_replace_status(cache_key, replaced_count)" in results_body
 assert (
     "build_hhs_search_command(\n"
     "        search_type, query, search_path, ignore_case, words, binary, replace, replacement"
@@ -4060,6 +4397,9 @@ PY
   run grep -q '.st-key-search_replace_controls' "${css_file}"
   assert_success
 
+  run grep -q '.st-key-search_replace_submit_button button' "${css_file}"
+  assert_success
+
   run grep -q '.hhs-search-replace-label' "${css_file}"
   assert_success
 
@@ -4106,6 +4446,9 @@ PY
   assert_success
 
   run grep -q 'grid-template-columns: max-content minmax(0, 1fr) 2rem 2rem 2rem 2rem' "${css_file}"
+  assert_success
+
+  run grep -q ':has(> div\[data-testid="stColumn"\]:nth-child(7))' "${css_file}"
   assert_success
 
   run grep -q 'grid-column: 2' "${css_file}"
@@ -11687,6 +12030,45 @@ namespace["submit_search_query"]()
 assert namespace["st"].session_state["search_result_query"] == "homeselect"
 assert namespace["st"].session_state["search_result_path"] == "/srv/homeselect"
 assert deleted_cache_tags[-1] == "search"
+namespace["st"].session_state["search_query"] = "needle"
+namespace["st"].session_state["search_path"] = "/srv/homeselect"
+namespace["st"].session_state["search_type"] = "Strings"
+namespace["st"].session_state["search_replace"] = True
+namespace["st"].session_state["search_replacement"] = "replacement value"
+namespace["submit_search_query"]()
+assert namespace["st"].session_state["search_result_query"] == "needle"
+assert namespace["st"].session_state["search_result_replace"] is False
+assert namespace["st"].session_state["search_result_replacement"] == ""
+normal_result_command = namespace["build_hhs_search_command"](
+    namespace["st"].session_state["search_result_type"],
+    namespace["st"].session_state["search_result_query"],
+    namespace["st"].session_state["search_result_path"],
+    namespace["st"].session_state["search_result_ignore_case"],
+    namespace["st"].session_state["search_result_words"],
+    namespace["st"].session_state["search_result_binary"],
+    namespace["st"].session_state["search_result_replace"],
+    namespace["st"].session_state["search_result_replacement"],
+)
+assert " -r " not in normal_result_command
+namespace["submit_search_query"](True)
+assert namespace["st"].session_state["search_result_query"] == "needle"
+assert namespace["st"].session_state["search_result_replace"] is True
+assert namespace["st"].session_state["search_result_replacement"] == "replacement value"
+replace_result_command = namespace["build_hhs_search_command"](
+    namespace["st"].session_state["search_result_type"],
+    namespace["st"].session_state["search_result_query"],
+    namespace["st"].session_state["search_result_path"],
+    namespace["st"].session_state["search_result_ignore_case"],
+    namespace["st"].session_state["search_result_words"],
+    namespace["st"].session_state["search_result_binary"],
+    namespace["st"].session_state["search_result_replace"],
+    namespace["st"].session_state["search_result_replacement"],
+)
+assert " -r 'replacement value' 'needle'" in replace_result_command
+namespace["st"].session_state["search_replacement"] = ""
+statuses.clear()
+namespace["submit_search_query"](True)
+assert statuses[-1] == ("Enter replacement text before replacing.", "warn")
 assert namespace["normalize_search_terms"](
     ["admin", " saridon ", "admin", "", "root"],
     "needle",
@@ -11783,13 +12165,22 @@ assert "stat -c %s" in files_command
 assert '""|Searching\\ for*) ;;' in files_command
 assert "__hhs_search_dir '/tmp/search root' '*docs*'" in folders_command
 assert "__HHS_SEARCH_RESULT__" in folders_command
-assert strings_command.endswith("__hhs_search_string '/tmp/search root' 'needle value'")
+assert strings_command.endswith("__hhs_search_string '/tmp/search root' 'needle value' '*'")
 assert strings_options_command.endswith(
-    "__hhs_search_string '/tmp/search root' -i -w -b 'needle value'"
+    "__hhs_search_string '/tmp/search root' -i -w -b 'needle value' '*'"
 )
 assert strings_replace_command.endswith(
-    "__hhs_search_string '/tmp/search root' -i -b -r 'replacement value' 'needle value'"
+    "__hhs_search_string '/tmp/search root' -i -b -r 'replacement value' 'needle value' '*'"
 )
+assert namespace["search_replace_status_message"](0) == "0 entries replaced"
+assert namespace["search_replace_status_message"](1) == "1 entry replaced"
+assert namespace["search_replace_status_message"](2) == "2 entries replaced"
+statuses.clear()
+namespace["st"].session_state.pop("_search_replace_status_cache_key", None)
+namespace["push_search_replace_status"]("replace-cache", 2)
+assert statuses == [("2 entries replaced", "info")]
+namespace["push_search_replace_status"]("replace-cache", 3)
+assert statuses == [("2 entries replaced", "info")]
 assert '__hhs_search_file "${HOME:-.}"' in home_files_command
 assert '__hhs_search_file "${HOME:-.}"/' in home_child_command
 assert "'Project Files'" in home_child_command

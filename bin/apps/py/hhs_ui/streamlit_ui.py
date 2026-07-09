@@ -278,6 +278,7 @@ CONFIG_ACTION_JOB = "config_action"
 HHS_SETUP_ACTION_JOB = "hhs_setup_action"
 HHS_SETTINGS_ACTION_JOB = "hhs_settings_action"
 HHS_STARSHIP_ACTION_JOB = "hhs_starship_action"
+HHS_FIREBASE_ACTION_JOB = "hhs_firebase_action"
 DOCKER_ACTION_JOB = "docker_action"
 ALIAS_LIST_JOB = "alias_list"
 SERVICE_LIST_JOB = "service_list"
@@ -322,12 +323,46 @@ HHS_SETUP_SETTINGS = (
     "hhs_verbose_logs",
     "hhs_ollama_ai_autostart",
 )
+HHS_FIREBASE_FIELDS = (
+    (
+        "UID",
+        "UID",
+        "hhs.firebase.user.uid",
+        "hhs_firebase_uid",
+        "Firebase auth UID",
+    ),
+    (
+        "PROJECT_ID",
+        "PROJECT_ID",
+        "hhs.firebase.project.id",
+        "hhs_firebase_project_id",
+        "Firebase project ID",
+    ),
+    (
+        "EMAIL",
+        "EMAIL",
+        "hhs.firebase.username",
+        "hhs_firebase_email",
+        "Firebase account email",
+    ),
+    (
+        "DATABASE",
+        "DATABASE",
+        "hhs.firebase.database",
+        "hhs_firebase_database",
+        "Realtime database name",
+    ),
+)
 STARSHIP_CACHE_OUTPUT_MARKER = "__HHS_STARSHIP_CACHE__"
 STARSHIP_CONFIG_OUTPUT_MARKER = "__HHS_STARSHIP_CONFIG__"
 STARSHIP_HHS_DIR_OUTPUT_MARKER = "__HHS_STARSHIP_HHS_DIR__"
 STARSHIP_PRESETS_OUTPUT_MARKER = "__HHS_STARSHIP_PRESETS__"
 STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER = "__HHS_STARSHIP_CONFIG_CONTENT__"
 STARSHIP_END_OUTPUT_MARKER = "__HHS_STARSHIP_END__"
+HHS_CONFIG_ENV_OUTPUT_MARKER = "__HHS_CONFIG_ENV__"
+FIREBASE_CONFIG_FILE_OUTPUT_MARKER = "__HHS_FIREBASE_CONFIG_FILE__"
+FIREBASE_CONFIG_CONTENT_OUTPUT_MARKER = "__HHS_FIREBASE_CONFIG_CONTENT__"
+FIREBASE_CONFIG_END_OUTPUT_MARKER = "__HHS_FIREBASE_END__"
 COMMAND_PRELOADER_BUS = "hhs-ui-command-preloader"
 COMMAND_PRELOADER_START_EVENT = "command:start"
 COMMAND_PRELOADER_FINISH_EVENT = "command:finish"
@@ -352,6 +387,7 @@ HOST_SWITCH_BACKGROUND_JOBS = (
     SEARCH_COMMAND_JOB,
     SEARCH_OPEN_JOB,
     CONFIG_ACTION_JOB,
+    HHS_FIREBASE_ACTION_JOB,
     DOCKER_ACTION_JOB,
     FOOTER_VERSION_JOB,
     HOME_TOOL_ACTION_JOB,
@@ -374,6 +410,7 @@ CACHE_CLEAR_BACKGROUND_JOBS = (
     SEARCH_COMMAND_JOB,
     SEARCH_OPEN_JOB,
     CONFIG_ACTION_JOB,
+    HHS_FIREBASE_ACTION_JOB,
     DOCKER_ACTION_JOB,
     FOOTER_VERSION_JOB,
     HOME_TOOL_ACTION_JOB,
@@ -3603,6 +3640,65 @@ def render_combobox_vt100_shortcuts_script() -> None:
               }
               node.dispatchEvent(inputEvent);
             };
+            const normalizedText = (value) =>
+              String(value || "").replace(/\s+/g, " ").trim();
+            const isVisibleNode = (node) => {
+              if (!node || typeof node.getClientRects !== "function") {
+                return false;
+              }
+              if (node.getClientRects().length === 0) {
+                return false;
+              }
+              const style = parentWindow.getComputedStyle(node);
+              return style.display !== "none" && style.visibility !== "hidden";
+            };
+            const isSearchTermsComboboxInput = (node) =>
+              isEditableComboboxInput(node) &&
+              Boolean(node.closest(".st-key-search_query"));
+            const dispatchMouseEvent = (node, eventName) => {
+              node.dispatchEvent(
+                new MouseEvent(eventName, {
+                  bubbles: true,
+                  cancelable: true,
+                  view: parentWindow,
+                })
+              );
+            };
+            const activateComboboxOption = (option) => {
+              for (const eventName of ["mousedown", "mouseup", "click"]) {
+                dispatchMouseEvent(option, eventName);
+              }
+            };
+            const selectPendingSearchTermAddOption = (node) => {
+              if (!isSearchTermsComboboxInput(node)) {
+                return false;
+              }
+              const value = normalizedText(node.value);
+              if (!value) {
+                return false;
+              }
+              const lowerValue = value.toLowerCase();
+              const optionSelectors = [
+                '[role="option"]',
+                '[data-baseweb="menu"] li',
+                '[data-baseweb="popover"] li',
+              ];
+              const addOption = Array.from(
+                doc.querySelectorAll(optionSelectors.join(","))
+              ).find((option) => {
+                if (!isVisibleNode(option)) {
+                  return false;
+                }
+                const text = normalizedText(option.textContent);
+                const lowerText = text.toLowerCase();
+                return lowerText.startsWith("add:") && lowerText.includes(lowerValue);
+              });
+              if (!addOption) {
+                return false;
+              }
+              activateComboboxOption(addOption);
+              return true;
+            };
             const selectionState = (node) => {
               const value = String(node.value || "");
               const fallback = value.length;
@@ -3650,10 +3746,24 @@ def render_combobox_vt100_shortcuts_script() -> None:
               return index;
             };
             const onKeydown = (event) => {
+              const node = event.target;
+              if (
+                event.key === "Enter" &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                !event.altKey &&
+                selectPendingSearchTermAddOption(node)
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (typeof event.stopImmediatePropagation === "function") {
+                  event.stopImmediatePropagation();
+                }
+                return;
+              }
               if (!(event.ctrlKey || event.metaKey) || event.altKey) {
                 return;
               }
-              const node = event.target;
               if (!isEditableComboboxInput(node)) {
                 return;
               }
@@ -12253,11 +12363,30 @@ def build_hhs_starship_info_command() -> str:
         + f'printf "%s\\n%s\\n" "{STARSHIP_CACHE_OUTPUT_MARKER}" "${{STARSHIP_CACHE}}"; '
         + f'printf "%s\\n%s\\n" "{STARSHIP_CONFIG_OUTPUT_MARKER}" "${{STARSHIP_CONFIG}}"; '
         + f'printf "%s\\n%s\\n" "{STARSHIP_HHS_DIR_OUTPUT_MARKER}" "${{HHS_DIR}}"; '
+        + f'printf "%s\\n" "{HHS_CONFIG_ENV_OUTPUT_MARKER}"; '
+        + 'printf "HHS_DIR\\t%s\\nHOME\\t%s\\nHHS_HOME\\t%s\\nSTARSHIP_CONFIG\\t%s\\n" '
+        + '"${HHS_DIR}" "${HOME:-}" "${HHS_HOME}" "${STARSHIP_CONFIG}"; '
         + f'printf "%s\\n" "{STARSHIP_PRESETS_OUTPUT_MARKER}"; '
         + 'printf "%s\\n" "${STARSHIP_PRESETS[@]}" | awk \'NF && !seen[$0]++\' | sort; '
         + f'printf "%s\\n" "{STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER}"; '
         + 'cat "${STARSHIP_CONFIG}" 2>/dev/null || true; '
         + f'printf "\\n%s\\n" "{STARSHIP_END_OUTPUT_MARKER}"'
+    )
+
+
+def build_hhs_firebase_info_command() -> str:
+    """Build the Bash command used to read Firebase config file details."""
+    return (
+        build_hhs_env_environment_command()
+        + 'export HHS_FIREBASE_CONFIG_FILE="${HHS_FIREBASE_CONFIG_FILE:-${HHS_DIR}/firebase.properties}"; '
+        + 'config_file="${HHS_FIREBASE_CONFIG_FILE}"; '
+        + f'printf "%s\\n%s\\n" "{FIREBASE_CONFIG_FILE_OUTPUT_MARKER}" "${{config_file}}"; '
+        + f'printf "%s\\n" "{HHS_CONFIG_ENV_OUTPUT_MARKER}"; '
+        + 'printf "HHS_DIR\\t%s\\nHOME\\t%s\\nHHS_HOME\\t%s\\nHHS_FIREBASE_CONFIG_FILE\\t%s\\n" '
+        + '"${HHS_DIR}" "${HOME:-}" "${HHS_HOME}" "${HHS_FIREBASE_CONFIG_FILE}"; '
+        + f'printf "%s\\n" "{FIREBASE_CONFIG_CONTENT_OUTPUT_MARKER}"; '
+        + 'cat "${config_file}" 2>/dev/null || true; '
+        + f'printf "\\n%s\\n" "{FIREBASE_CONFIG_END_OUTPUT_MARKER}"'
     )
 
 
@@ -12387,6 +12516,29 @@ def build_hhs_save_starship_config_command(config_content: str) -> str:
         + "else "
         + 'rm -f "${tmp_config}"; '
         + 'echo "Unable to decode Starship config content." >&2; '
+        + "exit 2; "
+        + "fi"
+    )
+
+
+def build_hhs_save_firebase_config_command(config_content: str) -> str:
+    """Build the Bash command used to save the Firebase config file."""
+    encoded_config = b64encode(config_content.encode("utf-8")).decode("ascii")
+    return (
+        build_hhs_env_environment_command()
+        + f"encoded_config={shlex.quote(encoded_config)}; "
+        + 'export HHS_FIREBASE_CONFIG_FILE="${HHS_FIREBASE_CONFIG_FILE:-${HHS_DIR}/firebase.properties}"; '
+        + 'config_file="${HHS_FIREBASE_CONFIG_FILE}"; '
+        + 'mkdir -p "$(dirname "${config_file}")" || exit 2; '
+        + 'tmp_config="$(mktemp "${TMPDIR:-/tmp}/hhs-firebase-config.XXXXXX")" || exit 2; '
+        + 'if printf "%s" "${encoded_config}" | base64 --decode >"${tmp_config}" 2>/dev/null '
+        + '|| printf "%s" "${encoded_config}" | base64 -d >"${tmp_config}" 2>/dev/null '
+        + '|| printf "%s" "${encoded_config}" | base64 -D >"${tmp_config}" 2>/dev/null; then '
+        + 'mv "${tmp_config}" "${config_file}" || exit 2; '
+        + 'printf "Saved Firebase configuration: %s\\n" "${config_file}"; '
+        + "else "
+        + 'rm -f "${tmp_config}"; '
+        + 'echo "Unable to decode Firebase config content." >&2; '
         + "exit 2; "
         + "fi"
     )
@@ -13784,12 +13936,25 @@ def parse_hhs_settings_list(output: str) -> list[dict[str, str]]:
     return rows
 
 
+def parse_hhs_config_environment(lines: list[str]) -> dict[str, str]:
+    """Parse marked HomeSetup config environment lines into name/value pairs."""
+    values: dict[str, str] = {}
+    for line in "".join(lines).splitlines():
+        if "\t" not in line:
+            continue
+        name, value = line.split("\t", 1)
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            values[name] = value
+    return values
+
+
 def parse_hhs_starship_info(output: str) -> dict[str, object]:
     """Parse marker-delimited Starship info and config output."""
     markers = {
         STARSHIP_CACHE_OUTPUT_MARKER,
         STARSHIP_CONFIG_OUTPUT_MARKER,
         STARSHIP_HHS_DIR_OUTPUT_MARKER,
+        HHS_CONFIG_ENV_OUTPUT_MARKER,
         STARSHIP_PRESETS_OUTPUT_MARKER,
         STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER,
         STARSHIP_END_OUTPUT_MARKER,
@@ -13807,6 +13972,11 @@ def parse_hhs_starship_info(output: str) -> dict[str, object]:
     cache_path = "".join(sections[STARSHIP_CACHE_OUTPUT_MARKER]).strip()
     config_path = "".join(sections[STARSHIP_CONFIG_OUTPUT_MARKER]).strip()
     hhs_dir = "".join(sections[STARSHIP_HHS_DIR_OUTPUT_MARKER]).strip()
+    environment = parse_hhs_config_environment(sections[HHS_CONFIG_ENV_OUTPUT_MARKER])
+    if hhs_dir and "HHS_DIR" not in environment:
+        environment["HHS_DIR"] = hhs_dir
+    if config_path and "STARSHIP_CONFIG" not in environment:
+        environment["STARSHIP_CONFIG"] = config_path
     presets = [
         preset.strip()
         for preset in "".join(sections[STARSHIP_PRESETS_OUTPUT_MARKER]).splitlines()
@@ -13817,9 +13987,129 @@ def parse_hhs_starship_info(output: str) -> dict[str, object]:
         "cache": cache_path,
         "config": config_path,
         "hhs_dir": hhs_dir,
+        "environment": environment,
         "presets": presets,
         "content": config_content.rstrip("\n"),
     }
+
+
+def parse_hhs_properties(content: str) -> dict[str, str]:
+    """Parse simple Java-style property assignments into a dictionary."""
+    properties: dict[str, str] = {}
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";", "[")):
+            continue
+        match = re.match(r"^([^:=\s][^:=]*?)\s*[:=]\s*(.*)$", line)
+        if not match:
+            continue
+        properties[match.group(1).strip()] = match.group(2).strip()
+    return properties
+
+
+def hhs_firebase_config_aliases() -> dict[str, str]:
+    """Return Firebase config file property aliases mapped to canonical keys."""
+    aliases: dict[str, str] = {}
+    for _label, property_name, fallback_property_name, _state_key, _placeholder in (
+        HHS_FIREBASE_FIELDS
+    ):
+        aliases[property_name] = property_name
+        aliases[fallback_property_name] = property_name
+    return aliases
+
+
+def parse_hhs_firebase_info(output: str) -> dict[str, object]:
+    """Parse marker-delimited Firebase config file info."""
+    markers = {
+        FIREBASE_CONFIG_FILE_OUTPUT_MARKER,
+        HHS_CONFIG_ENV_OUTPUT_MARKER,
+        FIREBASE_CONFIG_CONTENT_OUTPUT_MARKER,
+        FIREBASE_CONFIG_END_OUTPUT_MARKER,
+    }
+    sections: dict[str, list[str]] = {marker: [] for marker in markers}
+    current_marker = ""
+    for line in strip_ansi(output).splitlines(keepends=True):
+        clean_line = line.rstrip("\r\n")
+        if clean_line in markers:
+            current_marker = clean_line
+            continue
+        if current_marker and current_marker != FIREBASE_CONFIG_END_OUTPUT_MARKER:
+            sections[current_marker].append(line)
+
+    config_file = "".join(sections[FIREBASE_CONFIG_FILE_OUTPUT_MARKER]).strip()
+    content = "".join(sections[FIREBASE_CONFIG_CONTENT_OUTPUT_MARKER]).rstrip("\n")
+    environment = parse_hhs_config_environment(sections[HHS_CONFIG_ENV_OUTPUT_MARKER])
+    if config_file and "HHS_FIREBASE_CONFIG_FILE" not in environment:
+        environment["HHS_FIREBASE_CONFIG_FILE"] = config_file
+    properties = parse_hhs_properties(content)
+    values = {
+        property_name: properties.get(
+            property_name,
+            properties.get(fallback_property_name, ""),
+        )
+        for _label, property_name, fallback_property_name, _state_key, _placeholder in (
+            HHS_FIREBASE_FIELDS
+        )
+    }
+    return {
+        "config_file": config_file,
+        "environment": environment,
+        "content": content,
+        "values": values,
+    }
+
+
+def normalize_hhs_firebase_value(value: object) -> str:
+    """Return one safe single-line Firebase property value."""
+    return str(value).replace("\r", " ").replace("\n", " ").strip()
+
+
+def render_hhs_firebase_config_content(
+    original_content: str,
+    values: dict[str, str],
+) -> str:
+    """Return Firebase config content with form values merged into it."""
+    remaining_fields = {
+        property_name
+        for _label, property_name, _fallback, _state_key, _placeholder in (
+            HHS_FIREBASE_FIELDS
+        )
+    }
+    config_aliases = hhs_firebase_config_aliases()
+    rendered_lines: list[str] = []
+    property_pattern = re.compile(r"^(\s*)([^:=\s][^:=]*?)(\s*[:=]\s*)(.*)$")
+    for raw_line in original_content.splitlines():
+        match = property_pattern.match(raw_line)
+        if not match:
+            rendered_lines.append(raw_line)
+            continue
+        prefix, property_name, separator, _old_value = match.groups()
+        source_property_name = property_name.strip()
+        canonical_property_name = config_aliases.get(source_property_name)
+        if canonical_property_name not in values:
+            rendered_lines.append(raw_line)
+            continue
+        if source_property_name != canonical_property_name:
+            rendered_lines.append(
+                f"{prefix}{source_property_name}{separator}"
+                f"{normalize_hhs_firebase_value(values[canonical_property_name])}"
+            )
+            continue
+        if canonical_property_name not in remaining_fields:
+            continue
+        rendered_lines.append(
+            f"{prefix}{source_property_name}{separator}"
+            f"{normalize_hhs_firebase_value(values[canonical_property_name])}"
+        )
+        remaining_fields.remove(canonical_property_name)
+
+    for _label, property_name, _fallback, _state_key, _placeholder in HHS_FIREBASE_FIELDS:
+        if property_name in remaining_fields:
+            rendered_lines.append(
+                f"{property_name}={normalize_hhs_firebase_value(values.get(property_name, ''))}"
+            )
+
+    return "\n".join(rendered_lines).rstrip("\n") + "\n"
 
 
 def parse_hhs_services(output: str) -> list[dict[str, str]]:
@@ -15360,6 +15650,67 @@ def execute_pending_hhs_starship_action() -> None:
     complete_hhs_starship_action_job()
 
 
+def queue_hhs_firebase_action(
+    command: str,
+    description: str,
+    metadata: dict[str, object],
+) -> bool:
+    """Queue a HomeSetup Firebase config mutation for background execution."""
+    st.session_state["hhs_firebase_action_execute_pending"] = {
+        **metadata,
+        "command": command,
+        "description": description,
+    }
+    save_ui_state()
+    return True
+
+
+def start_pending_hhs_firebase_action() -> None:
+    """Start a queued HomeSetup Firebase action background job, when present."""
+    pending = st.session_state.pop("hhs_firebase_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        HHS_FIREBASE_ACTION_JOB,
+        command,
+        description,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        pending,
+        "Another Firebase action is already running.",
+    )
+    if not started:
+        st.session_state["hhs_firebase_action_execute_pending"] = pending
+
+
+def complete_hhs_firebase_action_job() -> None:
+    """Complete a HomeSetup Firebase action and refresh config data."""
+    completed = background_job_result(HHS_FIREBASE_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    if result.returncode == 0:
+        cache_delete_tag("hhs_firebase")
+        st.session_state.pop("_hhs_firebase_loaded_token", None)
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+    if result.returncode == 0:
+        fallback = str(metadata.get("success_fallback", "Firebase updated."))
+        push_floating_status(status_message or fallback, "info")
+    else:
+        fallback = str(metadata.get("error_fallback", "Firebase update failed."))
+        push_floating_status(status_message or fallback, "error")
+    save_ui_state()
+
+
+def execute_pending_hhs_firebase_action() -> None:
+    """Start or complete the current HomeSetup Firebase action."""
+    start_pending_hhs_firebase_action()
+    complete_hhs_firebase_action_job()
+
+
 def apply_selected_path_value(
     old_path: str,
     new_path: str,
@@ -16485,6 +16836,7 @@ def complete_background_action_jobs() -> None:
     execute_pending_hhs_setup_action()
     execute_pending_hhs_settings_action()
     execute_pending_hhs_starship_action()
+    execute_pending_hhs_firebase_action()
     execute_pending_docker_action()
     execute_pending_service_action()
     execute_pending_monitor_process_action()
@@ -17505,6 +17857,7 @@ def render_markdown_table(
     item_column_label: str = "Setting",
     variable_values: list[str] | None = None,
     extra_columns: dict[str, list[str]] | None = None,
+    min_row_count: int = 0,
 ) -> list[bool]:
     """Render a reusable checkbox markdown table and return selected values."""
     if len(items) != len(values) or len(items) != len(headers):
@@ -17611,7 +17964,7 @@ def render_markdown_table(
                 variable_column_label,
                 *extra_column_labels,
             ],
-            height=markdown_table_editor_height(len(items)),
+            height=markdown_table_editor_height(max(len(items), min_row_count)),
             disabled=(
                 [variable_column_label, item_column_label, *extra_column_labels]
                 if not disabled
@@ -18029,20 +18382,42 @@ def normalize_hhs_starship_preset_state(presets: list[str]) -> None:
         st.session_state["hhs_starship_preset"] = ""
 
 
-def display_hhs_starship_config_path(config_path: str, hhs_dir: str) -> str:
-    """Return a Starship config path display value rooted at $HHS_DIR when possible."""
+def hhs_config_path_root_values(
+    environment_values: dict[str, str],
+) -> list[tuple[str, str]]:
+    """Return configured HomeSetup path roots for display-only abbreviation."""
+    fallback_values = {
+        "HHS_DIR": str(homesetup_config_dir()),
+        "HHS_HOME": str(homesetup_home()),
+        "HOME": str(Path.home()),
+    }
+    roots: list[tuple[str, str]] = []
+    for name in ("HHS_DIR", "HHS_HOME", "HOME"):
+        raw_path = str(environment_values.get(name, "") or fallback_values[name])
+        clean_path = raw_path.strip().rstrip("/")
+        if clean_path and clean_path.startswith("/"):
+            roots.append((name, posixpath.normpath(clean_path)))
+    return sorted(roots, key=lambda item: len(item[1]), reverse=True)
+
+
+def display_hhs_config_path(
+    config_path: str,
+    environment_values: dict[str, str],
+) -> str:
+    """Return a config path display value rooted at known HomeSetup variables."""
     clean_config_path = config_path.strip()
-    clean_hhs_dir = hhs_dir.strip().rstrip("/")
-    if not clean_config_path or not clean_hhs_dir:
+    if not clean_config_path:
+        return ""
+    if not clean_config_path.startswith("/"):
         return clean_config_path
     normalized_config_path = posixpath.normpath(clean_config_path)
-    normalized_hhs_dir = posixpath.normpath(clean_hhs_dir)
-    if normalized_config_path == normalized_hhs_dir:
-        return "$HHS_DIR"
-    prefix = f"{normalized_hhs_dir}/"
-    if normalized_config_path.startswith(prefix):
-        relative_path = normalized_config_path[len(prefix) :]
-        return f"$HHS_DIR/{relative_path}"
+    for name, root_path in hhs_config_path_root_values(environment_values):
+        if normalized_config_path == root_path:
+            return f"${name}"
+        prefix = f"{root_path}/"
+        if normalized_config_path.startswith(prefix):
+            relative_path = normalized_config_path[len(prefix) :]
+            return f"${name}/{relative_path}"
     return clean_config_path
 
 
@@ -18052,8 +18427,12 @@ def render_hhs_starship_controls(
     """Render Starship paths, preset selector, and apply action."""
     cache_path = str(starship_info.get("cache", "")).strip()
     config_path = str(starship_info.get("config", "")).strip()
-    hhs_dir = str(starship_info.get("hhs_dir", "")).strip()
-    config_display_path = display_hhs_starship_config_path(config_path, hhs_dir)
+    raw_environment = starship_info.get("environment", {})
+    environment = raw_environment if isinstance(raw_environment, dict) else {}
+    config_display_path = display_hhs_config_path(
+        config_path,
+        {str(name): str(value) for name, value in environment.items()},
+    )
     presets = [
         str(preset).strip()
         for preset in starship_info.get("presets", [])
@@ -18130,8 +18509,12 @@ def render_hhs_starship_config_editor(
 ) -> None:
     """Render the current Starship config file contents."""
     config_path = str(starship_info.get("config", "")).strip()
-    hhs_dir = str(starship_info.get("hhs_dir", "")).strip()
-    config_display_path = display_hhs_starship_config_path(config_path, hhs_dir)
+    raw_environment = starship_info.get("environment", {})
+    environment = raw_environment if isinstance(raw_environment, dict) else {}
+    config_display_path = display_hhs_config_path(
+        config_path,
+        {str(name): str(value) for name, value in environment.items()},
+    )
     config_content = str(starship_info.get("content", ""))
     editing = bool(st.session_state.get("hhs_starship_config_editing"))
     sync_hhs_starship_config_editor_state(config_content)
@@ -18185,6 +18568,282 @@ def render_hhs_starship_panel() -> None:
     render_hhs_starship_config_editor(starship_info, action_running)
 
 
+def hhs_firebase_info_token(firebase_info: dict[str, object]) -> str:
+    """Return a stable token for the loaded Firebase config file."""
+    return json.dumps(
+        {
+            "config_file": str(firebase_info.get("config_file", "")),
+            "content": str(firebase_info.get("content", "")),
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
+def hhs_firebase_info_values(firebase_info: dict[str, object]) -> dict[str, str]:
+    """Return normalized Firebase field values from loaded info."""
+    raw_values = firebase_info.get("values", {})
+    values = raw_values if isinstance(raw_values, dict) else {}
+    return {
+        property_name: normalize_hhs_firebase_value(values.get(property_name, ""))
+        for _label, property_name, _fallback, _state_key, _placeholder in (
+            HHS_FIREBASE_FIELDS
+        )
+    }
+
+
+def hhs_firebase_form_state_needs_reload(values: dict[str, str]) -> bool:
+    """Return whether Firebase form widgets need to be repopulated."""
+    state_keys = [
+        state_key
+        for _label, _property_name, _fallback, state_key, _placeholder in (
+            HHS_FIREBASE_FIELDS
+        )
+    ]
+    original_values = st.session_state.get("_hhs_firebase_original_values")
+    if not isinstance(original_values, dict):
+        return True
+    if any(state_key not in st.session_state for state_key in state_keys):
+        return True
+    loaded_has_value = any(
+        values.get(property_name, "")
+        for _label, property_name, _fallback, _state_key, _placeholder in (
+            HHS_FIREBASE_FIELDS
+        )
+    )
+    if not loaded_has_value or st.session_state.get("_hhs_firebase_form_dirty"):
+        return False
+    current_values = [
+        normalize_hhs_firebase_value(st.session_state.get(state_key, ""))
+        for _label, _property_name, _fallback, state_key, _placeholder in (
+            HHS_FIREBASE_FIELDS
+        )
+    ]
+    return not any(current_values)
+
+
+def mark_hhs_firebase_form_dirty() -> None:
+    """Mark Firebase form values as user-edited for the current session."""
+    st.session_state["_hhs_firebase_form_dirty"] = True
+
+
+def sync_hhs_firebase_form_state(firebase_info: dict[str, object]) -> None:
+    """Initialize Firebase form state when the loaded config changes."""
+    token = hhs_firebase_info_token(firebase_info)
+    values = hhs_firebase_info_values(firebase_info)
+    token_matches = st.session_state.get("_hhs_firebase_loaded_token") == token
+    if token_matches and not hhs_firebase_form_state_needs_reload(values):
+        return
+    st.session_state["_hhs_firebase_loaded_token"] = token
+    st.session_state["_hhs_firebase_original_content"] = str(
+        firebase_info.get("content", "")
+    )
+    st.session_state["_hhs_firebase_original_values"] = values
+    st.session_state["_hhs_firebase_form_dirty"] = False
+    for _label, property_name, _fallback, state_key, _placeholder in HHS_FIREBASE_FIELDS:
+        st.session_state[state_key] = values.get(property_name, "")
+
+
+def apply_pending_hhs_firebase_form_revert() -> None:
+    """Apply a queued Firebase form revert before rendering inputs."""
+    if not st.session_state.pop("_hhs_firebase_revert_pending", False):
+        return
+    original_values = st.session_state.get("_hhs_firebase_original_values", {})
+    if not isinstance(original_values, dict):
+        return
+    for _label, property_name, _fallback, state_key, _placeholder in HHS_FIREBASE_FIELDS:
+        st.session_state[state_key] = normalize_hhs_firebase_value(
+            original_values.get(property_name, "")
+        )
+    st.session_state["_hhs_firebase_form_dirty"] = False
+
+
+def selected_hhs_firebase_values() -> dict[str, str]:
+    """Return Firebase property values selected in the form."""
+    return {
+        property_name: normalize_hhs_firebase_value(st.session_state.get(state_key, ""))
+        for _label, property_name, _fallback, state_key, _placeholder in (
+            HHS_FIREBASE_FIELDS
+        )
+    }
+
+
+def request_hhs_firebase_save() -> None:
+    """Queue saving Firebase configuration values."""
+    original_content = str(st.session_state.get("_hhs_firebase_original_content", ""))
+    config_content = render_hhs_firebase_config_content(
+        original_content,
+        selected_hhs_firebase_values(),
+    )
+    queue_hhs_firebase_action(
+        build_hhs_save_firebase_config_command(config_content),
+        "Saving Firebase configuration",
+        {
+            "operation": "save_config",
+            "success_fallback": "Firebase configuration saved.",
+            "error_fallback": "Unable to save Firebase configuration.",
+        },
+    )
+
+
+def request_hhs_firebase_revert() -> None:
+    """Queue reverting the Firebase form to the loaded config values."""
+    st.session_state["_hhs_firebase_revert_pending"] = True
+    save_ui_state()
+
+
+def render_hhs_firebase_title() -> None:
+    """Render the HomeSetup Firebase page title."""
+    st.markdown(
+        """
+        <section class="hhs-view-heading hhs-view-heading--direct-content">
+          <h2> Firebase</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_hhs_firebase_aliases_table(action_running: bool) -> None:
+    """Render the empty Firebase aliases table with the shared HHS table style."""
+    render_markdown_table(
+        "Firebase Aliases",
+        [],
+        [],
+        [],
+        "hhs_firebase_aliases",
+        disabled=action_running,
+        variable_values=[],
+        item_column_label="Database",
+        variable_column_label="Group",
+        extra_columns={
+            "Alias": [],
+            "Count": [],
+        },
+        min_row_count=4,
+    )
+
+
+def render_hhs_firebase_aliases_actions(action_running: bool) -> None:
+    """Render centered Firebase alias transfer buttons."""
+    with st.container(key="hhs_firebase_aliases_action_buttons"):
+        left, upload_col, download_col, right = st.columns(
+            [1, 0.28, 0.28, 1],
+            gap="small",
+            vertical_alignment="center",
+        )
+        del left, right
+        with upload_col:
+            st.button(
+                " Upload",
+                key="hhs_firebase_alias_upload_button",
+                help="Upload",
+                disabled=action_running,
+                width="stretch",
+            )
+        with download_col:
+            st.button(
+                " Download",
+                key="hhs_firebase_alias_download_button",
+                help="Download",
+                disabled=action_running,
+                width="stretch",
+            )
+
+
+def render_hhs_firebase_configurations(action_running: bool) -> None:
+    """Render Firebase configuration fields in one row inside an expander."""
+    with st.container(key="hhs_firebase_configurations"):
+        with st.expander("Configurations", expanded=True):
+            columns = st.columns(
+                len(HHS_FIREBASE_FIELDS),
+                gap="small",
+                vertical_alignment="bottom",
+            )
+            for column, (label, _property_name, _fallback, state_key, placeholder) in zip(
+                columns,
+                HHS_FIREBASE_FIELDS,
+                strict=True,
+            ):
+                with column:
+                    st.text_input(
+                        label,
+                        key=state_key,
+                        placeholder=placeholder,
+                        disabled=action_running,
+                        on_change=mark_hhs_firebase_form_dirty,
+                    )
+            left, save_col, cancel_col, right = st.columns(
+                [1, 0.22, 0.24, 1],
+                gap="small",
+                vertical_alignment="center",
+            )
+            del left, right
+            with save_col:
+                save_clicked = st.button(
+                    " Save",
+                    key="hhs_firebase_save_button",
+                    help="Save",
+                    disabled=action_running,
+                    width="stretch",
+                )
+            with cancel_col:
+                cancel_clicked = st.button(
+                    " Cancel",
+                    key="hhs_firebase_cancel_button",
+                    help="Cancel",
+                    disabled=action_running,
+                    width="stretch",
+                )
+        render_hhs_firebase_aliases_table(action_running)
+        render_hhs_firebase_aliases_actions(action_running)
+    if save_clicked:
+        request_hhs_firebase_save()
+        st.rerun()
+    elif cancel_clicked:
+        request_hhs_firebase_revert()
+        st.rerun()
+
+
+def render_hhs_firebase_panel() -> None:
+    """Render the HomeSetup Firebase configuration panel."""
+    execute_pending_hhs_firebase_action()
+    render_background_job_status(HHS_FIREBASE_ACTION_JOB)
+    render_hhs_firebase_title()
+    result = render_cached_command_result(
+        build_hhs_firebase_info_command(),
+        "Loading Firebase configuration",
+        "hhs_firebase",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load Firebase configuration.",
+    )
+    if result is None:
+        return
+    if result.returncode != 0:
+        st.error(
+            clean_command_status_message(
+                result.stderr or result.stdout or "Unable to load Firebase configuration."
+            )
+        )
+        return
+
+    firebase_info = parse_hhs_firebase_info(result.stdout)
+    config_file = str(firebase_info.get("config_file", "")).strip()
+    if config_file:
+        raw_environment = firebase_info.get("environment", {})
+        environment = raw_environment if isinstance(raw_environment, dict) else {}
+        config_display_path = display_hhs_config_path(
+            config_file,
+            {str(name): str(value) for name, value in environment.items()},
+        )
+        render_view_subtitle(f"<code>{html.escape(config_display_path)}</code>", True)
+    sync_hhs_firebase_form_state(firebase_info)
+    apply_pending_hhs_firebase_form_revert()
+    action_running = background_job_is_running(HHS_FIREBASE_ACTION_JOB)
+    render_hhs_firebase_configurations(action_running)
+
+
 def render_hhs_placeholder_panel(hhs_view: str) -> None:
     """Render a title-only placeholder HHS sub-page."""
     st.markdown(
@@ -18220,6 +18879,8 @@ def render_hhs_view() -> None:
         render_hhs_starship_panel()
     elif hhs_view == "SETTINGS":
         render_hhs_settings_panel()
+    elif hhs_view == "Firebase":
+        render_hhs_firebase_panel()
     else:
         render_hhs_placeholder_panel(hhs_view)
 
@@ -19515,7 +20176,7 @@ def build_hhs_search_command(
         )
         if option_args:
             option_args = f" {option_args}"
-        return f"{setup_command}__hhs_search_string {search_root}{option_args} {safe_query}"
+        return f"{setup_command}__hhs_search_string {search_root}{option_args} {safe_query} '*'"
     safe_glob = shlex.quote(search_glob_from_query(query))
     search_command = f"{setup_command}__hhs_search_file {search_root} {safe_glob}"
     return build_hhs_search_modified_results_command(search_command)
@@ -19986,6 +20647,20 @@ def render_search_path_results(
         "</div>",
         unsafe_allow_html=True,
     )
+
+
+def search_replace_status_message(replaced_count: int) -> str:
+    """Return the user-facing Search replace completion status."""
+    entry_label = "entry" if replaced_count == 1 else "entries"
+    return f"{replaced_count} {entry_label} replaced"
+
+
+def push_search_replace_status(cache_key: str, replaced_count: int) -> None:
+    """Queue one Search replace status message for a completed replace command."""
+    if st.session_state.get("_search_replace_status_cache_key") == cache_key:
+        return
+    st.session_state["_search_replace_status_cache_key"] = cache_key
+    push_floating_status(search_replace_status_message(replaced_count), "info")
 
 
 def increase_search_visible_count() -> None:
@@ -20533,7 +21208,7 @@ def render_search_option_toggle(
     )
 
 
-def submit_search_query() -> None:
+def submit_search_query(replace_requested: bool = False) -> None:
     """Persist the Search form values that should be executed."""
     query = clean_search_term_value(st.session_state.get("search_query", ""))
     search_path = clean_recent_search_value(st.session_state.get("search_path", ""))
@@ -20547,7 +21222,7 @@ def submit_search_query() -> None:
         return
     query = remember_search_term(query)
     search_type = normalized_search_type(st.session_state.get("search_type"))
-    replace = search_type == "Strings" and bool(
+    replace = bool(replace_requested) and search_type == "Strings" and bool(
         st.session_state.get("search_replace", False)
     )
     replacement = str(st.session_state.get("search_replacement", "")) if replace else ""
@@ -20570,6 +21245,8 @@ def submit_search_query() -> None:
     st.session_state["search_result_replace"] = replace
     st.session_state["search_result_replacement"] = replacement
     st.session_state["search_visible_count"] = hhs_ui_constants.SEARCH_PAGE_SIZE
+    if replace:
+        st.session_state["_search_replace_status_cache_key"] = ""
     cache_delete_tag("search")
     save_ui_state()
 
@@ -20639,8 +21316,8 @@ def render_search_replace_controls() -> None:
     if not search_replace_enabled():
         return
     with st.container(key="search_replace_controls"):
-        label_column, replacement_column = st.columns(
-            [1.15, 6.44],
+        label_column, replacement_column, replace_column = st.columns(
+            [1.15, 6.22, 0.22],
             vertical_alignment="center",
         )
         with label_column:
@@ -20655,6 +21332,15 @@ def render_search_replace_controls() -> None:
                 label_visibility="collapsed",
                 on_change=save_ui_state,
                 placeholder="Replacement string",
+                width="stretch",
+            )
+        with replace_column:
+            st.button(
+                "",
+                key="search_replace_submit_button",
+                help="Search and Replace",
+                on_click=submit_search_query,
+                args=(True,),
                 width="stretch",
             )
 
@@ -20679,21 +21365,34 @@ def selected_search_result_text_filter() -> str:
 def render_search_filters() -> None:
     """Render Search result filters and store selections in Session State."""
     with st.container(key="search_filter_controls"):
-        (
-            filter_column,
-            other_filter_column,
-            replace_column,
-            ignore_case_column,
-            words_column,
-            binary_column,
-            clear_column,
-        ) = st.columns(
-            [1.15, 3.0, 0.22, 0.22, 0.22, 0.22, 0.22],
-            vertical_alignment="center",
-        )
         strings_selected = (
             normalized_search_type(st.session_state.get("search_type")) == "Strings"
         )
+        if strings_selected:
+            (
+                filter_column,
+                other_filter_column,
+                replace_column,
+                ignore_case_column,
+                words_column,
+                binary_column,
+                clear_column,
+            ) = st.columns(
+                [1.15, 3.0, 0.22, 0.22, 0.22, 0.22, 0.22],
+                vertical_alignment="center",
+            )
+        else:
+            (
+                filter_column,
+                other_filter_column,
+                ignore_case_column,
+                words_column,
+                binary_column,
+                clear_column,
+            ) = st.columns(
+                [1.15, 3.0, 0.22, 0.22, 0.22, 0.22],
+                vertical_alignment="center",
+            )
         with filter_column:
             selected_filter = st.radio(
                 "Table filter",
@@ -20716,13 +21415,13 @@ def render_search_filters() -> None:
                     placeholder="Type result filter text",
                     width="stretch",
                 )
-        with replace_column:
-            render_search_option_toggle(
-                "search_replace",
-                "﯒",
-                "Replace matches (-r)",
-                disabled=not strings_selected,
-            )
+        if strings_selected:
+            with replace_column:
+                render_search_option_toggle(
+                    "search_replace",
+                    "﯒",
+                    "Show replacement controls",
+                )
         with ignore_case_column:
             render_search_option_toggle("search_ignore_case", "Aa", "Ignore case (-i)")
         with words_column:
@@ -20805,6 +21504,9 @@ def render_search_results() -> None:
                 output.split("\n", 2)[2], search_type, search_path
             ),
         )
+        replaced_count = len(rows)
+        if replace:
+            push_search_replace_status(cache_key, replaced_count)
         rows = filter_search_rows(rows, search_filter, text_filter)
         visible_rows = visible_search_rows(rows)
         total_count = len(rows)
