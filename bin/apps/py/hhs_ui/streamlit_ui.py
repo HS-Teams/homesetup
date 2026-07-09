@@ -4227,6 +4227,17 @@ def hhs_log_file_path(log_file: str) -> Path:
     return hhs_log_dir() / Path(log_file).name
 
 
+def hhs_log_file_info(log_file: str) -> tuple[str, dict[str, str]]:
+    """Return the selected log file path and environment used for display."""
+    environment_values = {
+        "HOME": str(Path.home()),
+        "HHS_HOME": str(homesetup_home()),
+        "HHS_DIR": str(homesetup_config_dir()),
+        "HHS_LOG_DIR": str(hhs_log_dir()),
+    }
+    return str(hhs_log_file_path(log_file)), environment_values
+
+
 def selected_monitor_log_level() -> str:
     """Return the selected monitor log level normalized to a supported value."""
     level = str(st.session_state.get("monitor_log_level", "ALL_LEVELS")).strip().upper()
@@ -6220,12 +6231,13 @@ def render_selected_table_item(
         else:
             value_col = st.container()
             action_cols = []
+    display_value = display_table_value(value)
     with value_col:
         st.markdown(
             (
                 '<span class="hhs-selected-item-line">'
                 f'<span class="hhs-selected-item-label">{html.escape(label)}</span>'
-                f'<span class="hhs-selected-item-value">{html.escape(value)}</span>'
+                f'<span class="hhs-selected-item-value">{html.escape(str(display_value))}</span>'
                 "</span>"
             ),
             unsafe_allow_html=True,
@@ -6282,10 +6294,15 @@ def execute_selected_table_action(
         callback(*callback_args)
 
 
-def env_path_aliases() -> list[tuple[str, str]]:
-    """Return environment variables that can visually abbreviate absolute paths."""
+def env_path_aliases(
+    environment_values: dict[str, str] | None = None,
+) -> list[tuple[str, str]]:
+    """Return known environment variables that visually abbreviate absolute paths."""
+    values = environment_values if environment_values is not None else os.environ
     aliases = []
-    for name, value in os.environ.items():
+    for raw_name, raw_value in values.items():
+        name = str(raw_name).strip()
+        value = str(raw_value).strip()
         if not re.fullmatch(r"[A-Z][A-Z0-9_]*", name):
             continue
         if not value.startswith(os.sep) or os.pathsep in value or value == os.sep:
@@ -6294,10 +6311,13 @@ def env_path_aliases() -> list[tuple[str, str]]:
     return sorted(aliases, key=lambda item: len(item[1]), reverse=True)
 
 
-def display_path_value(value: str) -> str:
-    """Return a display-only path value with environment-variable prefixes."""
+def display_path_value(
+    value: str,
+    environment_values: dict[str, str] | None = None,
+) -> str:
+    """Return a display-only path value with known environment-variable prefixes."""
     display_value = value
-    for name, path_prefix in env_path_aliases():
+    for name, path_prefix in env_path_aliases(environment_values):
         replacement = f"${{{name}}}"
         escaped_prefix = re.escape(path_prefix)
         display_value = re.sub(
@@ -6308,19 +6328,28 @@ def display_path_value(value: str) -> str:
     return display_value
 
 
-def display_table_value(value: object) -> object:
+def display_table_value(
+    value: object,
+    environment_values: dict[str, str] | None = None,
+) -> object:
     """Return the table-only representation for a row value."""
     if not isinstance(value, str):
         return value
     if os.sep not in value:
         return value
-    return display_path_value(value)
+    return display_path_value(value, environment_values)
 
 
-def display_table_rows(rows: list[dict[str, str]]) -> list[dict[str, object]]:
+def display_table_rows(
+    rows: list[dict[str, str]],
+    environment_values: dict[str, str] | None = None,
+) -> list[dict[str, object]]:
     """Return table rows with visual-only path abbreviations applied."""
     return [
-        {name: display_table_value(value) for name, value in row.items()}
+        {
+            name: display_table_value(value, environment_values)
+            for name, value in row.items()
+        }
         for row in rows
     ]
 
@@ -7159,6 +7188,30 @@ def search_open_href(path_or_uri: str) -> str:
     """Return a Search-style open link for a path or file URI."""
     query = urllib.parse.urlencode({hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM: path_or_uri})
     return f"?{query}"
+
+
+def render_openable_config_path(display_path: str, file_path: str) -> None:
+    """Render a subtitle path link that opens a file through __hhs_open."""
+    clean_display_path = display_path.strip()
+    clean_file_path = file_path.strip()
+    if not clean_display_path or not clean_file_path:
+        return
+    file_uri = file_uri_for_path(clean_file_path)
+    href = html.escape(search_open_href(file_uri), quote=True)
+    safe_file_uri = html.escape(file_uri, quote=True)
+    safe_display_path = html.escape(clean_display_path)
+    st.markdown(
+        (
+            '<h3 class="hhs-view-subtitle">'
+            f'<a class="hhs-view-subtitle-link" href="{href}" '
+            'target="_self" '
+            f'title="{safe_file_uri}" '
+            f'data-hhs-open-path="{safe_file_uri}">'
+            f"<code>{safe_display_path}</code></a>"
+            "</h3>"
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def render_config_file_pill(config_view: str) -> None:
@@ -12388,6 +12441,40 @@ def build_hhs_firebase_info_command() -> str:
         + 'cat "${config_file}" 2>/dev/null || true; '
         + f'printf "\\n%s\\n" "{FIREBASE_CONFIG_END_OUTPUT_MARKER}"'
     )
+
+
+def build_hhs_firebase_plugin_command(arguments: list[str]) -> str:
+    """Build a Bash command that invokes the HomeSetup Firebase plug-in."""
+    safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
+    firebase_dispatch = (
+        "function __hhs() { "
+        'if [[ "$1" == "firebase" ]]; then '
+        "shift; "
+        'local hhs_firebase_fn="${1:-execute}"; '
+        'if declare -F "${hhs_firebase_fn}" >/dev/null 2>&1; then '
+        "shift || true; "
+        '"${hhs_firebase_fn}" "$@"; '
+        "else "
+        'execute "${hhs_firebase_fn}" "$@"; '
+        "fi; "
+        "else "
+        "return 127; "
+        "fi; "
+        "}; "
+    )
+    return (
+        build_hhs_env_environment_command()
+        + 'export APP_NAME="${APP_NAME:-hhs-ui}"; '
+        + 'source "${HHS_HOME}/bin/apps/bash/app-commons.bash"; '
+        + 'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/firebase/firebase.bash"; '
+        + f"{firebase_dispatch}"
+        + f"__hhs firebase {safe_arguments}"
+    )
+
+
+def build_hhs_firebase_alias_action_command(operation: str, alias_name: str) -> str:
+    """Build the Firebase alias upload/download command."""
+    return build_hhs_firebase_plugin_command(["execute", operation, alias_name])
 
 
 def build_hhs_starship_plugin_command(arguments: list[str]) -> str:
@@ -17674,10 +17761,9 @@ def render_monitor_logs_panel() -> None:
         ".st-key-monitor_log_controls",
         "hhs.monitor.logs.controls.expanded",
     )
-    render_view_subtitle(
-        f"<code>{html.escape(selected_log)}</code>",
-        content_is_html=True,
-    )
+    log_file_path, log_environment = hhs_log_file_info(selected_log)
+    log_display_path = display_path_value(log_file_path, log_environment)
+    render_openable_config_path(log_display_path, log_file_path)
     if tail_enabled:
         render_monitor_logs_tail(
             selected_log, selected_level, tail_lines, log_filter, log_text_filter
@@ -17844,6 +17930,56 @@ def render_hhs_setup_title() -> None:
     )
 
 
+def themed_markdown_table_data(
+    table_data: pd.DataFrame,
+    column_text_colors: dict[str, str] | None,
+) -> object:
+    """Return markdown table data with optional resolved themed text colors."""
+    if not column_text_colors:
+        return table_data
+    theme_properties = theme_custom_properties(
+        st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
+    )
+    fallback_text_color = resolve_css_custom_property(
+        theme_properties,
+        "hhs-theme-text-color",
+        "#f8f8f2",
+    )
+    styler = table_data.style
+    for column_label, text_color in column_text_colors.items():
+        if column_label not in table_data:
+            continue
+        resolved_text_color = resolve_css_value(
+            theme_properties,
+            text_color,
+            fallback_text_color,
+        )
+        styler = styler.map(
+            lambda _value, color=resolved_text_color: f"color: {color};",
+            subset=[column_label],
+        )
+    return styler
+
+
+def markdown_table_single_selected_index(
+    selection_state: object,
+    row_count: int,
+) -> int | None:
+    """Return the single selected markdown table row index."""
+    selected_rows = table_selection_rows(selection_state)
+    if selected_rows and 0 <= selected_rows[0] < row_count:
+        return selected_rows[0]
+    return None
+
+
+def markdown_table_single_selection_marks(
+    row_count: int,
+    selected_index: int | None,
+) -> list[str]:
+    """Return radio-style mark glyphs for a singular markdown table."""
+    return ["◉" if index == selected_index else "○" for index in range(row_count)]
+
+
 def render_markdown_table(
     caption: str,
     headers: list[str],
@@ -17858,8 +17994,10 @@ def render_markdown_table(
     variable_values: list[str] | None = None,
     extra_columns: dict[str, list[str]] | None = None,
     min_row_count: int = 0,
+    multi_selection: bool = True,
+    column_text_colors: dict[str, str] | None = None,
 ) -> list[bool]:
-    """Render a reusable checkbox markdown table and return selected values."""
+    """Render a reusable selectable markdown table and return selected values."""
     if len(items) != len(values) or len(items) != len(headers):
         raise ValueError("headers, items, and values must have the same length")
     if value_keys is not None and len(items) != len(value_keys):
@@ -17887,12 +18025,14 @@ def render_markdown_table(
         f"{key_prefix}_markdown_table_editor_v"
         f"{hhs_ui_constants.MARKDOWN_TABLE_LAYOUT_VERSION}"
     )
+    selection_key = f"{editor_key}_single_selection"
     token_key = f"_{editor_key}_token"
     token = json.dumps(
         {
             "extra_columns": extra_columns,
             "headers": headers,
             "items": items,
+            "multi_selection": multi_selection,
             "values": values,
             "variable_values": variable_values,
         },
@@ -17901,6 +18041,7 @@ def render_markdown_table(
     )
     if st.session_state.get(token_key) != token:
         st.session_state.pop(editor_key, None)
+        st.session_state.pop(selection_key, None)
         st.session_state[token_key] = token
 
     rendered_variable_values = (
@@ -17953,27 +18094,84 @@ def render_markdown_table(
                 table_columns[text_column_label], dtype="string"
             )
         table_data = pd.DataFrame(table_data_columns)
-        edited_data = st.data_editor(
-            table_data,
-            key=editor_key,
-            hide_index=True,
-            num_rows="fixed",
-            column_order=[
-                value_column_label,
-                item_column_label,
-                variable_column_label,
-                *extra_column_labels,
-            ],
-            height=markdown_table_editor_height(max(len(items), min_row_count)),
-            disabled=(
-                [variable_column_label, item_column_label, *extra_column_labels]
-                if not disabled
-                else True
-            ),
-            column_config=column_config,
-        )
-
-    edited_values = [bool(value) for value in edited_data[value_column_label].tolist()]
+        if multi_selection:
+            edited_data = st.data_editor(
+                themed_markdown_table_data(table_data, column_text_colors),
+                key=editor_key,
+                hide_index=True,
+                num_rows="fixed",
+                column_order=[
+                    value_column_label,
+                    item_column_label,
+                    variable_column_label,
+                    *extra_column_labels,
+                ],
+                height=markdown_table_editor_height(max(len(items), min_row_count)),
+                disabled=(
+                    [variable_column_label, item_column_label, *extra_column_labels]
+                    if not disabled
+                    else True
+                ),
+                column_config=column_config,
+            )
+            edited_values = [
+                bool(value) for value in edited_data[value_column_label].tolist()
+            ]
+        else:
+            st.markdown(
+                '<span class="hhs-markdown-table-single-selection"></span>',
+                unsafe_allow_html=True,
+            )
+            selected_index = markdown_table_single_selected_index(
+                st.session_state.get(selection_key),
+                len(items),
+            )
+            selection_table_data = table_data.copy()
+            selection_table_data[value_column_label] = pd.Series(
+                markdown_table_single_selection_marks(len(items), selected_index),
+                dtype="string",
+            )
+            selection_args: dict[str, object] = {
+                "key": selection_key,
+                "hide_index": True,
+                "column_order": [
+                    value_column_label,
+                    item_column_label,
+                    variable_column_label,
+                    *extra_column_labels,
+                ],
+                "height": markdown_table_editor_height(max(len(items), min_row_count)),
+                "width": "stretch",
+                "column_config": {
+                    **{
+                        value_column_label: st.column_config.TextColumn(
+                            value_column_label,
+                            disabled=True,
+                            width=hhs_ui_constants.MARKDOWN_TABLE_MARK_COLUMN_WIDTH,
+                        )
+                    },
+                    **{
+                        column_label: config
+                        for column_label, config in column_config.items()
+                        if column_label != value_column_label
+                    },
+                },
+            }
+            if not disabled:
+                selection_args["on_select"] = "rerun"
+                selection_args["selection_mode"] = "single-row"
+            selection = st.dataframe(
+                themed_markdown_table_data(selection_table_data, column_text_colors),
+                **selection_args,
+            )
+            edited_values = [False] * len(items)
+            if not disabled:
+                selected_index = markdown_table_single_selected_index(
+                    selection,
+                    len(items),
+                )
+                if selected_index is not None:
+                    edited_values[selected_index] = True
     if value_keys is not None:
         for value_key, value in zip(value_keys, edited_values, strict=True):
             st.session_state[value_key] = value
@@ -17981,13 +18179,9 @@ def render_markdown_table(
 
 
 def markdown_table_editor_height(row_count: int) -> int:
-    """Return a data-editor height that does not expose blank trailing grid rows."""
-    header_height = 38
-    row_height = 36
-    border_height = 4
-    max_height = 360
-    visible_rows = max(0, row_count)
-    return min(max_height, header_height + (visible_rows * row_height) + border_height)
+    """Return the fixed HHS markdown table editor height."""
+    del row_count
+    return hhs_ui_constants.MARKDOWN_TABLE_HEIGHT
 
 
 def render_hhs_setup_settings_table(action_running: bool) -> None:
@@ -18382,57 +18576,12 @@ def normalize_hhs_starship_preset_state(presets: list[str]) -> None:
         st.session_state["hhs_starship_preset"] = ""
 
 
-def hhs_config_path_root_values(
-    environment_values: dict[str, str],
-) -> list[tuple[str, str]]:
-    """Return configured HomeSetup path roots for display-only abbreviation."""
-    fallback_values = {
-        "HHS_DIR": str(homesetup_config_dir()),
-        "HHS_HOME": str(homesetup_home()),
-        "HOME": str(Path.home()),
-    }
-    roots: list[tuple[str, str]] = []
-    for name in ("HHS_DIR", "HHS_HOME", "HOME"):
-        raw_path = str(environment_values.get(name, "") or fallback_values[name])
-        clean_path = raw_path.strip().rstrip("/")
-        if clean_path and clean_path.startswith("/"):
-            roots.append((name, posixpath.normpath(clean_path)))
-    return sorted(roots, key=lambda item: len(item[1]), reverse=True)
-
-
-def display_hhs_config_path(
-    config_path: str,
-    environment_values: dict[str, str],
-) -> str:
-    """Return a config path display value rooted at known HomeSetup variables."""
-    clean_config_path = config_path.strip()
-    if not clean_config_path:
-        return ""
-    if not clean_config_path.startswith("/"):
-        return clean_config_path
-    normalized_config_path = posixpath.normpath(clean_config_path)
-    for name, root_path in hhs_config_path_root_values(environment_values):
-        if normalized_config_path == root_path:
-            return f"${name}"
-        prefix = f"{root_path}/"
-        if normalized_config_path.startswith(prefix):
-            relative_path = normalized_config_path[len(prefix) :]
-            return f"${name}/{relative_path}"
-    return clean_config_path
-
-
 def render_hhs_starship_controls(
     starship_info: dict[str, object], action_running: bool
 ) -> None:
     """Render Starship paths, preset selector, and apply action."""
     cache_path = str(starship_info.get("cache", "")).strip()
     config_path = str(starship_info.get("config", "")).strip()
-    raw_environment = starship_info.get("environment", {})
-    environment = raw_environment if isinstance(raw_environment, dict) else {}
-    config_display_path = display_hhs_config_path(
-        config_path,
-        {str(name): str(value) for name, value in environment.items()},
-    )
     presets = [
         str(preset).strip()
         for preset in starship_info.get("presets", [])
@@ -18447,48 +18596,49 @@ def render_hhs_starship_controls(
         else "hhs_starship_edit_config_button"
     )
     with st.container(key="hhs_starship_controls"):
-        cache_col, config_col, preset_col, apply_col, edit_col = st.columns(
-            [1.2, 1.6, 1.1, 0.22, 0.22],
-            gap="small",
-            vertical_alignment="bottom",
-        )
-        with cache_col:
-            st.text_input(
-                "Cache",
-                value=cache_path,
-                disabled=True,
+        with st.expander("Configurations", expanded=True):
+            cache_col, config_col, preset_col, apply_col, edit_col = st.columns(
+                [1.2, 1.6, 1.1, 0.22, 0.22],
+                gap="small",
+                vertical_alignment="bottom",
             )
-        with config_col:
-            st.text_input(
-                "Config",
-                value=config_display_path,
-                disabled=True,
-            )
-        with preset_col:
-            st.selectbox(
-                "Preset",
-                preset_options,
-                key="hhs_starship_preset",
-                disabled=action_running or not presets,
-            )
-        with apply_col:
-            st.button(
-                "",
-                key="hhs_starship_apply_preset_button",
-                help="Apply Starship preset",
-                on_click=request_hhs_starship_preset_apply,
-                disabled=action_running or not presets,
-                width="stretch",
-            )
-        with edit_col:
-            st.button(
-                "",
-                key=edit_button_key,
-                help="Toggle Starship config editing",
-                on_click=toggle_hhs_starship_config_editing,
-                disabled=action_running or not config_path,
-                width="stretch",
-            )
+            with cache_col:
+                st.text_input(
+                    "Cache",
+                    value=cache_path,
+                    disabled=True,
+                )
+            with config_col:
+                st.text_input(
+                    "Config",
+                    value=config_path,
+                    disabled=True,
+                )
+            with preset_col:
+                st.selectbox(
+                    "Preset",
+                    preset_options,
+                    key="hhs_starship_preset",
+                    disabled=action_running or not presets,
+                )
+            with apply_col:
+                st.button(
+                    "",
+                    key="hhs_starship_apply_preset_button",
+                    help="Apply Starship preset",
+                    on_click=request_hhs_starship_preset_apply,
+                    disabled=action_running or not presets,
+                    width="stretch",
+                )
+            with edit_col:
+                st.button(
+                    "",
+                    key=edit_button_key,
+                    help="Toggle Starship config editing",
+                    on_click=toggle_hhs_starship_config_editing,
+                    disabled=action_running or not config_path,
+                    width="stretch",
+                )
 
 
 def sync_hhs_starship_config_editor_state(config_content: str) -> None:
@@ -18509,25 +18659,17 @@ def render_hhs_starship_config_editor(
 ) -> None:
     """Render the current Starship config file contents."""
     config_path = str(starship_info.get("config", "")).strip()
-    raw_environment = starship_info.get("environment", {})
-    environment = raw_environment if isinstance(raw_environment, dict) else {}
-    config_display_path = display_hhs_config_path(
-        config_path,
-        {str(name): str(value) for name, value in environment.items()},
-    )
     config_content = str(starship_info.get("content", ""))
     editing = bool(st.session_state.get("hhs_starship_config_editing"))
     sync_hhs_starship_config_editor_state(config_content)
 
-    if config_display_path:
-        render_view_subtitle(f"<code>{html.escape(config_display_path)}</code>", True)
     with st.container(key="hhs_starship_config_editor_panel"):
         st.text_area(
             "Starship config",
             key="hhs_starship_config_editor",
             height=360,
             disabled=not editing or action_running,
-            label_visibility="collapsed" if config_display_path else "visible",
+            label_visibility="collapsed",
         )
         if editing:
             st.button(
@@ -18705,6 +18847,29 @@ def request_hhs_firebase_revert() -> None:
     save_ui_state()
 
 
+def request_hhs_firebase_alias_action(operation: str, selected_alias: str) -> None:
+    """Queue uploading or downloading the selected Firebase alias."""
+    clean_operation = operation.strip().lower()
+    clean_alias = selected_alias.strip()
+    if clean_operation not in {"upload", "download"}:
+        push_floating_status("Unsupported Firebase alias action.", "error")
+        return
+    if not clean_alias:
+        push_floating_status("Select a Firebase alias before continuing.", "warn")
+        return
+    operation_label = clean_operation.title()
+    queue_hhs_firebase_action(
+        build_hhs_firebase_alias_action_command(clean_operation, clean_alias),
+        f"{operation_label} Firebase alias: {clean_alias}",
+        {
+            "operation": clean_operation,
+            "alias": clean_alias,
+            "success_fallback": f"Firebase alias {clean_operation} completed: {clean_alias}",
+            "error_fallback": f"Unable to {clean_operation} Firebase alias: {clean_alias}",
+        },
+    )
+
+
 def render_hhs_firebase_title() -> None:
     """Render the HomeSetup Firebase page title."""
     st.markdown(
@@ -18717,28 +18882,107 @@ def render_hhs_firebase_title() -> None:
     )
 
 
-def render_hhs_firebase_aliases_table(action_running: bool) -> None:
-    """Render the empty Firebase aliases table with the shared HHS table style."""
-    render_markdown_table(
+def fetch_firebase_aliases() -> dict[str, object]:
+    """Return Firebase alias data."""
+    return {
+        "databases": [
+            {
+                "homesetup": [
+                    {
+                        "dotfiles": [
+                            {"demo": {}},
+                            {"home": {}},
+                            {"new": {}},
+                            {"work": {}},
+                        ]
+                    },
+                    {
+                        "hspylib-test": [
+                            {"0": {}},
+                            {"1": {}},
+                        ]
+                    },
+                ]
+            }
+        ]
+    }
+
+
+def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, str]]:
+    """Return Firebase alias rows from the fetched alias payload."""
+    rows: list[dict[str, str]] = []
+    databases = alias_data.get("databases", [])
+    if not isinstance(databases, list):
+        return rows
+    for database_entry in databases:
+        if not isinstance(database_entry, dict):
+            continue
+        for database_name, groups in database_entry.items():
+            if not isinstance(groups, list):
+                continue
+            for group_entry in groups:
+                if not isinstance(group_entry, dict):
+                    continue
+                for group_name, aliases in group_entry.items():
+                    if not isinstance(aliases, list):
+                        continue
+                    for alias_entry in aliases:
+                        if not isinstance(alias_entry, dict):
+                            continue
+                        for alias_name, alias_value in alias_entry.items():
+                            count = len(alias_value) if isinstance(alias_value, dict) else 0
+                            rows.append(
+                                {
+                                    "Database": str(database_name),
+                                    "Group": str(group_name),
+                                    "Alias": str(alias_name),
+                                    "Count": str(count),
+                                }
+                            )
+    return rows
+
+
+def render_hhs_firebase_aliases_table(action_running: bool) -> str:
+    """Render the Firebase aliases table and return the selected alias."""
+    alias_rows = firebase_alias_table_rows(fetch_firebase_aliases())
+    alias_keys = [
+        f"{row['Database']}:{row['Group']}:{row['Alias']}" for row in alias_rows
+    ]
+    selected_values = render_markdown_table(
         "Firebase Aliases",
-        [],
-        [],
-        [],
+        [row["Database"] for row in alias_rows],
+        alias_keys,
+        [False] * len(alias_rows),
         "hhs_firebase_aliases",
         disabled=action_running,
-        variable_values=[],
+        variable_values=[row["Group"] for row in alias_rows],
         item_column_label="Database",
         variable_column_label="Group",
         extra_columns={
-            "Alias": [],
-            "Count": [],
+            "Alias": [row["Alias"] for row in alias_rows],
+            "Count": [row["Count"] for row in alias_rows],
         },
-        min_row_count=4,
+        multi_selection=False,
+        column_text_colors={
+            "Group": "var(--hhs-secondary)",
+            "Alias": "var(--hhs-theme-primary-color)",
+        },
     )
+    selected_aliases = [
+        row["Alias"]
+        for row, selected in zip(alias_rows, selected_values, strict=True)
+        if selected
+    ]
+    return selected_aliases[0] if selected_aliases else ""
 
 
-def render_hhs_firebase_aliases_actions(action_running: bool) -> None:
+def render_hhs_firebase_aliases_actions(
+    selected_alias: str,
+    action_running: bool,
+) -> None:
     """Render centered Firebase alias transfer buttons."""
+    clean_alias = selected_alias.strip()
+    action_disabled = action_running or not clean_alias
     with st.container(key="hhs_firebase_aliases_action_buttons"):
         left, upload_col, download_col, right = st.columns(
             [1, 0.28, 0.28, 1],
@@ -18751,7 +18995,9 @@ def render_hhs_firebase_aliases_actions(action_running: bool) -> None:
                 " Upload",
                 key="hhs_firebase_alias_upload_button",
                 help="Upload",
-                disabled=action_running,
+                on_click=request_hhs_firebase_alias_action,
+                args=("upload", clean_alias),
+                disabled=action_disabled,
                 width="stretch",
             )
         with download_col:
@@ -18759,7 +19005,9 @@ def render_hhs_firebase_aliases_actions(action_running: bool) -> None:
                 " Download",
                 key="hhs_firebase_alias_download_button",
                 help="Download",
-                disabled=action_running,
+                on_click=request_hhs_firebase_alias_action,
+                args=("download", clean_alias),
+                disabled=action_disabled,
                 width="stretch",
             )
 
@@ -18862,8 +19110,8 @@ def render_hhs_firebase_configurations(action_running: bool) -> None:
     with st.container(key="hhs_firebase_configurations"):
         with st.expander("Configurations", expanded=True):
             event = render_hhs_firebase_config_component(action_running)
-        render_hhs_firebase_aliases_table(action_running)
-        render_hhs_firebase_aliases_actions(action_running)
+        selected_alias = render_hhs_firebase_aliases_table(action_running)
+        render_hhs_firebase_aliases_actions(selected_alias, action_running)
     if handle_hhs_firebase_config_component_event(event):
         st.rerun()
 
@@ -18892,15 +19140,6 @@ def render_hhs_firebase_panel() -> None:
         return
 
     firebase_info = parse_hhs_firebase_info(result.stdout)
-    config_file = str(firebase_info.get("config_file", "")).strip()
-    if config_file:
-        raw_environment = firebase_info.get("environment", {})
-        environment = raw_environment if isinstance(raw_environment, dict) else {}
-        config_display_path = display_hhs_config_path(
-            config_file,
-            {str(name): str(value) for name, value in environment.items()},
-        )
-        render_view_subtitle(f"<code>{html.escape(config_display_path)}</code>", True)
     sync_hhs_firebase_form_state(firebase_info)
     apply_pending_hhs_firebase_form_revert()
     action_running = background_job_is_running(HHS_FIREBASE_ACTION_JOB)
@@ -19483,6 +19722,31 @@ def resolve_css_custom_property(
         visited.add(referenced_name)
         value = properties.get(referenced_name, fallback).strip()
     return value or fallback
+
+
+def resolve_css_value(
+    properties: dict[str, str], css_value: str, fallback: str
+) -> str:
+    """Return a CSS value with a top-level custom property reference resolved."""
+    clean_value = css_value.strip()
+    if not clean_value.startswith("var(--") or not clean_value.endswith(")"):
+        return clean_value or fallback
+    referenced_name = clean_value[6:-1].strip()
+    fallback_value = fallback
+    if "," in referenced_name:
+        referenced_name, fallback_value = referenced_name.split(",", 1)
+        fallback_value = fallback_value.strip()
+    referenced_name = referenced_name.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", referenced_name):
+        return fallback
+    resolved_value = resolve_css_custom_property(
+        properties,
+        referenced_name,
+        fallback_value,
+    ).strip()
+    if resolved_value.startswith("var("):
+        return fallback
+    return resolved_value or fallback
 
 
 def ssh_explorer_component_theme() -> dict[str, str]:

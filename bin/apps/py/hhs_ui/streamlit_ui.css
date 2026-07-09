@@ -7,7 +7,8 @@
   --hhs-theme-hhs-action-button-width: 140px;
   --hhs-floating-status-height: calc(1.85em + 20px);
   --hhs-floating-status-z-index: 999999;
-  --hhs-markdown-table-max-height: 360px;
+  --hhs-markdown-table-height: 360px;
+  --hhs-markdown-table-max-height: var(--hhs-markdown-table-height);
   --hhs-footer-z-index: 1000000;
   --hhs-footer-panel-z-index: 1000001;
   --hhs-log-chrome-height: 8.5rem;
@@ -26,6 +27,7 @@
   --hhs-danger: #dc2626;
   --hhs-theme-text-muted-color: var(--hhs-comment, var(--hhs-theme-text-color));
   --hhs-theme-input-placeholder-color: #686e7a;
+  --hhs-theme-file-link-color: var(--hhs-theme-link-color, var(--hhs-theme-text-color));
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
   --hhs-sidebar-inline-inset: 20px;
@@ -432,6 +434,11 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-path_add_value) {
 }
 
 [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"]:has(.st-key-search_controls) {
+  gap: var(--hhs-element-std-gap) !important;
+  row-gap: var(--hhs-element-std-gap) !important;
+}
+
+.st-key-hhs_starship_controls [data-testid="stExpanderDetails"] > [data-testid="stVerticalBlock"] {
   gap: var(--hhs-element-std-gap) !important;
   row-gap: var(--hhs-element-std-gap) !important;
 }
@@ -1268,14 +1275,58 @@ div[class*="st-key-"][class*="_markdown_table"] .hhs-markdown-table-caption {
 div[class*="st-key-"][class*="_markdown_table"] [data-testid="stDataFrame"] {
   border-radius: 0;
   border-width: 0 !important;
+  height: var(--hhs-markdown-table-height) !important;
   max-height: var(--hhs-markdown-table-max-height) !important;
+  min-height: var(--hhs-markdown-table-height) !important;
   overflow-y: auto;
 }
 
 div[class*="st-key-"][class*="_markdown_table"] [data-testid="stDataFrame"] > div {
   border-top-left-radius: 0 !important;
   border-top-right-radius: 0 !important;
+  height: var(--hhs-markdown-table-height) !important;
   max-height: var(--hhs-markdown-table-max-height) !important;
+  min-height: var(--hhs-markdown-table-height) !important;
+}
+
+.hhs-markdown-table-single-selection {
+  display: none !important;
+}
+
+div[class*="st-key-"][class*="_markdown_table"]:has(
+  .hhs-markdown-table-single-selection
+) [data-testid="stDataFrame"] input[type="checkbox"] {
+  appearance: none !important;
+  background: transparent !important;
+  border: 2px solid var(--hhs-theme-text-muted-color) !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+  height: 1rem !important;
+  margin: 0 !important;
+  width: 1rem !important;
+}
+
+div[class*="st-key-"][class*="_markdown_table"]:has(
+  .hhs-markdown-table-single-selection
+) [data-testid="stDataFrame"] input[type="checkbox"]:checked {
+  background: radial-gradient(
+    circle,
+    var(--hhs-theme-primary-color) 0 38%,
+    transparent 42%
+  ) !important;
+  border-color: var(--hhs-theme-primary-color) !important;
+}
+
+div[class*="st-key-"][class*="_markdown_table"]:has(
+  .hhs-markdown-table-single-selection
+) [data-testid="stDataFrame"] [role="checkbox"] {
+  border-radius: 50% !important;
+}
+
+div[class*="st-key-"][class*="_markdown_table"]:has(
+  .hhs-markdown-table-single-selection
+) [data-testid="stDataFrame"] [role="checkbox"] svg {
+  display: none !important;
 }
 
 .st-key-hhs_starship_config_editor textarea {
@@ -1404,6 +1455,22 @@ div[class*="st-key-"][class*="_markdown_table"] [data-testid="stDataFrame"] > di
 .hhs-view-subtitle code {
   border-radius: 0.25rem;
   padding: 0.15rem 0.35rem;
+}
+
+.hhs-view-subtitle-link,
+.hhs-view-subtitle-link:link,
+.hhs-view-subtitle-link:visited,
+.hhs-view-subtitle-link code {
+  color: var(--hhs-theme-file-link-color) !important;
+  text-decoration: none !important;
+}
+
+.hhs-view-subtitle-link:hover,
+.hhs-view-subtitle-link:focus,
+.hhs-view-subtitle-link:hover code,
+.hhs-view-subtitle-link:focus code {
+  color: var(--hhs-theme-file-link-color) !important;
+  text-decoration: underline !important;
 }
 
 [data-testid="stMain"] [data-testid="stMarkdownContainer"] h5 {

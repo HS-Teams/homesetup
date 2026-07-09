@@ -376,6 +376,7 @@ ALIAS_TABLE_RESET_COUNTER_KEY = "alias_vars_table_reset_counter"
 ALIAS_VALUE_EDITOR_KEY_PREFIX = "alias_selected_value"
 HHS_SETTINGS_TABLE_KEY = "hhs_settings_table"
 HHS_SETTINGS_TABLE_RESET_COUNTER_KEY = "hhs_settings_table_reset_counter"
+MARKDOWN_TABLE_HEIGHT = 360
 MARKDOWN_TABLE_MARK_COLUMN_WIDTH = 80
 MARKDOWN_TABLE_LAYOUT_VERSION = 3
 CMD_TABLE_KEY = "cmd_vars_table"

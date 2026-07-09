@@ -1260,23 +1260,64 @@ import csv
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 css = Path(sys.argv[2]).read_text(encoding="utf-8")
 render_body = source.split("def render_markdown_table", 1)[1].split("\ndef ", 1)[0]
 assert "min_row_count: int = 0" in render_body
+assert "multi_selection: bool = True" in render_body
+assert "column_text_colors: dict[str, str] | None = None" in render_body
 assert "height=markdown_table_editor_height(max(len(items), min_row_count))" in render_body
+assert "return hhs_ui_constants.MARKDOWN_TABLE_HEIGHT" in source
+assert "if multi_selection:" in render_body
+assert "st.data_editor(" in render_body
+assert "st.dataframe(" in render_body
+assert 'selection_args["on_select"] = "rerun"' in render_body
+assert 'selection_args["selection_mode"] = "single-row"' in render_body
+assert "markdown_table_single_selected_index(" in render_body
+assert "markdown_table_single_selection_marks(" in render_body
+assert "normalize_markdown_table_selection" not in render_body
+assert "def themed_markdown_table_data(" in source
+assert "def markdown_table_single_selection_marks(" in source
+assert '"◉"' in source
+assert '"○"' in source
+assert "resolve_css_value(" in source
+assert "styler.map(" in source
 assert "40 + (len(items) + 1) * 44" not in render_body
-assert "--hhs-markdown-table-max-height: 360px" in css
+assert "--hhs-markdown-table-height: 360px" in css
+assert "--hhs-markdown-table-max-height: var(--hhs-markdown-table-height)" in css
+assert "height: var(--hhs-markdown-table-height) !important" in css
 assert "max-height: var(--hhs-markdown-table-max-height) !important" in css
+assert "min-height: var(--hhs-markdown-table-height) !important" in css
+assert ".hhs-markdown-table-single-selection" in css
+assert "border-radius: 50% !important" in css
+assert "radial-gradient(" in css
 assert "overflow-y: auto" in css
 
 height_start = source.index("def markdown_table_editor_height(")
 height_end = source.index("def render_hhs_setup_settings_table", height_start)
-height_namespace = {}
+height_namespace = {"hhs_ui_constants": SimpleNamespace(MARKDOWN_TABLE_HEIGHT=360)}
 exec("from __future__ import annotations\n" + source[height_start:height_end], height_namespace)
-assert height_namespace["markdown_table_editor_height"](4) < 220
+assert height_namespace["markdown_table_editor_height"](0) == 360
+assert height_namespace["markdown_table_editor_height"](4) == 360
 assert height_namespace["markdown_table_editor_height"](12) == 360
+
+single_selection_start = source.index("def markdown_table_single_selected_index(")
+single_selection_end = source.index("def render_markdown_table", single_selection_start)
+single_selection_namespace = {"table_selection_rows": lambda selection: tuple(selection or ())}
+exec(
+    "from __future__ import annotations\n"
+    + source[single_selection_start:single_selection_end],
+    single_selection_namespace,
+)
+assert single_selection_namespace["markdown_table_single_selected_index"]([2], 3) == 2
+assert single_selection_namespace["markdown_table_single_selected_index"]([3], 3) is None
+assert single_selection_namespace["markdown_table_single_selection_marks"](3, 1) == [
+    "○",
+    "◉",
+    "○",
+]
 
 parse_start = source.index("def hhs_setting_variable_name(")
 parse_end = source.index("def parse_hhs_starship_info", parse_start)
@@ -1308,8 +1349,10 @@ PY
 
 @test "when rendering HHS Firebase then configurations form should load file values" {
   run python3 - "${ui_file}" "${css_file}" <<'PY'
+import os
 import posixpath
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -1331,6 +1374,17 @@ assert ".st-key-hhs_firebase_configurations" in css
 assert "gap: var(--hhs-element-std-gap) !important" in css
 assert "HHS_FIREBASE_CONFIG_FILE\\\\t%s" in source
 assert "STARSHIP_CONFIG\\\\t%s" in source
+assert "def render_openable_config_path(" in source
+assert "search_open_href(file_uri)" in source
+assert "hhs-view-subtitle-link" in source
+assert "data-hhs-open-path" in source
+assert "--hhs-theme-file-link-color: var(--hhs-theme-link-color, var(--hhs-theme-text-color))" in css
+assert ".hhs-view-subtitle-link:link" in css
+assert ".hhs-view-subtitle-link:visited" in css
+assert "color: var(--hhs-theme-file-link-color) !important" in css
+assert "def hhs_setup_config_file_info()" not in source
+assert "def display_hhs_config_path(" not in source
+assert "def hhs_config_path_root_values(" not in source
 assert "def firebase_config_component()" in source
 assert '"hhs_firebase_config_form"' in source
 assert "components.declare_component(" in source
@@ -1346,10 +1400,8 @@ assert "handle_hhs_firebase_config_component_event(event)" in render_body
 assert "fields=hhs_firebase_component_fields()" in source
 assert '"placeholder": placeholder' in source
 assert "max_chars" not in render_body
-assert "        render_hhs_firebase_aliases_table(action_running)" in render_body
-assert "        render_hhs_firebase_aliases_actions(action_running)" in render_body
-assert "            render_hhs_firebase_aliases_table(action_running)" not in render_body
-assert "            render_hhs_firebase_aliases_actions(action_running)" not in render_body
+assert "selected_alias = render_hhs_firebase_aliases_table(action_running)" in render_body
+assert "render_hhs_firebase_aliases_actions(selected_alias, action_running)" in render_body
 assert "Press enter to apply" not in component_html
 assert "Press Enter to apply" not in component_html
 assert 'event.key === "Enter"' in component_html
@@ -1385,21 +1437,121 @@ assert "--hhs-button-width: 140px" in component_html
 assert '"buttonWidth": resolve_css_custom_property(' in source
 assert "window.sessionStorage" in component_html
 
+setup_body = source.split("def render_hhs_setup_panel", 1)[1].split("\ndef ", 1)[0]
+assert "setup_display_path = display_path_value" not in setup_body
+assert "render_openable_config_path(" not in setup_body
+assert "render_hhs_setup_settings_table(action_running)" in setup_body
+
+starship_controls_body = source.split("def render_hhs_starship_controls", 1)[1].split("\ndef ", 1)[0]
+assert "display_path_value(" not in starship_controls_body
+assert 'with st.container(key="hhs_starship_controls"):' in starship_controls_body
+assert 'with st.expander("Configurations", expanded=True):' in starship_controls_body
+expander_index = starship_controls_body.index(
+    'with st.expander("Configurations", expanded=True):'
+)
+columns_index = starship_controls_body.index(
+    "cache_col, config_col, preset_col, apply_col, edit_col = st.columns("
+)
+assert expander_index < columns_index
+assert "value=config_path" in starship_controls_body
+assert ".st-key-hhs_starship_controls [data-testid=\"stExpanderDetails\"] > [data-testid=\"stVerticalBlock\"]" in css
+
+starship_editor_body = source.split("def render_hhs_starship_config_editor", 1)[1].split("\ndef ", 1)[0]
+assert "config_display_path = display_path_value(" not in starship_editor_body
+assert "render_openable_config_path(" not in starship_editor_body
+assert 'label_visibility="collapsed"' in starship_editor_body
+assert 'render_view_subtitle(f"<code>{html.escape(config_display_path)}</code>", True)' not in starship_editor_body
+
+firebase_panel_body = source.split("def render_hhs_firebase_panel", 1)[1].split("\ndef ", 1)[0]
+assert "config_display_path = display_path_value(" not in firebase_panel_body
+assert "render_openable_config_path(" not in firebase_panel_body
+assert 'render_view_subtitle(f"<code>{html.escape(config_display_path)}</code>", True)' not in firebase_panel_body
+
 aliases_table_body = source.split("def render_hhs_firebase_aliases_table", 1)[1].split("\ndef ", 1)[0]
+assert "fetch_firebase_aliases()" in source
+assert "def firebase_alias_table_rows(" in source
 assert "render_markdown_table(" in aliases_table_body
 assert '"Firebase Aliases"' in aliases_table_body
 assert 'item_column_label="Database"' in aliases_table_body
 assert 'variable_column_label="Group"' in aliases_table_body
-assert '"Alias": []' in aliases_table_body
-assert '"Count": []' in aliases_table_body
-assert "min_row_count=4" in aliases_table_body
+assert '[row["Database"] for row in alias_rows]' in aliases_table_body
+assert '[row["Group"] for row in alias_rows]' in aliases_table_body
+assert '"Alias": [row["Alias"] for row in alias_rows]' in aliases_table_body
+assert '"Count": [row["Count"] for row in alias_rows]' in aliases_table_body
+assert "min_row_count=4" not in aliases_table_body
+assert "multi_selection=False" in aliases_table_body
+assert '"Database": "var(--hhs-secondary)"' not in aliases_table_body
+assert '"Group": "var(--hhs-secondary)"' in aliases_table_body
+assert '"Alias": "var(--hhs-theme-primary-color)"' in aliases_table_body
+assert "return selected_aliases[0] if selected_aliases else" in aliases_table_body
+
+aliases_start = source.index("def fetch_firebase_aliases(")
+aliases_end = source.index("def render_hhs_firebase_aliases_table", aliases_start)
+aliases_namespace = {}
+exec("from __future__ import annotations\n" + source[aliases_start:aliases_end], aliases_namespace)
+firebase_aliases = aliases_namespace["fetch_firebase_aliases"]()
+expected_aliases = {
+    "databases": [
+        {
+            "homesetup": [
+                {
+                    "dotfiles": [
+                        {"demo": {}},
+                        {"home": {}},
+                        {"new": {}},
+                        {"work": {}},
+                    ]
+                },
+                {
+                    "hspylib-test": [
+                        {"0": {}},
+                        {"1": {}},
+                    ]
+                },
+            ]
+        }
+    ]
+}
+assert firebase_aliases == expected_aliases
+alias_rows = aliases_namespace["firebase_alias_table_rows"](firebase_aliases)
+assert alias_rows == [
+    {"Database": "homesetup", "Group": "dotfiles", "Alias": "demo", "Count": "0"},
+    {"Database": "homesetup", "Group": "dotfiles", "Alias": "home", "Count": "0"},
+    {"Database": "homesetup", "Group": "dotfiles", "Alias": "new", "Count": "0"},
+    {"Database": "homesetup", "Group": "dotfiles", "Alias": "work", "Count": "0"},
+    {"Database": "homesetup", "Group": "hspylib-test", "Alias": "0", "Count": "0"},
+    {"Database": "homesetup", "Group": "hspylib-test", "Alias": "1", "Count": "0"},
+]
+
+command_start = source.index("def build_hhs_firebase_plugin_command(")
+command_end = source.index("def build_hhs_starship_plugin_command", command_start)
+command_namespace = {
+    "shlex": shlex,
+    "build_hhs_env_environment_command": lambda: "ENV; ",
+}
+exec("from __future__ import annotations\n" + source[command_start:command_end], command_namespace)
+upload_command = command_namespace["build_hhs_firebase_alias_action_command"](
+    "upload",
+    "demo",
+)
+download_command = command_namespace["build_hhs_firebase_alias_action_command"](
+    "download",
+    "work alias",
+)
+assert "__hhs firebase execute upload demo" in upload_command
+assert "__hhs firebase execute download 'work alias'" in download_command
+assert 'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/firebase/firebase.bash"' in upload_command
 
 aliases_actions_body = source.split("def render_hhs_firebase_aliases_actions", 1)[1].split("\ndef ", 1)[0]
 assert "[1, 0.28, 0.28, 1]" in aliases_actions_body
 assert '" Upload"' in aliases_actions_body
 assert 'key="hhs_firebase_alias_upload_button"' in aliases_actions_body
+assert "on_click=request_hhs_firebase_alias_action" in aliases_actions_body
+assert 'args=("upload", clean_alias)' in aliases_actions_body
+assert "disabled=action_disabled" in aliases_actions_body
 assert '" Download"' in aliases_actions_body
 assert 'key="hhs_firebase_alias_download_button"' in aliases_actions_body
+assert 'args=("download", clean_alias)' in aliases_actions_body
 
 for label, property_name, fallback_property_name, state_key, placeholder in (
     ("UID", "UID", "hhs.firebase.user.uid", "hhs_firebase_uid", "Firebase auth UID"),
@@ -1474,35 +1626,58 @@ parse_end = source.index("def parse_hhs_services", parse_start)
 exec("from __future__ import annotations\n" + source[parse_start:parse_end], namespace)
 
 display_namespace = {
+    "os": os,
     "Path": Path,
     "posixpath": posixpath,
+    "re": re,
+    "connected_ssh_host": lambda: "",
+    "remote_environment_values": lambda _names: {},
     "homesetup_config_dir": lambda: Path("/home/user/.config/hhs"),
     "homesetup_home": lambda: Path("/home/user/HomeSetup"),
+    "hhs_log_dir": lambda: Path("/home/user/.config/hhs/log"),
 }
-display_start = source.index("def hhs_config_path_root_values(")
-display_end = source.index("def render_hhs_starship_controls", display_start)
+display_start = source.index("def env_path_aliases(")
+display_end = source.index("def history_command_display_index", display_start)
 exec("from __future__ import annotations\n" + source[display_start:display_end], display_namespace)
+expand_start = source.index("def path_variable_names(")
+expand_end = source.index("def build_remote_environment_values_command", expand_start)
+exec("from __future__ import annotations\n" + source[expand_start:expand_end], display_namespace)
 
 environment = {
     "HOME": "/home/user",
     "HHS_HOME": "/home/user/HomeSetup",
     "HHS_DIR": "/home/user/.config/hhs",
+    "HHS_LOG_DIR": "/home/user/.config/hhs/log",
 }
-display_value = display_namespace["display_hhs_config_path"](
+display_value = display_namespace["display_path_value"](
     "/home/user/.config/hhs/firebase.properties",
     environment,
 )
-assert display_value == "$HHS_DIR/firebase.properties"
-starship_value = display_namespace["display_hhs_config_path"](
+assert display_value == "${HHS_DIR}/firebase.properties"
+starship_value = display_namespace["display_path_value"](
     "/home/user/.config/starship.toml",
     environment,
 )
-assert starship_value == "$HOME/.config/starship.toml"
-hhs_home_value = display_namespace["display_hhs_config_path"](
+assert starship_value == "${HOME}/.config/starship.toml"
+hhs_home_value = display_namespace["display_path_value"](
     "/home/user/HomeSetup/bin/starship.toml",
     environment,
 )
-assert hhs_home_value == "$HHS_HOME/bin/starship.toml"
+assert hhs_home_value == "${HHS_HOME}/bin/starship.toml"
+log_value = display_namespace["display_path_value"](
+    "/home/user/.config/hhs/log/hhsrc.log",
+    environment,
+)
+assert log_value == "${HHS_LOG_DIR}/hhsrc.log"
+file_environment = {
+    **environment,
+    "HHS_FIREBASE_CONFIG_FILE": "/home/user/.config/hhs/firebase.properties",
+}
+file_value = display_namespace["display_path_value"](
+    "/home/user/.config/hhs/firebase.properties",
+    file_environment,
+)
+assert file_value == "${HHS_FIREBASE_CONFIG_FILE}"
 
 starship_output = """__HHS_STARSHIP_CACHE__
 /home/user/.cache/starship
@@ -2045,11 +2220,19 @@ PY
   run grep -q -- '--hhs-theme-link-color: var(' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/pastel-powerline.css"
   assert_failure
 
-  run grep -Eq -- '--hhs-theme-[^:]+: var\(' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/pastel-powerline.css"
-  assert_failure
+  run python3 - "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/pastel-powerline.css" "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/jetpack.css" <<'PY'
+import re
+import sys
+from pathlib import Path
 
-  run grep -Eq -- '--hhs-theme-[^:]+: var\(' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/jetpack.css"
-  assert_failure
+for theme_file in sys.argv[1:]:
+    for line in Path(theme_file).read_text(encoding="utf-8").splitlines():
+        clean_line = line.strip()
+        if clean_line.startswith("--hhs-theme-file-link-color:"):
+            continue
+        assert not re.match(r"--hhs-theme-[^:]+:\s*var\(", clean_line), clean_line
+PY
+  assert_success
 
   run python3 - <<'PY'
 import re
@@ -2755,8 +2938,15 @@ assert ui_source.count("hhs-view-heading hhs-view-heading--direct-content") == 2
 assert "def render_view_subtitle" in ui_source
 assert '<h3 class="hhs-view-subtitle">' in ui_source
 assert ".hhs-view-subtitle" in base_css
+assert ".hhs-view-subtitle-link" in base_css
+assert ".hhs-view-subtitle-link:link" in base_css
+assert ".hhs-view-subtitle-link:visited" in base_css
+assert ".hhs-view-subtitle-link:hover" in base_css
+assert "--hhs-theme-file-link-color: var(--hhs-theme-link-color, var(--hhs-theme-text-color))" in base_css
 assert "border-bottom: 0 !important" in base_css
 assert "box-shadow: none !important" in base_css
+assert "color: var(--hhs-theme-file-link-color) !important" in base_css
+assert "text-decoration: underline !important" in base_css
 assert "margin: 0 !important" in expander_block
 assert "margin: 0 !important" in docker_expander_block
 assert "gap: var(--hhs-element-std-gap) !important" in docker_expander_details_block
@@ -2944,6 +3134,7 @@ assert "--hhs-theme-footer-status-text-size: 1.176rem" in dracula_css
 assert "--hhs-theme-footer-glyph-button: 1.5rem" in dracula_css
 assert "--hhs-theme-hhs-action-button-width: 140px" in dracula_css
 assert "--hhs-theme-input-placeholder-color: #686e7a" in dracula_css
+assert "--hhs-theme-file-link-color: var(--hhs-theme-link-color)" in dracula_css
 assert "--hhs-theme-footer-status-info-color" in homesetup_css
 assert "--hhs-theme-footer-status-warn-color" in homesetup_css
 assert "--hhs-theme-footer-status-error-color" in homesetup_css
@@ -2952,6 +3143,7 @@ assert "--hhs-theme-footer-status-text-size: 1.176rem" in homesetup_css
 assert "--hhs-theme-footer-glyph-button: 1.5rem" in homesetup_css
 assert "--hhs-theme-hhs-action-button-width: 140px" in homesetup_css
 assert "--hhs-theme-input-placeholder-color: #686e7a" in homesetup_css
+assert "--hhs-theme-file-link-color: var(--hhs-theme-link-color)" in homesetup_css
 assert "--hhs-theme-footer-status-info-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-warn-color" in tokyo_night_css
 assert "--hhs-theme-footer-status-error-color" in tokyo_night_css
@@ -2966,6 +3158,9 @@ assert "--hhs-theme-hhs-action-button-width: 140px" in pastel_powerline_css
 assert "--hhs-theme-input-placeholder-color: #686e7a" in tokyo_night_css
 assert "--hhs-theme-input-placeholder-color: #686e7a" in jetpack_css
 assert "--hhs-theme-input-placeholder-color: #686e7a" in pastel_powerline_css
+assert "--hhs-theme-file-link-color: var(--hhs-theme-link-color)" in tokyo_night_css
+assert "--hhs-theme-file-link-color: var(--hhs-theme-link-color)" in jetpack_css
+assert "--hhs-theme-file-link-color: var(--hhs-theme-link-color)" in pastel_powerline_css
 assert '.stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"]' in dracula_css
 assert '.stButtonGroup [data-testid="stButtonGroup"] button[aria-checked="true"]' in dracula_css
 assert '.stButtonGroup [data-testid="stButtonGroup"] button[data-selected]' in dracula_css
@@ -6385,6 +6580,7 @@ theme_properties = {
     "hhs-theme-background-color": "#19181f",
     "hhs-theme-primary-color": "#f1fa8c",
     "hhs-panel": "var(--missing-panel, #14131a)",
+    "hhs-secondary": "var(--hhs-theme-primary-color)",
 }
 namespace["theme_custom_properties"] = lambda _theme_name: theme_properties
 assert namespace["resolve_css_custom_property"](
@@ -6393,6 +6589,12 @@ assert namespace["resolve_css_custom_property"](
 assert namespace["resolve_css_custom_property"](
     theme_properties, "hhs-panel", "#000000"
 ) == "#14131a"
+assert namespace["resolve_css_value"](
+    theme_properties, "var(--hhs-secondary)", "#ffffff"
+) == "#f1fa8c"
+assert namespace["resolve_css_value"](
+    theme_properties, "var(--missing-color, #abcdef)", "#ffffff"
+) == "#abcdef"
 theme = namespace["ssh_explorer_component_theme"]()
 assert theme["primary"] == "#f1fa8c"
 
@@ -9316,6 +9518,35 @@ PY
   run grep -q 'build_hhs_logs_command(selected_log, 200, selected_level)' "${ui_file}"
   assert_failure
 
+  run grep -q 'def hhs_log_file_info(log_file: str)' "${ui_file}"
+  assert_success
+
+  run grep -q '"HHS_LOG_DIR": str(hhs_log_dir())' "${ui_file}"
+  assert_success
+
+  run grep -q 'log_file_path, log_environment = hhs_log_file_info(selected_log)' "${ui_file}"
+  assert_success
+
+  run grep -q 'log_display_path = display_path_value(log_file_path, log_environment)' "${ui_file}"
+  assert_success
+
+  run grep -q 'render_openable_config_path(log_display_path, log_file_path)' "${ui_file}"
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+monitor_logs_body = source.split("def render_monitor_logs_panel", 1)[1].split("\ndef ", 1)[0]
+assert "render_openable_config_path(log_display_path, log_file_path)" in monitor_logs_body
+assert "render_view_subtitle(" not in monitor_logs_body
+assert monitor_logs_body.index("render_log_controls)") < monitor_logs_body.index(
+    "log_file_path, log_environment = hhs_log_file_info(selected_log)"
+)
+PY
+  assert_success
+
   run python3 - <<'PY'
 import ast
 import re
@@ -11150,7 +11381,7 @@ import sys
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-start = source.index("def env_path_aliases()")
+start = source.index("def env_path_aliases(")
 end = source.index("def render_table(")
 namespace = {"os": os, "re": re}
 exec("from __future__ import annotations\n" + source[start:end], namespace)
