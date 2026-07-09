@@ -17050,6 +17050,7 @@ def render_markdown_table_header(
 def render_markdown_table_row(
     key_prefix: str,
     index: int,
+    header: str,
     item: str,
     value_key: str,
     disabled: bool,
@@ -17066,17 +17067,18 @@ def render_markdown_table_row(
             st.markdown(str(index))
         with enabled_column:
             st.checkbox(
-                f"Mark {item}",
+                f"Mark {header or item}",
                 key=value_key,
                 disabled=disabled,
                 label_visibility="collapsed",
             )
         with setting_column:
-            st.markdown(f"`{item}`")
+            st.markdown(f"`{header or item}`")
 
 
 def render_markdown_table(
     caption: str,
+    headers: list[str],
     items: list[str],
     values: list[bool],
     key_prefix: str,
@@ -17086,8 +17088,8 @@ def render_markdown_table(
     item_column_label: str = "Setting",
 ) -> list[bool]:
     """Render a reusable checkbox markdown table and return selected values."""
-    if len(items) != len(values):
-        raise ValueError("items and values must have the same length")
+    if len(items) != len(values) or len(items) != len(headers):
+        raise ValueError("headers, items, and values must have the same length")
     if value_keys is not None and len(items) != len(value_keys):
         raise ValueError("items and value_keys must have the same length")
 
@@ -17108,19 +17110,23 @@ def render_markdown_table(
             value_column_label,
             item_column_label,
         )
-        for index, (item, checkbox_key) in enumerate(
-            zip(items, checkbox_keys, strict=True),
+        for index, (header, item, checkbox_key) in enumerate(
+            zip(headers, items, checkbox_keys, strict=True),
             start=1,
         ):
             render_markdown_table_row(
                 key_prefix,
                 index,
+                header,
                 item,
                 checkbox_key,
                 disabled,
             )
 
-    return [bool(st.session_state.get(checkbox_key, False)) for checkbox_key in checkbox_keys]
+    return [
+        bool(st.session_state.get(checkbox_key, False))
+        for checkbox_key in checkbox_keys
+    ]
 
 
 def render_hhs_setup_settings_table(action_running: bool) -> None:
@@ -17128,6 +17134,7 @@ def render_hhs_setup_settings_table(action_running: bool) -> None:
     settings = selected_hhs_setup_settings()
     render_markdown_table(
         "Mark the preferred startup settings",
+        list(HHS_SETUP_SETTINGS),
         list(HHS_SETUP_SETTINGS),
         [settings[name] for name in HHS_SETUP_SETTINGS],
         "hhs_setup_settings",
