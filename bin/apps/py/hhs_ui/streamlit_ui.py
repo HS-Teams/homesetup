@@ -18622,11 +18622,6 @@ def hhs_firebase_form_state_needs_reload(values: dict[str, str]) -> bool:
     return not any(current_values)
 
 
-def mark_hhs_firebase_form_dirty() -> None:
-    """Mark Firebase form values as user-edited for the current session."""
-    st.session_state["_hhs_firebase_form_dirty"] = True
-
-
 def sync_hhs_firebase_form_state(firebase_info: dict[str, object]) -> None:
     """Initialize Firebase form state when the loaded config changes."""
     token = hhs_firebase_info_token(firebase_info)
@@ -18648,14 +18643,20 @@ def apply_pending_hhs_firebase_form_revert() -> None:
     """Apply a queued Firebase form revert before rendering inputs."""
     if not st.session_state.pop("_hhs_firebase_revert_pending", False):
         return
+    restore_hhs_firebase_original_values()
+
+
+def restore_hhs_firebase_original_values() -> bool:
+    """Restore Firebase form session values from the loaded config file."""
     original_values = st.session_state.get("_hhs_firebase_original_values", {})
     if not isinstance(original_values, dict):
-        return
+        return False
     for _label, property_name, _fallback, state_key, _placeholder in HHS_FIREBASE_FIELDS:
         st.session_state[state_key] = normalize_hhs_firebase_value(
             original_values.get(property_name, "")
         )
     st.session_state["_hhs_firebase_form_dirty"] = False
+    return True
 
 
 def selected_hhs_firebase_values() -> dict[str, str]:
@@ -18666,6 +18667,18 @@ def selected_hhs_firebase_values() -> dict[str, str]:
             HHS_FIREBASE_FIELDS
         )
     }
+
+
+def apply_hhs_firebase_component_values(values: object) -> None:
+    """Copy Firebase component values into Streamlit session state."""
+    value_map = values if isinstance(values, dict) else {}
+    for _label, property_name, _fallback, state_key, _placeholder in (
+        HHS_FIREBASE_FIELDS
+    ):
+        st.session_state[state_key] = normalize_hhs_firebase_value(
+            value_map.get(property_name, st.session_state.get(state_key, ""))
+        )
+    st.session_state["_hhs_firebase_form_dirty"] = True
 
 
 def request_hhs_firebase_save() -> None:
@@ -18751,57 +18764,107 @@ def render_hhs_firebase_aliases_actions(action_running: bool) -> None:
             )
 
 
+@lru_cache(maxsize=1)
+def firebase_config_component() -> Callable[..., dict[str, object] | None]:
+    """Return the registered Firebase configuration Streamlit component."""
+    return components.declare_component(
+        "hhs_firebase_config_form",
+        path=str(hhs_ui.FIREBASE_CONFIG_COMPONENT_DIR),
+    )
+
+
+def firebase_config_component_theme() -> dict[str, str]:
+    """Return CSS tokens for the Firebase configuration component iframe."""
+    theme_name = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
+    properties = theme_custom_properties(theme_name)
+    return {
+        "background": resolve_css_custom_property(
+            properties, "hhs-background", "#282a36"
+        ),
+        "field": resolve_css_custom_property(
+            properties, "hhs-theme-secondary-background-color", "#44475a"
+        ),
+        "text": resolve_css_custom_property(
+            properties, "hhs-theme-text-color", "#f8f8f2"
+        ),
+        "muted": resolve_css_custom_property(
+            properties, "hhs-theme-input-placeholder-color", "#686e7a"
+        ),
+        "border": resolve_css_custom_property(
+            properties, "hhs-theme-dataframe-border-color", "#6272a4"
+        ),
+        "primary": resolve_css_custom_property(
+            properties, "hhs-theme-primary-color", "#bd93f9"
+        ),
+        "buttonWidth": resolve_css_custom_property(
+            properties, "hhs-theme-hhs-action-button-width", "140px"
+        ),
+    }
+
+
+def hhs_firebase_component_fields() -> list[dict[str, str]]:
+    """Return Firebase component field definitions and current values."""
+    return [
+        {
+            "label": label,
+            "name": property_name,
+            "placeholder": placeholder,
+            "value": normalize_hhs_firebase_value(
+                st.session_state.get(state_key, "")
+            ),
+        }
+        for label, property_name, _fallback, state_key, placeholder in (
+            HHS_FIREBASE_FIELDS
+        )
+    ]
+
+
+def render_hhs_firebase_config_component(
+    action_running: bool,
+) -> dict[str, object] | None:
+    """Render the Firebase configuration component and return its event."""
+    component = firebase_config_component()
+    return component(
+        disabled=action_running,
+        fields=hhs_firebase_component_fields(),
+        theme=firebase_config_component_theme(),
+        token=str(st.session_state.get("_hhs_firebase_loaded_token", "default")),
+        key="hhs_firebase_config_component",
+        default=None,
+    )
+
+
+def handle_hhs_firebase_config_component_event(event: object) -> bool:
+    """Handle one Firebase configuration component action event."""
+    if not isinstance(event, dict):
+        return False
+    event_id = normalize_hhs_firebase_value(event.get("eventId", ""))
+    if not event_id:
+        return False
+    if st.session_state.get("_hhs_firebase_config_component_event_id") == event_id:
+        return False
+    st.session_state["_hhs_firebase_config_component_event_id"] = event_id
+
+    action = normalize_hhs_firebase_value(event.get("action", ""))
+    if action == "save":
+        apply_hhs_firebase_component_values(event.get("values", {}))
+        request_hhs_firebase_save()
+        return True
+    if action == "restore":
+        restore_hhs_firebase_original_values()
+        save_ui_state()
+        return True
+    return False
+
+
 def render_hhs_firebase_configurations(action_running: bool) -> None:
-    """Render Firebase configuration fields in one row inside an expander."""
+    """Render Firebase configuration fields and action buttons."""
     with st.container(key="hhs_firebase_configurations"):
         with st.expander("Configurations", expanded=True):
-            columns = st.columns(
-                len(HHS_FIREBASE_FIELDS),
-                gap="small",
-                vertical_alignment="bottom",
-            )
-            for column, (label, _property_name, _fallback, state_key, placeholder) in zip(
-                columns,
-                HHS_FIREBASE_FIELDS,
-                strict=True,
-            ):
-                with column:
-                    st.text_input(
-                        label,
-                        key=state_key,
-                        placeholder=placeholder,
-                        disabled=action_running,
-                        on_change=mark_hhs_firebase_form_dirty,
-                    )
-            left, save_col, cancel_col, right = st.columns(
-                [1, 0.22, 0.24, 1],
-                gap="small",
-                vertical_alignment="center",
-            )
-            del left, right
-            with save_col:
-                save_clicked = st.button(
-                    " Save",
-                    key="hhs_firebase_save_button",
-                    help="Save",
-                    disabled=action_running,
-                    width="stretch",
-                )
-            with cancel_col:
-                cancel_clicked = st.button(
-                    " Cancel",
-                    key="hhs_firebase_cancel_button",
-                    help="Cancel",
-                    disabled=action_running,
-                    width="stretch",
-                )
+            event = render_hhs_firebase_config_component(action_running)
         render_hhs_firebase_aliases_table(action_running)
         render_hhs_firebase_aliases_actions(action_running)
-    if save_clicked:
-        request_hhs_firebase_save()
-        st.rerun()
-    elif cancel_clicked:
-        request_hhs_firebase_revert()
+    if handle_hhs_firebase_config_component_event(event):
         st.rerun()
 
 
@@ -19444,6 +19507,9 @@ def ssh_explorer_component_theme() -> dict[str, str]:
         ),
         "primary": resolve_css_custom_property(
             properties, "hhs-theme-primary-color", "#bd93f9"
+        ),
+        "placeholder": resolve_css_custom_property(
+            properties, "hhs-theme-input-placeholder-color", "#686e7a"
         ),
     }
 

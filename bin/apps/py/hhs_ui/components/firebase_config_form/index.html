@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      @font-face {
+        font-family: "Droid Sans Mono for Powerline Nerd Font Complete";
+        src: url("./Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2")
+          format("woff2");
+        font-weight: 400 900;
+      }
+
+      :root {
+        --hhs-bg: #282a36;
+        --hhs-field: #44475a;
+        --hhs-text: #f8f8f2;
+        --hhs-muted: rgba(248, 248, 242, 0.68);
+        --hhs-border: #6272a4;
+        --hhs-primary: #bd93f9;
+        --hhs-button-width: 140px;
+        color-scheme: dark;
+        font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        background: var(--hhs-bg);
+        color: var(--hhs-text);
+        margin: 0;
+        min-width: 0;
+        overflow: hidden;
+        padding: 0;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .firebase-config-form {
+        display: grid;
+        gap: 1rem;
+        background: var(--hhs-bg);
+        width: 100%;
+      }
+
+      .fields {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .field {
+        display: grid;
+        align-items: center;
+        gap: 0.65rem;
+        grid-template-columns: var(--hhs-label-width, max-content) minmax(0, 1fr);
+        min-width: 0;
+      }
+
+      .field:nth-child(odd) {
+        --hhs-label-width: 6ch;
+      }
+
+      .field:nth-child(even) {
+        --hhs-label-width: 5.7rem;
+      }
+
+      label {
+        color: var(--hhs-text);
+        font-size: 0.875rem;
+        font-weight: 700;
+        line-height: 1.2;
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      input {
+        background: var(--hhs-field);
+        border: 1px solid var(--hhs-border);
+        border-radius: 4px;
+        color: var(--hhs-text);
+        min-height: 2.5rem;
+        min-width: 0;
+        outline: none;
+        padding: 0 0.75rem;
+        width: 100%;
+      }
+
+      input::placeholder {
+        color: var(--hhs-muted);
+        opacity: 1;
+      }
+
+      input:focus {
+        border-color: var(--hhs-primary);
+        box-shadow: 0 0 0 1px var(--hhs-primary);
+      }
+
+      input:disabled,
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.62;
+      }
+
+      .actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+      }
+
+      button {
+        align-items: center;
+        background: var(--hhs-field);
+        border: 1px solid var(--hhs-border);
+        border-radius: 4px;
+        color: var(--hhs-text);
+        cursor: pointer;
+        display: inline-flex;
+        font-weight: 700;
+        justify-content: center;
+        min-height: 2.5rem;
+        min-width: var(--hhs-button-width);
+        padding: 0 0.85rem;
+        width: var(--hhs-button-width);
+      }
+
+      button:hover:not(:disabled),
+      button:focus-visible {
+        border-color: var(--hhs-primary);
+        box-shadow: 0 0 0 1px var(--hhs-primary);
+      }
+
+      @media (max-width: 520px) {
+        .fields,
+        .actions {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .fields {
+          display: grid;
+        }
+
+        .field {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        label {
+          text-align: left;
+        }
+
+        .actions {
+          display: grid;
+        }
+
+        button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main
+      id="app"
+      class="firebase-config-form"
+      aria-label="Firebase configuration"
+    ></main>
+    <script>
+      const Streamlit = {
+        sendMessage(type, data = {}) {
+          window.parent.postMessage(
+            {
+              isStreamlitMessage: true,
+              type,
+              ...data,
+            },
+            "*"
+          );
+        },
+        setComponentReady() {
+          this.sendMessage("streamlit:componentReady", { apiVersion: 1 });
+        },
+        setFrameHeight(height) {
+          this.sendMessage("streamlit:setFrameHeight", { height });
+        },
+        setComponentValue(value) {
+          this.sendMessage("streamlit:setComponentValue", {
+            dataType: "json",
+            value,
+          });
+        },
+      };
+
+      const app = document.getElementById("app");
+      let args = {
+        disabled: false,
+        fields: [],
+        theme: {},
+        token: "default",
+      };
+      let values = {};
+
+      function stringValue(value, fallback = "") {
+        if (value === null || value === undefined) {
+          return fallback;
+        }
+        return String(value);
+      }
+
+      function storageKey() {
+        return `hhs-firebase-config-form:${stringValue(args.token, "default")}`;
+      }
+
+      function fieldValues(fields) {
+        return Object.fromEntries(
+          fields.map((field) => [
+            stringValue(field.name),
+            stringValue(field.value),
+          ])
+        );
+      }
+
+      function hasRestorableChanges() {
+        const originalValues = fieldValues(args.fields);
+        return args.fields.some((field) => {
+          const name = stringValue(field.name);
+          return stringValue(values[name]) !== originalValues[name];
+        });
+      }
+
+      function updateRestoreButtonState() {
+        const restoreButton = app.querySelector('button[data-action="restore"]');
+        if (restoreButton) {
+          restoreButton.disabled = Boolean(args.disabled) || !hasRestorableChanges();
+        }
+      }
+
+      function displayLabel(value) {
+        const label = stringValue(value);
+        const labels = {
+          DATABASE: "Database",
+          EMAIL: "Email",
+          PROJECT_ID: "Project ID",
+          UID: "UID",
+        };
+        return labels[label] || label;
+      }
+
+      function readDraft() {
+        try {
+          const draft = window.sessionStorage.getItem(storageKey());
+          return draft ? JSON.parse(draft) : {};
+        } catch (_error) {
+          return {};
+        }
+      }
+
+      function writeDraft() {
+        try {
+          window.sessionStorage.setItem(storageKey(), JSON.stringify(values));
+        } catch (_error) {
+          return;
+        }
+      }
+
+      function clearDraft() {
+        try {
+          window.sessionStorage.removeItem(storageKey());
+        } catch (_error) {
+          return;
+        }
+      }
+
+      function applyTheme(theme) {
+        const styles = document.documentElement.style;
+        const tokens = {
+          "--hhs-bg": theme.background,
+          "--hhs-field": theme.field,
+          "--hhs-text": theme.text,
+          "--hhs-muted": theme.muted,
+          "--hhs-border": theme.border,
+          "--hhs-primary": theme.primary,
+          "--hhs-button-width": theme.buttonWidth,
+        };
+        Object.entries(tokens).forEach(([name, value]) => {
+          if (value) {
+            styles.setProperty(name, String(value));
+          }
+        });
+      }
+
+      function resizeFrame() {
+        const height = Math.ceil(document.documentElement.scrollHeight);
+        Streamlit.setFrameHeight(height);
+      }
+
+      function createField(field) {
+        const name = stringValue(field.name);
+        const labelText = displayLabel(field.label || name);
+        const wrapper = document.createElement("div");
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        wrapper.className = "field";
+        label.htmlFor = `firebase-${name}`;
+        label.textContent = `${labelText}:`;
+        input.id = `firebase-${name}`;
+        input.name = name;
+        input.placeholder = stringValue(field.placeholder);
+        input.type = "text";
+        input.value = stringValue(values[name]);
+        input.disabled = Boolean(args.disabled);
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+          }
+        });
+        input.addEventListener("input", () => {
+          values[name] = input.value;
+          writeDraft();
+          updateRestoreButtonState();
+        });
+        wrapper.append(label, input);
+        return wrapper;
+      }
+
+      function sendAction(action) {
+        if (action === "restore") {
+          values = fieldValues(args.fields);
+          clearDraft();
+          render();
+        } else if (action === "save") {
+          clearDraft();
+        }
+        Streamlit.setComponentValue({
+          action,
+          eventId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          values: { ...values },
+        });
+      }
+
+      function createButton(label, action, title) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.disabled = Boolean(args.disabled);
+        button.textContent = label;
+        button.title = title;
+        button.dataset.action = action;
+        button.setAttribute("aria-label", title);
+        button.addEventListener("click", () => sendAction(action));
+        return button;
+      }
+
+      function render(nextArgs) {
+        if (nextArgs) {
+          args = {
+            ...args,
+            ...nextArgs,
+            fields: Array.isArray(nextArgs.fields) ? nextArgs.fields : [],
+            theme: nextArgs.theme || {},
+          };
+        }
+        applyTheme(args.theme);
+        values = {
+          ...fieldValues(args.fields),
+          ...readDraft(),
+        };
+        const fields = document.createElement("section");
+        const actions = document.createElement("section");
+        fields.className = "fields";
+        actions.className = "actions";
+        fields.replaceChildren(...args.fields.map(createField));
+        actions.replaceChildren(
+          createButton(" Save", "save", "Save"),
+          createButton("ﭯ Restore", "restore", "Restore original file values")
+        );
+        app.replaceChildren(fields, actions);
+        updateRestoreButtonState();
+        requestAnimationFrame(resizeFrame);
+      }
+
+      window.addEventListener("message", (event) => {
+        const message = event.data || {};
+        if (message.type !== "streamlit:render") {
+          return;
+        }
+        render({
+          ...(message.args || {}),
+          theme: message.args?.theme || message.theme || {},
+        });
+      });
+
+      new ResizeObserver(resizeFrame).observe(document.body);
+      Streamlit.setComponentReady();
+      render();
+    </script>
+  </body>
+</html>
