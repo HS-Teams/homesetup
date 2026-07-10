@@ -26,6 +26,7 @@ import logging
 import os
 import posixpath
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -253,6 +254,7 @@ from hhs_ui.ssh_explorer_ui import (
 from hhs_ui.command_runtime import (
     background_job_is_running,
     background_job_result,
+    background_job_state,
     background_job_state_key,
     render_background_job_polling_fragment,
     render_background_job_status,
@@ -362,6 +364,7 @@ from hhs_ui.ui_definitions import (
     DOCKER_ACTION_JOB,
     HHS_FIREBASE_ACTION_JOB,
     HHS_FIREBASE_FIELDS,
+    HHS_HSPM_ACTION_JOB,
     HHS_SETTINGS_ACTION_JOB,
     HHS_SETUP_ACTION_JOB,
     HHS_SETUP_SETTINGS,
@@ -701,72 +704,6 @@ def terminal_document_view_is_active() -> bool:
     return bool(st.session_state.get(hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY)) and (
         st.session_state.get(hhs_ui.DOCUMENT_SELECTED_KEY) == "TERMINAL"
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def render_sidebar() -> None:
@@ -1222,6 +1159,7 @@ def render_docker_image_table(result: subprocess.CompletedProcess[str]) -> None:
         ],
         reset_selection=reset_docker_image_table_selection,
     )
+
 
 CONFIG_FILE_DEFINITIONS = {
     "ENV": ("HHS_ENV_FILE", ".env"),
@@ -1842,30 +1780,6 @@ def execute_mount_updater_check() -> None:
     start_updater_check("local", force_local=True, show_preloader_event=False)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def cached_aliases_result() -> tuple[subprocess.CompletedProcess[str] | None, bool]:
     """Return a cached aliases list result."""
     return cached_background_command_result(build_hhs_aliases_command(), "aliases")
@@ -1986,8 +1900,6 @@ def run_hhs_envs(
     )
 
 
-
-
 def run_hhs_updater_check(
     refresh_cache: bool = False,
 ) -> subprocess.CompletedProcess[str]:
@@ -2046,8 +1958,6 @@ def run_hhs_logs(
         "Loading logs...",
         cache_tag="monitor_logs",
     )
-
-
 
 
 def run_hhs_env_action(
@@ -2122,22 +2032,6 @@ def run_hhs_process_kill(process_name: str) -> subprocess.CompletedProcess[str]:
         timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         cache_tag="monitor_process",
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def run_hhs_services_quietly(
@@ -2247,18 +2141,6 @@ def filter_service_rows(
     return rows
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 def process_monitor_chart_rows(
     output: str, metric: str, limit: int = 10
 ) -> list[dict[str, float | str]]:
@@ -2290,10 +2172,6 @@ def history_command_value_editor_key(index: int) -> str:
 def history_directory_value_editor_key(index: int) -> str:
     """Return the Streamlit widget key for a selected history directory value viewer."""
     return f"{hhs_ui.HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX}_{index}"
-
-
-
-
 
 
 def docker_container_table_key() -> str:
@@ -2472,9 +2350,9 @@ def hhs_settings_table_key() -> str:
     )
     if not isinstance(reset_counter, int):
         reset_counter = 0
-        st.session_state[
-            hhs_ui_constants.HHS_SETTINGS_TABLE_RESET_COUNTER_KEY
-        ] = reset_counter
+        st.session_state[hhs_ui_constants.HHS_SETTINGS_TABLE_RESET_COUNTER_KEY] = (
+            reset_counter
+        )
     return f"{hhs_ui_constants.HHS_SETTINGS_TABLE_KEY}_{reset_counter}"
 
 
@@ -2490,6 +2368,35 @@ def reset_hhs_settings_table_selection() -> None:
     )
 
 
+def hhs_hspm_catalog_table_key() -> str:
+    """Return the HSPM catalog data editor key for the current generation."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui_constants.HHS_HSPM_CATALOG_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+        st.session_state[hhs_ui_constants.HHS_HSPM_CATALOG_TABLE_RESET_COUNTER_KEY] = (
+            reset_counter
+        )
+    return f"hhs_hspm_catalog_table_{reset_counter}"
+
+
+def reset_hhs_hspm_catalog_table_selection() -> None:
+    """Reset the HSPM catalog table marks for the next rerun."""
+    reset_counter = st.session_state.setdefault(
+        hhs_ui_constants.HHS_HSPM_CATALOG_TABLE_RESET_COUNTER_KEY, 0
+    )
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[hhs_ui_constants.HHS_HSPM_CATALOG_TABLE_RESET_COUNTER_KEY] = (
+        reset_counter + 1
+    )
+
+
+def refresh_hhs_hspm_catalog_listing() -> None:
+    """Refresh cached HSPM catalog data and clear marked rows."""
+    cache_delete_tag("hhs_hspm_catalog")
+    reset_hhs_hspm_catalog_table_selection()
 
 
 def refresh_home_tools_listing() -> None:
@@ -2713,6 +2620,7 @@ def start_background_action_job(
     metadata: dict[str, object],
     busy_message: str,
     force_local: bool = False,
+    show_preloader_event: bool = True,
 ) -> bool:
     """Start one user-triggered action command as an EventBus-backed background job."""
     started = start_background_bash_command(
@@ -2722,7 +2630,7 @@ def start_background_action_job(
         timeout_seconds,
         force_local=force_local,
         metadata=metadata,
-        show_preloader_event=True,
+        show_preloader_event=show_preloader_event,
     )
     if not started:
         push_floating_status(busy_message, "warn")
@@ -3003,9 +2911,9 @@ def complete_hhs_starship_action_job() -> None:
         if metadata.get("operation") == "preset":
             preset = str(metadata.get("preset", "")).strip()
             if preset:
-                st.session_state[
-                    hhs_ui_constants.HHS_STARSHIP_CURRENT_PRESET_KEY
-                ] = preset
+                st.session_state[hhs_ui_constants.HHS_STARSHIP_CURRENT_PRESET_KEY] = (
+                    preset
+                )
         if metadata.get("operation") == "save_config":
             st.session_state["hhs_starship_config_editing"] = False
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
@@ -3084,6 +2992,95 @@ def execute_pending_hhs_firebase_action() -> None:
     """Start or complete the current HomeSetup Firebase action."""
     start_pending_hhs_firebase_action()
     complete_hhs_firebase_action_job()
+
+
+def hhs_hspm_action_noun(operation: str) -> str:
+    """Return the display noun for an HSPM catalog action."""
+    return {
+        "install": "Installation",
+        "uninstall": "Uninstallation",
+    }.get(operation, "Operation")
+
+
+def hhs_hspm_package_summary(package_names: list[str]) -> str:
+    """Return a compact package summary for action status messages."""
+    clean_names = [name for name in package_names if name]
+    if len(clean_names) <= 3:
+        return ", ".join(clean_names)
+    shown_names = ", ".join(clean_names[:3])
+    return f"{shown_names}, +{len(clean_names) - 3} more"
+
+
+def queue_hhs_hspm_catalog_action(operation: str, package_names: list[str]) -> bool:
+    """Queue an HSPM catalog install or uninstall action."""
+    clean_operation = operation if operation in {"install", "uninstall"} else ""
+    clean_package_names = list(dict.fromkeys(name.strip() for name in package_names))
+    clean_package_names = [name for name in clean_package_names if name]
+    if not clean_operation or not clean_package_names:
+        push_floating_status("Mark at least one package first.", "warn")
+        return False
+    package_summary = hhs_hspm_package_summary(clean_package_names)
+    st.session_state["hhs_hspm_action_execute_pending"] = {
+        "operation": clean_operation,
+        "package_names": clean_package_names,
+        "command": build_hhs_hspm_command(clean_operation, clean_package_names),
+        "description": f"{hhs_hspm_action_noun(clean_operation)} of {package_summary}",
+    }
+    save_ui_state()
+    return True
+
+
+def start_pending_hhs_hspm_action() -> None:
+    """Start a queued HSPM catalog action background job, when present."""
+    pending = st.session_state.pop("hhs_hspm_action_execute_pending", None) or {}
+    if not isinstance(pending, dict):
+        return
+    command = str(pending.get("command", "")).strip()
+    description = str(pending.get("description", "")).strip()
+    if not command or not description:
+        return
+    started = start_background_action_job(
+        HHS_HSPM_ACTION_JOB,
+        command,
+        description,
+        hhs_ui_constants.UI_COMMAND_LONG_ACTION_TIMEOUT_SECONDS,
+        pending,
+        "Another HSPM action is already running.",
+        show_preloader_event=False,
+    )
+    if not started:
+        st.session_state["hhs_hspm_action_execute_pending"] = pending
+
+
+def complete_hhs_hspm_action_job() -> None:
+    """Complete an HSPM catalog action and refresh catalog data."""
+    completed = background_job_result(HHS_HSPM_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    package_names = [
+        str(package_name).strip()
+        for package_name in metadata.get("package_names", [])
+        if str(package_name).strip()
+    ]
+    operation = str(metadata.get("operation", "")).strip()
+    package_summary = hhs_hspm_package_summary(package_names)
+    if result.returncode == 0:
+        refresh_hhs_hspm_catalog_listing()
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+    if result.returncode == 0:
+        fallback = f"{hhs_hspm_action_noun(operation)} completed: {package_summary}"
+        push_floating_status(status_message or fallback, "info")
+    else:
+        fallback = f"{hhs_hspm_action_noun(operation)} failed: {package_summary}"
+        push_floating_status(status_message or fallback, "error")
+    save_ui_state()
+
+
+def execute_pending_hhs_hspm_action() -> None:
+    """Start or complete the current HSPM catalog action."""
+    start_pending_hhs_hspm_action()
+    complete_hhs_hspm_action_job()
 
 
 def apply_selected_path_value(
@@ -3465,8 +3462,6 @@ def scroll_to_env_value_editor(editor_key: str) -> None:
     )
 
 
-
-
 def render_env_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable editable environment variable rows."""
     rows = apply_env_value_overrides(rows)
@@ -3497,6 +3492,7 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
             },
         ],
     )
+
 
 def render_path_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable read-only PATH rows."""
@@ -3619,6 +3615,7 @@ def render_alias_rows(rows: list[dict[str, str]]) -> None:
             },
         ],
     )
+
 
 def service_is_up(row: dict[str, str]) -> bool:
     """Return whether a service row is currently up."""
@@ -4074,6 +4071,7 @@ def apply_selected_process_kill(process_name: str) -> None:
         {"process_name": clean_process_name},
     )
 
+
 def render_service_rows(rows: list[dict[str, str]]) -> None:
     """Render selectable read-only service rows with status styling."""
     _, selected_row = render_table(
@@ -4418,6 +4416,7 @@ def render_history_directories_table() -> None:
         column_config=history_directory_column_config(),
         selected_value=lambda row, _index: row.get("Value", ""),
     )
+
 
 def render_history_stats_chart() -> None:
     """Render command history stats using __hhs_hist_stats."""
@@ -4941,6 +4940,396 @@ def hhs_view_label(hhs_view: str) -> str:
     return hhs_ui.HHS_VIEW_LABELS.get(hhs_view, hhs_view)
 
 
+def hhs_hspm_os_name() -> str:
+    """Return the OS name used by the HSPM catalog title."""
+    raw_os_name = os.environ.get("HHS_MY_OS", "").strip()
+    if not raw_os_name:
+        try:
+            raw_os_name = os.uname().sysname
+        except AttributeError:
+            raw_os_name = sys.platform
+    return {
+        "darwin": "Darwin",
+        "linux": "Linux",
+    }.get(raw_os_name.lower(), raw_os_name)
+
+
+def hhs_hspm_os_glyph(os_name: str) -> str:
+    """Return the display glyph for an HSPM OS name."""
+    return {
+        "Darwin": "",
+        "Linux": "",
+    }.get(os_name, "")
+
+
+def hhs_hspm_catalog_title() -> str:
+    """Return the HSPM catalog slide title with an OS glyph when known."""
+    os_name = hhs_hspm_os_name()
+    glyph = hhs_hspm_os_glyph(os_name)
+    if not os_name:
+        return "Catalog"
+    if glyph:
+        return f"{glyph} Catalog ({os_name})"
+    return f"Catalog ({os_name})"
+
+
+def hhs_hspm_package_manager_name() -> str:
+    """Return the package manager name used by the HSPM recovery title."""
+    package_manager = os.environ.get("HHS_MY_OS_PACKMAN", "").strip()
+    if package_manager:
+        return package_manager
+    for package_manager in ("brew", "apt-get", "apt", "yum", "dnf", "apk"):
+        if shutil.which(package_manager):
+            return package_manager
+    return ""
+
+
+def hhs_hspm_recovery_title() -> str:
+    """Return the HSPM recovery slide title with OS glyph and package manager."""
+    glyph = hhs_hspm_os_glyph(hhs_hspm_os_name())
+    package_manager = hhs_hspm_package_manager_name()
+    title_prefix = f"{glyph} " if glyph else ""
+    if package_manager:
+        return f"{title_prefix}Recovery ({package_manager})"
+    return f"{title_prefix}Recovery"
+
+
+def hhs_hspm_recipe_file_path(package_name: str) -> Path | None:
+    """Return the local recipe path for a package on the selected OS."""
+    clean_package_name = package_name.strip()
+    if (
+        connected_ssh_host()
+        or not clean_package_name
+        or clean_package_name in {".", ".."}
+        or Path(clean_package_name).name != clean_package_name
+    ):
+        return None
+    recipe_path = (
+        homesetup_home()
+        / "bin/apps/bash/hhs-app/plugins/hspm/recipes"
+        / hhs_hspm_os_name()
+        / f"{clean_package_name}.recipe"
+    )
+    return recipe_path if recipe_path.is_file() else None
+
+
+def slider_pane_theme() -> dict[str, str]:
+    """Return CSS color tokens for reusable slider pane components."""
+    theme_name = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
+    properties = theme_custom_properties(theme_name)
+    return {
+        "background": resolve_css_custom_property(
+            properties, "hhs-background", "#19181f"
+        ),
+        "field": resolve_css_custom_property(
+            properties, "hhs-theme-secondary-background-color", "#221f2b"
+        ),
+        "text": resolve_css_custom_property(
+            properties, "hhs-theme-text-color", "#fcfcfa"
+        ),
+        "border": resolve_css_custom_property(
+            properties, "hhs-theme-dataframe-border-color", "#6c5f91"
+        ),
+        "primary": resolve_css_custom_property(
+            properties, "hhs-theme-primary-color", "#bd93f9"
+        ),
+        "accent": resolve_css_custom_property(
+            properties, "hhs-theme-link-color", "#8be9fd"
+        ),
+        "muted": resolve_css_custom_property(
+            properties, "hhs-theme-text-muted-color", "#a7a4b5"
+        ),
+    }
+
+
+def slider_pane_state_key(key: str, suffix: str) -> str:
+    """Return a stable Session State key for a slider pane value."""
+    return f"{key}_{suffix}"
+
+
+def slider_pane_active_index(key: str, page_count: int) -> int:
+    """Return the active slider page index."""
+    active_key = slider_pane_state_key(key, "active_index")
+    try:
+        active_index = int(st.session_state.get(active_key, 0))
+    except (TypeError, ValueError):
+        active_index = 0
+    if active_index < 0 or active_index >= page_count:
+        active_index = 0
+        st.session_state[active_key] = active_index
+    return active_index
+
+
+def set_slider_pane_active_index(key: str, page_count: int, next_index: int) -> None:
+    """Set the active slider page and remember transition direction."""
+    if page_count <= 0:
+        return
+    active_key = slider_pane_state_key(key, "active_index")
+    direction_key = slider_pane_state_key(key, "direction")
+    current_index = slider_pane_active_index(key, page_count)
+    normalized_index = next_index % page_count
+    if normalized_index == current_index:
+        return
+    if normalized_index > current_index or (
+        current_index == page_count - 1 and normalized_index == 0
+    ):
+        st.session_state[direction_key] = "right"
+    else:
+        st.session_state[direction_key] = "left"
+    st.session_state[active_key] = normalized_index
+    save_ui_state()
+
+
+def move_slider_pane(key: str, page_count: int, step: int) -> None:
+    """Move the slider page by one relative step."""
+    set_slider_pane_active_index(
+        key,
+        page_count,
+        slider_pane_active_index(key, page_count) + step,
+    )
+
+
+def slider_pane_css_class_key(key: str) -> str:
+    """Return the Streamlit key class suffix for a slider pane element."""
+    return re.sub(r"[^a-zA-Z0-9_-]+", "-", key).strip("-") or "slider"
+
+
+def render_slider_pane_styles(
+    key: str,
+    active_bullet_key: str,
+    slide_key: str,
+    direction: str,
+) -> None:
+    """Render key-scoped CSS for a native Streamlit slider pane."""
+    theme = slider_pane_theme()
+    font_family = html.escape(hhs_ui_constants.APP_FONT_FAMILY)
+    safe_key = slider_pane_css_class_key(key)
+    active_bullet_class = slider_pane_css_class_key(active_bullet_key)
+    slide_class = slider_pane_css_class_key(slide_key)
+    animation_name = (
+        "hhs-slider-slide-from-left"
+        if direction == "left"
+        else "hhs-slider-slide-from-right"
+    )
+    st.markdown(
+        f"""
+        <style>
+          @keyframes hhs-slider-slide-from-left {{
+            from {{ opacity: 0.55; transform: translateX(-1.75rem); }}
+            to {{ opacity: 1; transform: translateX(0); }}
+          }}
+
+          @keyframes hhs-slider-slide-from-right {{
+            from {{ opacity: 0.55; transform: translateX(1.75rem); }}
+            to {{ opacity: 1; transform: translateX(0); }}
+          }}
+
+          .st-key-{safe_key} {{
+            --hhs-slider-background: {html.escape(theme["background"])};
+            --hhs-slider-field: {html.escape(theme["field"])};
+            --hhs-slider-text: {html.escape(theme["text"])};
+            --hhs-slider-border: {html.escape(theme["border"])};
+            --hhs-slider-primary: {html.escape(theme["primary"])};
+            --hhs-slider-muted: {html.escape(theme["muted"])};
+            color: var(--hhs-slider-text);
+            font-family: "{font_family}", monospace;
+            font-size: 0.5rem;
+          }}
+
+          .st-key-{safe_key},
+          .st-key-{safe_key} * {{
+            box-sizing: border-box;
+            font-family: inherit;
+          }}
+
+          .st-key-{safe_key} [data-testid="stVerticalBlock"] {{
+            gap: 1rem;
+          }}
+
+          .st-key-{safe_key}_viewport {{
+            background: var(--hhs-slider-field);
+            border: 1px solid var(--hhs-slider-border);
+            border-radius: 6px;
+            overflow: hidden;
+          }}
+
+          .st-key-{safe_key}_slide_area {{
+            height: 100%;
+            min-height: 100%;
+            overflow: visible;
+            padding: 1rem 0 0;
+            transform: translateY(-2rem);
+          }}
+
+          .st-key-{safe_key}_slide_area [data-testid="stVerticalBlock"] {{
+            gap: 1rem;
+          }}
+
+          .st-key-{safe_key}_catalog_table_layout {{
+            margin-top: 1rem;
+          }}
+
+          .st-key-{slide_class} {{
+            animation: {animation_name} 280ms cubic-bezier(0.22, 1, 0.36, 1);
+            min-height: 100%;
+            min-width: 0;
+          }}
+
+          .st-key-{safe_key} [data-testid="stDataEditor"],
+          .st-key-{safe_key} [data-testid="stDataEditor"] * {{
+            font-size: 0.5rem !important;
+          }}
+
+          .st-key-{safe_key} [data-testid="stDataEditor"] [role="columnheader"],
+          .st-key-{safe_key} [data-testid="stDataEditor"] [role="gridcell"] {{
+            font-size: 0.5rem !important;
+          }}
+
+          .st-key-{safe_key} button {{
+            font-size: 0.5rem !important;
+          }}
+
+          .st-key-{safe_key} h3.hhs-slider-slide-title {{
+            color: var(--hhs-slider-text);
+            font-size: 0.9rem !important;
+            font-weight: 800;
+            line-height: 1.2;
+            margin: 0;
+            text-align: center;
+          }}
+
+          .st-key-{safe_key}_arrow_previous button,
+          .st-key-{safe_key}_arrow_next button {{
+            align-items: center;
+            display: inline-flex;
+            font-size: 0.5rem;
+            font-weight: 800;
+            height: 4rem !important;
+            justify-content: center;
+            line-height: 1;
+            min-width: 2rem !important;
+            padding: 0 !important;
+            width: 2rem !important;
+          }}
+
+          .st-key-{safe_key}_bullets {{
+            min-height: 1rem;
+          }}
+
+          .st-key-{safe_key}_bullets [data-testid="stHorizontalBlock"] {{
+            align-items: center;
+            justify-content: center;
+          }}
+
+          .st-key-{safe_key}_bullets [data-testid="stColumn"] {{
+            align-items: center;
+            display: flex;
+            justify-content: center;
+          }}
+
+          .st-key-{safe_key}_bullets button {{
+            background: var(--hhs-slider-muted) !important;
+            border: 1px solid var(--hhs-slider-border) !important;
+            border-radius: 999px !important;
+            color: transparent !important;
+            font-size: 0 !important;
+            height: 0.6rem !important;
+            min-height: 0.6rem !important;
+            min-width: 0.6rem !important;
+            padding: 0 !important;
+            width: 0.6rem !important;
+          }}
+
+          .st-key-{active_bullet_class} button {{
+            background: var(--hhs-slider-primary) !important;
+            border-color: var(--hhs-slider-primary) !important;
+            box-shadow: 0 0 0 2px
+              color-mix(in srgb, var(--hhs-slider-primary) 30%, transparent);
+          }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_slider_pane(
+    key: str,
+    pages: list[tuple[str, Callable[[], None]]],
+    height: int = 470,
+) -> None:
+    """Render a reusable native Streamlit slider pane."""
+    safe_key = re.sub(r"[^a-zA-Z0-9_-]+", "-", key).strip("-") or "slider"
+    clean_pages = pages or [("", st.empty)]
+    page_count = len(clean_pages)
+    active_index = slider_pane_active_index(safe_key, page_count)
+    direction = str(
+        st.session_state.get(slider_pane_state_key(safe_key, "direction"), "right")
+    )
+    active_bullet_key = f"{safe_key}_bullet_{active_index}"
+    slide_key = f"{safe_key}_slide_{active_index}_{direction}"
+    height_px = max(int(height), 240)
+    viewport_height = max(height_px - 32, 196)
+    render_slider_pane_styles(safe_key, active_bullet_key, slide_key, direction)
+    with st.container(key=safe_key, height=height_px, border=False):
+        with st.container(
+            key=f"{safe_key}_viewport",
+            height=viewport_height,
+            border=True,
+            horizontal=True,
+            vertical_alignment="center",
+            gap="small",
+        ):
+            with st.container(
+                key=f"{safe_key}_arrow_previous",
+                width=32,
+            ):
+                st.button(
+                    "",
+                    key=f"{safe_key}_previous_button",
+                    help="Slide left",
+                    on_click=move_slider_pane,
+                    args=(safe_key, page_count, -1),
+                    width=32,
+                )
+            with st.container(
+                key=f"{safe_key}_slide_area",
+                width="stretch",
+                height="stretch",
+            ):
+                with st.container(key=slide_key):
+                    clean_pages[active_index][1]()
+            with st.container(
+                key=f"{safe_key}_arrow_next",
+                width=32,
+            ):
+                st.button(
+                    "",
+                    key=f"{safe_key}_next_button",
+                    help="Slide right",
+                    on_click=move_slider_pane,
+                    args=(safe_key, page_count, 1),
+                    width=32,
+                )
+        with st.container(key=f"{safe_key}_bullets"):
+            bullet_columns = st.columns(
+                [1.0, *([0.025] * page_count), 1.0],
+                gap="small",
+                vertical_alignment="center",
+            )
+            for page_index, (page_title, _render_page) in enumerate(clean_pages):
+                bullet_key = f"{safe_key}_bullet_{page_index}"
+                with bullet_columns[page_index + 1]:
+                    with st.container(key=bullet_key):
+                        st.button(
+                            "•",
+                            key=f"{bullet_key}_button",
+                            help=f"Show {page_title}",
+                            on_click=set_slider_pane_active_index,
+                            args=(safe_key, page_count, page_index),
+                            width=24,
+                        )
+
+
 def hhs_setup_setting_key(setting_name: str) -> str:
     """Return the Session State key for a setup setting checkbox."""
     return f"hhs_setup_setting_{setting_name}"
@@ -5035,6 +5424,7 @@ def render_hhs_setup_title() -> None:
         """,
         unsafe_allow_html=True,
     )
+
 
 def render_hhs_setup_settings_table(action_running: bool) -> None:
     """Render the setup settings table."""
@@ -5349,7 +5739,9 @@ def render_hhs_settings_panel() -> None:
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
-                result.stderr or result.stdout or "Unable to load overridden system settings."
+                result.stderr
+                or result.stdout
+                or "Unable to load overridden system settings."
             )
         )
         return
@@ -5546,7 +5938,9 @@ def render_hhs_starship_panel() -> None:
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
-                result.stderr or result.stdout or "Unable to load Starship configuration."
+                result.stderr
+                or result.stdout
+                or "Unable to load Starship configuration."
             )
         )
         return
@@ -5628,7 +6022,13 @@ def sync_hhs_firebase_form_state(firebase_info: dict[str, object]) -> None:
     )
     st.session_state["_hhs_firebase_original_values"] = values
     st.session_state["_hhs_firebase_form_dirty"] = False
-    for _label, property_name, _fallback, state_key, _placeholder in HHS_FIREBASE_FIELDS:
+    for (
+        _label,
+        property_name,
+        _fallback,
+        state_key,
+        _placeholder,
+    ) in HHS_FIREBASE_FIELDS:
         st.session_state[state_key] = values.get(property_name, "")
 
 
@@ -5644,7 +6044,13 @@ def restore_hhs_firebase_original_values() -> bool:
     original_values = st.session_state.get("_hhs_firebase_original_values", {})
     if not isinstance(original_values, dict):
         return False
-    for _label, property_name, _fallback, state_key, _placeholder in HHS_FIREBASE_FIELDS:
+    for (
+        _label,
+        property_name,
+        _fallback,
+        state_key,
+        _placeholder,
+    ) in HHS_FIREBASE_FIELDS:
         st.session_state[state_key] = normalize_hhs_firebase_value(
             original_values.get(property_name, "")
         )
@@ -5665,9 +6071,13 @@ def selected_hhs_firebase_values() -> dict[str, str]:
 def apply_hhs_firebase_component_values(values: object) -> None:
     """Copy Firebase component values into Streamlit session state."""
     value_map = values if isinstance(values, dict) else {}
-    for _label, property_name, _fallback, state_key, _placeholder in (
-        HHS_FIREBASE_FIELDS
-    ):
+    for (
+        _label,
+        property_name,
+        _fallback,
+        state_key,
+        _placeholder,
+    ) in HHS_FIREBASE_FIELDS:
         st.session_state[state_key] = normalize_hhs_firebase_value(
             value_map.get(property_name, st.session_state.get(state_key, ""))
         )
@@ -5927,11 +6337,15 @@ def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, s
 def style_hhs_firebase_alias_row(row: pd.Series) -> list[str]:
     """Return dataframe row styles for Firebase alias metadata."""
     return [
-        "color: var(--hhs-secondary); font-weight: 800;"
-        if column == "Group"
-        else "color: var(--hhs-theme-primary-color); font-weight: 800;"
-        if column == "Alias"
-        else ""
+        (
+            "color: var(--hhs-secondary); font-weight: 800;"
+            if column == "Group"
+            else (
+                "color: var(--hhs-theme-primary-color); font-weight: 800;"
+                if column == "Alias"
+                else ""
+            )
+        )
         for column in row.index
     ]
 
@@ -6037,9 +6451,7 @@ def hhs_firebase_component_fields() -> list[dict[str, str]]:
             "label": label,
             "name": property_name,
             "placeholder": placeholder,
-            "value": normalize_hhs_firebase_value(
-                st.session_state.get(state_key, "")
-            ),
+            "value": normalize_hhs_firebase_value(st.session_state.get(state_key, "")),
         }
         for label, property_name, _fallback, state_key, placeholder in (
             HHS_FIREBASE_FIELDS
@@ -6122,7 +6534,9 @@ def render_hhs_firebase_panel() -> None:
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
-                result.stderr or result.stdout or "Unable to load Firebase configuration."
+                result.stderr
+                or result.stdout
+                or "Unable to load Firebase configuration."
             )
         )
         return
@@ -6132,6 +6546,226 @@ def render_hhs_firebase_panel() -> None:
     apply_pending_hhs_firebase_form_revert()
     action_running = background_job_is_running(HHS_FIREBASE_ACTION_JOB)
     render_hhs_firebase_configurations(firebase_info, action_running)
+
+
+def render_hhs_hspm_title() -> None:
+    """Render the HomeSetup package manager page title."""
+    st.markdown(
+        """
+        <section class="hhs-view-heading hhs-view-heading--direct-content">
+          <h2> Package Manager</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_hhs_hspm_slide_title(title: str) -> None:
+    """Render a centered HSPM slider page title."""
+    st.markdown(
+        f'<h3 class="hhs-slider-slide-title">{html.escape(title)}</h3>',
+        unsafe_allow_html=True,
+    )
+
+
+def parse_hhs_hspm_catalog(output: str) -> list[dict[str, str]]:
+    """Parse HSPM list output into catalog table rows."""
+    rows: list[dict[str, str]] = []
+    for line in strip_ansi(output).splitlines():
+        clean_line = line.strip()
+        if "=>" not in clean_line:
+            continue
+        match = re.match(
+            r"^\d+\s+(?P<recipe>[+-])\s+(?P<command>\S+)\s*\.{2,}\s*=>\s*(?P<description>.*)$",
+            clean_line,
+        )
+        if match is None:
+            match = re.match(
+                r"^\d+\s+(?P<recipe>[+-])\s+(?P<command>\S+)\s+=>\s*(?P<description>.*)$",
+                clean_line,
+            )
+        if match is None:
+            continue
+        rows.append(
+            {
+                "Command": match.group("command"),
+                "Description": match.group("description").strip(),
+                "CustomRecipe": match.group("recipe"),
+            }
+        )
+    return rows
+
+
+def hhs_hspm_catalog_table_data(
+    rows: list[dict[str, str]],
+) -> pd.io.formats.style.Styler:
+    """Return styled HSPM catalog rows with the editable Mark column."""
+    dataframe = pd.DataFrame(
+        {
+            "Mark": pd.Series([False] * len(rows), dtype="bool"),
+            "Command": pd.Series(
+                [row.get("Command", "") for row in rows],
+                dtype="string",
+            ),
+            "Description": pd.Series(
+                [row.get("Description", "") for row in rows],
+                dtype="string",
+            ),
+        }
+    )
+    custom_commands = {
+        row.get("Command", "") for row in rows if row.get("CustomRecipe") == "+"
+    }
+    accent_color = slider_pane_theme()["accent"]
+    return dataframe.style.map(
+        lambda value: (
+            "font-size: 0.5rem; "
+            + (
+                f"color: {accent_color}; font-weight: 800;"
+                if str(value) in custom_commands
+                else ""
+            )
+        ),
+        subset=["Command", "Description"],
+    )
+
+
+def selected_hhs_hspm_catalog_packages(edited_data: pd.DataFrame) -> list[str]:
+    """Return package names marked in the HSPM catalog table."""
+    if "Mark" not in edited_data or "Command" not in edited_data:
+        return []
+    selected_rows = edited_data[edited_data["Mark"].astype(bool)]
+    return [
+        str(command).strip()
+        for command in selected_rows["Command"].tolist()
+        if str(command).strip()
+    ]
+
+
+def render_hhs_hspm_catalog_action_buttons(
+    selected_package_names: list[str],
+    action_running: bool,
+) -> None:
+    """Render centered HSPM catalog action buttons."""
+    disabled = action_running or not selected_package_names
+    with st.container(
+        key="hhs_hspm_catalog_actions",
+        horizontal=True,
+        horizontal_alignment="center",
+        vertical_alignment="center",
+    ):
+        install_clicked = st.button(
+            "Install",
+            key="hhs_hspm_catalog_install_button",
+            disabled=disabled,
+            width=140,
+        )
+        uninstall_clicked = st.button(
+            "Uninstall",
+            key="hhs_hspm_catalog_uninstall_button",
+            disabled=disabled,
+            width=140,
+        )
+    if install_clicked:
+        if queue_hhs_hspm_catalog_action("install", selected_package_names):
+            st.rerun()
+    elif uninstall_clicked:
+        if queue_hhs_hspm_catalog_action("uninstall", selected_package_names):
+            st.rerun()
+
+
+def render_hhs_hspm_catalog_slide() -> None:
+    """Render the HSPM catalog slider page."""
+    render_hhs_hspm_slide_title(hhs_hspm_catalog_title())
+    result = render_cached_command_result(
+        build_hhs_hspm_command("list"),
+        "Loading HSPM catalog",
+        "hhs_hspm_catalog",
+        hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        "Unable to load HSPM catalog.",
+    )
+    if result is None:
+        return
+    if result.returncode != 0:
+        st.error(
+            clean_command_status_message(
+                result.stderr or result.stdout or "Unable to load HSPM catalog."
+            )
+        )
+        return
+    rows = parse_rows_cached("hhs_hspm_catalog", result.stdout, parse_hhs_hspm_catalog)
+    if not rows:
+        st.caption("No HSPM packages found.")
+        return
+    action_running = background_job_is_running(HHS_HSPM_ACTION_JOB)
+    with st.container(key="hhs_hspm_slider_catalog_table_layout"):
+        if action_running:
+            action_job = background_job_state(HHS_HSPM_ACTION_JOB) or {}
+            metadata = action_job.get("metadata", {})
+            metadata = metadata if isinstance(metadata, dict) else {}
+            operation = str(metadata.get("operation", "operation")).strip()
+            package_names = [
+                str(package_name).strip()
+                for package_name in metadata.get("package_names", [])
+                if str(package_name).strip()
+            ]
+            action_message = (
+                f"{hhs_hspm_action_noun(operation)} in progress: "
+                f"{hhs_hspm_package_summary(package_names)}"
+            )
+            action_status = st.status(
+                action_message,
+                state="running",
+                expanded=False,
+            )
+            action_status.write("The Catalog is locked until the operation completes.")
+        edited_data = st.data_editor(
+            hhs_hspm_catalog_table_data(rows),
+            key=hhs_hspm_catalog_table_key(),
+            hide_index=True,
+            column_order=["Mark", "Command", "Description"],
+            height=300,
+            disabled=["Command", "Description"] if not action_running else True,
+            column_config={
+                "Mark": st.column_config.CheckboxColumn(
+                    "Mark",
+                    disabled=action_running,
+                    width=80,
+                ),
+                "Command": st.column_config.TextColumn(
+                    "Command",
+                    disabled=True,
+                ),
+                "Description": st.column_config.TextColumn(
+                    "Description",
+                    disabled=True,
+                ),
+            },
+            width="stretch",
+        )
+    render_hhs_hspm_catalog_action_buttons(
+        selected_hhs_hspm_catalog_packages(edited_data),
+        action_running,
+    )
+
+
+def render_hhs_hspm_recovery_slide() -> None:
+    """Render the HSPM recovery slider page."""
+    render_hhs_hspm_slide_title(hhs_hspm_recovery_title())
+
+
+def render_hhs_hspm_panel() -> None:
+    """Render the HomeSetup package manager panel."""
+    execute_pending_hhs_hspm_action()
+    render_hhs_hspm_title()
+    render_slider_pane(
+        "hhs_hspm_slider",
+        [
+            ("Catalog", render_hhs_hspm_catalog_slide),
+            ("Recovery", render_hhs_hspm_recovery_slide),
+        ],
+    )
 
 
 def render_hhs_placeholder_panel(hhs_view: str) -> None:
@@ -6169,6 +6803,8 @@ def render_hhs_view() -> None:
         render_hhs_starship_panel()
     elif hhs_view == "SETTINGS":
         render_hhs_settings_panel()
+    elif hhs_view == "HSPM":
+        render_hhs_hspm_panel()
     elif hhs_view == "Firebase":
         render_hhs_firebase_panel()
     else:
@@ -6221,127 +6857,6 @@ def render_service_view() -> None:
 def monitor_view_label(monitor_view: str) -> str:
     """Return the display label for a Monitor view key."""
     return hhs_ui.MONITOR_VIEW_LABELS.get(monitor_view, monitor_view)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def history_view_label(history_view: str) -> str:
@@ -6401,28 +6916,6 @@ def render_monitor_view() -> None:
         render_monitor_processes_panel()
     elif monitor_view == "LOGS":
         render_monitor_logs_panel()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def selected_remote_host_requires_connection() -> bool:

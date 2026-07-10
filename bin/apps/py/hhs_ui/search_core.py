@@ -151,17 +151,6 @@ def build_hhs_search_command(
     return build_hhs_search_modified_results_command(search_command)
 
 
-def build_hhs_open_search_result_command(path: str) -> str:
-    """Build the HomeSetup command used to open one Search result path."""
-    safe_path = shlex.quote(path.strip())
-    return (
-        'export HHS_DIR="${HHS_DIR}"; '
-        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
-        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
-        f"__hhs_open {safe_path}"
-    )
-
-
 def search_result_download_name(path: str) -> str:
     """Return the local filename for a downloaded remote Search result."""
     clean_name = posixpath.basename(str(path).rstrip("/")).strip()

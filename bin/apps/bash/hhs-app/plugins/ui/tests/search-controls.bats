@@ -232,7 +232,7 @@ PY
   assert_success
 
   assert_file_contains_many "${ui_file}" \
-'clear_preloader()' 'def build_hhs_open_search_result_command' 'def open_search_result_path' \
+'clear_preloader()' 'def open_file' 'def open_search_result_path' \
     '__hhs_open' 'hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM' 'search_result_path_link(row)'
   assert_file_not_contains "${ui_file}" 'render_search_path_results(rows)'
   assert_file_not_contains "${ui_file}" 'render_search_string_results(rows, query, text_filter)'

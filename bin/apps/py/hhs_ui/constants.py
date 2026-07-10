@@ -221,6 +221,7 @@ AI_PERFORMANCE_RECALC_INTERVAL = 5
 AI_PERFORMANCE_TIMING_LIMIT = 100
 PROCESS_TABLE_KEY = "monitor_process_table"
 HHS_STARSHIP_CURRENT_PRESET_KEY = "hhs_starship_current_preset"
+HHS_HSPM_SLIDER_ACTIVE_INDEX_KEY = "hhs_hspm_slider_active_index"
 PERSISTED_UI_KEYS = (
     "active_view",
     "ai_chat_messages",
@@ -258,6 +259,7 @@ PERSISTED_UI_KEYS = (
     "home_shopts_filter",
     "home_shopts_other_filter",
     "hhs_view",
+    HHS_HSPM_SLIDER_ACTIVE_INDEX_KEY,
     HHS_STARSHIP_CURRENT_PRESET_KEY,
     "history_commands_filter",
     "history_commands_other_filter",
@@ -401,6 +403,7 @@ DOCKER_IMAGE_TABLE_KEY = "docker_image_table"
 DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY = "docker_image_table_reset_counter"
 HOME_TOOLS_TABLE_KEY = "home_tools_table"
 HOME_TOOLS_TABLE_RESET_COUNTER_KEY = "home_tools_table_reset_counter"
+HHS_HSPM_CATALOG_TABLE_RESET_COUNTER_KEY = "hhs_hspm_catalog_table_reset_counter"
 HOME_SHOPTS_TABLE_KEY = "home_shopts_table"
 HOME_SHOPTS_TABLE_RESET_COUNTER_KEY = "home_shopts_table_reset_counter"
 HISTORY_COMMAND_TABLE_KEY = "history_command_vars_table"

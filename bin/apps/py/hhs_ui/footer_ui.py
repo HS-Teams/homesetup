@@ -27,8 +27,8 @@ from hhs_ui.command_catalog import (
     build_footer_working_directory_command,
     build_hhs_updater_command,
     build_homesetup_version_command,
-    build_open_directory_command,
     clean_command_status_message,
+    open_file,
     strip_ansi,
 )
 from hhs_ui.command_runtime import (
@@ -1205,9 +1205,9 @@ def handle_footer_actions() -> None:
 
 
 def run_open_working_directory(directory: str) -> subprocess.CompletedProcess[str]:
-    """Open a working directory in the operating system file explorer."""
+    """Open a local working directory through HomeSetup."""
     return run_bash_command(
-        build_open_directory_command(directory),
+        open_file(directory),
         "Opening working directory...",
         ttl_seconds=0,
         use_cache=False,

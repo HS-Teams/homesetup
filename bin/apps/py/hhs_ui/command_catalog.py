@@ -1101,23 +1101,14 @@ def build_hhs_sysinfo_command() -> str:
     )
 
 
-def build_open_directory_command(directory: str) -> str:
-    """Build a POSIX-shell command that opens a directory in the OS file explorer."""
-    safe_directory = shlex.quote(str(Path(directory).resolve()))
+def open_file(filepath: str) -> str:
+    """Build a local HomeSetup command that opens a file or directory."""
+    safe_filepath = shlex.quote(filepath.strip())
     return (
-        f"target={safe_directory}; "
-        'if [ "$(uname -s)" = "Darwin" ]; then '
-        'open "$target"; '
-        "elif command -v xdg-open >/dev/null 2>&1; then "
-        'xdg-open "$target"; '
-        "elif command -v gio >/dev/null 2>&1; then "
-        'gio open "$target"; '
-        "elif command -v sensible-browser >/dev/null 2>&1; then "
-        'sensible-browser "$target"; '
-        "else "
-        'printf "%s\\n" "No supported file explorer opener found." >&2; '
-        "exit 127; "
-        "fi"
+        'export HHS_DIR="${HHS_DIR}"; '
+        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
+        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
+        f"__hhs_open {safe_filepath}"
     )
 
 
@@ -1543,12 +1534,24 @@ def build_docker_image_delete_command(image_id: str) -> str:
     return f"docker image rm -f {shlex.quote(image_id)}"
 
 
-def build_hhs_hspm_command(operation: str, tool_name: str) -> str:
+def build_hhs_hspm_command(
+    operation: str,
+    tool_name: str | list[str] | tuple[str, ...] = "",
+) -> str:
     """Build the Bash command used to run an hspm tool operation."""
     safe_operation = (
-        operation if operation in {"install", "uninstall", "reinstall"} else ""
+        operation
+        if operation in {"install", "uninstall", "reinstall", "list"}
+        else ""
     )
-    safe_tool_name = shlex.quote(tool_name.strip())
+    if isinstance(tool_name, str):
+        tool_names = [tool_name]
+    else:
+        tool_names = list(tool_name)
+    safe_tool_names = " ".join(
+        shlex.quote(name.strip()) for name in tool_names if name.strip()
+    )
+    safe_tool_args = f" {safe_tool_names}" if safe_tool_names else ""
     return (
         'export HHS_DIR="${HHS_DIR}"; '
         'export HHS_HOME="${HHS_HOME}"; '
@@ -1562,7 +1565,7 @@ def build_hhs_hspm_command(operation: str, tool_name: str) -> str:
         'source "${HHS_HOME}/dotfiles/bash/bash_env.bash"; '
         'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"; '
         'function __hhs() { if [[ "$1" == "hspm" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
-        f"__hhs hspm execute {safe_operation} {safe_tool_name}"
+        f"__hhs hspm execute {safe_operation}{safe_tool_args}"
     )
 
 

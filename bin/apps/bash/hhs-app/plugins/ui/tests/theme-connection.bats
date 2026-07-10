@@ -265,7 +265,7 @@ assert '>Clear application cache</span>' in ui_source
 assert '>Clear application states</span>' in ui_source
 assert '>Clear AI history</span>' in ui_source
 assert '>OK</button>' in ui_source
-assert 'def build_open_directory_command' in ui_source
+assert 'def open_file' in ui_source
 assert 'def open_working_directory_endpoint_url' in ui_source
 open_working_directory_endpoint_body = ui_source.split("def open_working_directory_endpoint_url", 1)[1].split("\ndef ", 1)[0]
 assert 'update_browser_cleanup_registration()' in open_working_directory_endpoint_body
@@ -460,10 +460,7 @@ assert 'hhs-floating-status--stable' in status_source
 assert 'hhs-floating-status--disposing' in status_source
 assert 'setAttribute("aria-label", "Dispose footer status")' in status_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in ui_source
-assert 'open "$target"' in ui_source
-assert 'xdg-open "$target"' in ui_source
-assert 'gio open "$target"' in ui_source
-assert 'sensible-browser "$target"' in ui_source
+assert 'f"__hhs_open {safe_filepath}"' in ui_source
 assert 'use_cache=False' in ui_source
 assert 'hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"' in ui_source
 assert 'class="hhs-footer-glyph"></span>' in ui_source

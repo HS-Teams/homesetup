@@ -28,7 +28,7 @@ import streamlit as st
 
 import hhs_ui
 import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.command_catalog import build_open_directory_command
+from hhs_ui.command_catalog import open_file
 from hhs_ui.process_resources import process_resource_registry, process_resource_state
 from hhs_ui.runtime import RUN_SHELL
 from hhs_ui.ssh_core import (
@@ -1198,7 +1198,7 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
             str(entry.get("cwd") or entry.get("working_dir") or os.getcwd()).strip()
             or os.getcwd()
         )
-        result = run_cleanup_bash_command(build_open_directory_command(directory), 10)
+        result = run_cleanup_bash_command(open_file(directory), 10)
         self.send_response(204 if result.returncode == 0 else 500)
         self.end_headers()
 
@@ -1411,4 +1411,3 @@ def show_terminal_ready_status() -> None:
     if not bool(st.session_state.get(hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY, False)):
         push_floating_status("HomeSetup terminal is ready.", "info")
         st.session_state[hhs_ui.TERMINAL_READY_STATUS_SHOWN_KEY] = True
-

@@ -475,9 +475,7 @@ namespace["cached_search_command_result"] = lambda *_args: None
 statuses.clear()
 namespace["render_search_results"]()
 assert statuses == [("Command timed out after 120 seconds.", "error")]
-open_command = namespace["build_hhs_open_search_result_command"](
-    "/tmp/search root/report.txt"
-)
+open_command = namespace["open_file"]("/tmp/search root/report.txt")
 assert 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash";' in open_command
 assert "__hhs_open '/tmp/search root/report.txt'" in open_command
 assert (

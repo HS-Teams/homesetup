@@ -277,7 +277,7 @@ open_working_dir_body = terminal_source.split("def handle_open_working_directory
 assert 'entry = TTYD_CLEANUP_REGISTRY.get(token, {})' in open_working_dir_body
 assert 'entry.get("ssh_host")' in open_working_dir_body
 assert 'entry.get("cwd") or entry.get("working_dir")' in open_working_dir_body
-assert 'build_open_directory_command(directory)' in open_working_dir_body
+assert 'open_file(directory)' in open_working_dir_body
 assert 'self.send_response(204 if result.returncode == 0 else 500)' in open_working_dir_body
 handler_body = terminal_source.split("def handle_cleanup_request", 1)[1].split("\n    def ", 1)[0]
 assert handler_body.index("self.send_response(204)") < handler_body.index(

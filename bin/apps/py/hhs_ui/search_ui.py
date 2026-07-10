@@ -35,6 +35,7 @@ from hhs_ui.cache_runtime import (
 from hhs_ui.command_catalog import (
     clean_command_status_message,
     log_filter_highlight_ranges,
+    open_file,
     row_matches_text_filter,
     sanitize_remote_command_result,
     strip_ansi,
@@ -50,7 +51,6 @@ from hhs_ui.command_runtime import (
 )
 from hhs_ui.path_picker import render_folder_picker_dialog, request_path_picker
 from hhs_ui.search_core import (
-    build_hhs_open_search_result_command,
     build_hhs_search_command,
     normalized_search_option_values,
     normalized_search_type,
@@ -247,7 +247,7 @@ def build_open_remote_search_result_command(
     download_command = build_download_remote_search_result_command(
         remote_path, download_dir, host
     )
-    open_command = build_hhs_open_search_result_command(str(local_path))
+    open_command = open_file(str(local_path))
     return f"{download_command} && {open_command}"
 
 
@@ -318,7 +318,7 @@ def execute_pending_search_open_action() -> None:
 def open_local_search_result_path(path: str) -> None:
     """Queue opening one local Search result path through HomeSetup."""
     queue_search_open_action(
-        build_hhs_open_search_result_command(path),
+        open_file(path),
         f"Opening {path}",
         {"action": "local_open", "path": path},
     )
