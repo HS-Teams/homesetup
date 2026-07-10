@@ -22,7 +22,11 @@ import streamlit.components.v1 as components
 
 import hhs_ui
 import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.cache_runtime import cache_delete_tag, parse_rows_cached, render_cached_command_result
+from hhs_ui.cache_runtime import (
+    cache_delete_tag,
+    parse_rows_cached,
+    render_cached_command_result,
+)
 from hhs_ui.command_catalog import (
     build_hhs_firebase_alias_action_command,
     build_hhs_firebase_info_command,
@@ -90,7 +94,9 @@ def _unconfigured_dependency(name: str) -> Callable[..., object]:
 
 render_script_html = _unconfigured_dependency("render_script_html")
 render_openable_file_pill = _unconfigured_dependency("render_openable_file_pill")
-render_view_segmented_control = _unconfigured_dependency("render_view_segmented_control")
+render_view_segmented_control = _unconfigured_dependency(
+    "render_view_segmented_control"
+)
 start_background_action_job = _unconfigured_dependency("start_background_action_job")
 hhs_setup_file_path = _unconfigured_dependency("hhs_setup_file_path")
 hhs_settings_table_key = _unconfigured_dependency("hhs_settings_table_key")
@@ -470,7 +476,6 @@ def execute_pending_hhs_hspm_action() -> None:
     """Start or complete the current HSPM catalog action."""
     start_pending_hhs_hspm_action()
     complete_hhs_hspm_action_job()
-
 
 
 def hhs_view_label(hhs_view: str) -> str:
@@ -2293,7 +2298,13 @@ def render_hhs_hspm_catalog_slide() -> None:
             key=hhs_hspm_catalog_table_key(),
             hide_index=True,
             column_order=["Mark", "Command", "Description"],
+<<<<<<< Updated upstream
             height=340,
+||||||| Stash base
+            height=300,
+=======
+            height=304,
+>>>>>>> Stashed changes
             disabled=["Command", "Description"] if not action_running else True,
             column_config={
                 "Mark": st.column_config.CheckboxColumn(
@@ -2326,6 +2337,7 @@ def render_hhs_hspm_recovery_slide() -> None:
 
 def render_hhs_hspm_panel() -> None:
     """Render the HomeSetup package manager panel."""
+<<<<<<< Updated upstream
     with st.container(key="hhs_hspm_panel", border=False):
         execute_pending_hhs_hspm_action()
         render_hhs_hspm_title()
@@ -2341,6 +2353,33 @@ def render_hhs_hspm_panel() -> None:
             navigation_offset=-30,
             vertical_offset=-16,
         )
+||||||| Stash base
+    execute_pending_hhs_hspm_action()
+    render_hhs_hspm_title()
+    render_slider_pane(
+        "hhs_hspm_slider",
+        [
+            ("Catalog", render_hhs_hspm_catalog_slide),
+            ("Recovery", render_hhs_hspm_recovery_slide),
+        ],
+    )
+=======
+    with st.container(key="hhs_hspm_panel", border=False):
+        execute_pending_hhs_hspm_action()
+        render_hhs_hspm_title()
+        render_slider_pane(
+            "hhs_hspm_slider",
+            [
+                ("Catalog", render_hhs_hspm_catalog_slide),
+                ("Recovery", render_hhs_hspm_recovery_slide),
+            ],
+            height=450,
+            viewport_border=False,
+            show_bullets=False,
+            navigation_offset=-30,
+            vertical_offset=-16,
+        )
+>>>>>>> Stashed changes
 
 
 def render_hhs_placeholder_panel(hhs_view: str) -> None:
