@@ -1,0 +1,114 @@
+setup() {
+  cd "${HHS_REPO_DIR}"
+  ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.py"
+  constants_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/constants.py"
+  css_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.css"
+  ask_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"
+  ask_prompt_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md"
+  bash_env_file="${HHS_REPO_DIR}/dotfiles/bash/bash_env.bash"
+  hhsrc_file="${HHS_REPO_DIR}/dotfiles/bash/hhsrc.bash"
+  hspm_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"
+  ui_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/ui.bash"
+
+  streamlit_ui_source="$(<"${ui_file}")"
+  streamlit_ui_css_source="$(<"${css_file}")"
+  constants_source="$(<"${constants_file}")"
+  ui_plugin_source="$(<"${ui_plugin_file}")"
+  hspm_plugin_source="$(<"${hspm_plugin_file}")"
+  bash_env_source="$(<"${bash_env_file}")"
+  hhsrc_source="$(<"${hhsrc_file}")"
+  install_source="$(<"${HHS_REPO_DIR}/install.bash")"
+  uninstall_source="$(<"${HHS_REPO_DIR}/uninstall.bash")"
+}
+
+assert_text_contains() {
+  local haystack="$1"
+  local needle="$2"
+  [[ "${haystack}" == *"${needle}"* ]]
+}
+
+assert_text_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+  [[ "${haystack}" != *"${needle}"* ]]
+}
+
+assert_text_contains_many() {
+  local haystack="$1"
+  shift
+  local needle
+  for needle in "$@"; do
+    assert_text_contains "${haystack}" "${needle}" || return 1
+  done
+}
+
+assert_text_not_contains_many() {
+  local haystack="$1"
+  shift
+  local needle
+  for needle in "$@"; do
+    assert_text_not_contains "${haystack}" "${needle}" || return 1
+  done
+}
+
+hhs_ui_pattern_is_regex() {
+  local needle="$1"
+  [[ "${needle}" == ^* || "${needle}" == *'.*'* ]]
+}
+
+hhs_ui_fixed_grep_pattern() {
+  printf "%s" "$1" | sed 's/\\\([][(){}.$*?+|^]\)/\1/g'
+}
+
+assert_file_contains() {
+  local file="$1"
+  local needle="$2"
+  local search_needle
+
+  if hhs_ui_pattern_is_regex "${needle}"; then
+    run grep -q -- "${needle}" "${file}"
+  else
+    search_needle="$(hhs_ui_fixed_grep_pattern "${needle}")"
+    run grep -Fq -- "${search_needle}" "${file}"
+  fi
+  assert_success
+}
+
+assert_file_not_contains() {
+  local file="$1"
+  local needle="$2"
+  local search_needle
+
+  if hhs_ui_pattern_is_regex "${needle}"; then
+    run grep -q -- "${needle}" "${file}"
+  else
+    search_needle="$(hhs_ui_fixed_grep_pattern "${needle}")"
+    run grep -Fq -- "${search_needle}" "${file}"
+  fi
+  assert_failure
+}
+
+assert_file_contains_many() {
+  local file="$1"
+  shift
+  local needle
+  for needle in "$@"; do
+    assert_file_contains "${file}" "${needle}" || return 1
+  done
+}
+
+assert_file_not_contains_many() {
+  local file="$1"
+  shift
+  local needle
+  for needle in "$@"; do
+    assert_file_not_contains "${file}" "${needle}" || return 1
+  done
+}
+
+assert_python_syntax_valid() {
+  local python_file="$1"
+  run python3 -c 'import ast, pathlib, sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))' \
+    "${python_file}"
+  assert_success
+}
