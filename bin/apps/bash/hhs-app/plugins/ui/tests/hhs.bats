@@ -22,7 +22,7 @@ load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
 @test "when footer statuses are queued then display timing should start on render" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${status_ui_file}" <<'PY'
 import sys
 from pathlib import Path
 from types import SimpleNamespace

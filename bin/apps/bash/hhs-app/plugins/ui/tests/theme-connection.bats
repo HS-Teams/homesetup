@@ -53,6 +53,7 @@ import re
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+status_source = Path("bin/apps/py/hhs_ui/status_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs_ui/streamlit_ui.css").read_text()
 dracula_css = Path("bin/apps/py/hhs_ui/themes/dracula.css").read_text()
 homesetup_css = Path("bin/apps/py/hhs_ui/themes/homesetup.css").read_text()
@@ -435,28 +436,28 @@ assert 'printf "y\\\\n" | ' in ui_source
 assert 'def handle_footer_actions' in ui_source
 assert 'force_local=not bool(connected_ssh_host())' in footer_actions_body
 assert 'metadata={"updater_context": updater_check_context()}' in footer_actions_body
-assert 'def push_floating_status' in ui_source
-assert 'def pop_floating_status' in ui_source
-assert 'def current_floating_status' in ui_source
-assert 'def effective_floating_status_timeout' in ui_source
-assert 'hhs_ui_constants.FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS' in ui_source
-assert 'def floating_status_dom_id' in ui_source
-assert 'def render_floating_status_dispose_script' in ui_source
-assert 'hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY' in ui_source
-assert 'def render_floating_status' in ui_source
+assert 'def push_floating_status' in status_source
+assert 'def pop_floating_status' in status_source
+assert 'def current_floating_status' in status_source
+assert 'def effective_floating_status_timeout' in status_source
+assert 'hhs_ui_constants.FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS' in status_source
+assert 'def floating_status_dom_id' in status_source
+assert 'def render_floating_status_dispose_script' in status_source
+assert 'hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY' in status_source
+assert 'def render_floating_status' in status_source
 assert 'render_floating_status()' in ui_source
-assert 'parentDocument.createElement("div")' in ui_source
-assert 'status.dataset.hhsFloatingStatusId = statusId' in ui_source
-assert 'querySelectorAll(".hhs-floating-status[data-hhs-floating-status-id]")' in ui_source
-assert "parentDocument.body.append(status)" in ui_source
-assert 'button.className = "hhs-floating-status-dismiss"' in ui_source
-assert 'dismiss.className = "hhs-floating-status-dismiss"' in ui_source
-assert '__hhsDisposedFloatingStatuses' in ui_source
-assert '__hhsRenderedFloatingStatuses' not in ui_source
-assert '__hhsFloatingStatusTimer' in ui_source
-assert 'hhs-floating-status--stable' in ui_source
-assert 'hhs-floating-status--disposing' in ui_source
-assert 'setAttribute("aria-label", "Dispose footer status")' in ui_source
+assert 'parentDocument.createElement("div")' in status_source
+assert 'status.dataset.hhsFloatingStatusId = statusId' in status_source
+assert 'querySelectorAll(".hhs-floating-status[data-hhs-floating-status-id]")' in status_source
+assert "parentDocument.body.append(status)" in status_source
+assert 'button.className = "hhs-floating-status-dismiss"' in status_source
+assert 'dismiss.className = "hhs-floating-status-dismiss"' in status_source
+assert '__hhsDisposedFloatingStatuses' in status_source
+assert '__hhsRenderedFloatingStatuses' not in status_source
+assert '__hhsFloatingStatusTimer' in status_source
+assert 'hhs-floating-status--stable' in status_source
+assert 'hhs-floating-status--disposing' in status_source
+assert 'setAttribute("aria-label", "Dispose footer status")' in status_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in ui_source
 assert 'open "$target"' in ui_source
 assert 'xdg-open "$target"' in ui_source

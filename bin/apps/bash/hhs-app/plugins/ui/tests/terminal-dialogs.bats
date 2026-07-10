@@ -23,20 +23,25 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
 @test "when confirming actions then reusable pop_dialog component should be used" {
   assert_file_contains_many "${ui_file}" \
-'def pop_dialog(' 'render_folder_picker_dialog()' \
+'render_folder_picker_dialog()' \
+    'execute_pending_dialog_callback()' 'st.session_state\["_hhs_dialog_dismiss_requested"\] = True'
+  assert_file_contains_many "${dialog_ui_file}" \
+'def pop_dialog(' \
     'def queue_dialog_callback' 'def execute_pending_dialog_callback' 'def handle_dialog_button_click' \
     'def render_pending_streamlit_dialog_dismiss' 'def handle_dialog_dismiss' \
-    'execute_pending_dialog_callback()' '@st.dialog(title, dismissible=dismissible, on_dismiss=on_dismiss)' \
+    '@st.dialog(title, dismissible=dismissible, on_dismiss=on_dismiss)' \
     'handle_dialog_button_click(' 'queue_dialog_callback(callback)' '_hhs_dialog_button_dismissal' \
     'handle_dialog_dismiss(dismiss_callback)' 'dismiss_streamlit_dialog()' \
-    'render_pending_streamlit_dialog_dismiss()' 'st.session_state\["_hhs_dialog_dismiss_requested"\] = True'
+    'render_pending_streamlit_dialog_dismiss()'
   assert_file_contains "${path_picker_file}" 'def render_folder_picker_dialog'
-  run python3 - <<'PY'
+  run python3 - "${dialog_ui_file}" "${ui_file}" <<'PY'
 from pathlib import Path
+import sys
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-callback_body = source.split("def handle_dialog_button_click", 1)[1].split("\ndef ", 1)[0]
-dismiss_body = source.split("def dismiss_streamlit_dialog", 1)[1].split("\ndef ", 1)[0]
+dialog_source = Path(sys.argv[1]).read_text()
+ui_source = Path(sys.argv[2]).read_text()
+callback_body = dialog_source.split("def handle_dialog_button_click", 1)[1].split("\ndef ", 1)[0]
+dismiss_body = ui_source.split("def dismiss_streamlit_dialog", 1)[1].split("\ndef ", 1)[0]
 assert "render_script_html(" not in callback_body
 assert "st.html(" not in callback_body
 assert "render_script_html(" not in dismiss_body
@@ -243,7 +248,7 @@ PY
     'parentWindow.addEventListener("message"' 'cleanup_all_registered_sessions'
   assert_file_contains "${constants_file}" 'PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"'
 
-  assert_file_contains "${ui_file}" 'hhs_ui_constants.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY'
+  assert_file_contains "${status_ui_file}" 'hhs_ui_constants.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY'
   assert_file_contains_many "${process_resources_file}" \
 'hhs_ui_constants.PROCESS_RESOURCE_STATE_KEY' 'hhs_ui_constants.FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY' \
     'hhs_ui_constants.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY'
@@ -305,10 +310,12 @@ PY
 
   assert_file_contains_many "${terminal_ui_file}" \
 'os.killpg(process_group, signal.SIGTERM)' 'os.killpg(process_group, signal.SIGKILL)' 'subprocess.Popen('
-  run python3 - <<'PY'
+  run python3 - "${status_ui_file}" <<'PY'
 from pathlib import Path
+import sys
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+status_source = Path(sys.argv[1]).read_text()
 process_resources_source = Path("bin/apps/py/hhs_ui/process_resources.py").read_text()
 main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
 disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
@@ -354,7 +361,7 @@ assert 'render_floating_status()' in footer_status_body
 assert 'parallel=True' not in footer_status_body
 assert "class FooterStatusLogHandler(logging.Handler)" in process_resources_source
 assert "logging.captureWarnings(True)" in process_resources_source
-assert "def drain_footer_status_log_records(" in ui_source
+assert "def drain_footer_status_log_records(" in status_source
 assert "def render_footer_client_error_bridge_script(" in ui_source
 assert "Missing Submit Button" in ui_source or "missing submit button" in ui_source
 PY
@@ -398,7 +405,11 @@ PY
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-assert ui_source.count("@st.dialog(") == 1
+feedback_source = Path("bin/apps/py/hhs_ui/feedback_ui.py").read_text()
+dialog_source = Path("bin/apps/py/hhs_ui/dialog_ui.py").read_text()
+assert ui_source.count("@st.dialog(") == 0
+assert feedback_source.count("@st.dialog(") == 0
+assert dialog_source.count("@st.dialog(") == 1
 PY
   assert_success
 

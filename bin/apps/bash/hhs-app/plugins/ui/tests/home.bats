@@ -121,7 +121,8 @@ PY
   assert_file_contains_many "${ui_file}" \
     'def apply_selected_tool_action' 'home_tool_action_execute_pending' \
     'def execute_pending_home_tool_action' 'def render_home_tool_action_dialog' \
-    'def render_terminal_output' 'hhs-home-tool-action-output'
+    'hhs-home-tool-action-output'
+  assert_file_contains "${feedback_ui_file}" 'def render_terminal_output'
   assert_file_contains_many "${css_file}" \
 '.hhs-home-tool-action-output' 'max-height: min(52dvh, 28rem)' \
     'max-width: min(82vw, 58rem)'
