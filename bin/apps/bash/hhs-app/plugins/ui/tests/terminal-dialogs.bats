@@ -310,12 +310,13 @@ PY
 
   assert_file_contains_many "${terminal_ui_file}" \
 'os.killpg(process_group, signal.SIGTERM)' 'os.killpg(process_group, signal.SIGKILL)' 'subprocess.Popen('
-  run python3 - "${status_ui_file}" <<'PY'
+  run python3 - "${status_ui_file}" "${command_runtime_file}" <<'PY'
 from pathlib import Path
 import sys
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 status_source = Path(sys.argv[1]).read_text()
+command_runtime_source = Path(sys.argv[2]).read_text()
 process_resources_source = Path("bin/apps/py/hhs_ui/process_resources.py").read_text()
 main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
 disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
@@ -348,9 +349,13 @@ assert shell_dialog_index < sidebar_index < main_view_index
 assert footer_index < client_status_index < cleanup_index
 footer_status_body = ui_source.split("def render_footer_status_fragment", 1)[1].split("\ndef ", 1)[0]
 footer_status_decorator = ui_source[: ui_source.index("def render_footer_status_fragment")].rstrip().splitlines()[-1]
-background_poll_prefix = ui_source[: ui_source.index("def render_background_job_polling_fragment")]
+background_poll_prefix = command_runtime_source[
+    : command_runtime_source.index("def render_background_job_polling_fragment")
+]
 background_poll_decorator = background_poll_prefix.rstrip().splitlines()[-1]
-background_status_decorator = ui_source[: ui_source.index("def render_background_job_status")].rstrip().splitlines()[-1]
+background_status_decorator = command_runtime_source[
+    : command_runtime_source.index("def render_background_job_status")
+].rstrip().splitlines()[-1]
 assert not footer_status_decorator.startswith('@st.fragment')
 assert background_poll_decorator == '@st.fragment(run_every="2s")'
 assert background_status_decorator != '@st.fragment(run_every="2s")'

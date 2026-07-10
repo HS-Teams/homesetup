@@ -61,8 +61,10 @@ if violations:
 PY
   assert_success
 
+  assert_file_contains_many "${command_runtime_file}" \
+'def run_bash_command('
   assert_file_contains_many "${ui_file}" \
-'def run_bash_command(' 'return run_bash_command(' 'def run_hhs_services_quietly'
+'return run_bash_command(' 'def run_hhs_services_quietly'
   assert_file_contains_many "${ssh_core_file}" \
 'def parse_ssh_config_hosts' 'def build_ssh_connect_command' 'def build_ssh_disconnect_command'
   assert_file_contains "${constants_file}" 'UI_CACHE_SSH_CONNECTION_KEY'

@@ -332,19 +332,24 @@ PY
   assert_success
 }
 @test "when cached content is fresh then background refresh loaders should stay hidden" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${ui_file}" "${command_runtime_file}" <<'PY'
 import ast
 import sys
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
+command_runtime_source = Path(sys.argv[2]).read_text(encoding="utf-8")
 tree = ast.parse(source)
 functions = {
     node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
 }
+command_runtime_tree = ast.parse(command_runtime_source)
+command_runtime_functions = {
+    node.name: node for node in command_runtime_tree.body if isinstance(node, ast.FunctionDef)
+}
 
 helper = ast.get_source_segment(
-    source, functions["render_background_job_status_if_blocking"]
+    command_runtime_source, command_runtime_functions["render_background_job_status_if_blocking"]
 )
 assert "if has_visible_content:" in helper
 assert "poll_background_job_completion(job_name)" not in helper

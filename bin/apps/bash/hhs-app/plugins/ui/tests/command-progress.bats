@@ -118,7 +118,7 @@ assert 'data-hhs-preloader-token="search_command:token&amp;1"' in rendered
 PY
   assert_success
 
-  run python3 - "${feedback_ui_file}" "${ui_file}" <<'PY'
+  run python3 - "${feedback_ui_file}" "${ui_file}" "${command_runtime_file}" <<'PY'
 from pathlib import Path
 import ast
 import html
@@ -127,6 +127,7 @@ import types
 
 feedback_source = Path(sys.argv[1]).read_text(encoding="utf-8")
 ui_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+command_runtime_source = Path(sys.argv[3]).read_text(encoding="utf-8")
 start = feedback_source.index("def loader_label_html(")
 end = feedback_source.index("def render_command_loader_timer(")
 namespace = {
@@ -153,7 +154,9 @@ assert payload["timeoutSeconds"] == 30
 assert '<span class="hhs-loader-primary">needle</span>' in payload["messageHtml"]
 
 renderer_body = feedback_source.split("def render_command_preloader_events", 1)[1].split("\ndef ", 1)[0]
-background_status_body = ui_source.split("def render_background_job_status", 1)[1].split("\ndef ", 1)[0]
+background_status_body = command_runtime_source.split(
+    "def render_background_job_status", 1
+)[1].split("\ndef ", 1)[0]
 assert 'parentWindow.__hhsCommandOverlayExpiryTimer = parentWindow.setTimeout' not in renderer_body
 assert 'removeOverlay(String(detail.token || ""))' in renderer_body
 assert 'overlay.className = "hhs-tab-loader";' in renderer_body
@@ -163,7 +166,7 @@ assert "def command_elapsed_helper_js" in feedback_source
 assert 'typeof parentWindow.__hhsRenderCommandElapsed !== "function"' in feedback_source
 assert "def command_overlay_close_button_html" in feedback_source
 assert "def command_overlay_close_helper_js" in feedback_source
-assert "def stop_background_job_by_preloader_token" in ui_source
+assert "def stop_background_job_by_preloader_token" in command_runtime_source
 assert "def handle_command_preloader_cancel_action" in ui_source
 assert "hhs_ui.COMMAND_PRELOADER_CANCEL_QUERY_PARAM" in ui_source
 assert 'class="hhs-tab-loader-close"' in feedback_source
@@ -175,8 +178,8 @@ assert feedback_source.count("elapsedSeconds > 25 && elapsedSeconds < 60") == 1
 assert feedback_source.count("elapsedSeconds >= 60") == 1
 assert "elapsed_ratio >=" not in feedback_source
 assert "elapsedRatio >=" not in feedback_source
-assert "job[\"preloader_finished\"] = True" in ui_source
-assert "def dismiss_background_job_preloader" in ui_source
+assert "job[\"preloader_finished\"] = True" in command_runtime_source
+assert "def dismiss_background_job_preloader" in command_runtime_source
 assert 'dismiss_background_job_preloader(job_name, job, "error")' in background_status_body
 assert "process.poll() is not None" in background_status_body
 assert "background_job_result(job_name)" not in background_status_body
@@ -238,8 +241,9 @@ PY
 'elapsed_ratio >= 0.3 && elapsed_ratio < 0.6' 'elapsedRatio >= 0.3 && elapsedRatio < 0.6'
   assert_file_contains_many "${feedback_ui_file}" \
 'hhs-loader-elapsed-warning' 'hhs-loader-elapsed-danger'
-  assert_file_contains_many "${ui_file}" \
-'set_overlay(False)' 'def run_bash_subprocess' \
+  assert_file_contains "${ui_file}" 'set_overlay(False)'
+  assert_file_contains_many "${command_runtime_file}" \
+'def run_bash_subprocess' \
     'result = run_bash_subprocess(command_to_run, effective_timeout)' 'subprocess.Popen(' \
     'start_new_session=True' 'stop_process(process)' 'Command timed out after {timeout_seconds} seconds.'
   assert_file_contains_many "${css_file}" \
