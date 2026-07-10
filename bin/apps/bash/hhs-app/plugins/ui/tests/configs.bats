@@ -35,16 +35,20 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'headers=\["Status", "Option", "Description"\]'
   assert_file_contains "${constants_file}" 'SHOPT_LINE_PATTERN = re.compile'
 
+  assert_file_contains_many "${command_catalog_file}" \
+'def filter_shopt_rows' 'f"__hhs_shopt {action} {shlex.quote(option_name)}"' \
+    'build_hhs_shopt_load_saved_command()' '__hhs_shopt -p' \
+    'shopt -s "${option}" 2>/dev/null || true' 'shopt -u "${option}" 2>/dev/null || true' \
+    '"Status": shopt_status_value(state)' 'f"__hhs_paths {action_args}"' \
+    'def build_hhs_path_environment_command' 'def build_hhs_paths_raw_entries_command' \
+    'HHS_PATHS_RAW_ENTRY_MARKER' 'action_args = f"-a {safe_path}"' \
+    'action_args = f"-r {safe_path}"' 'f"__hhs_save_dir {action_args}"' \
+    'f"__hhs_command {action_args}"' 'f"__hhs_aliases {action_args}"'
   assert_file_contains_many "${ui_file}" \
-'def filter_shopt_rows' 'def apply_home_shopt_action' 'def refresh_home_shopts_listing' \
-    'f"__hhs_shopt {action} {shlex.quote(option_name)}"' 'build_hhs_shopt_load_saved_command()' \
-    '__hhs_shopt -p' 'shopt -s "${option}" 2>/dev/null || true' 'shopt -u "${option}" 2>/dev/null || true' \
-    '"Status": shopt_status_value(state)' 'action_buttons=\[' '"label": " Turn ON"' '"label": " Turn OFF"' \
-    'action_column_weights=\[1, 1\]' 'f"__hhs_paths {action_args}"' 'def build_hhs_path_environment_command' \
-    'def build_hhs_paths_raw_entries_command' 'HHS_PATHS_RAW_ENTRY_MARKER' 'action_args = f"-a {safe_path}"' \
-    'action_args = f"-r {safe_path}"' 'f"__hhs_save_dir {action_args}"' 'f"__hhs_command {action_args}"' \
-    'f"__hhs_aliases {action_args}"'
-  run grep -q -- "-a {shlex.quote(f'{name}={value}')}" "${ui_file}"
+'def apply_home_shopt_action' 'def refresh_home_shopts_listing' \
+    'action_buttons=\[' '"label": " Turn ON"' '"label": " Turn OFF"' \
+    'action_column_weights=\[1, 1\]'
+  run grep -q -- "-a {shlex.quote(f'{name}={value}')}" "${command_catalog_file}"
   assert_success
 
   assert_file_contains_many "${ui_file}" \

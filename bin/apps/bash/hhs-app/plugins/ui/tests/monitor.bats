@@ -119,7 +119,7 @@ PY
 }
 
 @test "when filtering monitor processes then status and other filters should use parsed rows" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${command_catalog_file}" <<'PY'
 import ast
 import re
 import sys

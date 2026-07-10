@@ -90,18 +90,20 @@ PY
   assert_success
 }
 @test "when building ENV rows then the command should load HomeSetup shell environment" {
-  run python3 - "${ui_file}" "${BATS_TEST_TMPDIR}" "${HHS_REPO_DIR}" <<'PY'
+  run python3 - "${command_catalog_file}" "${BATS_TEST_TMPDIR}" "${HHS_REPO_DIR}" <<'PY'
 import os
 import shlex
 import subprocess
 import sys
 from pathlib import Path
 
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
+ui_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+source = command_source + "\n" + ui_source
 tmp_dir = Path(sys.argv[2])
 repo_dir = Path(sys.argv[3])
 start = source.index("def build_hhs_env_environment_command()")
-end = source.index("def run_hhs_envs(")
+end = source.index("def build_hhs_env_action_command(")
 namespace = {"shlex": shlex}
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
@@ -150,7 +152,7 @@ PY
   assert_success
 }
 @test "when parsing command-backed config rows then non-PATH parsers should not read process environment" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${command_catalog_file}" <<'PY'
 import ast
 import sys
 from pathlib import Path
@@ -177,14 +179,16 @@ PY
   assert_success
 }
 @test "when parsing PATH rows then command output should provide path values" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${command_catalog_file}" <<'PY'
 import os
 import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
+ui_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+source = command_source + "\n" + ui_source
 start = source.index("def path_sources(")
 end = source.index("def env_widget_key_fragment(")
 namespace = {
@@ -268,7 +272,9 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
+ui_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+source = command_source + "\n" + ui_source
 start = source.index("def history_command_display_index(")
 end = source.index("def table_selection_key_prefixes()")
 parse_start = source.index("def parse_legacy_hhs_history_line(")

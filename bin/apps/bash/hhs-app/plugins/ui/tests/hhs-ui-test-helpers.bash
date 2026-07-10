@@ -1,6 +1,7 @@
 setup() {
   cd "${HHS_REPO_DIR}"
   ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.py"
+  command_catalog_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/command_catalog.py"
   constants_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/constants.py"
   process_resources_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/process_resources.py"
   runtime_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/runtime.py"

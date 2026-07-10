@@ -199,12 +199,14 @@ PY
   assert_file_not_contains_many "${ui_file}" \
 '\["bash", "-lc"' 'source "{hhs_home}' 'export HHS_HOME="{hhs_home}' '/Users/hjunior/HomeSetup'
   assert_file_contains_many "${ui_file}" \
-'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"' 'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"' \
-    'or not selected_ssh_host_is_connected(host)' 'force_local: bool = False' 'def build_ssh_tunnels_command' \
-    'ssh {safe_config_option} -G {safe_host}' 'def run_ssh_tunnels' 'def parse_ssh_tunnels' \
-    'def parse_ssh_config_tunnels' 'def annotate_ssh_tunnel_statuses' 'def ssh_tunnel_status_cell_style' \
-    'def display_ssh_tunnel_rows' 'def filter_ssh_tunnel_rows' \
+'or not selected_ssh_host_is_connected(host)' 'force_local: bool = False' \
+    'def run_ssh_tunnels' 'def annotate_ssh_tunnel_statuses' \
     'headers = \["Local Port", "Remote Host:Port", "Kind", "Status", "Link"\]'
+  assert_file_contains_many "${command_catalog_file}" \
+'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"' 'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"' \
+    'def build_ssh_tunnels_command' 'ssh {safe_config_option} -G {safe_host}' \
+    'def parse_ssh_tunnels' 'def parse_ssh_config_tunnels' 'def ssh_tunnel_status_cell_style' \
+    'def display_ssh_tunnel_rows' 'def filter_ssh_tunnel_rows'
   assert_file_contains_many "${constants_file}" \
 'Path(os.environ.get("HHS_HOME", APP_DIR.parents\[4\]))' '/ "assets/devel/ports-default.csv"'
   run test -s "${HHS_REPO_DIR}/assets/devel/ports-default.csv"
@@ -367,7 +369,7 @@ PY
 
   assert_file_contains_many "${ui_file}" \
 'key=hhs_ui.SSH_TUNNEL_TABLE_KEY' 'checkbox=False'
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${command_catalog_file}" <<'PY'
 import csv
 import hashlib
 import os
@@ -754,8 +756,9 @@ PY
     'push_floating_status(f"Loaded TLDR: {tool_name}", "info")' \
     'status_message or f"Killed process: {process_name}"' \
     'status_message or f"Service {operation} completed: {service_name}"' \
-    'kind_aliases = {"success": "info", "warning": "warn"}' 'def clean_command_status_message' \
+    'kind_aliases = {"success": "info", "warning": "warn"}' \
     'clean_message = clean_command_status_message(str(message))' 'clean_kind not in {"info", "warn", "error"}'
+  assert_file_contains "${command_catalog_file}" 'def clean_command_status_message'
   assert_file_not_contains "${ui_file}" 'Successfully connected to {host}'
 
   run grep -F -q 'st.session_state["ssh_connection_dialog_title"] = ""' "${ui_file}"

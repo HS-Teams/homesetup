@@ -146,14 +146,18 @@ assert single_selection_namespace["markdown_table_single_selection_marks"](3, 1)
     "○",
 ]
 
-parse_start = source.index("def hhs_setting_variable_name(")
-parse_end = source.index("def parse_hhs_starship_info", parse_start)
+command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+parse_start = command_source.index("def hhs_setting_variable_name(")
+parse_end = command_source.index("def parse_hhs_starship_info", parse_start)
 parse_namespace = {
     "csv": csv,
     "re": re,
     "strip_ansi": lambda value: value,
 }
-exec("from __future__ import annotations\n" + source[parse_start:parse_end], parse_namespace)
+exec(
+    "from __future__ import annotations\n" + command_source[parse_start:parse_end],
+    parse_namespace,
+)
 
 output = """
 | NAME                     | PREFIX | VALUE                                 | SETTINGS TYPE | MODIFIED            |
@@ -444,13 +448,18 @@ assert aliases_namespace["firebase_response_json"](
     type("BadResponse", (), {"status_code": 500, "body": "{}"})()
 ) == {}
 
-command_start = source.index("def build_hhs_firebase_plugin_command(")
-command_end = source.index("def build_hhs_starship_plugin_command", command_start)
+command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+command_start = command_source.index("def build_hhs_firebase_plugin_command(")
+command_end = command_source.index("def build_hhs_starship_plugin_command", command_start)
 command_namespace = {
     "shlex": shlex,
     "build_hhs_env_environment_command": lambda: "ENV; ",
 }
-exec("from __future__ import annotations\n" + source[command_start:command_end], command_namespace)
+exec(
+    "from __future__ import annotations\n"
+    + command_source[command_start:command_end],
+    command_namespace,
+)
 upload_command = command_namespace["build_hhs_firebase_alias_action_command"](
     "upload",
     "demo",
@@ -542,9 +551,13 @@ namespace = {
     "re": re,
     "strip_ansi": lambda value: value,
 }
-parse_start = source.index("def parse_hhs_config_environment(")
-parse_end = source.index("def parse_hhs_services", parse_start)
-exec("from __future__ import annotations\n" + source[parse_start:parse_end], namespace)
+command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+parse_start = command_source.index("def parse_hhs_config_environment(")
+parse_end = command_source.index("def parse_hhs_services", parse_start)
+exec(
+    "from __future__ import annotations\n" + command_source[parse_start:parse_end],
+    namespace,
+)
 
 display_namespace = {
     "os": os,

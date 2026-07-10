@@ -41,7 +41,11 @@ import ast
 import types
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = (
+    Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+)
 tree = ast.parse(source)
 source_lines = source.splitlines()
 functions = {
@@ -115,7 +119,11 @@ import shlex
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = (
+    Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+)
 tree = ast.parse(source)
 source_lines = source.splitlines()
 functions = {
@@ -187,7 +195,11 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = (
+    Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+)
 tree = ast.parse(source)
 source_lines = source.splitlines()
 functions = {
@@ -277,7 +289,11 @@ import ast
 import types
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = (
+    Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+)
 tree = ast.parse(source)
 source_lines = source.splitlines()
 functions = {

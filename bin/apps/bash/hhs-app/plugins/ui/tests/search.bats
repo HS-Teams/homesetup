@@ -710,14 +710,14 @@ PY
 }
 
 @test "when parsing Docker command output then tables should preserve columns" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${command_catalog_file}" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def escape_markdown_table_cell(")
-end = source.index("def command_env(")
+end = source.index("def ssh_shared_connection_closed(")
 namespace = {"re": re, "strip_ansi": lambda value: value}
 exec(source[start:end], namespace)
 

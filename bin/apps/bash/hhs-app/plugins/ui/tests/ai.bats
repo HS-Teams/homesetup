@@ -22,7 +22,7 @@ load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
 @test "when remote terminal prints wrapper chatter then command output should be filtered" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${command_catalog_file}" <<'PY'
 import re
 import sys
 from functools import lru_cache
@@ -101,21 +101,25 @@ PY
   run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/images/favicon.png"
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
-'page_icon=str(hhs_ui.APP_FAVICON_FILE)' 'build_hhs_ask_execute_command(\["-k", message\])' \
-    'def build_terminal_ai_context_prompt' 'def submit_ai_chat_prompt' \
-    'TERMINAL_AI_DEFAULT_PROMPT = "Explain me this"' 'build_hhs_ask_command(clean_prompt)' '"Asking AI..."' \
-    'submit_ai_chat_prompt(prompt, ollama_model, context_size)' 'build_hhs_ask_execute_command(\["-c"\])' \
+  assert_file_contains_many "${command_catalog_file}" \
+'build_hhs_ask_execute_command(\["-k", message\])' 'def build_terminal_ai_context_prompt' \
+    'TERMINAL_AI_DEFAULT_PROMPT' 'build_hhs_ask_execute_command(\["-c"\])' \
     'build_hhs_ask_execute_command(\["-p"\])' 'build_hhs_ask_execute_command(\["-r"\])' \
     'build_hhs_ask_execute_command(\["-i", file_path\])' 'build_hhs_ask_execute_command(\["-m"\])' \
+    'def build_hhs_ask_prompt_file_command' 'def build_hhs_save_ask_prompt_file_command' \
+    'def build_hhs_revert_ask_prompt_file_command' 'cat "${HHS_OLLAMA_PROMPT_FILE}"' \
+    'prompt_file="${HHS_OLLAMA_PROMPT_FILE}"' \
+    'cp -f "${HHS_OLLAMA_PROMPT_SOURCE}" "${HHS_OLLAMA_PROMPT_FILE}"' \
+    'def build_hhs_ask_ingest_command'
+  assert_file_contains_many "${ui_file}" \
+'page_icon=str(hhs_ui.APP_FAVICON_FILE)' 'def submit_ai_chat_prompt' \
+    'build_hhs_ask_command(clean_prompt)' '"Asking AI..."' \
+    'submit_ai_chat_prompt(prompt, ollama_model, context_size)' \
     'def render_ai_context_panel' 'def render_ai_prompt_file_panel' 'def render_ai_context_output_panel' \
     'def refresh_ai_context' 'def clear_ai_context_history' 'def refresh_ai_prompt' \
     'def refresh_ai_prompt_file' 'def save_ai_prompt_file' 'def revert_ai_prompt_file' \
-    'def build_hhs_ask_prompt_file_command' 'def build_hhs_save_ask_prompt_file_command' \
-    'def build_hhs_revert_ask_prompt_file_command' 'def run_hhs_ask_prompt_file' \
-    'def run_hhs_save_ask_prompt_file' 'def run_hhs_revert_ask_prompt_file' 'cat "${HHS_OLLAMA_PROMPT_FILE}"' \
-    'prompt_file="${HHS_OLLAMA_PROMPT_FILE}"' \
-    'cp -f "${HHS_OLLAMA_PROMPT_SOURCE}" "${HHS_OLLAMA_PROMPT_FILE}"' 'def ingest_ai_context_upload' \
+    'def run_hhs_ask_prompt_file' 'def run_hhs_save_ask_prompt_file' \
+    'def run_hhs_revert_ask_prompt_file' 'def ingest_ai_context_upload' \
     'def run_hhs_ask_ingest'
   assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/constants.py" 'AI_CONTEXT_UPLOAD_TYPES = ('
 
@@ -133,7 +137,7 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
 tree = ast.parse(source)
 source_lines = source.splitlines()
 functions = {
@@ -330,15 +334,18 @@ PY
 'AI_PERFORMANCE_MIN_SAMPLES' 'AI_PERFORMANCE_RECALC_INTERVAL' 'AI_PERFORMANCE_TIMING_LIMIT'
   assert_file_contains_many "${constants_file}" \
 '"ai_model_performance_timings"' '"ai_model_performance_averages"' '"ai_model_performance_sample_counts"'
+  assert_file_contains_many "${command_catalog_file}" \
+'def parse_context_window_kib' 'def ai_context_used_percent' 'def ai_context_used_color' \
+    'def ai_context_used_meta_html' 'def html_tooltip_chip' 'def ai_context_used_tooltip_html' \
+    'def file_size_bytes' 'prompt_size = file_size_bytes(ollama_prompt_file())' \
+    'history_size = file_size_bytes(ollama_history_file())' \
+    'percent_of_context(prompt_size + history_size' '"Ctx Used"' 'Current logged user' \
+    'Prompt: ' 'Context: ' 'def parse_ollama_model_rows' 'def first_downloaded_ollama_model'
   assert_file_contains_many "${ui_file}" \
-'def record_ai_model_request_duration' 'def ai_chat_meta_html' 'def parse_context_window_kib' \
-    'def ai_context_used_percent' 'def ai_context_used_color' 'def ai_context_used_meta_html' \
-    'def html_tooltip_chip' 'def model_characteristics_tooltip_html' 'def ai_context_used_tooltip_html' \
-    'def ai_model_recent_duration_tooltip_html' 'def ollama_history_file' 'def ollama_prompt_file' \
-    'def file_size_bytes' 'HHS_OLLAMA_HISTORY_FILE' 'HHS_OLLAMA_PROMPT_FILE' '".ollama_history"' \
-    '"hhs-ask-ollama.md"' 'prompt_size = file_size_bytes(ollama_prompt_file())' \
-    'history_size = file_size_bytes(ollama_history_file())' 'percent_of_context(prompt_size + history_size' \
-    '"Ctx Used"' 'Current logged user' 'Prompt: ' 'Context: ' 'parse_rows_cached(' \
+'def record_ai_model_request_duration' 'def ai_chat_meta_html' \
+    'def model_characteristics_tooltip_html' 'def ai_model_recent_duration_tooltip_html' \
+    'def ollama_history_file' 'def ollama_prompt_file' 'HHS_OLLAMA_HISTORY_FILE' \
+    'HHS_OLLAMA_PROMPT_FILE' '".ollama_history"' '"hhs-ask-ollama.md"' 'parse_rows_cached(' \
     'parse_ollama_model_rows(output, ollama_model)' 'timing_durations_for_model(model_name)\[-5:\]'
   assert_file_contains_many "${css_file}" \
 'hhs-tooltip-content' '.hhs-ai-chat-meta .hhs-tooltip:hover .hhs-tooltip-content'
@@ -353,7 +360,7 @@ PY
   assert_file_contains_many "${ui_file}" \
 'use_cache=False' 'ask_started_at = time.perf_counter()' \
     'record_ai_model_request_duration(ollama_model, request_duration)' '"Latency"' \
-    'def parse_ollama_model_rows' 'def first_downloaded_ollama_model' 'Delete Model' 'Select Model'
+    'Delete Model' 'Select Model'
 }
 
 # TC - 14
