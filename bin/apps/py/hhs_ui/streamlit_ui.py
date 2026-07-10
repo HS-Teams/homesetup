@@ -42,7 +42,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import warnings
-from base64 import b64encode
 from collections.abc import Callable
 from datetime import datetime
 from functools import lru_cache
@@ -54,91 +53,113 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-from streamlit import config as st_config
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import hhs_ui
 import hhs_ui.constants as hhs_ui_constants
-
-
-def process_resource_state() -> dict[str, object]:
-    """Return process-wide resources that must survive Streamlit reruns."""
-    state = getattr(sys, hhs_ui_constants.PROCESS_RESOURCE_STATE_KEY, None)
-    if not isinstance(state, dict):
-        state = {}
-        setattr(sys, hhs_ui_constants.PROCESS_RESOURCE_STATE_KEY, state)
-    return state
-
-
-def process_resource_registry(key: str) -> dict:
-    """Return a process-wide mutable registry by key."""
-    state = process_resource_state()
-    registry = state.get(key)
-    if not isinstance(registry, dict):
-        registry = {}
-        state[key] = registry
-    return registry
-
-
-class FooterStatusLogHandler(logging.Handler):
-    """Capture logged warnings and errors for the footer status bar."""
-
-    def emit(self, record: logging.LogRecord) -> None:
-        """Append one formatted warning or error record to process storage."""
-        if record.levelno < logging.WARNING:
-            return
-        try:
-            message = self.format(record).strip()
-            if not message:
-                return
-            registry = process_resource_registry(
-                hhs_ui_constants.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY
-            )
-            records = registry.setdefault("records", [])
-            if not isinstance(records, list):
-                records = []
-                registry["records"] = records
-            records.append(
-                {
-                    "level": record.levelname,
-                    "logger": record.name,
-                    "message": message,
-                }
-            )
-            del records[: -hhs_ui_constants.FLOATING_STATUS_QUEUE_LIMIT]
-        except Exception:
-            return
-
-
-def install_footer_status_log_handler() -> None:
-    """Install one footer status log handler on runtime warning/error loggers."""
-    registry = process_resource_registry(
-        hhs_ui_constants.FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY
-    )
-    handler = registry.get("handler")
-    if not isinstance(handler, FooterStatusLogHandler):
-        handler = FooterStatusLogHandler()
-        handler.setLevel(logging.WARNING)
-        handler.setFormatter(logging.Formatter("%(message)s"))
-        registry["handler"] = handler
-
-    logging.captureWarnings(True)
-    logger_names = {
-        name
-        for name, logger in logging.Logger.manager.loggerDict.items()
-        if name == "py.warnings"
-        or name == "streamlit"
-        or (name.startswith("streamlit.") and isinstance(logger, logging.Logger))
-    }
-    logger_names.update(("", "py.warnings", "streamlit"))
-    for logger_name in logger_names:
-        logger = logging.getLogger(logger_name)
-        if not any(
-            isinstance(existing_handler, FooterStatusLogHandler)
-            for existing_handler in logger.handlers
-        ):
-            logger.addHandler(handler)
-    registry["installed"] = True
+from hhs_ui.process_resources import (
+    install_footer_status_log_handler,
+    process_resource_registry,
+    process_resource_state,
+)
+from hhs_ui.paths import (
+    hhs_log_dir,
+    hhs_log_file_info,
+    hhs_log_file_path,
+    hhs_log_files,
+    homesetup_config_dir,
+    homesetup_home,
+    ollama_history_file,
+    ollama_prompt_file,
+)
+from hhs_ui.runtime import RUN_SHELL, shell_version_command
+from hhs_ui.search_core import (
+    build_hhs_open_search_result_command,
+    build_hhs_search_command,
+    normalized_search_option_values,
+    normalized_search_type,
+    path_from_file_uri,
+    search_full_path,
+    search_output_line_is_status,
+    search_relative_path,
+    search_result_download_name,
+    search_type_label,
+)
+from hhs_ui.theme_assets import (
+    available_theme_options,
+    configure_app_font_theme,
+    default_theme_name,
+    format_datetime,
+    load_app_image_data_uri,
+    load_text_file,
+    render_styles,
+    theme_custom_properties,
+    validated_theme_name,
+)
+from hhs_ui.ui_definitions import (
+    AI_ASK_JOB,
+    AI_CONTEXT_ACTION_JOB,
+    AI_MODEL_DELETE_JOB,
+    AI_MODEL_SELECT_JOB,
+    AI_PROMPT_ACTION_JOB,
+    ALIAS_LIST_JOB,
+    BACKGROUND_JOB_STATE_KEY_PREFIX,
+    CACHE_CLEAR_BACKGROUND_JOBS,
+    COMMAND_PRELOADER_BUS,
+    COMMAND_PRELOADER_EVENT_BUS_REGISTRY_KEY,
+    COMMAND_PRELOADER_EVENT_QUEUE_KEY,
+    COMMAND_PRELOADER_FINISH_EVENT,
+    COMMAND_PRELOADER_START_EVENT,
+    COMMAND_PRELOADER_SUBSCRIBER_MARKER,
+    CONFIG_ACTION_JOB,
+    DOCKER_ACTION_JOB,
+    FIREBASE_CONFIG_CONTENT_OUTPUT_MARKER,
+    FIREBASE_CONFIG_END_OUTPUT_MARKER,
+    FIREBASE_CONFIG_FILE_OUTPUT_MARKER,
+    FOOTER_VERSION_CACHE_TAG,
+    FOOTER_VERSION_JOB,
+    FOOTER_VERSION_OUTPUT_MARKER,
+    FOOTER_WORKING_DIR_JOB,
+    HHS_CONFIG_ENV_OUTPUT_MARKER,
+    HHS_FIREBASE_ACTION_JOB,
+    HHS_FIREBASE_FIELDS,
+    HHS_PATHS_RAW_ENTRY_MARKER,
+    HHS_SETTINGS_ACTION_JOB,
+    HHS_SETUP_ACTION_JOB,
+    HHS_SETUP_SETTINGS,
+    HHS_STARSHIP_ACTION_JOB,
+    HOME_TOOL_ACTION_JOB,
+    HOME_TOOL_TLDR_JOB,
+    HOST_SWITCH_BACKGROUND_JOBS,
+    HOST_SWITCH_CACHE_TAGS,
+    HOST_SWITCH_STATE_KEYS,
+    HOST_SWITCH_VIEW_STATE_KEY,
+    MONITOR_CPU_JOB,
+    MONITOR_MEM_JOB,
+    MONITOR_PROCESS_ACTION_JOB,
+    MONITOR_PROCESS_LIST_JOB,
+    PATH_PICKER_LISTING_JOB_PREFIX,
+    PATH_PICKER_LISTING_LOADER_MESSAGE,
+    SEARCH_COMMAND_JOB,
+    SEARCH_OPEN_JOB,
+    SERVICE_ACTION_JOB,
+    SERVICE_LIST_JOB,
+    SHOPT_DESCRIPTIONS,
+    SSH_CONNECT_JOB,
+    SSH_DISCONNECT_JOB,
+    SSH_EXPLORER_ACTION_JOB,
+    SSH_EXPLORER_DELETE_JOB,
+    SSH_FILE_TRANSFER_JOB,
+    STARSHIP_CACHE_OUTPUT_MARKER,
+    STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER,
+    STARSHIP_CONFIG_OUTPUT_MARKER,
+    STARSHIP_END_OUTPUT_MARKER,
+    STARSHIP_HHS_DIR_OUTPUT_MARKER,
+    STARSHIP_PRESETS_OUTPUT_MARKER,
+    TERMINAL_AI_DEFAULT_PROMPT,
+    UPDATER_CHECK_JOB,
+    UPDATER_UPDATE_JOB,
+)
 
 
 TTYD_CLEANUP_REGISTRY: dict[str, dict[str, object]] = process_resource_registry(
@@ -162,423 +183,9 @@ TTYD_CLEANUP_SERVER_PORT = (
 TTYD_EXIT_COMMANDS = {"exit", "logout"}
 
 
-def resolve_run_shell() -> str:
-    """Return the Bash executable used for all HomeSetup UI commands."""
-    run_shell = ""
-    brew_commands = (
-        ["brew", "--prefix", "bash"],
-        ["/opt/homebrew/bin/brew", "--prefix", "bash"],
-        ["/usr/local/bin/brew", "--prefix", "bash"],
-    )
-    for brew_command in brew_commands:
-        try:
-            brew_result = subprocess.run(
-                brew_command,
-                capture_output=True,
-                check=False,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=5,
-            )
-            if brew_result.returncode == 0:
-                run_shell = brew_result.stdout.strip()
-                break
-        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-            continue
-
-    candidates = []
-    if run_shell:
-        candidates.extend((Path(run_shell) / "bin" / "bash", Path(run_shell)))
-    candidates.extend(
-        (
-            Path("/opt/homebrew/opt/bash/bin/bash"),
-            Path("/usr/local/opt/bash/bin/bash"),
-            Path("/bin/bash"),
-        )
-    )
-    for candidate in candidates:
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return str(candidate)
-    return "/bin/bash"
-
-
-def shell_version_command() -> str:
-    """Return the command that prints the active target Bash version."""
-    return r"${BASH:-bash} --version"
-
-
-RUN_SHELL = resolve_run_shell()
-os.environ[hhs_ui_constants.RUN_SHELL_ENV_KEY] = RUN_SHELL
-HHS_PATHS_RAW_ENTRY_MARKER = "__HHS_UI_PATH_ENTRY__"
-FOOTER_VERSION_CACHE_TAG = "footer_version"
-FOOTER_VERSION_OUTPUT_MARKER = "__HHS_UI_VERSION__"
-SHOPT_DESCRIPTIONS = {
-    "assoc_expand_once": "Suppresses repeated evaluation of associative array subscripts.",
-    "autocd": "Runs a directory name as if it were the argument to cd.",
-    "cdable_vars": "Treats a non-directory cd argument as a variable containing the target directory.",
-    "cdspell": "Corrects minor spelling errors in directory names used with cd.",
-    "checkhash": "Verifies hashed commands still exist before executing them.",
-    "checkjobs": "Checks for stopped and running jobs before an interactive shell exits.",
-    "checkwinsize": "Updates LINES and COLUMNS after each command when the terminal size changes.",
-    "cmdhist": "Stores all lines of a multi-line command in one history entry.",
-    "compat31": "Uses Bash 3.1 compatibility for quoted =~ conditional arguments.",
-    "compat32": "Uses Bash 3.2 compatibility for conditional and locale-specific behavior.",
-    "compat40": "Uses Bash 4.0 compatibility for conditional and locale-specific behavior.",
-    "compat41": "Uses Bash 4.1 compatibility for conditional and POSIX mode behavior.",
-    "compat42": "Uses Bash 4.2 compatibility for pattern replacement quote handling.",
-    "compat43": "Uses Bash 4.3 compatibility for word expansion and loop state behavior.",
-    "compat44": "Uses Bash 4.4 compatibility for expansion and unset behavior.",
-    "complete_fullquote": "Quotes all shell metacharacters in completion results.",
-    "direxpand": "Expands directory names during completion.",
-    "dirspell": "Corrects directory name spelling during completion.",
-    "dotglob": "Includes filenames beginning with a dot in pathname expansion.",
-    "execfail": "Prevents a non-interactive shell from exiting when exec cannot run its target.",
-    "expand_aliases": "Expands aliases before command execution.",
-    "extdebug": "Enables debugger-oriented shell behavior and tracing.",
-    "extglob": "Enables extended pathname pattern matching operators.",
-    "extquote": "Enables ANSI-C and locale-specific quoting inside parameter expansions.",
-    "failglob": "Makes non-matching pathname patterns raise an expansion error.",
-    "force_fignore": "Applies FIGNORE suffixes even when they are the only completion matches.",
-    "globasciiranges": "Uses ASCII ordering for bracket expression ranges in pattern matching.",
-    "globstar": "Makes ** recursively match files and directories during pathname expansion.",
-    "gnu_errfmt": "Formats shell error messages in GNU style.",
-    "histappend": "Appends history to HISTFILE instead of overwriting it on shell exit.",
-    "histreedit": "Lets readline re-edit a failed history substitution.",
-    "histverify": "Loads history substitutions into readline before execution for review.",
-    "hostcomplete": "Completes hostnames when a word containing @ is completed.",
-    "huponexit": "Sends SIGHUP to jobs when an interactive login shell exits.",
-    "inherit_errexit": "Preserves errexit in command substitutions.",
-    "interactive_comments": "Allows # to begin comments in interactive shells.",
-    "lastpipe": "Runs the last foreground pipeline command in the current shell when possible.",
-    "lithist": "Stores multi-line history entries with embedded newlines when cmdhist is enabled.",
-    "localvar_inherit": "Lets local variables inherit prior visible values and attributes.",
-    "localvar_unset": "Makes unset local variables hide same-named outer variables.",
-    "login_shell": "Indicates that the shell was started as a login shell.",
-    "mailwarn": "Warns when a checked mail file has been read since the last check.",
-    "no_empty_cmd_completion": "Skips PATH completion attempts on an empty command line.",
-    "nocaseglob": "Matches filenames case-insensitively during pathname expansion.",
-    "nocasematch": "Matches case and [[ patterns case-insensitively.",
-    "noexpand_translation": "Prevents translated strings from being single-quoted.",
-    "nullglob": "Expands non-matching pathname patterns to nothing.",
-    "progcomp": "Enables programmable completion.",
-    "progcomp_alias": "Tries programmable completion through an alias target.",
-    "promptvars": "Expands variables and command substitutions in prompt strings.",
-    "restricted_shell": "Indicates that the shell is running in restricted mode.",
-    "shift_verbose": "Reports an error when shift exceeds the number of positional parameters.",
-    "sourcepath": "Uses PATH to find files passed to source or dot.",
-    "varredir_close": "Automatically closes file descriptors opened with varredir redirections.",
-    "xpg_echo": "Makes echo expand backslash escape sequences by default.",
-}
 TableControlsResult = TypeVar("TableControlsResult")
 UI_CACHE_MEMORY: dict[str, dict[str, object]] = {}
 UI_CACHE_MEMORY_MTIME: float | None = None
-HOME_TOOL_ACTION_JOB = "home_tool_action"
-HOME_TOOL_TLDR_JOB = "home_tool_tldr"
-CONFIG_ACTION_JOB = "config_action"
-HHS_SETUP_ACTION_JOB = "hhs_setup_action"
-HHS_SETTINGS_ACTION_JOB = "hhs_settings_action"
-HHS_STARSHIP_ACTION_JOB = "hhs_starship_action"
-HHS_FIREBASE_ACTION_JOB = "hhs_firebase_action"
-DOCKER_ACTION_JOB = "docker_action"
-ALIAS_LIST_JOB = "alias_list"
-SERVICE_LIST_JOB = "service_list"
-SERVICE_ACTION_JOB = "service_action"
-MONITOR_CPU_JOB = "monitor_cpu"
-MONITOR_MEM_JOB = "monitor_mem"
-MONITOR_PROCESS_LIST_JOB = "monitor_process_list"
-MONITOR_PROCESS_ACTION_JOB = "monitor_process_action"
-AI_CONTEXT_ACTION_JOB = "ai_context_action"
-AI_PROMPT_ACTION_JOB = "ai_prompt_action"
-AI_MODEL_SELECT_JOB = "ai_model_select"
-AI_MODEL_DELETE_JOB = "ai_model_delete"
-UPDATER_UPDATE_JOB = "updater_update"
-UPDATER_CHECK_JOB = "updater_check"
-AI_ASK_JOB = "ai_ask"
-TERMINAL_AI_DEFAULT_PROMPT = "Explain me this"
-FOOTER_VERSION_JOB = "footer_hhs_version"
-FOOTER_WORKING_DIR_JOB = "footer_working_dir"
-SSH_CONNECT_JOB = "ssh_connect"
-SSH_DISCONNECT_JOB = "ssh_disconnect"
-SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"
-SSH_EXPLORER_ACTION_JOB = "ssh_explorer_action"
-SSH_EXPLORER_DELETE_JOB = "ssh_explorer_delete"
-SEARCH_COMMAND_JOB = "search_command"
-SEARCH_OPEN_JOB = "search_open"
-PATH_PICKER_LISTING_JOB_PREFIX = "path_picker_listing"
-BACKGROUND_JOB_STATE_KEY_PREFIX = "_hhs_background_job_"
-PATH_PICKER_LISTING_LOADER_MESSAGE = "Loading directories and files..."
-HHS_SETUP_SETTINGS = (
-    "hhs_set_locales",
-    "hhs_export_settings",
-    "hhs_restore_last_dir",
-    "hhs_load_shell_options",
-    "homebrew_no_auto_update",
-    "hhs_no_auto_update",
-    "hhs_load_completions",
-    "hhs_load_key_bindings",
-    "hhs_python_venv_enabled",
-    "hhs_use_starship",
-    "hhs_use_blesh",
-    "hhs_use_atuin",
-    "hhs_verbose_logs",
-    "hhs_ollama_ai_autostart",
-)
-HHS_FIREBASE_FIELDS = (
-    (
-        "UID",
-        "UID",
-        "hhs.firebase.user.uid",
-        "hhs_firebase_uid",
-        "Firebase auth UID",
-    ),
-    (
-        "PROJECT_ID",
-        "PROJECT_ID",
-        "hhs.firebase.project.id",
-        "hhs_firebase_project_id",
-        "Firebase project ID",
-    ),
-    (
-        "EMAIL",
-        "EMAIL",
-        "hhs.firebase.username",
-        "hhs_firebase_email",
-        "Firebase account email",
-    ),
-    (
-        "DATABASE",
-        "DATABASE",
-        "hhs.firebase.database",
-        "hhs_firebase_database",
-        "Realtime database name",
-    ),
-)
-STARSHIP_CACHE_OUTPUT_MARKER = "__HHS_STARSHIP_CACHE__"
-STARSHIP_CONFIG_OUTPUT_MARKER = "__HHS_STARSHIP_CONFIG__"
-STARSHIP_HHS_DIR_OUTPUT_MARKER = "__HHS_STARSHIP_HHS_DIR__"
-STARSHIP_PRESETS_OUTPUT_MARKER = "__HHS_STARSHIP_PRESETS__"
-STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER = "__HHS_STARSHIP_CONFIG_CONTENT__"
-STARSHIP_END_OUTPUT_MARKER = "__HHS_STARSHIP_END__"
-HHS_CONFIG_ENV_OUTPUT_MARKER = "__HHS_CONFIG_ENV__"
-FIREBASE_CONFIG_FILE_OUTPUT_MARKER = "__HHS_FIREBASE_CONFIG_FILE__"
-FIREBASE_CONFIG_CONTENT_OUTPUT_MARKER = "__HHS_FIREBASE_CONFIG_CONTENT__"
-FIREBASE_CONFIG_END_OUTPUT_MARKER = "__HHS_FIREBASE_END__"
-COMMAND_PRELOADER_BUS = "hhs-ui-command-preloader"
-COMMAND_PRELOADER_START_EVENT = "command:start"
-COMMAND_PRELOADER_FINISH_EVENT = "command:finish"
-COMMAND_PRELOADER_EVENT_QUEUE_KEY = "_hhs_command_preloader_events"
-COMMAND_PRELOADER_SUBSCRIBER_MARKER = "_hhs_command_preloader_subscriber"
-COMMAND_PRELOADER_EVENT_BUS_REGISTRY_KEY = "command_preloader_event_bus"
-HOST_SWITCH_VIEW_STATE_KEY = "_hhs_host_switch_view_state"
-HOST_SWITCH_CACHE_TAGS = (
-    FOOTER_VERSION_CACHE_TAG,
-    "env",
-    "services",
-    "monitor_disk",
-    "monitor_process",
-    "ssh_files",
-)
-HOST_SWITCH_BACKGROUND_JOBS = (
-    SSH_CONNECT_JOB,
-    SSH_DISCONNECT_JOB,
-    SSH_FILE_TRANSFER_JOB,
-    SSH_EXPLORER_ACTION_JOB,
-    SSH_EXPLORER_DELETE_JOB,
-    SEARCH_COMMAND_JOB,
-    SEARCH_OPEN_JOB,
-    CONFIG_ACTION_JOB,
-    HHS_FIREBASE_ACTION_JOB,
-    DOCKER_ACTION_JOB,
-    FOOTER_VERSION_JOB,
-    HOME_TOOL_ACTION_JOB,
-    HOME_TOOL_TLDR_JOB,
-    SERVICE_LIST_JOB,
-    SERVICE_ACTION_JOB,
-    MONITOR_CPU_JOB,
-    MONITOR_MEM_JOB,
-    MONITOR_PROCESS_LIST_JOB,
-    MONITOR_PROCESS_ACTION_JOB,
-    AI_CONTEXT_ACTION_JOB,
-    AI_PROMPT_ACTION_JOB,
-)
-CACHE_CLEAR_BACKGROUND_JOBS = (
-    SSH_CONNECT_JOB,
-    SSH_DISCONNECT_JOB,
-    SSH_FILE_TRANSFER_JOB,
-    SSH_EXPLORER_ACTION_JOB,
-    SSH_EXPLORER_DELETE_JOB,
-    SEARCH_COMMAND_JOB,
-    SEARCH_OPEN_JOB,
-    CONFIG_ACTION_JOB,
-    HHS_FIREBASE_ACTION_JOB,
-    DOCKER_ACTION_JOB,
-    FOOTER_VERSION_JOB,
-    HOME_TOOL_ACTION_JOB,
-    HOME_TOOL_TLDR_JOB,
-    ALIAS_LIST_JOB,
-    SERVICE_LIST_JOB,
-    SERVICE_ACTION_JOB,
-    MONITOR_CPU_JOB,
-    MONITOR_MEM_JOB,
-    MONITOR_PROCESS_LIST_JOB,
-    MONITOR_PROCESS_ACTION_JOB,
-    AI_CONTEXT_ACTION_JOB,
-    AI_PROMPT_ACTION_JOB,
-)
-HOST_SWITCH_STATE_KEYS = (
-    "monitor_cpu_error",
-    "monitor_mem_error",
-    "monitor_process_action_message",
-    "monitor_process_action_succeeded",
-    "monitor_process_list_error",
-    "service_list_error",
-)
-
-
-def file_mtime_token(file_path: Path) -> float:
-    """Return a cache token that changes when a filesystem asset changes."""
-    try:
-        return file_path.stat().st_mtime
-    except OSError:
-        return 0.0
-
-
-@lru_cache(maxsize=128)
-def cached_text_file(file_path: str, mtime_token: float) -> str:
-    """Return a UTF-8 text file body cached by path and modification time."""
-    del mtime_token
-    try:
-        return Path(file_path).read_text(encoding="utf-8")
-    except OSError:
-        return ""
-
-
-def load_text_file(file_path: Path) -> str:
-    """Load a UTF-8 text file through the static asset cache."""
-    return cached_text_file(str(file_path), file_mtime_token(file_path))
-
-
-@lru_cache(maxsize=64)
-def cached_data_uri(file_path: str, mime_type: str, mtime_token: float) -> str:
-    """Return a browser data URI cached by path, MIME type, and modification time."""
-    del mtime_token
-    try:
-        encoded_data = b64encode(Path(file_path).read_bytes()).decode("ascii")
-    except OSError:
-        encoded_data = ""
-    return f"data:{mime_type};base64,{encoded_data}"
-
-
-def load_data_uri(file_path: Path, mime_type: str) -> str:
-    """Load a binary file as a browser data URI through the static asset cache."""
-    return cached_data_uri(str(file_path), mime_type, file_mtime_token(file_path))
-
-
-def load_app_css() -> str:
-    """Load the HomeSetup Streamlit UI stylesheet."""
-    return load_text_file(hhs_ui.APP_CSS_FILE)
-
-
-def available_theme_options() -> tuple[str, ...]:
-    """Return all selectable theme names from the themes folder."""
-    return tuple(
-        sorted(theme.stem for theme in hhs_ui.APP_THEME_CSS_FILE.parent.glob("*.css"))
-    )
-
-
-def default_theme_name(theme_options: tuple[str, ...] | None = None) -> str:
-    """Return the default selectable HomeSetup UI theme name."""
-    options = theme_options if theme_options is not None else available_theme_options()
-    if hhs_ui.APP_THEME_CSS_FILE.stem in options:
-        return hhs_ui.APP_THEME_CSS_FILE.stem
-    return options[0] if options else ""
-
-
-def validated_theme_name(
-    theme_name: object, theme_options: tuple[str, ...] | None = None
-) -> str:
-    """Return a valid selectable theme name or an empty string."""
-    selected_theme = str(theme_name or "").strip()
-    options = theme_options if theme_options is not None else available_theme_options()
-    return selected_theme if selected_theme in options else ""
-
-
-def theme_css_file(theme_name: object) -> Path:
-    """Return the stylesheet path for a selectable UI theme."""
-    theme_options = available_theme_options()
-    selected_theme = validated_theme_name(theme_name, theme_options)
-    if not selected_theme:
-        selected_theme = default_theme_name(theme_options)
-    theme_file = hhs_ui.APP_THEME_CSS_FILE.with_name(f"{selected_theme}.css")
-    if not theme_file.is_file():
-        return hhs_ui.APP_THEME_CSS_FILE
-    return theme_file
-
-
-def css_custom_properties(css_source: str) -> dict[str, str]:
-    """Return CSS custom property values from a stylesheet source string."""
-    properties: dict[str, str] = {}
-    for property_name, property_value in re.findall(
-        r"--([A-Za-z0-9_-]+)\s*:\s*([^;]+);", css_source
-    ):
-        properties[property_name] = property_value.strip()
-    return properties
-
-
-@lru_cache(maxsize=32)
-def cached_css_custom_properties(css_source: str) -> dict[str, str]:
-    """Return parsed CSS custom properties cached by stylesheet source."""
-    return css_custom_properties(css_source)
-
-
-def theme_custom_properties(theme_name: object) -> dict[str, str]:
-    """Return parsed CSS custom properties for a selectable UI theme."""
-    return cached_css_custom_properties(load_text_file(theme_css_file(theme_name)))
-
-
-def css_theme_bool(value: str) -> bool | str:
-    """Return a boolean value for CSS boolean tokens or the original string."""
-    normalized_value = value.strip().lower()
-    if normalized_value == "true":
-        return True
-    if normalized_value == "false":
-        return False
-    return value
-
-
-def theme_config_options(theme_name: object) -> dict[str, object]:
-    """Return Streamlit native theme options parsed from a selectable CSS theme."""
-    theme_properties = theme_custom_properties(theme_name)
-    option_tokens = {
-        "theme.base": "hhs-theme-base",
-        "theme.primaryColor": "hhs-theme-primary-color",
-        "theme.backgroundColor": "hhs-theme-background-color",
-        "theme.secondaryBackgroundColor": "hhs-theme-secondary-background-color",
-        "theme.textColor": "hhs-theme-text-color",
-        "theme.linkColor": "hhs-theme-link-color",
-        "theme.borderColor": "hhs-theme-border-color",
-        "theme.dataframeBorderColor": "hhs-theme-dataframe-border-color",
-        "theme.dataframeHeaderBackgroundColor": (
-            "hhs-theme-dataframe-header-background-color"
-        ),
-        "theme.codeBackgroundColor": "hhs-theme-code-background-color",
-        "theme.baseRadius": "hhs-theme-base-radius",
-        "theme.buttonRadius": "hhs-theme-button-radius",
-        "theme.showWidgetBorder": "hhs-theme-show-widget-border",
-        "theme.showSidebarBorder": "hhs-theme-show-sidebar-border",
-    }
-    return {
-        option_name: css_theme_bool(theme_properties[token_name])
-        for option_name, token_name in option_tokens.items()
-        if token_name in theme_properties
-    }
-
-
-def load_app_theme_css() -> str:
-    """Load the selected HomeSetup Streamlit UI theme stylesheet."""
-    selected_theme = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
-    return load_text_file(theme_css_file(selected_theme))
 
 
 def persist_theme_selection(theme_name: str) -> None:
@@ -604,69 +211,6 @@ def request_theme_reload() -> None:
         persist_theme_selection(selected_theme)
         st.session_state["theme_reload_pending"] = True
         st.session_state["theme_reload_name"] = selected_theme
-
-
-def load_app_font_data_uri() -> str:
-    """Load the HomeSetup UI font as a browser-embeddable data URI."""
-    return load_data_uri(hhs_ui.APP_FONT_FILE, "font/woff2")
-
-
-def load_app_image_data_uri(image_file: Path, mime_type: str) -> str:
-    """Load a HomeSetup UI image as a browser-embeddable data URI."""
-    return load_data_uri(image_file, mime_type)
-
-
-def load_app_font_face_css() -> str:
-    """Load the HomeSetup UI font as an embeddable CSS font face."""
-    return (
-        "@font-face {"
-        f'font-family: "{hhs_ui.APP_FONT_FAMILY}";'
-        f'src: url("{load_app_font_data_uri()}") format("woff2");'
-        "font-style: normal;"
-        "font-weight: 400;"
-        "font-display: swap;"
-        "}"
-    )
-
-
-def configure_app_font_theme(theme_name: object = "") -> None:
-    """Configure Streamlit's selected theme for native components."""
-    for option_name, option_value in theme_config_options(theme_name).items():
-        st_config.set_option(option_name, option_value)
-    st_config.set_option(
-        "theme.fontFaces",
-        [
-            {
-                "family": hhs_ui.APP_FONT_FAMILY,
-                "url": load_app_font_data_uri(),
-                "weight": "400",
-                "style": "normal",
-            }
-        ],
-    )
-    st_config.set_option("theme.font", hhs_ui.APP_FONT_FAMILY)
-    st_config.set_option("theme.headingFont", hhs_ui.APP_FONT_FAMILY)
-    st_config.set_option("theme.codeFont", hhs_ui.APP_FONT_FAMILY)
-
-
-def render_styles() -> None:
-    """Render app-level Streamlit styles."""
-    st.markdown(
-        (
-            "<style>"
-            f"{load_app_font_face_css()}"
-            f"{hhs_ui.APP_CSS}"
-            f"{load_app_css()}"
-            f"{load_app_theme_css()}"
-            "</style>"
-        ),
-        unsafe_allow_html=True,
-    )
-
-
-def format_datetime(value: datetime) -> str:
-    """Format a datetime value for the HomeSetup UI."""
-    return value.strftime(hhs_ui.DISPLAY_DATETIME_FORMAT)
 
 
 def render_sidebar_clock() -> None:
@@ -3989,34 +3533,6 @@ def homesetup_version(refresh_cache: bool = False) -> str:
     return fallback_footer_homesetup_version(context)
 
 
-def homesetup_home() -> Path:
-    """Return the HomeSetup repository root used by this UI."""
-    return Path(os.environ.get("HHS_HOME", hhs_ui.APP_DIR.parents[3])).expanduser()
-
-
-def homesetup_config_dir() -> Path:
-    """Return the HomeSetup runtime configuration directory used by this UI."""
-    return Path(os.environ.get("HHS_DIR", Path.home() / ".config/hhs")).expanduser()
-
-
-def ollama_history_file() -> Path:
-    """Return the configured HomeSetup Ollama history file path."""
-    return Path(
-        os.environ.get(
-            "HHS_OLLAMA_HISTORY_FILE", homesetup_config_dir() / ".ollama_history"
-        )
-    ).expanduser()
-
-
-def ollama_prompt_file() -> Path:
-    """Return the configured HomeSetup Ollama prompt file path."""
-    return Path(
-        os.environ.get(
-            "HHS_OLLAMA_PROMPT_FILE", homesetup_config_dir() / "hhs-ask-ollama.md"
-        )
-    ).expanduser()
-
-
 def monitor_default_disk_directory() -> str:
     """Return the default directory for the disk monitor."""
     if connected_ssh_host():
@@ -4203,40 +3719,6 @@ def synchronize_monitor_disk_directory_with_host() -> None:
     st.session_state["monitor_disk_directory"] = directory
     st.session_state["monitor_disk_directory_applied"] = directory
     cache_delete_tag("monitor_disk")
-
-
-def hhs_log_dir() -> Path:
-    """Return the HomeSetup log directory used by monitor logs."""
-    return Path(
-        os.environ.get(
-            "HHS_LOG_DIR",
-            Path(os.environ.get("HHS_DIR", Path.home() / ".config/hhs")) / "logs",
-        )
-    ).expanduser()
-
-
-def hhs_log_files() -> list[str]:
-    """Return available HomeSetup log file names."""
-    log_dir = hhs_log_dir()
-    if not log_dir.is_dir():
-        return []
-    return sorted(path.name for path in log_dir.glob("*.log") if path.is_file())
-
-
-def hhs_log_file_path(log_file: str) -> Path:
-    """Return the safe path for a HomeSetup log file name."""
-    return hhs_log_dir() / Path(log_file).name
-
-
-def hhs_log_file_info(log_file: str) -> tuple[str, dict[str, str]]:
-    """Return the selected log file path and environment used for display."""
-    environment_values = {
-        "HOME": str(Path.home()),
-        "HHS_HOME": str(homesetup_home()),
-        "HHS_DIR": str(homesetup_config_dir()),
-        "HHS_LOG_DIR": str(hhs_log_dir()),
-    }
-    return str(hhs_log_file_path(log_file)), environment_values
 
 
 def selected_monitor_log_level() -> str:
@@ -20499,147 +19981,6 @@ def render_monitor_view() -> None:
         render_monitor_logs_panel()
 
 
-def search_type_label(search_type: str) -> str:
-    """Return the display label for a Search type key."""
-    return hhs_ui_constants.SEARCH_TYPE_LABELS.get(search_type, search_type)
-
-
-def normalized_search_type(search_type: object) -> str:
-    """Return a valid Search type key."""
-    candidate = str(search_type or "").strip()
-    if candidate in hhs_ui_constants.SEARCH_TYPES:
-        return candidate
-    return hhs_ui_constants.SEARCH_TYPES[0]
-
-
-def search_glob_from_query(query: str) -> str:
-    """Return the file or folder glob used for a Search query."""
-    clean_query = query.strip()
-    if any(character in clean_query for character in "*?[],"):
-        return clean_query
-    return f"*{clean_query}*"
-
-
-def build_hhs_search_setup_command() -> str:
-    """Build shell setup for HomeSetup Search helper functions."""
-    return (
-        'export HHS_DIR="${HHS_DIR}"; '
-        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
-        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-text.bash"; '
-        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-search.bash"; '
-        "function __hhs_highlight() { cat -; }; "
-    )
-
-
-def build_hhs_search_modified_results_command(search_command: str) -> str:
-    """Wrap a Search command so path results include metadata columns."""
-    return (
-        f"{search_command} | while IFS= read -r line; do "
-        'case "${line}" in '
-        '""|Searching\\ for*) ;; '
-        "*) "
-        'if [ -e "${line}" ]; then '
-        'if modified=$(stat -c %Y "${line}" 2>/dev/null); then :; '
-        'else modified=$(stat -f %m "${line}" 2>/dev/null || printf "0"); fi; '
-        'if [ -f "${line}" ]; then '
-        'if size=$(stat -c %s "${line}" 2>/dev/null); then :; '
-        'else size=$(stat -f %z "${line}" 2>/dev/null || printf ""); fi; '
-        'else size=""; fi; '
-        'else modified=0; size=""; fi; '
-        'printf "__HHS_SEARCH_RESULT__\\t%s\\t%s\\t%s\\n" "${line}" "${modified}" "${size}" ;; '
-        "esac; "
-        "done"
-    )
-
-
-def shell_home_path_argument(path_value: str) -> str:
-    """Return a shell-safe path argument, expanding home tokens on the target host."""
-    clean_path = path_value.strip() or "."
-    if clean_path in {"~", "$HOME", "${HOME}"}:
-        return '"${HOME:-.}"'
-    for home_prefix in ("~/", "$HOME/", "${HOME}/"):
-        if clean_path.startswith(home_prefix):
-            suffix = clean_path[len(home_prefix) :]
-            if not suffix:
-                return '"${HOME:-.}"'
-            return f'"${{HOME:-.}}"/{shlex.quote(suffix)}'
-    return shlex.quote(clean_path)
-
-
-def normalized_search_option_values(
-    search_type: str,
-    ignore_case: bool = False,
-    words: bool = False,
-    binary: bool = False,
-    replace: bool = False,
-    replacement: object = "",
-) -> tuple[bool, bool, bool, bool, str]:
-    """Return Search option flags that apply to the selected Search type."""
-    if normalized_search_type(search_type) != "Strings":
-        return (False, False, False, False, "")
-    should_replace = bool(replace)
-    return (
-        bool(ignore_case),
-        bool(words) and not should_replace,
-        bool(binary),
-        should_replace,
-        str(replacement or "") if should_replace else "",
-    )
-
-
-def search_string_option_flags(
-    ignore_case: bool = False,
-    words: bool = False,
-    binary: bool = False,
-    replace: bool = False,
-    replacement: object = "",
-) -> list[str]:
-    """Return __hhs_search_string option arguments for selected Search toggles."""
-    flags: list[str] = []
-    if ignore_case:
-        flags.append("-i")
-    if words:
-        flags.append("-w")
-    if binary:
-        flags.append("-b")
-    if replace:
-        flags.extend(("-r", str(replacement or "")))
-    return flags
-
-
-def build_hhs_search_command(
-    search_type: str,
-    query: str,
-    search_path: str,
-    ignore_case: bool = False,
-    words: bool = False,
-    binary: bool = False,
-    replace: bool = False,
-    replacement: object = "",
-) -> str:
-    """Build the HomeSetup search command for the selected Search type."""
-    setup_command = build_hhs_search_setup_command()
-    search_root = shell_home_path_argument(search_path)
-    safe_query = shlex.quote(query.strip())
-    if search_type == "Folders":
-        safe_glob = shlex.quote(search_glob_from_query(query))
-        search_command = f"{setup_command}__hhs_search_dir {search_root} {safe_glob}"
-        return build_hhs_search_modified_results_command(search_command)
-    if search_type == "Strings":
-        option_values = normalized_search_option_values(
-            search_type, ignore_case, words, binary, replace, replacement
-        )
-        option_args = " ".join(
-            shlex.quote(flag) for flag in search_string_option_flags(*option_values)
-        )
-        if option_args:
-            option_args = f" {option_args}"
-        return f"{setup_command}__hhs_search_string {search_root}{option_args} {safe_query} '*'"
-    safe_glob = shlex.quote(search_glob_from_query(query))
-    search_command = f"{setup_command}__hhs_search_file {search_root} {safe_glob}"
-    return build_hhs_search_modified_results_command(search_command)
-
-
 def search_command_cache_key(
     search_type: str,
     query: str,
@@ -20738,23 +20079,6 @@ def start_search_command(command: str, cache_key: str, loader_message: str) -> b
         metadata=search_command_background_metadata(command, cache_key),
         show_preloader_event=True,
     )
-
-
-def build_hhs_open_search_result_command(path: str) -> str:
-    """Build the HomeSetup command used to open one Search result path."""
-    safe_path = shlex.quote(path.strip())
-    return (
-        'export HHS_DIR="${HHS_DIR}"; '
-        'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
-        'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash"; '
-        f"__hhs_open {safe_path}"
-    )
-
-
-def search_result_download_name(path: str) -> str:
-    """Return the local filename for a downloaded remote Search result."""
-    clean_name = posixpath.basename(str(path).rstrip("/")).strip()
-    return clean_name or "search-result"
 
 
 def create_search_result_download_dir() -> Path:
@@ -20877,15 +20201,6 @@ def open_remote_search_result_path(path: str, host: str) -> None:
     )
 
 
-def path_from_file_uri(path_or_uri: str) -> str:
-    """Return the filesystem path from a plain path or file URI."""
-    clean_value = path_or_uri.strip()
-    parsed_uri = urllib.parse.urlparse(clean_value)
-    if parsed_uri.scheme != "file":
-        return clean_value
-    return urllib.parse.unquote(parsed_uri.path)
-
-
 def open_search_result_path(path: str) -> None:
     """Open one Search result path through the HomeSetup generic opener."""
     clean_path = path_from_file_uri(path)
@@ -20896,44 +20211,6 @@ def open_search_result_path(path: str) -> None:
         open_remote_search_result_path(clean_path, host)
         return
     open_local_search_result_path(clean_path)
-
-
-def search_relative_path(path: str, search_path: str) -> str:
-    """Return a Search result path relative to the submitted Search folder."""
-    clean_path = path.strip()
-    clean_search_path = search_path.strip()
-    if not clean_path or not clean_search_path:
-        return clean_path
-    normalized_path = posixpath.normpath(clean_path)
-    normalized_search_path = posixpath.normpath(clean_search_path)
-    if posixpath.isabs(normalized_path) != posixpath.isabs(normalized_search_path):
-        return clean_path
-    try:
-        relative_path = posixpath.relpath(normalized_path, normalized_search_path)
-    except ValueError:
-        return clean_path
-    if relative_path == ".":
-        return "."
-    if relative_path.startswith("../"):
-        return clean_path
-    return relative_path
-
-
-def search_full_path(path: str, search_path: str) -> str:
-    """Return the full path represented by a Search result path."""
-    clean_path = path.strip()
-    clean_search_path = search_path.strip()
-    if not clean_path:
-        return ""
-    if posixpath.isabs(clean_path) or not clean_search_path:
-        return posixpath.normpath(clean_path)
-    return posixpath.normpath(posixpath.join(clean_search_path, clean_path))
-
-
-def search_output_line_is_status(line: str) -> bool:
-    """Return whether one Search output line is helper or UI status text."""
-    clean_line = re.sub(r"\s+", " ", strip_ansi(line)).strip()
-    return clean_line.startswith("Searching for")
 
 
 def parse_hhs_search_results(
