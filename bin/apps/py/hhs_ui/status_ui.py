@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from collections.abc import Callable
 
@@ -12,6 +13,7 @@ import streamlit as st
 
 import hhs_ui.constants as hhs_ui_constants
 from hhs_ui.command_catalog import clean_command_status_message
+from hhs_ui.paths import hhs_log_dir
 from hhs_ui.process_resources import process_resource_registry
 
 
@@ -39,16 +41,58 @@ def push_floating_status(
     clean_message = clean_command_status_message(str(message))
     if not clean_message:
         return
+    normalized_kind = normalize_floating_status_kind(kind)
+    log_footer_status_message(clean_message, normalized_kind)
     status_queue = floating_status_queue()
     status_queue.append(
         {
             "message": clean_message,
-            "kind": normalize_floating_status_kind(kind),
+            "kind": normalized_kind,
             "timeout_seconds": max(1.0, min(float(timeout_seconds), 30.0)),
         }
     )
     del status_queue[: -hhs_ui_constants.FLOATING_STATUS_QUEUE_LIMIT]
     st.session_state[hhs_ui_constants.FLOATING_STATUS_QUEUE_KEY] = status_queue
+
+
+def log_footer_status_message(message: str, kind: str) -> None:
+    """Append one footer status message to the Streamlit server log."""
+    logger = footer_status_file_logger()
+    if logger is not None:
+        logger.info("Footer status [%s]: %s", kind.upper(), message)
+
+
+def footer_status_file_logger() -> logging.Logger | None:
+    """Return the non-propagating logger used for footer status messages."""
+    log_path = (hhs_log_dir() / "streamlit-ui.log").resolve()
+    registry = process_resource_registry(
+        hhs_ui_constants.FOOTER_STATUS_FILE_LOG_HANDLER_REGISTRY_KEY
+    )
+    logger = logging.getLogger("hhs_ui.footer_status")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    handler = registry.get("handler")
+    if isinstance(handler, logging.FileHandler) and handler.baseFilename != str(log_path):
+        logger.removeHandler(handler)
+        handler.close()
+        handler = None
+    if not isinstance(handler, logging.FileHandler):
+        try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            handler = logging.FileHandler(log_path, encoding="utf-8")
+        except OSError:
+            return None
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)s %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        logger.addHandler(handler)
+        registry["handler"] = handler
+    elif handler not in logger.handlers:
+        logger.addHandler(handler)
+    return logger
 
 
 def normalize_floating_status_kind(kind: str) -> str:
