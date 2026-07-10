@@ -230,7 +230,7 @@ PY
     'def ssh_explorer_local_default_path' 'def ssh_explorer_remote_default_path' \
     'def open_ssh_explorer_parent' 'def refresh_ssh_explorer_paths' 'def set_remote_footer_working_directory' \
     'def build_recoverable_delete_command' 'def request_ssh_explorer_delete_confirmation' \
-    'def render_ssh_explorer_delete_dialog' 'def create_ssh_explorer_folder' 'def resolve_css_custom_property' \
+    'def render_ssh_explorer_delete_dialog' 'def create_ssh_explorer_folder' \
     'def ssh_explorer_component_theme' 'def open_ssh_explorer_selection' \
     'def build_remote_explorer_listing_command' 'def remote_explorer_target_assignment' \
     'def build_remote_explorer_create_folder_command' 'def parse_remote_explorer_created_dir' \
@@ -252,6 +252,7 @@ PY
     'theme=ssh_explorer_component_theme()' '"ssh_explorer_local_path", ssh_explorer_local_default_path()' \
     '"ssh_explorer_remote_path", ssh_explorer_remote_default_path()' 'selectionHint=False' \
     'component_height = table_height(hhs_ui.ENV_TABLE_HEIGHT)' 'height=component_height'
+  assert_file_contains "${table_ui_file}" 'def resolve_css_custom_property'
   assert_file_not_contains_many "${ui_file}" \
 'on_select=reset_ssh_explorer_remote_table_selection' 'on_select=reset_ssh_explorer_local_table_selection' \
     'key_prefix": "ssh_explorer_local_open_button"' 'key_prefix": "ssh_explorer_remote_open_button"'

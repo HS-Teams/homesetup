@@ -228,12 +228,13 @@ PY
     'selected_edit_key=lambda _row, index: dir_value_editor_key(index)' 'selected_edit_folder_picker=True' \
     'selected_edit_key=lambda _row, index: cmd_value_editor_key(index)' \
     'selected_edit_key=lambda _row, index: alias_value_editor_key(index)'
-  run python3 - "${ui_file}" "${constants_file}" <<'PY'
+  run python3 - "${ui_file}" "${constants_file}" "${table_ui_file}" <<'PY'
 from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 constants_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+table_source = Path(sys.argv[3]).read_text(encoding="utf-8")
 path_body = source.split("def render_path_rows(", 1)[1].split("\ndef ", 1)[0]
 assert '"""Render selectable read-only PATH rows."""' in path_body
 assert "selected_label=lambda row, _index: f\"Selected: {row['Path Value']}\"" in path_body
@@ -256,7 +257,7 @@ assert "def apply_selected_path_editor_value(" not in source
 assert "def path_value_overrides(" not in source
 assert "def apply_path_value_overrides(" not in source
 assert "def export_path_value_overrides(" not in source
-assert "def path_column_config(" in source
+assert "def path_column_config(" in table_source
 assert "path_value_overrides()" not in source
 
 persisted_prefix_body = constants_source.split("PERSISTED_UI_KEY_PREFIXES = (", 1)[1].split(")", 1)[0]

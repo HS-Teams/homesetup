@@ -48,11 +48,14 @@ assert "cmd=$(awk" not in body
 PY
   assert_success
 
+  assert_file_contains "${command_catalog_file}" '__hhs_process_kill -f'
+  assert_file_contains_many "${table_ui_file}" \
+    'def render_chart_controls' 'def plot_chart' 'Literal\["HBars", "VBars", "Pie"\]' \
+    'with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):' \
+    'top_n_label: str = "Top N:"'
   assert_file_contains_many "${ui_file}" \
-'__hhs_process_kill -f' 'def render_monitor_processes_panel' 'def render_chart_controls' 'def plot_chart' \
-    'Literal\["HBars", "VBars", "Pie"\]' '"monitor_disk_controls"' 'f"monitor_{metric.lower()}_controls"' \
-    '"history_stats_controls"' 'with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):' \
-    'top_n_label: str = "Top N:"' 'input_label="Directory:"' 'refresh_key="monitor_disk_apply_button"' \
+    'def render_monitor_processes_panel' '"monitor_disk_controls"' 'f"monitor_{metric.lower()}_controls"' \
+    '"history_stats_controls"' 'input_label="Directory:"' 'refresh_key="monitor_disk_apply_button"' \
     'refresh_key=f"monitor_{metric.lower()}_refresh_button"' 'refresh_key="history_stats_refresh_button"' \
     'refresh_on_click=refresh_history_stats_chart'
   assert_file_contains_many "${css_file}" \
@@ -64,19 +67,20 @@ PY
     'display: grid !important' ':has(.st-key-monitor_disk_apply_button)' \
     'grid-template-columns: max-content 150px minmax(0, 1fr) 2rem' \
     'grid-template-columns: max-content 150px max-content minmax(0, 1fr) 2rem' 'justify-self: end'
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${table_ui_file}" "${ui_file}" <<'PY'
 from pathlib import Path
 import sys
 
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-chart_controls_body = source.split("def render_chart_controls", 1)[1].split(
+table_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+ui_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+chart_controls_body = table_source.split("def render_chart_controls", 1)[1].split(
     "\ndef ", 1
 )[0]
-disk_body = source.split("def render_monitor_disk_chart", 1)[1].split("\ndef ", 1)[0]
-process_chart_body = source.split("def render_process_monitor_chart", 1)[1].split(
+disk_body = ui_source.split("def render_monitor_disk_chart", 1)[1].split("\ndef ", 1)[0]
+process_chart_body = ui_source.split("def render_process_monitor_chart", 1)[1].split(
     "\ndef ", 1
 )[0]
-process_panel_body = source.split("def render_monitor_processes_panel", 1)[1].split(
+process_panel_body = ui_source.split("def render_monitor_processes_panel", 1)[1].split(
     "\ndef ", 1
 )[0]
 assert 'gap="small"' in chart_controls_body
@@ -90,14 +94,14 @@ assert "render_chart_top_n_input" in chart_controls_body
 assert 'render_chart_control_label(top_n_label)' in chart_controls_body
 assert 'render_chart_control_label(str(input_label))' in chart_controls_body
 assert 'render_chart_refresh_button' in chart_controls_body
-assert 'help": "Refresh"' in source
-assert "width" in source.split("def render_chart_top_n_input", 1)[1].split("\ndef ", 1)[0]
-assert "150" in source.split("def render_chart_top_n_input", 1)[1].split("\ndef ", 1)[0]
+assert 'help": "Refresh"' in table_source
+assert "width" in table_source.split("def render_chart_top_n_input", 1)[1].split("\ndef ", 1)[0]
+assert "150" in table_source.split("def render_chart_top_n_input", 1)[1].split("\ndef ", 1)[0]
 assert "render_chart_controls(" in disk_body
 assert "render_chart_controls(" in process_chart_body
 assert "plot_chart(" in disk_body
 assert "plot_chart(" in process_chart_body
-assert 'st.altair_chart(chart, width="stretch", height=fallback_height)' in source
+assert 'st.altair_chart(chart, width="stretch", height=fallback_height)' in table_source
 assert disk_body.index("top_n_key=") < disk_body.index("input_label=")
 assert process_panel_body.count("complete_monitor_process_list_refresh()") >= 3
 assert process_panel_body.index("result = complete_monitor_process_list_refresh()") < process_panel_body.index(
@@ -191,18 +195,21 @@ PY
   assert_file_contains_many "${constants_file}" \
 '"monitor_log_filter"' '"monitor_log_other_filter"' '"monitor_log_level"' '"monitor_log_tail_lines"' \
     '"monitor_log_tail_lines_default_migrated"'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${command_catalog_file}" \
 'def colorize_log_output' 'def log_filter_highlight_ranges' 'def filter_log_output' \
-    'def selected_monitor_log_level' 'def monitor_log_level_label' 'def normalized_monitor_log_tail_lines' \
+    'def normalized_monitor_log_tail_lines'
+  assert_file_contains_many "${ui_file}" \
+    'def selected_monitor_log_level' 'def monitor_log_level_label' \
     'def normalize_monitor_log_tail_lines_state' 'def handle_monitor_log_tail_lines_change' \
     'def clear_monitor_log_file' 'def render_monitor_logs_panel' 'def render_log_controls' \
     'def toggle_monitor_logs_tail' 'tail_lines,' 'render_log_controls' 'render_table_filter_controls(' \
     'hhs_ui.LOG_FILTERS'
   assert_file_not_contains "${ui_file}" 'other_options=("Containing",)'
 
+  assert_file_contains "${table_ui_file}" \
+'other_options: tuple\[str, ...\] = ("Other", "Others", "Containing")'
   assert_file_contains_many "${ui_file}" \
-'other_options: tuple\[str, ...\] = ("Other", "Others", "Containing")' '"monitor_log_filter"' \
-    '"monitor_log_other_filter"' 'st.container(key="monitor_log_controls")' \
+    '"monitor_log_filter"' '"monitor_log_other_filter"' 'st.container(key="monitor_log_controls")' \
     'def render_persisted_expander_state_script' 'render_persisted_expander_state_script(' \
     '".st-key-monitor_log_controls"' '"hhs.monitor.logs.controls.expanded"' \
     'parentWindow.localStorage.getItem(storageKey)' 'marker?.closest("details")' \

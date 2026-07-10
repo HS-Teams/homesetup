@@ -843,7 +843,8 @@ PY
 from pathlib import Path
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-body = source.split("def render_table_filter_controls", 1)[1].split("\ndef ", 1)[0]
+table_source = Path("bin/apps/py/hhs_ui/table_ui.py").read_text()
+body = table_source.split("def render_table_filter_controls", 1)[1].split("\ndef ", 1)[0]
 assert "st.session_state[key] = options[safe_index]" in body
 assert "index=None" in body
 assert "index=index" not in body

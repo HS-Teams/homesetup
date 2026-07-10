@@ -223,7 +223,7 @@ PY
   assert_success
 }
 @test "when rendering table rows then path values are visually abbreviated with env vars" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${table_ui_file}" <<'PY'
 import os
 import re
 import sys
@@ -266,19 +266,20 @@ PY
   assert_success
 }
 @test "when rendering history tables then compact columns are headless" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${table_ui_file}" "${ui_file}" "${command_catalog_file}" <<'PY'
 import sys
 import re
 from pathlib import Path
 from types import SimpleNamespace
 
-ui_source = Path(sys.argv[1]).read_text(encoding="utf-8")
-command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
-source = command_source + "\n" + ui_source
-start = source.index("def history_command_display_index(")
-end = source.index("def table_selection_key_prefixes()")
-parse_start = source.index("def parse_legacy_hhs_history_line(")
-parse_end = source.index("def parse_hhs_history_dirs(")
+table_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+ui_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+command_source = Path(sys.argv[3]).read_text(encoding="utf-8")
+combined_source = command_source + "\n" + table_source + "\n" + ui_source
+start = table_source.index("def history_command_display_index(")
+end = table_source.index("def table_selection_key_prefixes()")
+parse_start = command_source.index("def parse_legacy_hhs_history_line(")
+parse_end = command_source.index("def parse_hhs_history_dirs(")
 
 class ColumnConfig:
     """Stub Streamlit column config used by the pure helper test."""
@@ -329,7 +330,7 @@ namespace = {
     "pd": SimpleNamespace(DataFrame=FakeDataFrame),
     "st": SimpleNamespace(column_config=ColumnConfig()),
 }
-exec("from __future__ import annotations\n" + source[start:end], namespace)
+exec("from __future__ import annotations\n" + table_source[start:end], namespace)
 
 rows = [
     {"Index": "49", "Value": "ls"},
@@ -377,7 +378,7 @@ parse_namespace = {
     "re": re,
     "strip_ansi": lambda value: value,
 }
-exec("from __future__ import annotations\n" + source[parse_start:parse_end], parse_namespace)
+exec("from __future__ import annotations\n" + command_source[parse_start:parse_end], parse_namespace)
 parsed_rows = parse_namespace["parse_hhs_history"](
     """
     49.....................................  ls
@@ -391,30 +392,30 @@ assert parsed_rows == [
 ], parsed_rows
 assert list(parsed_table_data.index) == ["!49", "!1200"], parsed_table_data
 
-history_body = source.split("def render_history_commands_table()", 1)[1].split("\ndef ", 1)[0]
+history_body = ui_source.split("def render_history_commands_table()", 1)[1].split("\ndef ", 1)[0]
 assert 'headers=["Value"]' in history_body
 assert "hide_index=False" in history_body
 assert "table_data=history_command_table_data(rows)" in history_body
 assert "column_config=history_command_column_config(rows)" in history_body
-assert "history_command_display_index(row.get(\"Index\", \"\"))" in source
+assert "history_command_display_index(row.get(\"Index\", \"\"))" in table_source
 assert 'parse_rows_cached("history", result.stdout, parse_hhs_history)' in history_body
 assert "run_bash_command(" in history_body
 assert "ttl_seconds=hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS" in history_body
 
-history_directories_body = source.split("def render_history_directories_table()", 1)[1].split("\ndef ", 1)[0]
+history_directories_body = ui_source.split("def render_history_directories_table()", 1)[1].split("\ndef ", 1)[0]
 assert 'headers=["Value"]' in history_directories_body
 assert "hide_index=False" in history_directories_body
 assert "table_data=history_directory_table_data(rows)" in history_directories_body
 assert "column_config=history_directory_column_config()" in history_directories_body
 
-path_body = source.split("def render_path_rows(", 1)[1].split("\ndef ", 1)[0]
+path_body = ui_source.split("def render_path_rows(", 1)[1].split("\ndef ", 1)[0]
 assert "column_config=path_column_config()" in path_body
-assert "path_column_config" in source
+assert "path_column_config" in combined_source
 
-cmd_body = source.split("def render_cmd_rows(", 1)[1].split("\ndef ", 1)[0]
+cmd_body = ui_source.split("def render_cmd_rows(", 1)[1].split("\ndef ", 1)[0]
 assert "column_config=cmd_column_config()" in cmd_body
 
-history_command_body = source.split("def build_hhs_history_command()", 1)[1].split("\ndef ", 1)[0]
+history_command_body = command_source.split("def build_hhs_history_command()", 1)[1].split("\ndef ", 1)[0]
 assert "HISTFILE" in history_command_body
 assert "__hhs_history" in history_command_body
 PY

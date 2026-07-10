@@ -25,11 +25,11 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_contains "${constants_file}" 'TABLE_CONTROLS_PANEL_TITLE = "Filters & Controls"'
   assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
 'TABLE_CONTROLS_PANEL_TITLE'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${table_ui_file}" \
 'def render_table_controls_panel' 'st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True)' \
     'def render_table_filter_controls' 'def clear_table_other_filter' \
     'key=f"{other_key}_clear"' '""' 'on_click=clear_table_other_filter' \
-    'def render_env_add_controls'
+  assert_file_contains "${ui_file}" 'def render_env_add_controls'
   assert_file_contains_many "${constants_file}" \
 'TWO_OPTION_FILTER_COLUMNS = \[0.75, 3.25\]' \
     'THREE_OPTION_FILTER_COLUMNS = \[1.1, 2.9\]' \
@@ -38,7 +38,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'PATH_FILTER_COLUMNS = \[2.25, 1.75\]'
   assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
 'FIVE_OPTION_FILTER_COLUMNS'
-  assert_file_contains "${ui_file}" 'hhs_ui.THREE_OPTION_FILTER_COLUMNS'
+  assert_file_contains "${table_ui_file}" 'hhs_ui.THREE_OPTION_FILTER_COLUMNS'
 
   assert_file_contains_many "${constants_file}" \
 'SERVICE_FILTERS = ("All", "Up", "Down", "Containing")' \

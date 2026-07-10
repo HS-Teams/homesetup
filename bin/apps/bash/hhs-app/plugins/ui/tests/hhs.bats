@@ -77,7 +77,7 @@ PY
 }
 
 @test "when rendering HHS Settings then table height should fit real rows" {
-  run python3 - "${ui_file}" "${css_file}" <<'PY'
+  run python3 - "${table_ui_file}" "${css_file}" <<'PY'
 import csv
 import re
 import sys
@@ -179,7 +179,7 @@ PY
 }
 
 @test "when rendering HHS Firebase then configurations form should load file values" {
-  run python3 - "${ui_file}" "${css_file}" <<'PY'
+  run python3 - "${ui_file}" "${css_file}" "${table_ui_file}" <<'PY'
 import json
 import os
 import posixpath
@@ -190,6 +190,7 @@ from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 css = Path(sys.argv[2]).read_text(encoding="utf-8")
+table_source = Path(sys.argv[3]).read_text(encoding="utf-8")
 component_html = (
     Path(sys.argv[1])
     .parent.joinpath("components", "firebase_config_form", "index.html")
@@ -570,9 +571,13 @@ display_namespace = {
     "homesetup_home": lambda: Path("/home/user/HomeSetup"),
     "hhs_log_dir": lambda: Path("/home/user/.config/hhs/log"),
 }
-display_start = source.index("def env_path_aliases(")
-display_end = source.index("def history_command_display_index", display_start)
-exec("from __future__ import annotations\n" + source[display_start:display_end], display_namespace)
+display_start = table_source.index("def env_path_aliases(")
+display_end = table_source.index("def history_command_display_index", display_start)
+exec(
+    "from __future__ import annotations\n"
+    + table_source[display_start:display_end],
+    display_namespace,
+)
 expand_start = source.index("def path_variable_names(")
 expand_end = source.index("def build_remote_environment_values_command", expand_start)
 exec("from __future__ import annotations\n" + source[expand_start:expand_end], display_namespace)

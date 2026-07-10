@@ -22,7 +22,7 @@ load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
 @test "when using table filters then shared filter controls should persist filter keys" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${table_ui_file}" <<'PY'
 import ast
 import sys
 from pathlib import Path
@@ -63,14 +63,14 @@ assert 'st.session_state[other_key] = clean_value' in ast.unparse(text_filter_st
 PY
   assert_success
 
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${table_ui_file}" <<'PY'
 from pathlib import Path
 from types import SimpleNamespace
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def clear_table_other_filter(")
-end = source.index("def render_env_add_controls(")
+end = source.index("def render_view_subtitle(")
 session_state = {"monitor_process_other_filter": None}
 namespace = {
     "hhs_ui": SimpleNamespace(
@@ -117,14 +117,15 @@ PY
   assert_success
 }
 @test "when filtering table rows then status and text filters should reduce rows" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${command_catalog_file}" "${ui_file}" <<'PY'
 import re
 import sys
 from pathlib import Path
 
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-start = source.index("def env_filter_pattern(")
-end = source.index("def parse_hhs_envs(")
+command_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+ui_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+start = command_source.index("def env_filter_pattern(")
+end = command_source.index("def parse_hhs_envs(")
 namespace = {
     "re": re,
     "home_tool_is_installed": lambda row: (
@@ -141,7 +142,10 @@ namespace = {
     "service_is_up": lambda row: "up" in row.get("Value", "").lower(),
     "service_is_down": lambda row: "down" in row.get("Value", "").lower(),
 }
-exec("from __future__ import annotations\n" + source[start:end], namespace)
+exec("from __future__ import annotations\n" + command_source[start:end], namespace)
+tool_start = ui_source.index("def filter_tool_rows(")
+tool_end = ui_source.index("def complete_cached_status_background_command(")
+exec("from __future__ import annotations\n" + ui_source[tool_start:tool_end], namespace)
 
 assert namespace["env_filter_pattern"]("Containing", "PATH") == "PATH"
 assert namespace["env_filter_pattern"]("Other", "PATH") == "PATH"

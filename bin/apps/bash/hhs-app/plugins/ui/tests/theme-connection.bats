@@ -749,8 +749,8 @@ assert "margin-bottom: 0 !important" in heading_container_block
 assert "margin-bottom: 0 !important" in tabbed_heading_container_block
 assert ui_source.count("hhs-view-heading hhs-view-heading--with-tabs") >= 6
 assert ui_source.count("hhs-view-heading hhs-view-heading--direct-content") >= 2
-assert "def render_view_subtitle" in ui_source
-assert '<h3 class="hhs-view-subtitle">' in ui_source
+assert "def render_view_subtitle" in table_ui_source
+assert '<h3 class="hhs-view-subtitle">' in table_ui_source
 assert ".hhs-view-subtitle" in base_css
 assert ".hhs-view-subtitle-link" in base_css
 assert ".hhs-view-subtitle-link:link" in base_css

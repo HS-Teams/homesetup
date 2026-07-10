@@ -113,10 +113,12 @@ PY
     'def home_shopts_table_key' 'def reset_home_shopts_table_selection' \
     'key=home_shopts_table_key()' 'reset_home_shopts_table_selection()'
 
+  assert_file_contains_many "${command_catalog_file}" \
+'def build_hhs_hspm_command' '__hhs hspm execute' '"install", "uninstall", "reinstall"' \
+    'def build_tool_tldr_command' 'tldr {shlex.quote(tool_name.strip())}'
+  assert_file_contains_many "${table_ui_file}" \
+'def home_tool_is_installed' 'def home_tool_is_not_found'
   assert_file_contains_many "${ui_file}" \
-'def build_hhs_hspm_command' 'def home_tool_is_installed' \
-    'def home_tool_is_not_found' '__hhs hspm execute' '"install", "uninstall", "reinstall"' \
-    'def build_tool_tldr_command' 'tldr {shlex.quote(tool_name.strip())}' \
     'def apply_selected_tool_action' 'home_tool_action_execute_pending' \
     'def execute_pending_home_tool_action' 'def render_home_tool_action_dialog' \
     'def render_terminal_output' 'hhs-home-tool-action-output'

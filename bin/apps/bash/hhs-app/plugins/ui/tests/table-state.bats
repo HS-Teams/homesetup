@@ -22,14 +22,15 @@ load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
 @test "when selecting table rows then command overlays should be suppressed" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${table_ui_file}" "${ui_file}" <<'PY'
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-start = source.index("def table_selection_key_prefixes()")
-end = source.index("def render_table(")
+table_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+ui_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+start = table_source.index("def table_selection_key_prefixes()")
+end = table_source.index("def render_table(")
 session_state = {
     "_hhs_table_selection_snapshots": {
         "env_vars_table_0": (),
@@ -61,7 +62,7 @@ namespace = {
     ),
     "st": SimpleNamespace(session_state=session_state),
 }
-exec("from __future__ import annotations\n" + source[start:end], namespace)
+exec("from __future__ import annotations\n" + table_source[start:end], namespace)
 
 assert namespace["table_selection_widget_key"]("env_vars_table_0") is True
 assert namespace["table_selection_widget_key"]("unrelated") is False
@@ -70,8 +71,8 @@ assert namespace["table_selection_rerun_in_progress"]() is True
 namespace["remember_table_selection"]("env_vars_table_0", {"selection": {"rows": [2]}})
 assert namespace["table_selection_rerun_in_progress"]() is False
 
-snapshot_start = source.index("def command_result_snapshots()")
-snapshot_end = source.index("def cache_set(")
+snapshot_start = ui_source.index("def command_result_snapshots()")
+snapshot_end = ui_source.index("def cache_set(")
 snapshot_namespace = {
     "st": SimpleNamespace(session_state={}),
     "hhs_ui_constants": SimpleNamespace(
@@ -80,7 +81,7 @@ snapshot_namespace = {
     ),
     "safe_cache_tag": lambda value: value,
 }
-exec("from __future__ import annotations\n" + source[snapshot_start:snapshot_end], snapshot_namespace)
+exec("from __future__ import annotations\n" + ui_source[snapshot_start:snapshot_end], snapshot_namespace)
 snapshot_namespace["command_result_snapshot_set"]("command_tag:docker:one", {"stdout": "one"})
 snapshot_namespace["command_result_snapshot_set"]("command_tag:docker:two", {"stdout": "two"})
 snapshot_namespace["command_result_snapshot_set"]("command_tag:docker:three", {"stdout": "three"})
