@@ -188,6 +188,11 @@ textarea,
   row-gap: var(--hhs-element-std-gap) !important;
 }
 
+.st-key-hhs_hspm_panel > [data-testid="stVerticalBlock"] {
+  gap: 0 !important;
+  row-gap: 0 !important;
+}
+
 [data-testid="stVegaLiteChart"] {
   height: var(--hhs-bar-chart-height);
   max-height: var(--hhs-bar-chart-height);

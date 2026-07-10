@@ -637,6 +637,9 @@ def render_slider_pane_styles(
     active_bullet_key: str,
     slide_key: str,
     direction: str,
+    viewport_border: bool,
+    navigation_offset: int,
+    vertical_offset: int,
 ) -> None:
     """Render key-scoped CSS for a native Streamlit slider pane."""
     theme = slider_pane_theme()
@@ -672,6 +675,7 @@ def render_slider_pane_styles(
             color: var(--hhs-slider-text);
             font-family: "{font_family}", monospace;
             font-size: 0.5rem;
+            margin-top: {vertical_offset}px;
           }}
 
           .st-key-{safe_key},
@@ -685,9 +689,9 @@ def render_slider_pane_styles(
           }}
 
           .st-key-{safe_key}_viewport {{
-            background: var(--hhs-slider-field);
-            border: 1px solid var(--hhs-slider-border);
-            border-radius: 6px;
+            background: {"var(--hhs-slider-field)" if viewport_border else "transparent"};
+            border: {"1px solid var(--hhs-slider-border)" if viewport_border else "0"};
+            border-radius: {"6px" if viewport_border else "0"};
             overflow: hidden;
           }}
 
@@ -695,8 +699,8 @@ def render_slider_pane_styles(
             height: 100%;
             min-height: 100%;
             overflow: visible;
-            padding: 1rem 0 0;
-            transform: translateY(-2rem);
+            padding: 0;
+            transform: none;
           }}
 
           .st-key-{safe_key}_slide_area [data-testid="stVerticalBlock"] {{
@@ -704,7 +708,7 @@ def render_slider_pane_styles(
           }}
 
           .st-key-{safe_key}_catalog_table_layout {{
-            margin-top: 1rem;
+            margin-top: 0;
           }}
 
           .st-key-{slide_class} {{
@@ -732,7 +736,7 @@ def render_slider_pane_styles(
             font-size: 0.9rem !important;
             font-weight: 800;
             line-height: 1.2;
-            margin: 0;
+            margin: 0 0 1rem;
             text-align: center;
           }}
 
@@ -747,6 +751,7 @@ def render_slider_pane_styles(
             line-height: 1;
             min-width: 2rem !important;
             padding: 0 !important;
+            transform: translateY({navigation_offset}px);
             width: 2rem !important;
           }}
 
@@ -794,6 +799,10 @@ def render_slider_pane(
     key: str,
     pages: list[tuple[str, Callable[[], None]]],
     height: int = 470,
+    viewport_border: bool = True,
+    show_bullets: bool = True,
+    navigation_offset: int = 0,
+    vertical_offset: int = 0,
 ) -> None:
     """Render a reusable native Streamlit slider pane."""
     safe_key = re.sub(r"[^a-zA-Z0-9_-]+", "-", key).strip("-") or "slider"
@@ -806,13 +815,21 @@ def render_slider_pane(
     active_bullet_key = f"{safe_key}_bullet_{active_index}"
     slide_key = f"{safe_key}_slide_{active_index}_{direction}"
     height_px = max(int(height), 240)
-    viewport_height = max(height_px - 32, 196)
-    render_slider_pane_styles(safe_key, active_bullet_key, slide_key, direction)
+    viewport_height = max(height_px - (32 if show_bullets else 0), 196)
+    render_slider_pane_styles(
+        safe_key,
+        active_bullet_key,
+        slide_key,
+        direction,
+        viewport_border,
+        navigation_offset,
+        vertical_offset,
+    )
     with st.container(key=safe_key, height=height_px, border=False):
         with st.container(
             key=f"{safe_key}_viewport",
             height=viewport_height,
-            border=True,
+            border=viewport_border,
             horizontal=True,
             vertical_alignment="center",
             gap="small",
@@ -848,24 +865,37 @@ def render_slider_pane(
                     args=(safe_key, page_count, 1),
                     width=32,
                 )
-        with st.container(key=f"{safe_key}_bullets"):
-            bullet_columns = st.columns(
-                [1.0, *([0.025] * page_count), 1.0],
-                gap="small",
-                vertical_alignment="center",
+        if show_bullets:
+            render_slider_pane_bullets(
+                safe_key,
+                [page_title for page_title, _render_page in clean_pages],
             )
-            for page_index, (page_title, _render_page) in enumerate(clean_pages):
-                bullet_key = f"{safe_key}_bullet_{page_index}"
-                with bullet_columns[page_index + 1]:
-                    with st.container(key=bullet_key):
-                        st.button(
-                            "•",
-                            key=f"{bullet_key}_button",
-                            help=f"Show {page_title}",
-                            on_click=set_slider_pane_active_index,
-                            args=(safe_key, page_count, page_index),
-                            width=24,
-                        )
+
+
+def render_slider_pane_bullets(key: str, page_titles: list[str]) -> None:
+    """Render slider pagination bullets for the supplied page titles."""
+    safe_key = slider_pane_css_class_key(key)
+    page_count = len(page_titles)
+    if page_count < 2:
+        return
+    with st.container(key=f"{safe_key}_bullets"):
+        bullet_columns = st.columns(
+            [1.0, *([0.025] * page_count), 1.0],
+            gap="small",
+            vertical_alignment="center",
+        )
+        for page_index, page_title in enumerate(page_titles):
+            bullet_key = f"{safe_key}_bullet_{page_index}"
+            with bullet_columns[page_index + 1]:
+                with st.container(key=bullet_key):
+                    st.button(
+                        "•",
+                        key=f"{bullet_key}_button",
+                        help=f"Show {page_title}",
+                        on_click=set_slider_pane_active_index,
+                        args=(safe_key, page_count, page_index),
+                        width=24,
+                    )
 
 
 def hhs_setup_setting_key(setting_name: str) -> str:
@@ -2263,7 +2293,7 @@ def render_hhs_hspm_catalog_slide() -> None:
             key=hhs_hspm_catalog_table_key(),
             hide_index=True,
             column_order=["Mark", "Command", "Description"],
-            height=300,
+            height=340,
             disabled=["Command", "Description"] if not action_running else True,
             column_config={
                 "Mark": st.column_config.CheckboxColumn(
@@ -2282,6 +2312,7 @@ def render_hhs_hspm_catalog_slide() -> None:
             },
             width="stretch",
         )
+    render_slider_pane_bullets("hhs_hspm_slider", ["Catalog", "Recovery"])
     render_hhs_hspm_catalog_action_buttons(
         selected_hhs_hspm_catalog_packages(edited_data),
         action_running,
@@ -2295,15 +2326,21 @@ def render_hhs_hspm_recovery_slide() -> None:
 
 def render_hhs_hspm_panel() -> None:
     """Render the HomeSetup package manager panel."""
-    execute_pending_hhs_hspm_action()
-    render_hhs_hspm_title()
-    render_slider_pane(
-        "hhs_hspm_slider",
-        [
-            ("Catalog", render_hhs_hspm_catalog_slide),
-            ("Recovery", render_hhs_hspm_recovery_slide),
-        ],
-    )
+    with st.container(key="hhs_hspm_panel", border=False):
+        execute_pending_hhs_hspm_action()
+        render_hhs_hspm_title()
+        render_slider_pane(
+            "hhs_hspm_slider",
+            [
+                ("Catalog", render_hhs_hspm_catalog_slide),
+                ("Recovery", render_hhs_hspm_recovery_slide),
+            ],
+            height=486,
+            viewport_border=False,
+            show_bullets=False,
+            navigation_offset=-30,
+            vertical_offset=-16,
+        )
 
 
 def render_hhs_placeholder_panel(hhs_view: str) -> None:
@@ -2347,4 +2384,3 @@ def render_hhs_view() -> None:
         render_hhs_firebase_panel()
     else:
         render_hhs_placeholder_panel(hhs_view)
-
