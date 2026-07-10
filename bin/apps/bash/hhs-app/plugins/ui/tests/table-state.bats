@@ -22,13 +22,14 @@ load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
 @test "when selecting table rows then command overlays should be suppressed" {
-  run python3 - "${table_ui_file}" "${ui_file}" <<'PY'
+  run python3 - "${table_ui_file}" "${ui_file}" "${cache_runtime_file}" <<'PY'
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 table_source = Path(sys.argv[1]).read_text(encoding="utf-8")
 ui_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+cache_runtime_source = Path(sys.argv[3]).read_text(encoding="utf-8")
 start = table_source.index("def table_selection_key_prefixes()")
 end = table_source.index("def render_table(")
 session_state = {
@@ -71,8 +72,8 @@ assert namespace["table_selection_rerun_in_progress"]() is True
 namespace["remember_table_selection"]("env_vars_table_0", {"selection": {"rows": [2]}})
 assert namespace["table_selection_rerun_in_progress"]() is False
 
-snapshot_start = ui_source.index("def command_result_snapshots()")
-snapshot_end = ui_source.index("def cache_set(")
+snapshot_start = cache_runtime_source.index("def command_result_snapshots()")
+snapshot_end = cache_runtime_source.index("def cache_set(")
 snapshot_namespace = {
     "st": SimpleNamespace(session_state={}),
     "hhs_ui_constants": SimpleNamespace(
@@ -81,7 +82,11 @@ snapshot_namespace = {
     ),
     "safe_cache_tag": lambda value: value,
 }
-exec("from __future__ import annotations\n" + ui_source[snapshot_start:snapshot_end], snapshot_namespace)
+exec(
+    "from __future__ import annotations\n"
+    + cache_runtime_source[snapshot_start:snapshot_end],
+    snapshot_namespace,
+)
 snapshot_namespace["command_result_snapshot_set"]("command_tag:docker:one", {"stdout": "one"})
 snapshot_namespace["command_result_snapshot_set"]("command_tag:docker:two", {"stdout": "two"})
 snapshot_namespace["command_result_snapshot_set"]("command_tag:docker:three", {"stdout": "three"})
@@ -93,7 +98,7 @@ PY
   assert_success
 }
 @test "when rerendering command tables then parsed rows should be cached in session state" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${cache_runtime_file}" <<'PY'
 import hashlib
 import sys
 from pathlib import Path
@@ -147,10 +152,10 @@ PY
   assert_success
 }
 @test "when reading UI cache then expired entries should not be written back during load" {
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${cache_runtime_file}" \
 'key.startswith("search_terms:")' 'def ui_cache_preserved_on_clear_key' \
     'hhs_ui_constants.SEARCH_TERM_HISTORY_CACHE_KEY' 'if ui_cache_preserved_on_clear_key(key)'
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${cache_runtime_file}" <<'PY'
 import ast
 import sys
 from pathlib import Path
@@ -332,13 +337,14 @@ PY
   assert_success
 }
 @test "when cached content is fresh then background refresh loaders should stay hidden" {
-  run python3 - "${ui_file}" "${command_runtime_file}" <<'PY'
+  run python3 - "${ui_file}" "${command_runtime_file}" "${cache_runtime_file}" <<'PY'
 import ast
 import sys
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 command_runtime_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+cache_runtime_source = Path(sys.argv[3]).read_text(encoding="utf-8")
 tree = ast.parse(source)
 functions = {
     node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
@@ -346,6 +352,10 @@ functions = {
 command_runtime_tree = ast.parse(command_runtime_source)
 command_runtime_functions = {
     node.name: node for node in command_runtime_tree.body if isinstance(node, ast.FunctionDef)
+}
+cache_runtime_tree = ast.parse(cache_runtime_source)
+cache_runtime_functions = {
+    node.name: node for node in cache_runtime_tree.body if isinstance(node, ast.FunctionDef)
 }
 
 helper = ast.get_source_segment(
@@ -356,7 +366,7 @@ assert "poll_background_job_completion(job_name)" not in helper
 assert "render_background_job_status(job_name, message)" in helper
 
 cached_renderer = ast.get_source_segment(
-    source, functions["render_cached_command_result"]
+    cache_runtime_source, cache_runtime_functions["render_cached_command_result"]
 )
 assert "render_background_job_status_if_blocking(job_name, result is not None)" in cached_renderer
 assert "command_running and not fresh_cache and result is None" in cached_renderer

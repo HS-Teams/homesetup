@@ -179,7 +179,7 @@ PY
 }
 
 @test "when rendering HHS Firebase then configurations form should load file values" {
-  run python3 - "${ui_file}" "${css_file}" "${table_ui_file}" <<'PY'
+  run python3 - "${ui_file}" "${css_file}" "${table_ui_file}" "${cache_runtime_file}" <<'PY'
 import json
 import os
 import posixpath
@@ -191,6 +191,7 @@ from pathlib import Path
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 css = Path(sys.argv[2]).read_text(encoding="utf-8")
 table_source = Path(sys.argv[3]).read_text(encoding="utf-8")
+cache_runtime_source = Path(sys.argv[4]).read_text(encoding="utf-8")
 component_html = (
     Path(sys.argv[1])
     .parent.joinpath("components", "firebase_config_form", "index.html")
@@ -315,8 +316,10 @@ assert "def fetch_firebase_aliases_cached(" in source
 assert "def clear_firebase_aliases_cache(" in source
 assert "def firebase_aliases_cache_is_warm(" in source
 assert "fetch_firebase_aliases_cached.cache_clear()" in source
-assert "clear_firebase_aliases_cache()" in source.split("def complete_hhs_firebase_action_job", 1)[1].split("\ndef ", 1)[0]
-assert "clear_firebase_aliases_cache()" in source.split("def clear_render_caches", 1)[1].split("\ndef ", 1)[0]
+firebase_action_body = source.split("def complete_hhs_firebase_action_job", 1)[1].split("\ndef ", 1)[0]
+clear_render_caches_body = cache_runtime_source.split("def clear_render_caches", 1)[1].split("\ndef ", 1)[0]
+assert "clear_firebase_aliases_cache()" in firebase_action_body
+assert "clear_firebase_aliases_cache()" in clear_render_caches_body
 assert "render_command_loader(\"Fetching Firebase aliases\")" in source
 assert "loader_placeholder.empty()" in source
 assert "if firebase_aliases_cache_is_warm():" in source

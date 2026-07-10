@@ -1,6 +1,7 @@
 setup() {
   cd "${HHS_REPO_DIR}"
   ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.py"
+  cache_runtime_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/cache_runtime.py"
   command_runtime_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/command_runtime.py"
   command_catalog_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/command_catalog.py"
   dialog_ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/dialog_ui.py"
@@ -25,6 +26,7 @@ setup() {
   ui_plugin_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/ui.bash"
 
   streamlit_ui_source="$(<"${ui_file}")"
+  cache_runtime_source="$(<"${cache_runtime_file}")"
   command_runtime_source="$(<"${command_runtime_file}")"
   dialog_ui_source="$(<"${dialog_ui_file}")"
   feedback_ui_source="$(<"${feedback_ui_file}")"

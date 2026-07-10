@@ -53,6 +53,7 @@ import re
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+cache_runtime_source = Path("bin/apps/py/hhs_ui/cache_runtime.py").read_text()
 status_source = Path("bin/apps/py/hhs_ui/status_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs_ui/streamlit_ui.css").read_text()
 dracula_css = Path("bin/apps/py/hhs_ui/themes/dracula.css").read_text()
@@ -355,9 +356,9 @@ assert 'remove_footer_cache_clear_query_params()' in footer_actions_body
 assert 'apply_footer_cache_clear_options(' in footer_actions_body
 assert 'open_footer_cache_clear_menu()' not in footer_actions_body
 assert 'clear_cached_ui_data_preserving_state()' not in footer_actions_body
-assert 'def cache_delete_command' in ui_source
+assert 'def cache_delete_command' in cache_runtime_source
 assert 'cache_delete_command(command, "env")' in ui_source
-clear_cache_body = ui_source.split("def clear_cached_ui_data_preserving_state", 1)[1].split("\ndef ", 1)[0]
+clear_cache_body = cache_runtime_source.split("def clear_cached_ui_data_preserving_state", 1)[1].split("\ndef ", 1)[0]
 assert "cache_clear()" in clear_cache_body
 assert "st.session_state.clear()" not in clear_cache_body
 assert "UI_STATE_FILE" not in clear_cache_body
