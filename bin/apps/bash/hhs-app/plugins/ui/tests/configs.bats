@@ -68,42 +68,44 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_not_contains "${ui_file}" 'env_add_button'
 
   assert_file_contains_many "${ui_file}" \
-'"Custom Variable"' 'def render_path_add_controls' 'def render_dir_add_controls' 'def request_folder_picker' \
+'"Custom Variable"' 'def render_path_add_controls' 'def render_dir_add_controls' 'request_folder_picker'
+  assert_file_contains_many "${path_picker_file}" \
     'def apply_folder_picker_selection' 'def open_folder_picker_selected_child' \
     'sync_folder_picker_child_selection(child_directories)' 'def folder_picker_child_selection_widget_key' \
     '_hhs_folder_picker_selected_dir_widget_' \
     'prune_folder_picker_child_selection_widget_keys(selected_widget_key)' '"key": selected_widget_key' \
     'else empty_caption' 'loading_children or not bool(child_directories)'
-  assert_file_not_contains "${ui_file}" 'st.caption(empty_caption)'
+  assert_file_not_contains "${path_picker_file}" 'st.caption(empty_caption)'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${path_picker_file}" \
 'def folder_picker_browsing_directory' 'def queue_folder_picker_directory_load' \
     'def load_pending_remote_path_picker_directory' 'def folder_picker_visible_child_paths' \
-    'PATH_PICKER_LISTING_JOB_PREFIX = "path_picker_listing"' 'def path_picker_listing_job_name' \
+    'PATH_PICKER_LISTING_JOB_PREFIX' 'def path_picker_listing_job_name' \
     'start_background_bash_command(' 'def render_path_picker_listing_loader' \
     'render_background_job_status(job_name, PATH_PICKER_LISTING_LOADER_MESSAGE)'
-  assert_file_not_contains "${ui_file}" 'poll_background_job_completion(job_name)'
+  assert_file_not_contains "${path_picker_file}" 'poll_background_job_completion(job_name)'
 
   assert_file_contains "${ui_file}" 'stop_path_picker_listing_jobs()'
 
   assert_file_not_contains "${ui_file}" 'rerun_after_folder_picker_navigation()'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${path_picker_file}" \
 'st.container(key="folder_picker_action_grid")' '_left_spacer,'
-  assert_file_not_contains "${ui_file}" '_parent_open_gap,'
+  assert_file_not_contains "${path_picker_file}" '_parent_open_gap,'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${path_picker_file}" \
 '\[1.0, 0.12, 0.12, 0.12, 0.12, 1.0\]' 'gap="small"' 'width="content"' '""' '""' '"﬌"' '"ﰸ"'
-  assert_file_not_contains_many "${ui_file}" \
+  assert_file_not_contains_many "${path_picker_file}" \
 '" Parent"' '"label": "﬌ Select"' 'buttons=()'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${path_picker_file}" \
 'st.container(key="hhs_path_picker_overlay")' 'st.container(key="hhs_path_picker_panel")' \
     'def render_path_picker_body' 'def folder_picker_owner_context_for_target' \
-    'def folder_picker_owner_matches' 'render_folder_picker_dialog("path")' \
-    'render_folder_picker_dialog("dir")' 'render_folder_picker_dialog("search")'
+    'def folder_picker_owner_matches'
+  assert_file_contains_many "${ui_file}" \
+    'render_folder_picker_dialog("path")' 'render_folder_picker_dialog("dir")' 'render_folder_picker_dialog("search")'
   assert_file_not_contains_many "${ui_file}" \
 'rerun_streamlit_app' 'st.rerun(scope="app")'
-  assert_file_contains "${ui_file}" 'key="folder_picker_header_close_button"'
+  assert_file_contains "${path_picker_file}" 'key="folder_picker_header_close_button"'
 
   assert_file_contains_many "${css_file}" \
 '.st-key-folder_picker_select_button button' '.st-key-folder_picker_header_close_button button' \
@@ -135,9 +137,9 @@ PY
 
   assert_file_contains_many "${css_file}" \
 'nth-child(5)' 'min-width: 2rem' 'justify-content: center'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${path_picker_file}" \
 '"Include .dot-folders"' '"Loading directories and files..."'
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${path_picker_file}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -151,14 +153,14 @@ assert "PATH_PICKER_LISTING_LOADER_MESSAGE" in pending_listing_body
 PY
   assert_success
 
-  assert_file_not_contains_many "${ui_file}" \
+  assert_file_not_contains_many "${path_picker_file}" \
 'def render_path_picker_open_preloader_script' 'render_path_picker_open_preloader_script()' \
     '__hhsPathPickerOpenPreloaderCleanup' 'const overlayToken = `path-picker-' \
     '[class*="st-key-"][class*="_folder_picker_button"] button' '.st-key-folder_picker_open_button button' \
     '.st-key-folder_picker_parent_button button'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${path_picker_file}" \
 '_hhs_folder_picker_include_dot_folders' 'include_dot_folders or not path.name.startswith(".")'
-  assert_file_not_contains "${ui_file}" '_hhs_folder_picker_on_select'
+  assert_file_not_contains "${path_picker_file}" '_hhs_folder_picker_on_select'
 
   assert_file_contains_many "${ui_file}" \
 'key=f"{key_prefix}_folder_picker_button"' 'name_col = columns\[0\]' \

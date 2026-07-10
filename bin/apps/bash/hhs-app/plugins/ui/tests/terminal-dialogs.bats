@@ -23,13 +23,14 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
 @test "when confirming actions then reusable pop_dialog component should be used" {
   assert_file_contains_many "${ui_file}" \
-'def pop_dialog(' 'def render_folder_picker_dialog' 'render_folder_picker_dialog()' \
+'def pop_dialog(' 'render_folder_picker_dialog()' \
     'def queue_dialog_callback' 'def execute_pending_dialog_callback' 'def handle_dialog_button_click' \
     'def render_pending_streamlit_dialog_dismiss' 'def handle_dialog_dismiss' \
     'execute_pending_dialog_callback()' '@st.dialog(title, dismissible=dismissible, on_dismiss=on_dismiss)' \
     'handle_dialog_button_click(' 'queue_dialog_callback(callback)' '_hhs_dialog_button_dismissal' \
     'handle_dialog_dismiss(dismiss_callback)' 'dismiss_streamlit_dialog()' \
     'render_pending_streamlit_dialog_dismiss()' 'st.session_state\["_hhs_dialog_dismiss_requested"\] = True'
+  assert_file_contains "${path_picker_file}" 'def render_folder_picker_dialog'
   run python3 - <<'PY'
 from pathlib import Path
 

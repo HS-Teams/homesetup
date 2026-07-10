@@ -22,7 +22,7 @@ load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
 @test "when connected over SSH then reusable path picker should list remote paths" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${path_picker_file}" <<'PY'
 import hashlib
 import os
 import posixpath
@@ -35,7 +35,7 @@ from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def folder_picker_start_directory(")
-end = source.index("def homesetup_version(")
+end = len(source)
 host = "remote-box"
 statuses = []
 commands = []
@@ -298,7 +298,7 @@ PY
   assert_success
 }
 @test "when local path picker opens a child folder then its children should be selected" {
-  run python3 - "${ui_file}" "${BATS_TEST_TMPDIR}" <<'PY'
+  run python3 - "${path_picker_file}" "${BATS_TEST_TMPDIR}" <<'PY'
 import hashlib
 import os
 import posixpath
@@ -312,7 +312,7 @@ from pathlib import Path
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 tmpdir = Path(sys.argv[2])
 start = source.index("def folder_picker_start_directory(")
-end = source.index("def homesetup_version(")
+end = len(source)
 home = tmpdir / "home"
 apps = home / "Applications"
 alpha = apps / "alpha"
