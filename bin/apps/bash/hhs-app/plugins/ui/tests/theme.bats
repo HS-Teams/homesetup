@@ -42,8 +42,10 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   run grep -q -- '--hhs-background: var(--hhs-theme-background-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
   assert_success
 
+  assert_file_contains_many "${theme_assets_file}" \
+'def css_custom_properties' 'def theme_config_options'
   assert_file_contains_many "${ui_file}" \
-'def css_custom_properties' 'def theme_config_options' 'class="hhs-sidebar-title"' 'def render_sidebar_title' \
+'class="hhs-sidebar-title"' 'def render_sidebar_title' \
     'render_sidebar_title()' 'class="hhs-sidebar-title-logo"' \
     'hhs_ui.APP_AI_HOMESETUP_AVATAR_FILE, "image/png"' 'class="hhs-sidebar-clock-glyph"></span>'
   assert_file_contains_many "${css_file}" \
@@ -85,7 +87,9 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 'options = [local_hostname()]' 'if not selected_host:' 'state_hosts = (' 'registered_ssh_connection_host()' \
     'def selected_remote_host_requires_connection' 'def render_remote_connection_required_view' \
     'Connect to the remote host to interact' 'Remote host: {host} -&gt; {host_address}' \
-    'def parse_ssh_config_hostnames' 'def ssh_config_hostname' 'keyword == "hostname"' '<hr />'
+    '<hr />'
+  assert_file_contains_many "${ssh_core_file}" \
+'def parse_ssh_config_hostnames' 'def ssh_config_hostname' 'keyword == "hostname"'
   assert_file_contains_many "${css_file}" \
 '.hhs-remote-connect-required h1' '.hhs-remote-connect-required hr' '.hhs-remote-connect-required h2' \
     'color: #dc2626'
@@ -218,6 +222,7 @@ sys.modules["pandas"] = types.ModuleType("pandas")
 spec = importlib.util.spec_from_file_location("streamlit_ui_under_test", app_dir / "streamlit_ui.py")
 ui = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ui)
+import hhs_ui.theme_assets as theme_assets
 
 with tempfile.TemporaryDirectory() as tmpdir:
     tmp_path = Path(tmpdir)
@@ -258,6 +263,8 @@ tokyo-night-css
 """, encoding="utf-8")
     ui.hhs_ui.APP_THEME_CSS_FILE = themes_dir / "dracula.css"
     ui.hhs_ui.UI_STATE_FILE = tmp_path / "hhs-dir" / "streamlit-ui-state.json"
+    ui.hhs_ui_constants.APP_THEME_CSS_FILE = themes_dir / "dracula.css"
+    ui.hhs_ui_constants.UI_STATE_FILE = tmp_path / "hhs-dir" / "streamlit-ui-state.json"
 
     ui.persist_theme_selection("tokyo-night")
     assert json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))["theme_selected"] == "tokyo-night"
@@ -298,19 +305,19 @@ tokyo-night-css
     assert "search_query" not in streamlit.session_state
     assert "search_result_query" not in streamlit.session_state
     assert "path_value_overrides" not in streamlit.session_state
-    assert "tokyo-night-css" in ui.load_app_theme_css()
+    assert "tokyo-night-css" in theme_assets.load_app_theme_css()
 
     config_options.clear()
     ui.configure_app_font_theme(ui.persisted_theme_name())
     assert config_options["theme.backgroundColor"] == "#1a1b26"
     assert config_options["theme.showWidgetBorder"] is True
 
-    theme_options = ui.theme_config_options("tokyo-night")
+    theme_options = theme_assets.theme_config_options("tokyo-night")
     assert theme_options["theme.backgroundColor"] == "#1a1b26"
     assert theme_options["theme.primaryColor"] == "#bb9af7"
     assert theme_options["theme.textColor"] == "#c0caf5"
 
-    homesetup_options = ui.theme_config_options("homesetup")
+    homesetup_options = theme_assets.theme_config_options("homesetup")
     assert homesetup_options["theme.backgroundColor"] == "#07111f"
     assert homesetup_options["theme.codeBackgroundColor"] == "#0b1628"
 

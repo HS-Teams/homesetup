@@ -62,8 +62,9 @@ PY
   assert_success
 
   assert_file_contains_many "${ui_file}" \
-'def run_bash_command(' 'return run_bash_command(' 'def run_hhs_services_quietly' 'def parse_ssh_config_hosts' \
-    'def build_ssh_connect_command' 'def build_ssh_disconnect_command'
+'def run_bash_command(' 'return run_bash_command(' 'def run_hhs_services_quietly'
+  assert_file_contains_many "${ssh_core_file}" \
+'def parse_ssh_config_hosts' 'def build_ssh_connect_command' 'def build_ssh_disconnect_command'
   assert_file_contains "${constants_file}" 'UI_CACHE_SSH_CONNECTION_KEY'
 
   assert_file_not_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" 'UI_SSH_CONNECTION_FILE'
@@ -174,25 +175,27 @@ PY
   run grep -q -- '-O exit' "${ui_file}"
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ssh_core_file}" \
 'pgrep -f --' 'kill -TERM' 'kill -KILL' 'rm -f {safe_control_path}' 'def ssh_config_option'
-  run grep -q -- '-F "${HOME}/.ssh/config"' "${ui_file}"
+  run grep -q -- '-F "${HOME}/.ssh/config"' "${ssh_core_file}"
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
-'ControlMaster=yes' 'ConnectionAttempts=1' 'def build_ssh_wrapped_command' 'bash -ic' '"ssh",' '"-tt",' \
+  assert_file_contains_many "${ssh_core_file}" \
+'ControlMaster=yes' 'ConnectionAttempts=1' 'def build_ssh_wrapped_command' 'bash -ic' \
     'safe_remote_shell = shlex.quote'
+  assert_file_contains_many "${ui_file}" '"ssh",' '"-tt",'
   assert_file_not_contains_many "${ui_file}" \
 'JOB_NAME="${JOB_NAME:-HomeSetup-UI}"' 'source "${HOME}/.bashrc"' '[[ ! -s "${HOME}/.hhsrc" ]]' \
     '"HomeSetup" is not installed on the host.' 'def handle_missing_remote_homesetup' \
     'result.returncode != 86'
   assert_file_contains_many "${ui_file}" \
-'def effective_bash_command' 'def resolve_run_shell' '\["brew", "--prefix", "bash"\]' \
+'def effective_bash_command' 'hhs_ui_constants.RUN_SHELL_ENV_KEY: RUN_SHELL' '\[RUN_SHELL, "-lc", command_to_run\]'
+  assert_file_contains_many "${runtime_file}" \
+'def resolve_run_shell' '\["brew", "--prefix", "bash"\]' \
     '\["/opt/homebrew/bin/brew", "--prefix", "bash"\]' '\["/usr/local/bin/brew", "--prefix", "bash"\]' \
     'Path(run_shell) / "bin" / "bash"' 'Path("/opt/homebrew/opt/bash/bin/bash")' \
     'Path("/usr/local/opt/bash/bin/bash")' 'Path("/bin/bash")' 'RUN_SHELL = resolve_run_shell()' \
-    'os.environ\[hhs_ui_constants.RUN_SHELL_ENV_KEY\] = RUN_SHELL' \
-    'hhs_ui_constants.RUN_SHELL_ENV_KEY: RUN_SHELL' '\[RUN_SHELL, "-lc", command_to_run\]'
+    'os.environ\[hhs_ui_constants.RUN_SHELL_ENV_KEY\] = RUN_SHELL'
   assert_file_not_contains_many "${ui_file}" \
 '\["bash", "-lc"' 'source "{hhs_home}' 'export HHS_HOME="{hhs_home}' '/Users/hjunior/HomeSetup'
   assert_file_contains_many "${ui_file}" \

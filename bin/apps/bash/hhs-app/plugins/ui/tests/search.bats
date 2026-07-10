@@ -35,7 +35,9 @@ import types
 import urllib.parse
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
-start = source.index("def search_type_label(")
+search_core_source = Path("bin/apps/py/hhs_ui/search_core.py").read_text(encoding="utf-8")
+search_core_start = search_core_source.index("def search_type_label(")
+start = source.index("def search_command_cache_key(")
 end = source.index("def render_ai_models_result(")
 
 def fragment(*args, **kwargs):
@@ -127,7 +129,13 @@ def cache_set(key, value, ttl_seconds):
 
 namespace["cache_get"] = cache_get
 namespace["cache_set"] = cache_set
-exec("from __future__ import annotations\n" + source[start:end], namespace)
+exec(
+    "from __future__ import annotations\n"
+    + search_core_source[search_core_start:]
+    + "\n"
+    + source[start:end],
+    namespace,
+)
 
 controls_body = source.split("def render_search_controls", 1)[1].split("\ndef ", 1)[0]
 assert (

@@ -240,14 +240,17 @@ PY
     'parentWindow.addEventListener("message"' 'cleanup_all_registered_sessions'
   assert_file_contains "${constants_file}" 'PROCESS_RESOURCE_STATE_KEY = "_hhs_ui_process_resource_state"'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains "${ui_file}" 'hhs_ui_constants.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY'
+  assert_file_contains_many "${process_resources_file}" \
 'hhs_ui_constants.PROCESS_RESOURCE_STATE_KEY' 'hhs_ui_constants.FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY' \
     'hhs_ui_constants.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY'
   assert_file_not_contains_many "${ui_file}" \
 'hhs_ui.PROCESS_RESOURCE_STATE_KEY' 'hhs_ui.FOOTER_STATUS_LOG_HANDLER_REGISTRY_KEY' \
     'hhs_ui.FOOTER_STATUS_LOG_RECORDS_REGISTRY_KEY'
+  assert_file_contains_many "${process_resources_file}" \
+'def process_resource_state' 'def process_resource_registry'
   assert_file_contains_many "${ui_file}" \
-'def process_resource_state' 'def process_resource_registry' 'schedule_cleanup_session_resources(token)' \
+'schedule_cleanup_session_resources(token)' \
     'atexit.register(cleanup_all_registered_sessions)' 'build_ssh_disconnect_command(ssh_host)' \
     'ttyd_process_is_running(process)' '"-q",' 'update_browser_cleanup_registration()' \
     'start_new_session=True' 'parentWindow.__hhsTtydCleanupHandler' 'parentWindow.removeEventListener(' \
@@ -256,6 +259,7 @@ PY
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+process_resources_source = Path("bin/apps/py/hhs_ui/process_resources.py").read_text()
 assert '"working_dir": footer_working_directory()' in ui_source
 assert 'if request_path == "/open-working-directory":' in ui_source
 open_working_dir_body = ui_source.split("def handle_open_working_directory_request", 1)[1].split("\n    def ", 1)[0]
@@ -271,9 +275,11 @@ assert handler_body.index("self.send_response(204)") < handler_body.index(
 schedule_body = ui_source.split("def schedule_cleanup_session_resources", 1)[1].split("\ndef ", 1)[0]
 assert "threading.Thread(" in schedule_body
 assert "daemon=True" in schedule_body
-state_body = ui_source.split("def process_resource_state", 1)[1].split("\ndef ", 1)[0]
+state_body = process_resources_source.split("def process_resource_state", 1)[1].split("\ndef ", 1)[0]
 assert "setattr(sys, hhs_ui_constants.PROCESS_RESOURCE_STATE_KEY, state)" in state_body
-registry_body = ui_source.split("def process_resource_registry", 1)[1].split("\n\nTTYD_CLEANUP_REGISTRY", 1)[0]
+registry_body = process_resources_source.split("def process_resource_registry", 1)[1].split(
+    "\n\nclass FooterStatusLogHandler", 1
+)[0]
 assert "state[key] = registry" in registry_body
 assert "process_resource_registry(\n    \"ttyd_cleanup_registry\"" in ui_source
 assert "process_resource_registry(\n    \"ttyd_event_registry\"" in ui_source
@@ -299,6 +305,7 @@ PY
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+process_resources_source = Path("bin/apps/py/hhs_ui/process_resources.py").read_text()
 main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
 disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
 connect_index = main_body.index("execute_pending_ssh_connection()")
@@ -330,7 +337,8 @@ assert shell_dialog_index < sidebar_index < main_view_index
 assert footer_index < client_status_index < cleanup_index
 footer_status_body = ui_source.split("def render_footer_status_fragment", 1)[1].split("\ndef ", 1)[0]
 footer_status_decorator = ui_source[: ui_source.index("def render_footer_status_fragment")].rstrip().splitlines()[-1]
-background_poll_decorator = ui_source[: ui_source.index("def render_background_job_polling_fragment")].rstrip().splitlines()[-1]
+background_poll_prefix = ui_source[: ui_source.index("def render_background_job_polling_fragment")]
+background_poll_decorator = background_poll_prefix.rstrip().splitlines()[-1]
 background_status_decorator = ui_source[: ui_source.index("def render_background_job_status")].rstrip().splitlines()[-1]
 assert not footer_status_decorator.startswith('@st.fragment')
 assert background_poll_decorator == '@st.fragment(run_every="2s")'
@@ -340,8 +348,8 @@ assert 'drain_footer_status_log_records()' in footer_status_body
 assert 'render_footer()' in footer_status_body
 assert 'render_floating_status()' in footer_status_body
 assert 'parallel=True' not in footer_status_body
-assert "class FooterStatusLogHandler(logging.Handler)" in ui_source
-assert "logging.captureWarnings(True)" in ui_source
+assert "class FooterStatusLogHandler(logging.Handler)" in process_resources_source
+assert "logging.captureWarnings(True)" in process_resources_source
 assert "def drain_footer_status_log_records(" in ui_source
 assert "def render_footer_client_error_bridge_script(" in ui_source
 assert "Missing Submit Button" in ui_source or "missing submit button" in ui_source
@@ -368,7 +376,9 @@ PY
     'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem)' \
     'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - var(--hhs-ttyd-shell-gap))' \
     'margin: var(--hhs-ttyd-shell-gap) 0 0'
-  assert_file_not_contains "${css_file}" 'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - (var(--hhs-ttyd-shell-gap) \* 2))'
+  terminal_double_gap_height='height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem'
+  terminal_double_gap_height+=' - (var(--hhs-ttyd-shell-gap) \* 2))'
+  assert_file_not_contains "${css_file}" "${terminal_double_gap_height}"
 
   assert_file_contains_many "${css_file}" \
 'max-height: var(--hhs-ttyd-max-height, 760px)' 'background: var(--hhs-terminal-background-color, #000000)' \

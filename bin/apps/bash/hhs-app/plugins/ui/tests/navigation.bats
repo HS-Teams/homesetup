@@ -29,8 +29,9 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'SEARCH_FILTERS = ("All", "Containing")' 'HISTORY_FILTERS = ("All", "Containing")' \
     'ENV_FILTERS = ("All", "HHS", "Containing")' 'LIST_FILTERS = ("All", "Containing")'
 
-  assert_file_contains_many "${ui_file}" \
-'import hhs_ui.constants as hhs_ui_constants' 'def parse_ssh_config_ports' \
+  assert_file_contains "${ui_file}" 'import hhs_ui.constants as hhs_ui_constants'
+  assert_file_contains_many "${ssh_core_file}" \
+'def parse_ssh_config_ports' \
     'def ssh_config_port' 'def ssh_connection_display' \
     'return f"{ssh_config_hostname(clean_host)}:{ssh_config_port(clean_host)}"'
   assert_file_not_contains_many "${ui_file}" \
