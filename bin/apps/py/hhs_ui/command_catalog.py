@@ -1541,7 +1541,7 @@ def build_hhs_hspm_command(
     """Build the Bash command used to run an hspm tool operation."""
     safe_operation = (
         operation
-        if operation in {"install", "uninstall", "reinstall", "list"}
+        if operation in {"install", "uninstall", "reinstall", "list", "recover"}
         else ""
     )
     if isinstance(tool_name, str):

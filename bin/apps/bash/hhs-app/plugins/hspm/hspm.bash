@@ -42,7 +42,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|reinstall|list|recover} [op
       -h | --help                  : Display this help message.
       -e                           : (recover) Open the recovery file with the default editor.
       -i                           : (recover) Install all recovered packages instead of listing.
-      -t                           : (recover) Use ${HHS_DEV_TOOLS} as the source for recovery.
+      -t                           : (recover) Use \${HHS_DEV_TOOLS} as the source for recovery.
 
     arguments:
       list                         : List all available OS-based installation recipes.

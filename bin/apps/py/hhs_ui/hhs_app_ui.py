@@ -390,10 +390,11 @@ def execute_pending_hhs_firebase_action() -> None:
 
 
 def hhs_hspm_action_noun(operation: str) -> str:
-    """Return the display noun for an HSPM catalog action."""
+    """Return the display noun for an HSPM action."""
     return {
         "install": "Installation",
         "uninstall": "Uninstallation",
+        "recover": "Recovery",
     }.get(operation, "Operation")
 
 
@@ -425,8 +426,30 @@ def queue_hhs_hspm_catalog_action(operation: str, package_names: list[str]) -> b
     return True
 
 
+def queue_hhs_hspm_recovery_action(action: str) -> bool:
+    """Queue a predefined HSPM recovery action."""
+    recovery_actions = {
+        "packages": ("-i", "Recovering packages"),
+        "tools": ("-t", "Loading recovery tools"),
+        "edit": ("-e", "Opening the recovery file"),
+    }
+    recovery_action = recovery_actions.get(action)
+    if recovery_action is None:
+        return False
+    option, description = recovery_action
+    st.session_state["hhs_hspm_action_execute_pending"] = {
+        "operation": "recover",
+        "command": build_hhs_hspm_command("recover", option),
+        "description": description,
+        "success_fallback": f"{description} completed.",
+        "error_fallback": f"{description} failed.",
+    }
+    save_ui_state()
+    return True
+
+
 def start_pending_hhs_hspm_action() -> None:
-    """Start a queued HSPM catalog action background job, when present."""
+    """Start a queued HSPM action background job, when present."""
     pending = st.session_state.pop("hhs_hspm_action_execute_pending", None) or {}
     if not isinstance(pending, dict):
         return
@@ -448,7 +471,7 @@ def start_pending_hhs_hspm_action() -> None:
 
 
 def complete_hhs_hspm_action_job() -> None:
-    """Complete an HSPM catalog action and refresh catalog data."""
+    """Complete an HSPM action and refresh its cached data."""
     completed = background_job_result(HHS_HSPM_ACTION_JOB)
     if completed is None:
         return
@@ -461,13 +484,20 @@ def complete_hhs_hspm_action_job() -> None:
     operation = str(metadata.get("operation", "")).strip()
     package_summary = hhs_hspm_package_summary(package_names)
     if result.returncode == 0:
-        refresh_hhs_hspm_catalog_listing()
+        if operation == "recover":
+            cache_delete_tag("hhs_hspm_recovery")
+        else:
+            refresh_hhs_hspm_catalog_listing()
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
     if result.returncode == 0:
-        fallback = f"{hhs_hspm_action_noun(operation)} completed: {package_summary}"
+        fallback = str(metadata.get("success_fallback", "")).strip()
+        if not fallback:
+            fallback = f"{hhs_hspm_action_noun(operation)} completed: {package_summary}"
         push_floating_status(status_message or fallback, "info")
     else:
-        fallback = f"{hhs_hspm_action_noun(operation)} failed: {package_summary}"
+        fallback = str(metadata.get("error_fallback", "")).strip()
+        if not fallback:
+            fallback = f"{hhs_hspm_action_noun(operation)} failed: {package_summary}"
         push_floating_status(status_message or fallback, "error")
     save_ui_state()
 
@@ -579,6 +609,8 @@ def slider_pane_theme() -> dict[str, str]:
         "accent": resolve_css_custom_property(
             properties, "hhs-theme-link-color", "#8be9fd"
         ),
+        "success": resolve_css_custom_property(properties, "hhs-success", "#50fa7b"),
+        "danger": resolve_css_custom_property(properties, "hhs-danger", "#ff5555"),
         "muted": resolve_css_custom_property(
             properties, "hhs-theme-text-muted-color", "#a7a4b5"
         ),
@@ -2215,6 +2247,57 @@ def selected_hhs_hspm_catalog_packages(edited_data: pd.DataFrame) -> list[str]:
     ]
 
 
+def parse_hhs_hspm_recovery(output: str) -> list[dict[str, str]]:
+    """Parse HSPM recovery output into package status table rows."""
+    rows: list[dict[str, str]] = []
+    status_pattern = re.compile(
+        r"^\s*\d+\s*-\s*(?P<command>\S+).*?\s+(?P<status>NOT INSTALLED|INSTALLED)\s*$"
+    )
+    normalized_output = strip_ansi(output)
+    for line in normalized_output.splitlines():
+        match = status_pattern.match(line)
+        if match is None:
+            continue
+        rows.append(
+            {
+                "Command": match.group("command"),
+                "Status": match.group("status"),
+            }
+        )
+    return rows
+
+
+def hhs_hspm_recovery_table_data(
+    rows: list[dict[str, str]],
+) -> pd.io.formats.style.Styler:
+    """Return recovery rows with theme-aware status colors."""
+    dataframe = pd.DataFrame(
+        {
+            "Command": pd.Series(
+                [row.get("Command", "") for row in rows],
+                dtype="string",
+            ),
+            "Status": pd.Series(
+                [row.get("Status", "") for row in rows],
+                dtype="string",
+            ),
+        }
+    )
+    theme = slider_pane_theme()
+    return dataframe.style.map(
+        lambda value: (
+            f"color: {theme['success']}; font-weight: 800;"
+            if str(value) == "INSTALLED"
+            else (
+                f"color: {theme['danger']}; font-weight: 800;"
+                if str(value) == "NOT INSTALLED"
+                else ""
+            )
+        ),
+        subset=["Status"],
+    )
+
+
 def render_hhs_hspm_catalog_action_buttons(
     selected_package_names: list[str],
     action_running: bool,
@@ -2231,19 +2314,54 @@ def render_hhs_hspm_catalog_action_buttons(
             "Install",
             key="hhs_hspm_catalog_install_button",
             disabled=disabled,
-            width=140,
+            width=180,
         )
         uninstall_clicked = st.button(
             "Uninstall",
             key="hhs_hspm_catalog_uninstall_button",
             disabled=disabled,
-            width=140,
+            width=180,
         )
     if install_clicked:
         if queue_hhs_hspm_catalog_action("install", selected_package_names):
             st.rerun()
     elif uninstall_clicked:
         if queue_hhs_hspm_catalog_action("uninstall", selected_package_names):
+            st.rerun()
+
+
+def render_hhs_hspm_recovery_action_buttons(action_running: bool) -> None:
+    """Render the predefined HSPM recovery action buttons."""
+    with st.container(
+        key="hhs_hspm_recovery_actions",
+        horizontal=True,
+        horizontal_alignment="center",
+        vertical_alignment="center",
+    ):
+        packages_clicked = st.button(
+            " Install Pkgs.",
+            key="hhs_hspm_recovery_packages_button",
+            disabled=action_running,
+            width=180,
+        )
+        tools_clicked = st.button(
+            " Install Tools",
+            key="hhs_hspm_recovery_tools_button",
+            disabled=action_running,
+            width=180,
+        )
+        edit_clicked = st.button(
+            " Edit",
+            key="hhs_hspm_recovery_edit_button",
+            disabled=action_running,
+            width=180,
+        )
+    for action, clicked in (
+        ("packages", packages_clicked),
+        ("tools", tools_clicked),
+        ("edit", edit_clicked),
+    ):
+        if clicked and queue_hhs_hspm_recovery_action(action):
             st.rerun()
 
 
@@ -2298,13 +2416,7 @@ def render_hhs_hspm_catalog_slide() -> None:
             key=hhs_hspm_catalog_table_key(),
             hide_index=True,
             column_order=["Mark", "Command", "Description"],
-<<<<<<< Updated upstream
-            height=340,
-||||||| Stash base
-            height=300,
-=======
             height=304,
->>>>>>> Stashed changes
             disabled=["Command", "Description"] if not action_running else True,
             column_config={
                 "Mark": st.column_config.CheckboxColumn(
@@ -2331,39 +2443,53 @@ def render_hhs_hspm_catalog_slide() -> None:
 
 
 def render_hhs_hspm_recovery_slide() -> None:
-    """Render the HSPM recovery slider page."""
+    """Render the HSPM package recovery slider page."""
     render_hhs_hspm_slide_title(hhs_hspm_recovery_title())
+    result = render_cached_command_result(
+        build_hhs_hspm_command("recover"),
+        "Loading HSPM recovery packages",
+        "hhs_hspm_recovery",
+        hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
+        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+        "Unable to load HSPM recovery packages.",
+    )
+    if result is None:
+        return
+    if result.returncode != 0:
+        st.error(
+            clean_command_status_message(
+                result.stderr
+                or result.stdout
+                or "Unable to load HSPM recovery packages."
+            )
+        )
+        return
+    rows = parse_rows_cached(
+        "hhs_hspm_recovery",
+        result.stdout,
+        parse_hhs_hspm_recovery,
+    )
+    action_running = background_job_is_running(HHS_HSPM_ACTION_JOB)
+    with st.container(key="hhs_hspm_slider_recovery_table_layout"):
+        st.data_editor(
+            hhs_hspm_recovery_table_data(rows),
+            key="hhs_hspm_recovery_table",
+            hide_index=True,
+            column_order=["Command", "Status"],
+            height=304,
+            disabled=True,
+            column_config={
+                "Command": st.column_config.TextColumn("Command", disabled=True),
+                "Status": st.column_config.TextColumn("Status", disabled=True),
+            },
+            width="stretch",
+        )
+    render_slider_pane_bullets("hhs_hspm_slider", ["Catalog", "Recovery"])
+    render_hhs_hspm_recovery_action_buttons(action_running)
 
 
 def render_hhs_hspm_panel() -> None:
     """Render the HomeSetup package manager panel."""
-<<<<<<< Updated upstream
-    with st.container(key="hhs_hspm_panel", border=False):
-        execute_pending_hhs_hspm_action()
-        render_hhs_hspm_title()
-        render_slider_pane(
-            "hhs_hspm_slider",
-            [
-                ("Catalog", render_hhs_hspm_catalog_slide),
-                ("Recovery", render_hhs_hspm_recovery_slide),
-            ],
-            height=486,
-            viewport_border=False,
-            show_bullets=False,
-            navigation_offset=-30,
-            vertical_offset=-16,
-        )
-||||||| Stash base
-    execute_pending_hhs_hspm_action()
-    render_hhs_hspm_title()
-    render_slider_pane(
-        "hhs_hspm_slider",
-        [
-            ("Catalog", render_hhs_hspm_catalog_slide),
-            ("Recovery", render_hhs_hspm_recovery_slide),
-        ],
-    )
-=======
     with st.container(key="hhs_hspm_panel", border=False):
         execute_pending_hhs_hspm_action()
         render_hhs_hspm_title()
@@ -2379,7 +2505,6 @@ def render_hhs_hspm_panel() -> None:
             navigation_offset=-30,
             vertical_offset=-16,
         )
->>>>>>> Stashed changes
 
 
 def render_hhs_placeholder_panel(hhs_view: str) -> None:
