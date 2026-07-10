@@ -46,14 +46,16 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 }
 
 @test "when remote SSH command closes then Streamlit UI should clear stale connection state" {
-  assert_file_contains_many "${ui_file}" \
-'def ssh_shared_connection_closed' 'def strip_ssh_shared_connection_notice' 'def clear_disconnected_ssh_host'
-  run python3 - "${ui_file}" <<'PY'
+  assert_file_contains_many "${command_catalog_file}" \
+'def ssh_shared_connection_closed' 'def strip_ssh_shared_connection_notice'
+  assert_file_contains "${ssh_runtime_file}" 'def clear_disconnected_ssh_host'
+  run python3 - "${ui_file}" "${ssh_runtime_file}" <<'PY'
 from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-clear_body = source.split("def clear_disconnected_ssh_host", 1)[1].split("\ndef ", 1)[0]
+ssh_runtime_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+clear_body = ssh_runtime_source.split("def clear_disconnected_ssh_host", 1)[1].split("\ndef ", 1)[0]
 assert "queue_search_directory_home_reset()" in clear_body
 assert "reset_search_directory_to_home()" not in clear_body
 assert "def apply_pending_search_directory_home_reset" in source
@@ -65,16 +67,20 @@ assert pending_reset_index < initialize_search_index < render_main_index
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
-'handle_remote_command_result(remote_host, result)' 'sanitize_remote_command_result(' \
+  assert_file_contains "${ssh_runtime_file}" \
+'st.session_state\["ssh_host_selected"\] = local_hostname()'
+  assert_file_contains "${command_runtime_file}" \
+'handle_remote_command_result(remote_host, result)'
+  assert_file_contains_many "${command_runtime_file}" \
     'if use_cache and not ssh_shared_connection_closed(result)' \
     'if remote_host and not ssh_connection_is_alive(remote_host)' \
-    'completed_disconnected_ssh_process(command_to_run, remote_host)' 'st.rerun()' 'ConnectTimeout=5' \
-    'st.session_state\["ssh_host_selected"\] = local_hostname()'
+    'completed_disconnected_ssh_process(command_to_run, remote_host)' 'st.rerun()'
+  assert_file_contains_many "${command_catalog_file}" \
+    'sanitize_remote_command_result(' 'ConnectTimeout=5'
 }
 
 @test "when remote commands print HomeSetup startup chatter then command output should be sanitized" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${ssh_runtime_file}" <<'PY'
 import re
 import os
 import subprocess
@@ -197,7 +203,7 @@ PY
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def restore_terminal_document_view(")
 end = source.index("def close_document_view(")
 session_state = {}
@@ -290,13 +296,14 @@ PY
 }
 
 @test "when SSH host switches then current main page should be preserved" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${ssh_runtime_file}" <<'PY'
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def reconnect_view_state_keys(")
-end = source.index("def render_script_html(")
+end = source.index("def host_selector_options(")
 session_state = {"active_view": "Configs"}
 persisted_state = {
     "active_view": "Search",

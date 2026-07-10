@@ -71,9 +71,10 @@ PY
 
   assert_file_not_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" 'UI_SSH_CONNECTION_FILE'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains "${ui_file}" 'restore_registered_ssh_connection_on_session_start()'
+  assert_file_contains_many "${ssh_runtime_file}" \
 'def restore_registered_ssh_connection_on_session_start' \
-    'restore_registered_ssh_connection_on_session_start()' 'ssh_connection_restore_checked' \
+    'ssh_connection_restore_checked' \
     'hhs_ui.SSH_RECONNECT_HOST_KEY' 'st.session_state\["ssh_connect_pending"\] = reconnect_host' \
     'f"Reconnecting to {ssh_connection_display(reconnect_host)}"' \
     'st.session_state\["ssh_reconnect_restore_view_state"\] = True' 'def reconnect_view_state_snapshot' \
@@ -82,14 +83,14 @@ PY
     'st.session_state\["ssh_connect_pending_message"\] = ""'
   assert_file_not_contains "${ui_file}" 'Disconnecting stale SSH host'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ssh_runtime_file}" \
 'st.session_state\["ssh_connection_status"\] = "connected"' 'def clear_host_scoped_session_state' \
     'clear_host_scoped_session_state()' 'st.session_state\[hhs_ui.TERMINAL_CWD_KEY\] = "."' \
     'key in hhs_ui.PERSISTED_UI_KEYS'
   run python3 - <<'PY'
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = Path("bin/apps/py/hhs_ui/ssh_runtime.py").read_text()
 start_body = source.split("def execute_pending_ssh_connection", 1)[1].split("\ndef ", 1)[0]
 complete_body = source.split("def complete_ssh_connection", 1)[1].split("\ndef ", 1)[0]
 body = f"{start_body}\n{complete_body}"
@@ -161,20 +162,21 @@ assert restore_registered_availability_refresh_index < restore_body.index("save_
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ssh_runtime_file}" \
 'def register_ssh_connection' 'def clear_registered_ssh_connection' 'def legacy_ssh_connection_files' \
-    'def unlink_legacy_ssh_connection_files' 'ui_cache_metadata_key(key)' \
-    'def request_ssh_host_connect'
-  run grep -Fq -- 'cache[hhs_ui.UI_CACHE_SSH_CONNECTION_KEY] = {"value": {"host": clean_host}}' "${ui_file}"
+    'def unlink_legacy_ssh_connection_files' 'def request_ssh_host_connect'
+  assert_file_contains "${cache_runtime_file}" 'ui_cache_metadata_key(key)'
+  run grep -Fq -- 'cache[hhs_ui.UI_CACHE_SSH_CONNECTION_KEY] = {"value": {"host": clean_host}}' "${ssh_runtime_file}"
   assert_success
   assert_file_not_contains "${ui_file}" 'on_change=request_ssh_host_connection'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains "${ui_file}" 'synchronize_selected_ssh_host_with_connection()'
+  assert_file_contains_many "${ssh_runtime_file}" \
 'def selected_ssh_host_is_connected' 'def connected_ssh_host' \
-    'def synchronize_selected_ssh_host_with_connection' 'synchronize_selected_ssh_host_with_connection()' \
+    'def synchronize_selected_ssh_host_with_connection' \
     'st.session_state\["ssh_host_selected"\] = host' 'st.session_state\["ssh_host_selector"\] = host' \
     'ssh_connection_host' 'def request_ssh_host_disconnection' 'def execute_pending_ssh_disconnection'
-  run grep -q -- '-O exit' "${ui_file}"
+  run grep -q -- '-O exit' "${ssh_core_file}"
   assert_success
 
   assert_file_contains_many "${ssh_core_file}" \
@@ -185,13 +187,14 @@ PY
   assert_file_contains_many "${ssh_core_file}" \
 'ControlMaster=yes' 'ConnectionAttempts=1' 'def build_ssh_wrapped_command' 'bash -ic' \
     'safe_remote_shell = shlex.quote'
-  assert_file_contains_many "${ui_file}" '"ssh",' '"-tt",'
+  assert_file_contains_many "${ssh_core_file}" '"ssh",' '"-tt",'
   assert_file_not_contains_many "${ui_file}" \
 'JOB_NAME="${JOB_NAME:-HomeSetup-UI}"' 'source "${HOME}/.bashrc"' '[[ ! -s "${HOME}/.hhsrc" ]]' \
     '"HomeSetup" is not installed on the host.' 'def handle_missing_remote_homesetup' \
     'result.returncode != 86'
-  assert_file_contains_many "${ui_file}" \
-'def effective_bash_command' 'hhs_ui_constants.RUN_SHELL_ENV_KEY: RUN_SHELL' '\[RUN_SHELL, "-lc", command_to_run\]'
+  assert_file_contains "${ssh_runtime_file}" 'def effective_bash_command'
+  assert_file_contains_many "${command_runtime_file}" \
+'hhs_ui_constants.RUN_SHELL_ENV_KEY: RUN_SHELL' '\[RUN_SHELL, "-lc", command_to_run\]'
   assert_file_contains_many "${runtime_file}" \
 'def resolve_run_shell' '\["brew", "--prefix", "bash"\]' \
     '\["/opt/homebrew/bin/brew", "--prefix", "bash"\]' '\["/usr/local/bin/brew", "--prefix", "bash"\]' \
@@ -200,8 +203,9 @@ PY
     'os.environ\[hhs_ui_constants.RUN_SHELL_ENV_KEY\] = RUN_SHELL'
   assert_file_not_contains_many "${ui_file}" \
 '\["bash", "-lc"' 'source "{hhs_home}' 'export HHS_HOME="{hhs_home}' '/Users/hjunior/HomeSetup'
+  assert_file_contains_many "${ssh_runtime_file}" \
+'or not selected_ssh_host_is_connected(host)' 'force_local: bool = False'
   assert_file_contains_many "${ui_file}" \
-'or not selected_ssh_host_is_connected(host)' 'force_local: bool = False' \
     'def run_ssh_tunnels' 'def annotate_ssh_tunnel_statuses' \
     'headers = \["Local Port", "Remote Host:Port", "Kind", "Status", "Link"\]'
   assert_file_contains_many "${command_catalog_file}" \
@@ -727,19 +731,23 @@ assert "host.example:/remote/file-two.txt" in multi_to_local
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ssh_runtime_file}" \
 'timeout_seconds: int | None = None' 'def command_timeout_seconds' \
     'return hhs_ui.UI_COMMAND_REMOTE_TIMEOUT_SECONDS' 'return hhs_ui.UI_COMMAND_LOCAL_TIMEOUT_SECONDS' \
-    'def effective_command_timeout_seconds' 'return max(1, int(timeout_seconds))' \
-    'effective_timeout = effective_command_timeout_seconds(' 'except subprocess.TimeoutExpired' \
+    'def effective_command_timeout_seconds' 'return max(1, int(timeout_seconds))'
+  assert_file_contains_many "${command_runtime_file}" \
+    'effective_timeout = effective_command_timeout_seconds(' 'except subprocess.TimeoutExpired'
+  assert_file_contains_many "${ssh_runtime_file}" \
     'def render_ssh_connection_dialog' 'def clear_ssh_connection_dialog' 'def dismiss_streamlit_dialog' \
-    'button[aria-label="Close"]' 'close_button.click()' 'close_callback=close_ssh_connection_dialog' \
-    'render_dialog()' 'if render_ssh_connection_dialog()'
+    'close_callback=close_ssh_connection_dialog'
+  assert_file_contains_many "${dialog_ui_file}" \
+    'button[aria-label="Close"]' 'close_button.click()'
+  assert_file_contains_many "${ui_file}" 'render_dialog()' 'if render_ssh_connection_dialog()'
   run python3 - <<'PY'
 import ast
 from pathlib import Path
 
-tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
+tree = ast.parse(Path("bin/apps/py/hhs_ui/ssh_runtime.py").read_text())
 for node in ast.walk(tree):
     if isinstance(node, ast.FunctionDef) and node.name == "render_ssh_connection_dialog":
         assert "st.stop()" not in ast.unparse(node)
@@ -749,10 +757,11 @@ else:
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ssh_runtime_file}" \
 'return True' 'dismiss_streamlit_dialog()' 'set_overlay(False)' \
     'f"Connected to remote  {ssh_connection_display(host)}"' \
-    'push_floating_status(f"Failed to connect to remote: {host}", "error")' \
+    'push_floating_status(f"Failed to connect to remote: {host}", "error")'
+  assert_file_contains_many "${ui_file}" \
     'push_floating_status("Opened working directory.", "info")' \
     '"success_fallback": "AI chat history cleared."' 'status_message or f"Selected AI model: {new_model}"' \
     'status_message or f"Deleted AI model: {model_name}"' \

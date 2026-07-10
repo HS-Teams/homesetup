@@ -76,15 +76,17 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 '.hhs-sidebar-title-logo' 'height: 24px' 'width: 24px' 'margin-right: 0.45rem'
   assert_file_contains_many "${ui_file}" \
 'host_kind = "Local" if selected_host_is_local() else "SSH"' 'Host ({host_kind})' \
-    'def select_ssh_host_from_widget' 'key="ssh_host_selector"' 'on_change=select_ssh_host_from_widget'
+    'key="ssh_host_selector"' 'on_change=select_ssh_host_from_widget'
+  assert_file_contains "${ssh_runtime_file}" 'def select_ssh_host_from_widget'
   assert_file_not_contains "${ui_file}" 'key="ssh_host_selected"'
 
   assert_file_contains_many "${ui_file}" \
 'ssh_host_connected_display_' 'disabled=True'
   assert_file_not_contains "${ui_file}" 'options = ["", local_hostname()]'
 
+  assert_file_contains_many "${ssh_runtime_file}" \
+'options = [local_hostname()]' 'if not selected_host:' 'state_hosts = (' 'registered_ssh_connection_host()'
   assert_file_contains_many "${ui_file}" \
-'options = [local_hostname()]' 'if not selected_host:' 'state_hosts = (' 'registered_ssh_connection_host()' \
     'def selected_remote_host_requires_connection' 'def render_remote_connection_required_view' \
     'Connect to the remote host to interact' 'Remote host: {host} -&gt; {host_address}' \
     '<hr />'

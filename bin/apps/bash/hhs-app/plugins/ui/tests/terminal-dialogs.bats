@@ -34,14 +34,14 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'handle_dialog_dismiss(dismiss_callback)' 'dismiss_streamlit_dialog()' \
     'render_pending_streamlit_dialog_dismiss()'
   assert_file_contains "${path_picker_file}" 'def render_folder_picker_dialog'
-  run python3 - "${dialog_ui_file}" "${ui_file}" <<'PY'
+  run python3 - "${dialog_ui_file}" "${ssh_runtime_file}" <<'PY'
 from pathlib import Path
 import sys
 
 dialog_source = Path(sys.argv[1]).read_text()
-ui_source = Path(sys.argv[2]).read_text()
+ssh_runtime_source = Path(sys.argv[2]).read_text()
 callback_body = dialog_source.split("def handle_dialog_button_click", 1)[1].split("\ndef ", 1)[0]
-dismiss_body = ui_source.split("def dismiss_streamlit_dialog", 1)[1].split("\ndef ", 1)[0]
+dismiss_body = ssh_runtime_source.split("def dismiss_streamlit_dialog", 1)[1].split("\ndef ", 1)[0]
 assert "render_script_html(" not in callback_body
 assert "st.html(" not in callback_body
 assert "render_script_html(" not in dismiss_body
@@ -50,8 +50,8 @@ PY
   assert_success
 
   assert_file_contains_many "${ui_file}" \
-'close_callback=close_home_tool_action_dialog' 'close_callback=close_home_tool_tldr_dialog' \
-    'close_callback=close_ssh_connection_dialog'
+'close_callback=close_home_tool_action_dialog' 'close_callback=close_home_tool_tldr_dialog'
+  assert_file_contains "${ssh_runtime_file}" 'close_callback=close_ssh_connection_dialog'
   assert_file_not_contains "${ui_file}" 'st.rerun(scope="app")'
 
   assert_file_contains_many "${ui_file}" \
@@ -88,10 +88,12 @@ PY
 'def open_document_view' 'def activate_terminal_document_view' 'def deactivate_terminal_document_view' \
     'def restore_terminal_document_view' 'activate_terminal_document_view()' \
     'st.session_state\[hhs_ui.TERMINAL_CWD_KEY\] = footer_working_directory()' 'def close_document_view'
-  run python3 - <<'PY'
+  run python3 - "${ssh_runtime_file}" <<'PY'
 from pathlib import Path
+import sys
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+ssh_runtime_source = Path(sys.argv[1]).read_text()
 terminal_source = Path("bin/apps/py/hhs_ui/terminal_ui.py").read_text()
 open_body = ui_source.split("def open_document_view", 1)[1].split("\ndef ", 1)[0]
 close_body = ui_source.split("def close_document_view", 1)[1].split("\ndef ", 1)[0]
@@ -100,8 +102,8 @@ terminal_render_body = terminal_source.split("def render_terminal_document_view"
 terminal_init_body = terminal_source.split("def initialize_terminal_session_state", 1)[1].split("\ndef ", 1)[0]
 deactivate_body = ui_source.split("def deactivate_terminal_document_view", 1)[1].split("\ndef ", 1)[0]
 sync_events_body = terminal_source.split("def sync_ttyd_event_state", 1)[1].split("\ndef ", 1)[0]
-ssh_connect_body = ui_source.split("def execute_pending_ssh_connection", 1)[1].split("\ndef ", 1)[0]
-ssh_disconnect_body = ui_source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
+ssh_connect_body = ssh_runtime_source.split("def execute_pending_ssh_connection", 1)[1].split("\ndef ", 1)[0]
+ssh_disconnect_body = ssh_runtime_source.split("def execute_pending_ssh_disconnection", 1)[1].split("\ndef ", 1)[0]
 assert 'terminal_document_view_is_active() and document_key != "TERMINAL"' not in open_body
 assert "deactivate_terminal_document_view()" not in open_body
 assert "if reset_terminal and terminal_document_view_is_active():" in close_body
