@@ -1228,11 +1228,12 @@ def build_hhs_firebase_info_command() -> str:
     return (
         build_hhs_env_environment_command()
         + 'export HHS_FIREBASE_CONFIG_FILE="${HHS_FIREBASE_CONFIG_FILE:-${HHS_DIR}/firebase.properties}"; '
+        + 'export HHS_FIREBASE_CREDS_FILE="${HHS_FIREBASE_CREDS_FILE:-${HOME}/firebase-credentials.json}"; '
         + 'config_file="${HHS_FIREBASE_CONFIG_FILE}"; '
         + f'printf "%s\\n%s\\n" "{FIREBASE_CONFIG_FILE_OUTPUT_MARKER}" "${{config_file}}"; '
         + f'printf "%s\\n" "{HHS_CONFIG_ENV_OUTPUT_MARKER}"; '
-        + 'printf "HHS_DIR\\t%s\\nHOME\\t%s\\nHHS_HOME\\t%s\\nHHS_FIREBASE_CONFIG_FILE\\t%s\\n" '
-        + '"${HHS_DIR}" "${HOME:-}" "${HHS_HOME}" "${HHS_FIREBASE_CONFIG_FILE}"; '
+        + 'printf "HHS_DIR\\t%s\\nHOME\\t%s\\nHHS_HOME\\t%s\\nHHS_FIREBASE_CONFIG_FILE\\t%s\\nHHS_FIREBASE_CREDS_FILE\\t%s\\n" '
+        + '"${HHS_DIR}" "${HOME:-}" "${HHS_HOME}" "${HHS_FIREBASE_CONFIG_FILE}" "${HHS_FIREBASE_CREDS_FILE}"; '
         + f'printf "%s\\n" "{FIREBASE_CONFIG_CONTENT_OUTPUT_MARKER}"; '
         + 'cat "${config_file}" 2>/dev/null || true; '
         + f'printf "\\n%s\\n" "{FIREBASE_CONFIG_END_OUTPUT_MARKER}"'

@@ -102,6 +102,17 @@
         box-shadow: 0 0 0 1px var(--hhs-primary);
       }
 
+      .field-control {
+        align-items: center;
+        display: flex;
+        gap: 1rem;
+        min-width: 0;
+      }
+
+      .field-control input {
+        flex: 1 1 auto;
+      }
+
       input:disabled,
       button:disabled {
         cursor: not-allowed;
@@ -128,6 +139,27 @@
         min-width: var(--hhs-button-width);
         padding: 0 0.85rem;
         width: var(--hhs-button-width);
+      }
+
+      .reveal-button {
+        align-items: center;
+        border-radius: 4px;
+        display: inline-flex;
+        font-size: 0.9rem;
+        font-weight: 800;
+        height: 2rem;
+        justify-content: center;
+        min-height: 2rem;
+        min-width: 2rem;
+        padding: 0;
+        width: 2rem;
+      }
+
+      .reveal-button.is-selected {
+        background: color-mix(in srgb, var(--hhs-primary) 24%, transparent);
+        border-color: var(--hhs-primary);
+        color: var(--hhs-primary);
+        box-shadow: inset 0 0 0 1px var(--hhs-primary);
       }
 
       button:hover:not(:disabled),
@@ -302,16 +334,19 @@
       function createField(field) {
         const name = stringValue(field.name);
         const labelText = displayLabel(field.label || name);
+        const isPassword = name === "UID";
         const wrapper = document.createElement("div");
+        const control = document.createElement("div");
         const label = document.createElement("label");
         const input = document.createElement("input");
         wrapper.className = "field";
+        control.className = "field-control";
         label.htmlFor = `firebase-${name}`;
         label.textContent = `${labelText}:`;
         input.id = `firebase-${name}`;
         input.name = name;
         input.placeholder = stringValue(field.placeholder);
-        input.type = "text";
+        input.type = isPassword ? "password" : "text";
         input.value = stringValue(values[name]);
         input.disabled = Boolean(args.disabled);
         input.autocomplete = "off";
@@ -326,7 +361,29 @@
           writeDraft();
           updateRestoreButtonState();
         });
-        wrapper.append(label, input);
+        control.append(input);
+        if (isPassword) {
+          const revealButton = document.createElement("button");
+          revealButton.type = "button";
+          revealButton.className = "reveal-button";
+          revealButton.disabled = Boolean(args.disabled);
+          revealButton.textContent = "﯎";
+          revealButton.title = "Reveal";
+          revealButton.setAttribute("aria-label", "Reveal UID");
+          revealButton.addEventListener("click", () => {
+            const revealed = input.type === "text";
+            input.type = revealed ? "password" : "text";
+            revealButton.textContent = revealed ? "﯎" : "﯏";
+            revealButton.title = revealed ? "Reveal" : "Hide";
+            revealButton.classList.toggle("is-selected", !revealed);
+            revealButton.setAttribute(
+              "aria-label",
+              revealed ? "Reveal UID" : "Hide UID"
+            );
+          });
+          control.append(revealButton);
+        }
+        wrapper.append(label, control);
         return wrapper;
       }
 

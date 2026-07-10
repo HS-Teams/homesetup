@@ -1272,6 +1272,33 @@ div[class*="st-key-"][class*="_markdown_table"] .hhs-markdown-table-caption {
   text-align: center;
 }
 
+.hhs-table-caption {
+  background: color-mix(in srgb, var(--hhs-theme-dataframe-header-background-color) 78%, transparent);
+  border: 1px solid var(--hhs-theme-dataframe-border-color);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  color: var(--hhs-markdown-table-header);
+  font-weight: 750;
+  padding: 0.7rem 0.85rem;
+  text-align: center;
+}
+
+.st-key-hhs_firebase_aliases_table_panel [data-testid="stVerticalBlock"] {
+  gap: 0 !important;
+  row-gap: 0 !important;
+}
+
+.st-key-hhs_firebase_aliases_table_panel [data-testid="stDataFrame"] {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+
+.st-key-hhs_firebase_aliases_table_panel [data-testid="stDataFrame"] > div,
+.st-key-hhs_firebase_aliases_table_panel [data-testid="stDataFrame"] > div > div {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+
 div[class*="st-key-"][class*="_markdown_table"] [data-testid="stDataFrame"] {
   border-radius: 0;
   border-width: 0 !important;

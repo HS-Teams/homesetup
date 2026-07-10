@@ -148,7 +148,7 @@ HHS_VIEW_LABELS = {
     "STARSHIP": "留 Starship",
     "SETTINGS": "שּׂ Settings",
     "HSPM": " HSPM",
-    "Firebase": " Firebase",
+    "Firebase": " Firebase",
 }
 CONFIG_VIEWS = ("ENV", "PATH", "DIR", "CMD", "ALIAS")
 CONFIG_VIEW_LABELS = {

@@ -307,7 +307,6 @@ from hhs_ui.table_ui import (
     config_filter_columns,
     config_filter_display_label,
     config_filter_return_value,
-    display_path_value,
     home_shopt_is_off,
     home_shopt_is_on,
     home_tool_is_aliased,
@@ -1271,6 +1270,23 @@ def config_file_path(config_view: str) -> str:
     return default_config_file_path(file_name)
 
 
+def hhs_setup_file_path() -> str:
+    """Return the effective HomeSetup setup file path for the active host."""
+    env_name = "HHS_SETUP_FILE"
+    file_name = ".homesetup.toml"
+    if connected_ssh_host():
+        values = remote_environment_values([env_name, "HHS_DIR", "HOME"])
+        raw_path = values.get(env_name, "").strip()
+        if raw_path:
+            return expand_path_with_environment(raw_path, values)
+        return default_config_file_path(file_name)
+
+    raw_path = os.environ.get(env_name, "").strip()
+    if raw_path:
+        return os.path.expandvars(os.path.expanduser(raw_path))
+    return default_config_file_path(file_name)
+
+
 def file_uri_for_path(path_value: str) -> str:
     """Return a file URI for a POSIX-style absolute path."""
     clean_path = posixpath.normpath(path_value.strip())
@@ -1283,25 +1299,32 @@ def search_open_href(path_or_uri: str) -> str:
     return f"?{query}"
 
 
-def render_openable_config_path(display_path: str, file_path: str) -> None:
-    """Render a subtitle path link that opens a file through __hhs_open."""
-    clean_display_path = display_path.strip()
+def openable_file_label(file_path: str) -> str:
+    """Return the filename shown inside an openable file pill."""
     clean_file_path = file_path.strip()
-    if not clean_display_path or not clean_file_path:
+    return posixpath.basename(clean_file_path.rstrip("/")) or clean_file_path
+
+
+def render_openable_file_pill(label: str, file_path: str) -> None:
+    """Render a clickable filename pill that opens the full file path."""
+    clean_file_path = file_path.strip()
+    if not clean_file_path:
         return
     file_uri = file_uri_for_path(clean_file_path)
     href = html.escape(search_open_href(file_uri), quote=True)
     safe_file_uri = html.escape(file_uri, quote=True)
-    safe_display_path = html.escape(clean_display_path)
+    safe_label = html.escape(label.strip())
+    safe_file_label = html.escape(openable_file_label(clean_file_path))
     st.markdown(
         (
-            '<h3 class="hhs-view-subtitle">'
-            f'<a class="hhs-view-subtitle-link" href="{href}" '
+            '<div class="hhs-config-file-pill-row">'
+            f'<span class="hhs-config-file-pill-label">{safe_label}</span>'
+            f'<a class="hhs-config-file-pill" href="{href}" '
             'target="_self" '
             f'title="{safe_file_uri}" '
             f'data-hhs-open-path="{safe_file_uri}">'
-            f"<code>{safe_display_path}</code></a>"
-            "</h3>"
+            f'<span aria-hidden="true"></span>{safe_file_label}</a>'
+            "</div>"
         ),
         unsafe_allow_html=True,
     )
@@ -1312,23 +1335,10 @@ def render_config_file_pill(config_view: str) -> None:
     file_path = config_file_path(config_view)
     if not file_path:
         return
-    file_name = posixpath.basename(file_path.rstrip("/")) or file_path
-    file_uri = file_uri_for_path(file_path)
-    href = html.escape(search_open_href(file_uri), quote=True)
-    safe_file_uri = html.escape(file_uri, quote=True)
     page_label = CONFIG_FILE_PAGE_LABELS.get(config_view, "Environment")
-    st.markdown(
-        (
-            '<div class="hhs-config-file-pill-row">'
-            f'<span class="hhs-config-file-pill-label">Custom {html.escape(page_label)} file:</span>'
-            f'<a class="hhs-config-file-pill" href="{href}" '
-            'target="_self" '
-            f'title="{safe_file_uri}" '
-            f'data-hhs-open-path="{safe_file_uri}">'
-            f'<span aria-hidden="true"></span>{html.escape(file_name)}</a>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
+    render_openable_file_pill(
+        f"Custom {page_label} file:",
+        file_path,
     )
 
 
@@ -4859,9 +4869,8 @@ def render_monitor_logs_panel() -> None:
         ".st-key-monitor_log_controls",
         "hhs.monitor.logs.controls.expanded",
     )
-    log_file_path, log_environment = hhs_log_file_info(selected_log)
-    log_display_path = display_path_value(log_file_path, log_environment)
-    render_openable_config_path(log_display_path, log_file_path)
+    log_file_path = hhs_log_file_info(selected_log)[0]
+    render_openable_file_pill("Selected log file:", log_file_path)
     if tail_enabled:
         render_monitor_logs_tail(
             selected_log, selected_level, tail_lines, log_filter, log_text_filter
@@ -5064,6 +5073,7 @@ def render_hhs_setup_panel() -> None:
         )
         return
 
+    render_openable_file_pill("Current setup file:", hhs_setup_file_path())
     sync_hhs_setup_form_state(parse_hhs_setup_settings(result.stdout))
     apply_pending_hhs_setup_form_revert()
     action_running = background_job_is_running(HHS_SETUP_ACTION_JOB)
@@ -5300,7 +5310,7 @@ def render_hhs_settings_actions(
             )
         with truncate_col:
             st.button(
-                " Truncate",
+                "ﮊ Truncate",
                 key="hhs_settings_truncate_button",
                 help="Truncate",
                 on_click=request_hhs_settings_truncate,
@@ -5440,8 +5450,8 @@ def render_hhs_starship_controls(
     )
     with st.container(key="hhs_starship_controls"):
         with st.expander("Configurations", expanded=True):
-            cache_col, config_col, preset_col, apply_col, edit_col = st.columns(
-                [1.2, 1.6, 1.1, 0.22, 0.22],
+            cache_col, preset_col, apply_col, edit_col = st.columns(
+                [1.4, 1.1, 0.22, 0.22],
                 gap="small",
                 vertical_alignment="bottom",
             )
@@ -5449,12 +5459,6 @@ def render_hhs_starship_controls(
                 st.text_input(
                     "Cache",
                     value=cache_path,
-                    disabled=True,
-                )
-            with config_col:
-                st.text_input(
-                    "Config",
-                    value=config_path,
                     disabled=True,
                 )
             with preset_col:
@@ -5550,6 +5554,10 @@ def render_hhs_starship_panel() -> None:
     starship_info = parse_hhs_starship_info(result.stdout)
     action_running = background_job_is_running(HHS_STARSHIP_ACTION_JOB)
     render_hhs_starship_controls(starship_info, action_running)
+    render_openable_file_pill(
+        "Current Starship file:",
+        str(starship_info.get("config", "")).strip(),
+    )
     render_hhs_starship_config_editor(starship_info, action_running)
 
 
@@ -5744,6 +5752,25 @@ def hhs_firebase_creds_file(project_id: str) -> Path:
     return Path(creds_template.format(project_id=project_id)).expanduser()
 
 
+def hhs_firebase_creds_file_path(firebase_info: dict[str, object]) -> str:
+    """Return the effective Firebase credentials file path for display."""
+    raw_environment = firebase_info.get("environment", {})
+    environment = (
+        {str(name): str(value) for name, value in raw_environment.items()}
+        if isinstance(raw_environment, dict)
+        else {}
+    )
+    raw_path = environment.get("HHS_FIREBASE_CREDS_FILE", "").strip()
+    if not raw_path:
+        raw_path = "~/firebase-credentials.json"
+    project_id = hhs_firebase_info_values(firebase_info).get("PROJECT_ID", "").strip()
+    try:
+        raw_path = raw_path.format(project_id=project_id)
+    except (IndexError, KeyError, ValueError):
+        pass
+    return expand_path_with_environment(raw_path, environment)
+
+
 def hhs_firebase_configuration() -> object:
     """Return the hspylib Firebase configuration."""
     from datasource.firebase.firebase_configuration import FirebaseConfiguration
@@ -5897,39 +5924,36 @@ def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, s
     return rows
 
 
+def style_hhs_firebase_alias_row(row: pd.Series) -> list[str]:
+    """Return dataframe row styles for Firebase alias metadata."""
+    return [
+        "color: var(--hhs-secondary); font-weight: 800;"
+        if column == "Group"
+        else "color: var(--hhs-theme-primary-color); font-weight: 800;"
+        if column == "Alias"
+        else ""
+        for column in row.index
+    ]
+
+
 def render_hhs_firebase_aliases_table(action_running: bool) -> str:
     """Render the Firebase aliases table and return the selected alias."""
     alias_rows = firebase_alias_table_rows(fetch_firebase_aliases_with_preloader())
-    alias_keys = [
-        f"{row['Database']}:{row['Group']}:{row['Alias']}" for row in alias_rows
-    ]
-    selected_values = render_markdown_table(
-        "Firebase Aliases",
-        [row["Database"] for row in alias_rows],
-        alias_keys,
-        [False] * len(alias_rows),
-        "hhs_firebase_aliases",
-        disabled=action_running,
-        variable_values=[row["Group"] for row in alias_rows],
-        item_column_label="Database",
-        variable_column_label="Group",
-        extra_columns={
-            "Alias": [row["Alias"] for row in alias_rows],
-            "Count": [row["Count"] for row in alias_rows],
-        },
-        multi_selection=False,
-        show_value_column=False,
-        column_text_colors={
-            "Group": "var(--hhs-secondary)",
-            "Alias": "var(--hhs-theme-primary-color)",
-        },
-    )
-    selected_aliases = [
-        row["Alias"]
-        for row, selected in zip(alias_rows, selected_values, strict=True)
-        if selected
-    ]
-    return selected_aliases[0] if selected_aliases else ""
+    with st.container(key="hhs_firebase_aliases_table_panel"):
+        st.markdown(
+            '<div class="hhs-table-caption">Firebase Aliases</div>',
+            unsafe_allow_html=True,
+        )
+        _selected_index, selected_row = render_table(
+            alias_rows,
+            key="hhs_firebase_aliases_table",
+            empty_hint="Select a Firebase alias.",
+            headers=["Database", "Group", "Alias", "Count"],
+            checkbox=not action_running,
+            height=hhs_ui.ENV_TABLE_HEIGHT,
+            row_style=style_hhs_firebase_alias_row,
+        )
+    return str(selected_row.get("Alias", "")) if selected_row else ""
 
 
 def render_hhs_firebase_aliases_actions(
@@ -6061,11 +6085,19 @@ def handle_hhs_firebase_config_component_event(event: object) -> bool:
     return False
 
 
-def render_hhs_firebase_configurations(action_running: bool) -> None:
+def render_hhs_firebase_configurations(
+    firebase_info: dict[str, object], action_running: bool
+) -> None:
     """Render Firebase configuration fields and action buttons."""
+    config_file = str(firebase_info.get("config_file", "")).strip()
     with st.container(key="hhs_firebase_configurations"):
+        render_openable_file_pill("Current Firebase file:", config_file)
         with st.expander("Configurations", expanded=True):
             event = render_hhs_firebase_config_component(action_running)
+        render_openable_file_pill(
+            "Firebase credentials file:",
+            hhs_firebase_creds_file_path(firebase_info),
+        )
         selected_alias = render_hhs_firebase_aliases_table(action_running)
         render_hhs_firebase_aliases_actions(selected_alias, action_running)
     if handle_hhs_firebase_config_component_event(event):
@@ -6099,7 +6131,7 @@ def render_hhs_firebase_panel() -> None:
     sync_hhs_firebase_form_state(firebase_info)
     apply_pending_hhs_firebase_form_revert()
     action_running = background_job_is_running(HHS_FIREBASE_ACTION_JOB)
-    render_hhs_firebase_configurations(action_running)
+    render_hhs_firebase_configurations(firebase_info, action_running)
 
 
 def render_hhs_placeholder_panel(hhs_view: str) -> None:
