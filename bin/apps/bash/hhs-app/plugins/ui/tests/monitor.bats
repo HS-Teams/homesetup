@@ -198,11 +198,13 @@ PY
   assert_file_contains_many "${command_catalog_file}" \
 'def colorize_log_output' 'def log_filter_highlight_ranges' 'def filter_log_output' \
     'def normalized_monitor_log_tail_lines'
-  assert_file_contains_many "${ui_file}" \
-    'def selected_monitor_log_level' 'def monitor_log_level_label' \
+  assert_file_contains_many "${monitor_runtime_file}" \
+'def selected_monitor_log_level' 'def monitor_log_level_label' \
     'def normalize_monitor_log_tail_lines_state' 'def handle_monitor_log_tail_lines_change' \
-    'def clear_monitor_log_file' 'def render_monitor_logs_panel' 'def render_log_controls' \
-    'def toggle_monitor_logs_tail' 'tail_lines,' 'render_log_controls' 'render_table_filter_controls(' \
+    'def clear_monitor_log_file' 'def toggle_monitor_logs_tail'
+  assert_file_contains_many "${ui_file}" \
+    'def render_monitor_logs_panel' 'def render_log_controls' \
+    'tail_lines,' 'render_log_controls' 'render_table_filter_controls(' \
     'hhs_ui.LOG_FILTERS'
   assert_file_not_contains "${ui_file}" 'other_options=("Containing",)'
 
@@ -267,7 +269,7 @@ import ast
 import re
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
 module = ast.parse(source)
 selected = [
     node for node in module.body

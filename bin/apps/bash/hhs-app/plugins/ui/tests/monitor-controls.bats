@@ -27,13 +27,17 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 'def history_view_label' 'format_func=history_view_label'
   assert_file_contains "${constants_file}" 'MONITOR_VIEWS = ("DISK", "MEM", "CPU", "PROCESSES", "LOGS")'
   assert_file_contains_many "${ui_file}" \
-'def monitor_view_label' 'format_func=monitor_view_label' 'def normalized_monitor_disk_top_n' \
+'def monitor_view_label' 'format_func=monitor_view_label'
+  assert_file_contains_many "${command_catalog_file}" \
+'def normalized_monitor_disk_top_n' \
     'def normalized_history_stats_top_n'
   assert_file_contains_many "${constants_file}" \
 'DEFAULT_TOP_N = 10' 'MIN_TOP_N = 1' 'MAX_TOP_N = 100' \
     '"monitor_cpu_top_n"' '"monitor_mem_top_n"'
-  assert_file_contains_many "${ui_file}" \
-'def normalized_monitor_top_n' 'st.session_state\["history_stats_top_n"\] = normalized_history_stats_top_n' \
+  assert_file_contains "${command_catalog_file}" 'def normalized_monitor_top_n'
+  assert_file_contains "${ui_file}" \
+'st.session_state\["history_stats_top_n"\] = normalized_history_stats_top_n'
+  assert_file_contains_many "${table_ui_file}" \
     '"min_value": hhs_ui_constants.MIN_TOP_N' '"max_value": hhs_ui_constants.MAX_TOP_N'
 
   run python3 - <<'PY'
@@ -43,6 +47,8 @@ from pathlib import Path
 
 source = (
     Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/monitor_runtime.py").read_text()
     + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )
@@ -100,16 +106,18 @@ PY
 }
 
 @test "when rendering Monitor disk and process controls then remote host context should be preserved" {
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${monitor_runtime_file}" \
 'def monitor_disk_directory_for_host' 'def synchronize_monitor_disk_directory_with_host' \
-    '"ssh_files"' 'return hhs_ui_constants.DEFAULT_TOP_N' 'key="monitor_disk_top_n_input"' \
-    'on_change=handle_monitor_disk_top_n_change' 'def monitor_process_top_n_state_key' \
-    'def handle_monitor_process_top_n_change' 'on_change=handle_monitor_process_top_n_change' \
+    'def monitor_process_top_n_state_key' 'def handle_monitor_process_top_n_change' \
+    'def monitor_metric_command' 'normalized_monitor_process_top_n(metric)'
+  assert_file_contains_many "${ui_file}" \
+    '"ssh_files"' 'key="monitor_disk_top_n_input"' \
+    'on_change=handle_monitor_disk_top_n_change' 'on_change=handle_monitor_process_top_n_change' \
     'on_click=apply_monitor_process_controls' 'for metric in ("CPU", "MEM"):' \
-    'def monitor_metric_command' 'normalized_monitor_process_top_n(metric)' \
     'process_monitor_chart_rows(result.stdout, metric, applied_top_n)' \
     'Top {applied_top_n} {title} processes' 'def process_monitor_chart_rows' \
     'top -b -n 2 -d 1 -o {linux_sort} -w 512' 'No CPU usage above 0.0% found.'
+  assert_file_contains "${command_catalog_file}" 'return hhs_ui_constants.DEFAULT_TOP_N'
 
   run python3 - <<'PY'
 import ast
@@ -121,6 +129,8 @@ from types import SimpleNamespace
 
 source = (
     Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/monitor_runtime.py").read_text()
     + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )
@@ -197,6 +207,10 @@ from types import SimpleNamespace
 
 source = (
     Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/monitor_runtime.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/table_ui.py").read_text()
     + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )
@@ -291,6 +305,10 @@ from pathlib import Path
 
 source = (
     Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/monitor_runtime.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/table_ui.py").read_text()
     + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )
