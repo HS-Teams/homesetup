@@ -21,6 +21,62 @@ load "${HHS_REPO_DIR}/tests/test_helper"
 load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
+@test "when organizing HomeSetup UI modules then responsibilities should be grouped by package" {
+  run python3 - "${HHS_REPO_DIR}/bin/apps/py/hhs_ui" <<'PY'
+import sys
+from pathlib import Path
+
+package_dir = Path(sys.argv[1])
+expected_groups = {
+    "core": {
+        "constants.py",
+        "paths.py",
+        "process_resources.py",
+        "runtime.py",
+        "theme_assets.py",
+        "ui_definitions.py",
+        "ui_state.py",
+    },
+    "execution": {"cache_runtime.py", "command_catalog.py", "command_runtime.py"},
+    "features": {
+        "ai_ui.py",
+        "hhs_app_ui.py",
+        "monitor_runtime.py",
+        "monitor_ui.py",
+        "search_core.py",
+        "search_ui.py",
+        "ssh_core.py",
+        "ssh_explorer_ui.py",
+        "ssh_runtime.py",
+    },
+    "widgets": {
+        "dialog_ui.py",
+        "dom_scripts.py",
+        "feedback_ui.py",
+        "footer_ui.py",
+        "path_picker.py",
+        "status_ui.py",
+        "table_ui.py",
+        "terminal_ui.py",
+    },
+}
+
+assert {path.name for path in package_dir.glob("*.py")} == {
+    "__init__.py",
+    "startup_theme.py",
+    "streamlit_ui.py",
+}
+for group, expected_modules in expected_groups.items():
+    group_dir = package_dir / group
+    assert group_dir.is_dir(), group_dir
+    assert {path.name for path in group_dir.glob("*.py")} == {
+        "__init__.py",
+        *expected_modules,
+    }
+PY
+  assert_success
+}
+
 @test "when launching HomeSetup UI then plugin should use the configured Streamlit UI port" {
   assert_file_contains "${HHS_REPO_DIR}/dotfiles/bash/hhsrc.bash" 'HHS_STREAMLIT_UI_PORT:-18501'
 

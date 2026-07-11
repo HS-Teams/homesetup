@@ -94,7 +94,7 @@ import sys
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 ssh_runtime_source = Path(sys.argv[1]).read_text()
-terminal_source = Path("bin/apps/py/hhs_ui/terminal_ui.py").read_text()
+terminal_source = Path("bin/apps/py/hhs_ui/widgets/terminal_ui.py").read_text()
 open_body = ui_source.split("def open_document_view", 1)[1].split("\ndef ", 1)[0]
 close_body = ui_source.split("def close_document_view", 1)[1].split("\ndef ", 1)[0]
 render_main_body = ui_source.split("def render_main_view", 1)[1].split("\ndef ", 1)[0]
@@ -152,7 +152,7 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path("bin/apps/py/hhs_ui/terminal_ui.py").read_text(encoding="utf-8")
+source = Path("bin/apps/py/hhs_ui/widgets/terminal_ui.py").read_text(encoding="utf-8")
 tree = ast.parse(source)
 source_lines = source.splitlines()
 functions = {
@@ -233,7 +233,7 @@ PY
   run python3 - <<'PY'
 from pathlib import Path
 
-terminal_source = Path("bin/apps/py/hhs_ui/terminal_ui.py").read_text()
+terminal_source = Path("bin/apps/py/hhs_ui/widgets/terminal_ui.py").read_text()
 remote_body = terminal_source.split("def build_ttyd_remote_command", 1)[1].split("\ndef ", 1)[0]
 assert '"ssh",' in remote_body
 assert '"-tt",' in remote_body
@@ -269,8 +269,8 @@ PY
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-terminal_source = Path("bin/apps/py/hhs_ui/terminal_ui.py").read_text()
-process_resources_source = Path("bin/apps/py/hhs_ui/process_resources.py").read_text()
+terminal_source = Path("bin/apps/py/hhs_ui/widgets/terminal_ui.py").read_text()
+process_resources_source = Path("bin/apps/py/hhs_ui/core/process_resources.py").read_text()
 assert '"working_dir": footer_working_directory()' in terminal_source
 assert 'if request_path == "/open-working-directory":' in terminal_source
 open_working_dir_body = terminal_source.split("def handle_open_working_directory_request", 1)[1].split("\n    def ", 1)[0]
@@ -319,7 +319,7 @@ import sys
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 status_source = Path(sys.argv[1]).read_text()
 command_runtime_source = Path(sys.argv[2]).read_text()
-process_resources_source = Path("bin/apps/py/hhs_ui/process_resources.py").read_text()
+process_resources_source = Path("bin/apps/py/hhs_ui/core/process_resources.py").read_text()
 main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
 disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
 connect_index = main_body.index("execute_pending_ssh_connection()")
@@ -412,8 +412,8 @@ PY
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-feedback_source = Path("bin/apps/py/hhs_ui/feedback_ui.py").read_text()
-dialog_source = Path("bin/apps/py/hhs_ui/dialog_ui.py").read_text()
+feedback_source = Path("bin/apps/py/hhs_ui/widgets/feedback_ui.py").read_text()
+dialog_source = Path("bin/apps/py/hhs_ui/widgets/dialog_ui.py").read_text()
 assert ui_source.count("@st.dialog(") == 0
 assert feedback_source.count("@st.dialog(") == 0
 assert dialog_source.count("@st.dialog(") == 1

@@ -15,9 +15,9 @@ import pandas as pd
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.theme_assets import theme_custom_properties
-from hhs_ui.ui_state import save_ui_state
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.core.theme_assets import theme_custom_properties
+from hhs_ui.core.ui_state import save_ui_state
 
 TableControlsResult = TypeVar("TableControlsResult")
 

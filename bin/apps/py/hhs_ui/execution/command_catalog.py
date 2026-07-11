@@ -15,11 +15,11 @@ from functools import lru_cache
 from pathlib import Path
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.paths import homesetup_home, ollama_history_file, ollama_prompt_file
-from hhs_ui.runtime import RUN_SHELL
-from hhs_ui.ssh_core import ssh_config_file, ssh_config_hostname, ssh_config_option
-from hhs_ui.ui_definitions import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.core.paths import homesetup_home, ollama_history_file, ollama_prompt_file
+from hhs_ui.core.runtime import RUN_SHELL
+from hhs_ui.features.ssh_core import ssh_config_file, ssh_config_hostname, ssh_config_option
+from hhs_ui.core.ui_definitions import (
     FIREBASE_CONFIG_CONTENT_OUTPUT_MARKER,
     FIREBASE_CONFIG_END_OUTPUT_MARKER,
     FIREBASE_CONFIG_FILE_OUTPUT_MARKER,

@@ -19,8 +19,8 @@ from pathlib import Path
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.cache_runtime import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.cache_runtime import (
     background_command_metadata,
     cache_background_command_result,
     cache_delete_tag,
@@ -32,7 +32,7 @@ from hhs_ui.cache_runtime import (
     parse_rows_cached,
     safe_cache_tag,
 )
-from hhs_ui.command_catalog import (
+from hhs_ui.execution.command_catalog import (
     clean_command_status_message,
     log_filter_highlight_ranges,
     open_file,
@@ -40,7 +40,7 @@ from hhs_ui.command_catalog import (
     sanitize_remote_command_result,
     strip_ansi,
 )
-from hhs_ui.command_runtime import (
+from hhs_ui.execution.command_runtime import (
     background_job_is_running,
     background_job_result,
     background_job_state,
@@ -49,8 +49,8 @@ from hhs_ui.command_runtime import (
     start_background_bash_command,
     stop_background_job,
 )
-from hhs_ui.path_picker import render_folder_picker_dialog, request_path_picker
-from hhs_ui.search_core import (
+from hhs_ui.widgets.path_picker import render_folder_picker_dialog, request_path_picker
+from hhs_ui.features.search_core import (
     build_hhs_search_command,
     normalized_search_option_values,
     normalized_search_type,
@@ -61,21 +61,21 @@ from hhs_ui.search_core import (
     search_result_download_name,
     search_type_label,
 )
-from hhs_ui.ssh_runtime import (
+from hhs_ui.features.ssh_runtime import (
     command_remote_host,
     connected_ssh_host,
     effective_bash_command,
     handle_remote_command_result,
 )
-from hhs_ui.status_ui import push_floating_status
-from hhs_ui.table_ui import (
+from hhs_ui.widgets.status_ui import push_floating_status
+from hhs_ui.widgets.table_ui import (
     clean_table_text_filter_value,
     clear_table_other_filter,
     display_path_value,
     normalize_table_text_filter_state,
 )
-from hhs_ui.ui_definitions import SEARCH_COMMAND_JOB, SEARCH_OPEN_JOB
-from hhs_ui.ui_state import save_ui_state
+from hhs_ui.core.ui_definitions import SEARCH_COMMAND_JOB, SEARCH_OPEN_JOB
+from hhs_ui.core.ui_state import save_ui_state
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:

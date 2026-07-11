@@ -18,8 +18,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.cache_runtime import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.cache_runtime import (
     cache_background_command_result,
     cache_delete_tag,
     cached_background_command_result,
@@ -27,7 +27,7 @@ from hhs_ui.cache_runtime import (
     render_cached_command_result,
     start_cached_background_command,
 )
-from hhs_ui.command_catalog import (
+from hhs_ui.execution.command_catalog import (
     build_port_reachability_command,
     build_ssh_tunnels_command,
     display_ssh_tunnel_rows,
@@ -38,7 +38,7 @@ from hhs_ui.command_catalog import (
     ssh_tunnel_status_cell_style,
     strip_ansi,
 )
-from hhs_ui.command_runtime import (
+from hhs_ui.execution.command_runtime import (
     background_job_is_running,
     background_job_result,
     background_job_state,
@@ -46,12 +46,12 @@ from hhs_ui.command_runtime import (
     run_bash_command,
     start_background_bash_command,
 )
-from hhs_ui.dialog_ui import pop_dialog
-from hhs_ui.feedback_ui import render_command_loader
-from hhs_ui.ssh_core import ssh_config_option, ssh_control_path
-from hhs_ui.ssh_runtime import connected_ssh_host
-from hhs_ui.status_ui import push_floating_status
-from hhs_ui.table_ui import (
+from hhs_ui.widgets.dialog_ui import pop_dialog
+from hhs_ui.widgets.feedback_ui import render_command_loader
+from hhs_ui.features.ssh_core import ssh_config_option, ssh_control_path
+from hhs_ui.features.ssh_runtime import connected_ssh_host
+from hhs_ui.widgets.status_ui import push_floating_status
+from hhs_ui.widgets.table_ui import (
     display_table_rows,
     render_table,
     render_table_controls_panel,
@@ -59,13 +59,13 @@ from hhs_ui.table_ui import (
     resolve_css_custom_property,
     table_height,
 )
-from hhs_ui.theme_assets import theme_custom_properties
-from hhs_ui.ui_definitions import (
+from hhs_ui.core.theme_assets import theme_custom_properties
+from hhs_ui.core.ui_definitions import (
     SSH_EXPLORER_ACTION_JOB,
     SSH_EXPLORER_DELETE_JOB,
     SSH_FILE_TRANSFER_JOB,
 )
-from hhs_ui.ui_state import save_ui_state
+from hhs_ui.core.ui_state import save_ui_state
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:

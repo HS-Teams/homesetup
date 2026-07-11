@@ -269,7 +269,7 @@ import ast
 import re
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+source = Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
 module = ast.parse(source)
 selected = [
     node for node in module.body

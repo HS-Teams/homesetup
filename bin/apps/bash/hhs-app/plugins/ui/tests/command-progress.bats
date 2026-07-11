@@ -66,7 +66,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'start=FluidEvent(' 'finish=FluidEvent(' 'events.start.emit(' 'events.finish.emit(' \
     'events.start.subscribe(cb_event_handler=enqueue_command_preloader_event)' \
     'events.finish.subscribe(cb_event_handler=enqueue_command_preloader_event)' '"hhs:command-preloader"'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/ui_definitions.py" \
+  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/core/ui_definitions.py" \
     'COMMAND_PRELOADER_BUS = "hhs-ui-command-preloader"'
   assert_file_contains_many "${ui_file}" \
     'show_preloader_event: bool = False' '"preloader_token": command_preloader_token' \

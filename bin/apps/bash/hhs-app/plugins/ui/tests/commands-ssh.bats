@@ -90,7 +90,7 @@ PY
   run python3 - <<'PY'
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs_ui/ssh_runtime.py").read_text()
+source = Path("bin/apps/py/hhs_ui/features/ssh_runtime.py").read_text()
 start_body = source.split("def execute_pending_ssh_connection", 1)[1].split("\ndef ", 1)[0]
 complete_body = source.split("def complete_ssh_connection", 1)[1].split("\ndef ", 1)[0]
 body = f"{start_body}\n{complete_body}"
@@ -747,7 +747,7 @@ PY
 import ast
 from pathlib import Path
 
-tree = ast.parse(Path("bin/apps/py/hhs_ui/ssh_runtime.py").read_text())
+tree = ast.parse(Path("bin/apps/py/hhs_ui/features/ssh_runtime.py").read_text())
 for node in ast.walk(tree):
     if isinstance(node, ast.FunctionDef) and node.name == "render_ssh_connection_dialog":
         assert "st.stop()" not in ast.unparse(node)

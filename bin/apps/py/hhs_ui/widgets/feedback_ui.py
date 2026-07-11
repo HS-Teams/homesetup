@@ -12,10 +12,10 @@ from collections.abc import Callable
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.dialog_ui import close_all_dialogs
-from hhs_ui.process_resources import process_resource_registry
-from hhs_ui.ui_definitions import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.widgets.dialog_ui import close_all_dialogs
+from hhs_ui.core.process_resources import process_resource_registry
+from hhs_ui.core.ui_definitions import (
     COMMAND_PRELOADER_BUS,
     COMMAND_PRELOADER_EVENT_BUS_REGISTRY_KEY,
     COMMAND_PRELOADER_EVENT_QUEUE_KEY,

@@ -8,9 +8,9 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.87"
+VERSION = "0.1.88"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
-APP_DIR = Path(__file__).resolve().parent
+APP_DIR = Path(__file__).resolve().parents[1]
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
 APP_THEME_CSS_FILE = APP_DIR / "themes/dracula.css"
 SSH_EXPLORER_COMPONENT_DIR = APP_DIR / "components/ssh_explorer"

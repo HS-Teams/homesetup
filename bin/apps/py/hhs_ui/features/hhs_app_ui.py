@@ -21,13 +21,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.cache_runtime import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.cache_runtime import (
     cache_delete_tag,
     parse_rows_cached,
     render_cached_command_result,
 )
-from hhs_ui.command_catalog import (
+from hhs_ui.execution.command_catalog import (
     build_hhs_firebase_alias_action_command,
     build_hhs_firebase_info_command,
     build_hhs_hspm_command,
@@ -54,23 +54,23 @@ from hhs_ui.command_catalog import (
     render_hhs_firebase_config_content,
     strip_ansi,
 )
-from hhs_ui.command_runtime import (
+from hhs_ui.execution.command_runtime import (
     background_job_is_running,
     background_job_result,
     background_job_state,
     render_background_job_status,
 )
-from hhs_ui.feedback_ui import render_command_loader
-from hhs_ui.paths import homesetup_config_dir, homesetup_home
-from hhs_ui.search_ui import expand_path_with_environment
-from hhs_ui.ssh_runtime import connected_ssh_host
-from hhs_ui.status_ui import push_floating_status
-from hhs_ui.table_ui import (
+from hhs_ui.widgets.feedback_ui import render_command_loader
+from hhs_ui.core.paths import homesetup_config_dir, homesetup_home
+from hhs_ui.features.search_ui import expand_path_with_environment
+from hhs_ui.features.ssh_runtime import connected_ssh_host
+from hhs_ui.widgets.status_ui import push_floating_status
+from hhs_ui.widgets.table_ui import (
     render_markdown_table,
     resolve_css_custom_property,
 )
-from hhs_ui.theme_assets import theme_custom_properties
-from hhs_ui.ui_definitions import (
+from hhs_ui.core.theme_assets import theme_custom_properties
+from hhs_ui.core.ui_definitions import (
     HHS_FIREBASE_ACTION_JOB,
     HHS_FIREBASE_FIELDS,
     HHS_HSPM_CATALOG_CACHE_TAG,
@@ -81,7 +81,7 @@ from hhs_ui.ui_definitions import (
     HHS_SETUP_SETTINGS,
     HHS_STARSHIP_ACTION_JOB,
 )
-from hhs_ui.ui_state import save_ui_state
+from hhs_ui.core.ui_state import save_ui_state
 
 
 HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH = 165

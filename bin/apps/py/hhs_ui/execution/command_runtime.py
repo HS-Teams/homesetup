@@ -14,23 +14,23 @@ from pathlib import Path
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.command_catalog import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.command_catalog import (
     completed_disconnected_ssh_process,
     sanitize_remote_command_result,
     ssh_shared_connection_closed,
 )
-from hhs_ui.feedback_ui import (
+from hhs_ui.widgets.feedback_ui import (
     emit_command_preloader_finish,
     emit_command_preloader_start,
     render_command_loader,
     render_command_preloader_events,
     set_overlay,
 )
-from hhs_ui.runtime import RUN_SHELL
-from hhs_ui.table_ui import table_selection_rerun_in_progress
-from hhs_ui.terminal_ui import stop_process
-from hhs_ui.ui_definitions import BACKGROUND_JOB_STATE_KEY_PREFIX
+from hhs_ui.core.runtime import RUN_SHELL
+from hhs_ui.widgets.table_ui import table_selection_rerun_in_progress
+from hhs_ui.widgets.terminal_ui import stop_process
+from hhs_ui.core.ui_definitions import BACKGROUND_JOB_STATE_KEY_PREFIX
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:

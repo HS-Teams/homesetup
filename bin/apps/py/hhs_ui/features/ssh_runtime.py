@@ -10,30 +10,30 @@ from pathlib import Path
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.cache_runtime import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.cache_runtime import (
     cache_clear,
     cache_get,
     expire_host_scoped_command_state,
     load_ui_cache,
     save_ui_cache,
 )
-from hhs_ui.command_catalog import (
+from hhs_ui.execution.command_catalog import (
     clean_command_status_message,
     ssh_output_is_only_shared_close,
     ssh_shared_connection_closed,
     strip_ansi,
 )
-from hhs_ui.command_runtime import (
+from hhs_ui.execution.command_runtime import (
     background_job_result,
     background_job_state,
     render_background_job_status,
     run_bash_command,
     start_background_bash_command,
 )
-from hhs_ui.dialog_ui import pop_dialog
-from hhs_ui.feedback_ui import render_command_preloader_events, set_overlay
-from hhs_ui.ssh_core import (
+from hhs_ui.widgets.dialog_ui import pop_dialog
+from hhs_ui.widgets.feedback_ui import render_command_preloader_events, set_overlay
+from hhs_ui.features.ssh_core import (
     build_ssh_check_command,
     build_ssh_connect_command,
     build_ssh_disconnect_command,
@@ -42,17 +42,17 @@ from hhs_ui.ssh_core import (
     ssh_config_hosts,
     ssh_connection_display,
 )
-from hhs_ui.status_ui import push_floating_status
-from hhs_ui.terminal_ui import (
+from hhs_ui.widgets.status_ui import push_floating_status
+from hhs_ui.widgets.terminal_ui import (
     render_ttyd_terminal_frame_cleanup_script,
     stop_ttyd_session,
 )
-from hhs_ui.ui_definitions import (
+from hhs_ui.core.ui_definitions import (
     HOST_SWITCH_VIEW_STATE_KEY,
     SSH_CONNECT_JOB,
     SSH_DISCONNECT_JOB,
 )
-from hhs_ui.ui_state import is_persistable_ui_value, load_ui_state, save_ui_state
+from hhs_ui.core.ui_state import is_persistable_ui_value, load_ui_state, save_ui_state
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:

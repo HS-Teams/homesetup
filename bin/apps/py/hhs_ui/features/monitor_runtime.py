@@ -11,15 +11,15 @@ import subprocess
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.cache_runtime import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.cache_runtime import (
     cache_delete_command,
     cache_delete_tag,
     cached_background_command_result,
     complete_cached_background_command,
     start_cached_background_command,
 )
-from hhs_ui.command_catalog import (
+from hhs_ui.execution.command_catalog import (
     build_hhs_history_stats_command,
     build_hhs_process_list_command,
     build_process_monitor_command,
@@ -29,15 +29,15 @@ from hhs_ui.command_catalog import (
     normalized_monitor_top_n,
     strip_ansi,
 )
-from hhs_ui.paths import hhs_log_file_path, hhs_log_files, homesetup_home
-from hhs_ui.ssh_runtime import command_remote_host, connected_ssh_host
-from hhs_ui.status_ui import push_floating_status
-from hhs_ui.ui_definitions import (
+from hhs_ui.core.paths import hhs_log_file_path, hhs_log_files, homesetup_home
+from hhs_ui.features.ssh_runtime import command_remote_host, connected_ssh_host
+from hhs_ui.widgets.status_ui import push_floating_status
+from hhs_ui.core.ui_definitions import (
     MONITOR_CPU_JOB,
     MONITOR_MEM_JOB,
     MONITOR_PROCESS_LIST_JOB,
 )
-from hhs_ui.ui_state import save_ui_state
+from hhs_ui.core.ui_state import save_ui_state
 
 
 def normalize_monitor_log_tail_lines_state() -> int:

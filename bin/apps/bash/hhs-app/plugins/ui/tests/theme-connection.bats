@@ -53,8 +53,8 @@ import re
 from pathlib import Path
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-cache_runtime_source = Path("bin/apps/py/hhs_ui/cache_runtime.py").read_text()
-status_source = Path("bin/apps/py/hhs_ui/status_ui.py").read_text()
+cache_runtime_source = Path("bin/apps/py/hhs_ui/execution/cache_runtime.py").read_text()
+status_source = Path("bin/apps/py/hhs_ui/widgets/status_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs_ui/streamlit_ui.css").read_text()
 dracula_css = Path("bin/apps/py/hhs_ui/themes/dracula.css").read_text()
 homesetup_css = Path("bin/apps/py/hhs_ui/themes/homesetup.css").read_text()
@@ -103,7 +103,7 @@ assert 'FOOTER_VERSION_OUTPUT_MARKER' in ui_source
 assert 'def parse_homesetup_version_output' in ui_source
 assert 'def record_footer_homesetup_version_error' in ui_source
 assert 'hhs_ui.VERSION' not in homesetup_version_body
-constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
+constants_source = Path("bin/apps/py/hhs_ui/core/constants.py").read_text()
 init_source = Path("bin/apps/py/hhs_ui/__init__.py").read_text()
 assert 'FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"' in constants_source
 assert 'FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"' in constants_source
@@ -397,7 +397,7 @@ assert 'def store_updater_check_result' in ui_source
 assert 'def execute_due_updater_check' in ui_source
 assert 'def execute_mount_updater_check' in ui_source
 assert 'execute_due_updater_check()' in ui_source
-constants_source = Path("bin/apps/py/hhs_ui/constants.py").read_text()
+constants_source = Path("bin/apps/py/hhs_ui/core/constants.py").read_text()
 assert "UPDATER_CHECK_INTERVAL_SECONDS" not in constants_source
 assert "UPDATER_CHECK_INTERVAL_SECONDS" not in init_source
 store_updater_body = ui_source.split("def store_updater_check_result", 1)[1].split("\ndef ", 1)[0]

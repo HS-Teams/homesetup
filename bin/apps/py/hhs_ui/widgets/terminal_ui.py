@@ -27,11 +27,11 @@ from pathlib import Path
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.command_catalog import open_file
-from hhs_ui.process_resources import process_resource_registry, process_resource_state
-from hhs_ui.runtime import RUN_SHELL
-from hhs_ui.ssh_core import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.command_catalog import open_file
+from hhs_ui.core.process_resources import process_resource_registry, process_resource_state
+from hhs_ui.core.runtime import RUN_SHELL
+from hhs_ui.features.ssh_core import (
     build_ssh_disconnect_command,
     ssh_config_option_args,
     ssh_control_path,

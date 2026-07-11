@@ -13,15 +13,15 @@ import pandas as pd
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.cache_runtime import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.cache_runtime import (
     background_command_metadata,
     cache_background_command_result,
     cache_delete_tag,
     parse_rows_cached,
     render_cached_command_result,
 )
-from hhs_ui.command_catalog import (
+from hhs_ui.execution.command_catalog import (
     ai_context_used_meta_html,
     build_hhs_ask_command,
     build_hhs_ask_context_command,
@@ -46,7 +46,7 @@ from hhs_ui.command_catalog import (
     prepare_ai_chat_content,
     strip_ansi,
 )
-from hhs_ui.command_runtime import (
+from hhs_ui.execution.command_runtime import (
     background_job_is_running,
     background_job_result,
     background_job_state,
@@ -54,19 +54,19 @@ from hhs_ui.command_runtime import (
     run_bash_command,
     start_background_bash_command,
 )
-from hhs_ui.dialog_ui import pop_dialog
-from hhs_ui.feedback_ui import render_terminal_output
-from hhs_ui.ssh_runtime import connected_ssh_host
-from hhs_ui.status_ui import push_floating_status
-from hhs_ui.table_ui import render_table, render_view_subtitle
-from hhs_ui.ui_definitions import (
+from hhs_ui.widgets.dialog_ui import pop_dialog
+from hhs_ui.widgets.feedback_ui import render_terminal_output
+from hhs_ui.features.ssh_runtime import connected_ssh_host
+from hhs_ui.widgets.status_ui import push_floating_status
+from hhs_ui.widgets.table_ui import render_table, render_view_subtitle
+from hhs_ui.core.ui_definitions import (
     AI_ASK_JOB,
     AI_CONTEXT_ACTION_JOB,
     AI_MODEL_DELETE_JOB,
     AI_MODEL_SELECT_JOB,
     AI_PROMPT_ACTION_JOB,
 )
-from hhs_ui.ui_state import save_ui_state
+from hhs_ui.core.ui_state import save_ui_state
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:

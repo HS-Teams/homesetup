@@ -11,13 +11,13 @@ import altair as alt
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.cache_runtime import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.cache_runtime import (
     parse_rows_cached,
     render_cached_command_result,
     rendered_log_output_cached,
 )
-from hhs_ui.command_catalog import (
+from hhs_ui.execution.command_catalog import (
     build_hhs_history_stats_command,
     build_hhs_logs_command,
     clean_command_status_message,
@@ -30,9 +30,9 @@ from hhs_ui.command_catalog import (
     parse_hhs_process_list,
     strip_ansi,
 )
-from hhs_ui.command_runtime import background_job_is_running, render_background_job_status
-from hhs_ui.feedback_ui import render_command_loader, render_terminal_output
-from hhs_ui.monitor_runtime import (
+from hhs_ui.execution.command_runtime import background_job_is_running, render_background_job_status
+from hhs_ui.widgets.feedback_ui import render_command_loader, render_terminal_output
+from hhs_ui.features.monitor_runtime import (
     applied_monitor_disk_directory,
     apply_monitor_disk_controls,
     apply_monitor_process_controls,
@@ -59,8 +59,8 @@ from hhs_ui.monitor_runtime import (
     start_monitor_process_list_refresh,
     toggle_monitor_logs_tail,
 )
-from hhs_ui.paths import hhs_log_dir, hhs_log_file_info, hhs_log_files
-from hhs_ui.table_ui import (
+from hhs_ui.core.paths import hhs_log_dir, hhs_log_file_info, hhs_log_files
+from hhs_ui.widgets.table_ui import (
     plot_chart,
     render_chart_controls,
     render_standard_number_spinner,
@@ -68,8 +68,8 @@ from hhs_ui.table_ui import (
     render_table_controls_panel,
     render_table_filter_controls,
 )
-from hhs_ui.ui_definitions import MONITOR_PROCESS_ACTION_JOB, MONITOR_PROCESS_LIST_JOB
-from hhs_ui.ui_state import save_ui_state
+from hhs_ui.core.ui_definitions import MONITOR_PROCESS_ACTION_JOB, MONITOR_PROCESS_LIST_JOB
+from hhs_ui.core.ui_state import save_ui_state
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:

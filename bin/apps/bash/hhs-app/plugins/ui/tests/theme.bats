@@ -224,7 +224,7 @@ sys.modules["pandas"] = types.ModuleType("pandas")
 spec = importlib.util.spec_from_file_location("streamlit_ui_under_test", app_dir / "streamlit_ui.py")
 ui = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ui)
-import hhs_ui.theme_assets as theme_assets
+import hhs_ui.core.theme_assets as theme_assets
 
 with tempfile.TemporaryDirectory() as tmpdir:
     tmp_path = Path(tmpdir)

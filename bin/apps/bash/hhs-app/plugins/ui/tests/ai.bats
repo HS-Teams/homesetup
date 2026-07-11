@@ -121,7 +121,7 @@ PY
     'def run_hhs_ask_prompt_file' 'def run_hhs_save_ask_prompt_file' \
     'def run_hhs_revert_ask_prompt_file' 'def ingest_ai_context_upload' \
     'def run_hhs_ask_ingest'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/constants.py" 'AI_CONTEXT_UPLOAD_TYPES = ('
+  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/core/constants.py" 'AI_CONTEXT_UPLOAD_TYPES = ('
 
   assert_file_contains "${ui_file}" 'st.file_uploader('
 
@@ -137,7 +137,7 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
-source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+source = Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
 tree = ast.parse(source)
 source_lines = source.splitlines()
 functions = {

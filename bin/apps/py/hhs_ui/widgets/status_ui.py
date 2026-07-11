@@ -11,10 +11,10 @@ from collections.abc import Callable
 
 import streamlit as st
 
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.command_catalog import clean_command_status_message
-from hhs_ui.paths import hhs_log_dir
-from hhs_ui.process_resources import process_resource_registry
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.command_catalog import clean_command_status_message
+from hhs_ui.core.paths import hhs_log_dir
+from hhs_ui.core.process_resources import process_resource_registry
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:

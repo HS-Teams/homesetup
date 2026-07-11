@@ -46,9 +46,9 @@ import types
 from pathlib import Path
 
 source = (
-    Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
     + "\n"
-    + Path("bin/apps/py/hhs_ui/monitor_runtime.py").read_text()
+    + Path("bin/apps/py/hhs_ui/features/monitor_runtime.py").read_text()
     + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )
@@ -128,9 +128,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 source = (
-    Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
     + "\n"
-    + Path("bin/apps/py/hhs_ui/monitor_runtime.py").read_text()
+    + Path("bin/apps/py/hhs_ui/features/monitor_runtime.py").read_text()
     + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )
@@ -206,11 +206,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 source = (
-    Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
     + "\n"
-    + Path("bin/apps/py/hhs_ui/monitor_runtime.py").read_text()
+    + Path("bin/apps/py/hhs_ui/features/monitor_runtime.py").read_text()
     + "\n"
-    + Path("bin/apps/py/hhs_ui/table_ui.py").read_text()
+    + Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
     + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )
@@ -304,11 +304,11 @@ import types
 from pathlib import Path
 
 source = (
-    Path("bin/apps/py/hhs_ui/command_catalog.py").read_text()
+    Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
     + "\n"
-    + Path("bin/apps/py/hhs_ui/monitor_runtime.py").read_text()
+    + Path("bin/apps/py/hhs_ui/features/monitor_runtime.py").read_text()
     + "\n"
-    + Path("bin/apps/py/hhs_ui/table_ui.py").read_text()
+    + Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
     + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )

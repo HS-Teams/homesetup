@@ -98,7 +98,7 @@ import sys
 from pathlib import Path
 
 ui_source = Path(sys.argv[1]).read_text(encoding="utf-8")
-command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+command_source = Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text(encoding="utf-8")
 source = command_source + "\n" + ui_source
 tmp_dir = Path(sys.argv[2])
 repo_dir = Path(sys.argv[3])
@@ -187,7 +187,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 ui_source = Path(sys.argv[1]).read_text(encoding="utf-8")
-command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+command_source = Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text(encoding="utf-8")
 source = command_source + "\n" + ui_source
 start = source.index("def path_sources(")
 end = source.index("def env_widget_key_fragment(")

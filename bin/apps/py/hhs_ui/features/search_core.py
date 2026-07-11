@@ -7,7 +7,7 @@ import re
 import shlex
 import urllib.parse
 
-from . import constants as hhs_ui_constants
+from hhs_ui.core import constants as hhs_ui_constants
 
 
 def search_type_label(search_type: str) -> str:

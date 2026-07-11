@@ -14,8 +14,8 @@ from collections.abc import Callable
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.cache_runtime import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.cache_runtime import (
     background_command_metadata,
     cache_background_command_result,
     cache_delete_command,
@@ -23,7 +23,7 @@ from hhs_ui.cache_runtime import (
     cached_background_command_result,
     clear_cached_ui_data_preserving_state,
 )
-from hhs_ui.command_catalog import (
+from hhs_ui.execution.command_catalog import (
     build_footer_working_directory_command,
     build_hhs_updater_command,
     build_homesetup_version_command,
@@ -31,32 +31,32 @@ from hhs_ui.command_catalog import (
     open_file,
     strip_ansi,
 )
-from hhs_ui.command_runtime import (
+from hhs_ui.execution.command_runtime import (
     background_job_is_running,
     background_job_result,
     run_bash_command,
     start_background_bash_command,
     stop_background_job_by_preloader_token,
 )
-from hhs_ui.dialog_ui import pop_dialog
-from hhs_ui.feedback_ui import render_terminal_output
-from hhs_ui.paths import homesetup_home
-from hhs_ui.runtime import shell_version_command
-from hhs_ui.ssh_core import ssh_connection_display
-from hhs_ui.ssh_runtime import connected_ssh_host
-from hhs_ui.status_ui import (
+from hhs_ui.widgets.dialog_ui import pop_dialog
+from hhs_ui.widgets.feedback_ui import render_terminal_output
+from hhs_ui.core.paths import homesetup_home
+from hhs_ui.core.runtime import shell_version_command
+from hhs_ui.features.ssh_core import ssh_connection_display
+from hhs_ui.features.ssh_runtime import connected_ssh_host
+from hhs_ui.widgets.status_ui import (
     drain_footer_status_log_records,
     push_floating_status,
     render_floating_status,
 )
-from hhs_ui.terminal_ui import (
+from hhs_ui.widgets.terminal_ui import (
     browser_cleanup_token,
     ensure_ttyd_cleanup_server,
     sync_ttyd_event_state,
     update_browser_cleanup_registration,
 )
-from hhs_ui.theme_assets import load_app_image_data_uri
-from hhs_ui.ui_definitions import (
+from hhs_ui.core.theme_assets import load_app_image_data_uri
+from hhs_ui.core.ui_definitions import (
     FOOTER_VERSION_CACHE_TAG,
     FOOTER_VERSION_JOB,
     FOOTER_VERSION_OUTPUT_MARKER,
@@ -64,7 +64,7 @@ from hhs_ui.ui_definitions import (
     TERMINAL_AI_DEFAULT_PROMPT,
     UPDATER_UPDATE_JOB,
 )
-from hhs_ui.ui_state import is_persisted_ui_key, save_ui_state, ui_state_files
+from hhs_ui.core.ui_state import is_persisted_ui_key, save_ui_state, ui_state_files
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:

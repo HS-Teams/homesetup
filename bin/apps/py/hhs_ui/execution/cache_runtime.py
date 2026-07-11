@@ -14,15 +14,15 @@ from pathlib import Path
 import streamlit as st
 
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.command_catalog import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.command_catalog import (
     colorize_log_output,
     filter_log_output,
     sanitize_remote_command_result,
     ssh_shared_connection_closed,
     strip_ansi,
 )
-from hhs_ui.command_runtime import (
+from hhs_ui.execution.command_runtime import (
     background_job_is_running,
     background_job_result,
     background_job_state_key,
@@ -31,9 +31,9 @@ from hhs_ui.command_runtime import (
     stop_background_jobs,
     stop_background_jobs_with_state_prefix,
 )
-from hhs_ui.feedback_ui import render_command_loader
-from hhs_ui.runtime import RUN_SHELL
-from hhs_ui.ui_definitions import (
+from hhs_ui.widgets.feedback_ui import render_command_loader
+from hhs_ui.core.runtime import RUN_SHELL
+from hhs_ui.core.ui_definitions import (
     CACHE_CLEAR_BACKGROUND_JOBS,
     HOST_SWITCH_BACKGROUND_JOBS,
     HOST_SWITCH_CACHE_TAGS,

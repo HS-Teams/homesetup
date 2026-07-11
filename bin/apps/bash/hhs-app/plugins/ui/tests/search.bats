@@ -35,7 +35,7 @@ import types
 import urllib.parse
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
-search_core_source = Path("bin/apps/py/hhs_ui/search_core.py").read_text(encoding="utf-8")
+search_core_source = Path("bin/apps/py/hhs_ui/features/search_core.py").read_text(encoding="utf-8")
 search_core_start = search_core_source.index("def search_type_label(")
 start = source.index("def search_command_cache_key(")
 end = source.index("def render_ai_models_result(")
@@ -841,7 +841,7 @@ PY
 from pathlib import Path
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-table_source = Path("bin/apps/py/hhs_ui/table_ui.py").read_text()
+table_source = Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
 body = table_source.split("def render_table_filter_controls", 1)[1].split("\ndef ", 1)[0]
 assert "st.session_state[key] = options[safe_index]" in body
 assert "index=None" in body

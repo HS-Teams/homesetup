@@ -282,10 +282,10 @@ import sys
 from pathlib import Path
 
 repo = Path(sys.argv[1])
-hspm_ui_source = (repo / "bin/apps/py/hhs_ui/hhs_app_ui.py").read_text()
+hspm_ui_source = (repo / "bin/apps/py/hhs_ui/features/hhs_app_ui.py").read_text()
 streamlit_ui_source = (repo / "bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-ssh_runtime_source = (repo / "bin/apps/py/hhs_ui/ssh_runtime.py").read_text()
-command_catalog_source = (repo / "bin/apps/py/hhs_ui/command_catalog.py").read_text()
+ssh_runtime_source = (repo / "bin/apps/py/hhs_ui/features/ssh_runtime.py").read_text()
+command_catalog_source = (repo / "bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
 
 for function_name in (
     "start_pending_hhs_hspm_action",
@@ -326,7 +326,7 @@ assert parser_namespace["parse_hhs_hspm_environment"](
 ) == {"HHS_MY_OS": "Linux", "HHS_MY_OS_PACKMAN": "apt-get"}
 
 assert "hhs_hspm_catalog_recipes_v2" in (
-    repo / "bin/apps/py/hhs_ui/ui_definitions.py"
+    repo / "bin/apps/py/hhs_ui/core/ui_definitions.py"
 ).read_text()
 
 tree = ast.parse(ssh_runtime_source)
@@ -362,7 +362,7 @@ PY
 
 @test "when loading Streamlit UI imports then package reloads should not run at startup" {
   assert_file_contains_many "${ui_file}" \
-'^import hhs_ui$' '^import hhs_ui.constants as hhs_ui_constants$'
+'^import hhs_ui$' '^import hhs_ui.core.constants as hhs_ui_constants$'
   assert_file_not_contains_many "${ui_file}" \
 'import importlib' 'importlib.reload'
 }

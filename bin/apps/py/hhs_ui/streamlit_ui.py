@@ -37,8 +37,8 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import hhs_ui
-import hhs_ui.constants as hhs_ui_constants
-from hhs_ui.command_catalog import (
+import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.execution.command_catalog import (
     normalized_monitor_top_n,
     normalized_history_stats_top_n,
     normalized_monitor_disk_top_n,
@@ -100,29 +100,32 @@ from hhs_ui.command_catalog import (
     cmd_value_editor_key,
     alias_value_editor_key,
 )
-from hhs_ui.process_resources import install_footer_status_log_handler
-from hhs_ui.paths import (
+from hhs_ui.core.process_resources import install_footer_status_log_handler
+from hhs_ui.core.paths import (
     homesetup_home,
 )
-from hhs_ui.search_core import (
+from hhs_ui.features.search_core import (
     normalized_search_type,
 )
-from hhs_ui import ai_ui
-from hhs_ui import cache_runtime
-from hhs_ui import command_runtime
-from hhs_ui import dialog_ui
-from hhs_ui import dom_scripts
-from hhs_ui import feedback_ui
-from hhs_ui import footer_ui
-from hhs_ui import hhs_app_ui
-from hhs_ui import monitor_ui
-from hhs_ui import path_picker as path_picker_ui
-from hhs_ui import search_ui
-from hhs_ui import ssh_explorer_ui
-from hhs_ui import ssh_runtime
-from hhs_ui import status_ui
-from hhs_ui import terminal_ui
-from hhs_ui.ai_ui import (
+from hhs_ui.execution import cache_runtime, command_runtime
+from hhs_ui.features import (
+    ai_ui,
+    hhs_app_ui,
+    monitor_ui,
+    search_ui,
+    ssh_explorer_ui,
+    ssh_runtime,
+)
+from hhs_ui.widgets import (
+    dialog_ui,
+    dom_scripts,
+    feedback_ui,
+    footer_ui,
+    path_picker as path_picker_ui,
+    status_ui,
+    terminal_ui,
+)
+from hhs_ui.features.ai_ui import (
     clear_ai_chat_history,
     execute_pending_ai_context_action,
     execute_pending_ai_prompt_action,
@@ -130,7 +133,7 @@ from hhs_ui.ai_ui import (
     reset_ai_model_table_selection,
     ui_disposable_files_dir,
 )
-from hhs_ui.cache_runtime import (
+from hhs_ui.execution.cache_runtime import (
     cache_background_command_result,
     cache_delete_command,
     cache_delete_tag,
@@ -148,16 +151,16 @@ from hhs_ui.cache_runtime import (
     safe_cache_tag,
     start_cached_background_command,
 )
-from hhs_ui.dialog_ui import execute_pending_dialog_callback, pop_dialog
-from hhs_ui.dom_scripts import render_combobox_vt100_shortcuts_script
-from hhs_ui.feedback_ui import (
+from hhs_ui.widgets.dialog_ui import execute_pending_dialog_callback, pop_dialog
+from hhs_ui.widgets.dom_scripts import render_combobox_vt100_shortcuts_script
+from hhs_ui.widgets.feedback_ui import (
     clear_preloader,
     render_command_loader,
     render_command_preloader_events,
     render_terminal_output,
     render_theme_reload_overlay,
 )
-from hhs_ui.footer_ui import (
+from hhs_ui.widgets.footer_ui import (
     footer_working_directory,
     handle_footer_actions,
     render_footer_client_error_bridge_script,
@@ -165,7 +168,7 @@ from hhs_ui.footer_ui import (
     render_footer_status_fragment,
     update_remote_footer_working_directory,
 )
-from hhs_ui.hhs_app_ui import (
+from hhs_ui.features.hhs_app_ui import (
     clear_firebase_aliases_cache,
     execute_pending_hhs_firebase_action,
     execute_pending_hhs_settings_action,
@@ -173,20 +176,20 @@ from hhs_ui.hhs_app_ui import (
     execute_pending_hhs_starship_action,
     render_hhs_view,
 )
-from hhs_ui.monitor_runtime import (
+from hhs_ui.features.monitor_runtime import (
     monitor_default_disk_directory,
     monitor_process_top_n_state_key,
     selected_monitor_log_level,
     synchronize_monitor_disk_directory_with_host,
 )
-from hhs_ui.monitor_ui import (
+from hhs_ui.features.monitor_ui import (
     render_history_stats_chart,
     render_monitor_disk_chart,
     render_monitor_logs_panel,
     render_process_monitor_chart,
     render_monitor_processes_panel,
 )
-from hhs_ui.search_ui import (
+from hhs_ui.features.search_ui import (
     apply_pending_search_directory_home_reset,
     execute_pending_search_open_action,
     expand_path_with_environment,
@@ -198,7 +201,7 @@ from hhs_ui.search_ui import (
     render_search_view,
     reset_search_directory_to_home,
 )
-from hhs_ui.ssh_explorer_ui import (
+from hhs_ui.features.ssh_explorer_ui import (
     build_scp_to_local_command,
     execute_pending_ssh_explorer_action,
     execute_pending_ssh_explorer_delete,
@@ -207,7 +210,7 @@ from hhs_ui.ssh_explorer_ui import (
     ssh_explorer_mtime_text,
     ssh_explorer_size_text,
 )
-from hhs_ui.command_runtime import (
+from hhs_ui.execution.command_runtime import (
     background_job_is_running,
     background_job_result,
     background_job_state_key,
@@ -219,13 +222,13 @@ from hhs_ui.command_runtime import (
     stop_background_job,
     stop_background_jobs_with_state_prefix,
 )
-from hhs_ui.path_picker import (
+from hhs_ui.widgets.path_picker import (
     apply_pending_folder_picker_selection,
     render_folder_picker_dialog,
     request_folder_picker,
     stop_path_picker_listing_jobs,
 )
-from hhs_ui.ssh_runtime import (
+from hhs_ui.features.ssh_runtime import (
     clear_registered_ssh_connection,
     command_remote_host,
     command_timeout_seconds,
@@ -248,17 +251,17 @@ from hhs_ui.ssh_runtime import (
     ssh_connection_is_alive,
     synchronize_selected_ssh_host_with_connection,
 )
-from hhs_ui.terminal_ui import (
+from hhs_ui.widgets.terminal_ui import (
     clear_ttyd_exit_request,
     render_browser_cleanup_script,
     render_terminal_document_view,
     render_ttyd_terminal_frame_hide_script,
     stop_ttyd_session,
 )
-from hhs_ui.status_ui import (
+from hhs_ui.widgets.status_ui import (
     push_floating_status,
 )
-from hhs_ui.table_ui import (
+from hhs_ui.widgets.table_ui import (
     clean_table_text_filter_value,
     cmd_column_config,
     config_filter_columns,
@@ -286,11 +289,11 @@ from hhs_ui.table_ui import (
     styled_tool_rows,
     table_filter_mapping,
 )
-from hhs_ui.ssh_core import (
+from hhs_ui.features.ssh_core import (
     local_hostname,
     ssh_config_hostname,
 )
-from hhs_ui.theme_assets import (
+from hhs_ui.core.theme_assets import (
     available_theme_options,
     configure_app_font_theme,
     default_theme_name,
@@ -299,7 +302,7 @@ from hhs_ui.theme_assets import (
     render_styles,
     validated_theme_name,
 )
-from hhs_ui.ui_state import (
+from hhs_ui.core.ui_state import (
     load_ui_state,
     persisted_theme_name,
     restore_persisted_theme_selection,
@@ -307,7 +310,7 @@ from hhs_ui.ui_state import (
     save_ui_state,
     unlink_legacy_ui_state_files,
 )
-from hhs_ui.ui_definitions import (
+from hhs_ui.core.ui_definitions import (
     ALIAS_LIST_JOB,
     CONFIG_ACTION_JOB,
     DOCKER_ACTION_JOB,

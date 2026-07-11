@@ -113,7 +113,7 @@ PY
 }
 
 @test "when choosing footer cleanup options then button controls must avoid checkbox inputs" {
-  run python3 - "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/footer_ui.py" \
+  run python3 - "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/widgets/footer_ui.py" \
     "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.css" <<'PY'
 import sys
 from pathlib import Path
@@ -214,7 +214,7 @@ assert single_selection_namespace["markdown_table_single_selection_marks"](3, 1)
     "○",
 ]
 
-command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+command_source = Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text(encoding="utf-8")
 parse_start = command_source.index("def hhs_setting_variable_name(")
 parse_end = command_source.index("def parse_hhs_starship_info", parse_start)
 parse_namespace = {
@@ -520,7 +520,7 @@ assert aliases_namespace["firebase_response_json"](
     type("BadResponse", (), {"status_code": 500, "body": "{}"})()
 ) == {}
 
-command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+command_source = Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text(encoding="utf-8")
 command_start = command_source.index("def build_hhs_firebase_plugin_command(")
 command_end = command_source.index("def build_hhs_starship_plugin_command", command_start)
 command_namespace = {
@@ -623,7 +623,7 @@ namespace = {
     "re": re,
     "strip_ansi": lambda value: value,
 }
-command_source = Path("bin/apps/py/hhs_ui/command_catalog.py").read_text(encoding="utf-8")
+command_source = Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text(encoding="utf-8")
 parse_start = command_source.index("def parse_hhs_config_environment(")
 parse_end = command_source.index("def parse_hhs_services", parse_start)
 exec(

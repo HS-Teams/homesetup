@@ -29,7 +29,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'SEARCH_FILTERS = ("All", "Containing")' 'HISTORY_FILTERS = ("All", "Containing")' \
     'ENV_FILTERS = ("All", "HHS", "Containing")' 'LIST_FILTERS = ("All", "Containing")'
 
-  assert_file_contains "${ui_file}" 'import hhs_ui.constants as hhs_ui_constants'
+  assert_file_contains "${ui_file}" 'import hhs_ui.core.constants as hhs_ui_constants'
   assert_file_contains_many "${ssh_core_file}" \
 'def parse_ssh_config_ports' \
     'def ssh_config_port' 'def ssh_connection_display' \
@@ -45,7 +45,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
-constants_path = Path("bin/apps/py/hhs_ui/constants.py")
+constants_path = Path("bin/apps/py/hhs_ui/core/constants.py")
 constants_namespace = {"__file__": str(constants_path)}
 exec(
     compile(constants_path.read_text(encoding="utf-8"), str(constants_path), "exec"),
