@@ -931,25 +931,6 @@ def sanitize_remote_command_result(
     return subprocess.CompletedProcess(result.args, result.returncode, stdout, stderr)
 
 
-def ssh_output_is_only_shared_close(result: subprocess.CompletedProcess[str]) -> bool:
-    """Return whether failed SSH output only contains the shared-close notice."""
-    if not ssh_shared_connection_closed(result):
-        return False
-    lines = [
-        line.strip().lower()
-        for line in strip_ansi(
-            f"{result.stdout or ''}\n{result.stderr or ''}"
-        ).splitlines()
-        if line.strip()
-    ]
-    remaining_lines = [
-        line
-        for line in lines
-        if not (line.startswith("shared connection to ") and line.endswith(" closed."))
-    ]
-    return not remaining_lines
-
-
 def completed_disconnected_ssh_process(
     command: str, host: str
 ) -> subprocess.CompletedProcess[str]:

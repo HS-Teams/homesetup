@@ -20,7 +20,6 @@ from hhs_ui.execution.cache_runtime import (
 )
 from hhs_ui.execution.command_catalog import (
     clean_command_status_message,
-    ssh_output_is_only_shared_close,
     ssh_shared_connection_closed,
     strip_ansi,
 )
@@ -79,9 +78,6 @@ update_remote_footer_working_directory = _unconfigured_dependency(
 reset_search_directory_to_home = _unconfigured_dependency(
     "reset_search_directory_to_home"
 )
-queue_search_directory_home_reset = _unconfigured_dependency(
-    "queue_search_directory_home_reset"
-)
 schedule_ollama_service_availability_refresh = _unconfigured_dependency(
     "schedule_ollama_service_availability_refresh"
 )
@@ -94,7 +90,6 @@ def configure_ssh_runtime(
     reset_updater_remote_check_state: Callable[[], None],
     update_remote_footer_working_directory: Callable[[], None],
     reset_search_directory_to_home: Callable[[], None],
-    queue_search_directory_home_reset: Callable[[], None],
     schedule_ollama_service_availability_refresh: Callable[[], None],
 ) -> None:
     """Configure callbacks required by SSH runtime helpers."""
@@ -105,7 +100,6 @@ def configure_ssh_runtime(
             "reset_updater_remote_check_state": reset_updater_remote_check_state,
             "update_remote_footer_working_directory": update_remote_footer_working_directory,
             "reset_search_directory_to_home": reset_search_directory_to_home,
-            "queue_search_directory_home_reset": queue_search_directory_home_reset,
             "schedule_ollama_service_availability_refresh": (
                 schedule_ollama_service_availability_refresh
             ),
@@ -123,6 +117,7 @@ def reconnect_view_state_keys() -> tuple[str, ...]:
         hhs_ui.DOCUMENT_SELECTED_KEY,
         hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY,
         "history_view",
+        "hhs_view",
         "home_view",
         "monitor_view",
         "ssh_explorer_local_path",
@@ -300,17 +295,10 @@ def restore_registered_ssh_connection_on_session_start() -> None:
     if not host:
         return
     if not ssh_connection_is_alive(host):
-        clear_registered_ssh_connection()
         if reconnect_host and not selected_host_is_local(reconnect_host):
-            remember_host_switch_view_state()
-            st.session_state["ssh_host_selected"] = reconnect_host
-            st.session_state["ssh_host_selector"] = reconnect_host
-            st.session_state["ssh_connect_pending"] = reconnect_host
-            st.session_state["ssh_disconnect_pending"] = ""
-            st.session_state["ssh_reconnect_restore_view_state"] = True
-            st.session_state["ssh_connect_pending_message"] = (
-                f"Reconnecting to {ssh_connection_display(reconnect_host)}"
-            )
+            schedule_ssh_reconnect(reconnect_host)
+        else:
+            clear_registered_ssh_connection()
         return
     reconnect_state = reconnect_view_state_snapshot()
     clear_host_scoped_session_state()
@@ -397,20 +385,27 @@ def synchronize_selected_ssh_host_with_connection() -> None:
             save_ui_state()
 
 
-def clear_disconnected_ssh_host(host: str) -> None:
-    """Clear stale UI SSH connection state and select the local host."""
+def schedule_ssh_reconnect(host: str) -> None:
+    """Schedule an on-demand reconnect without losing the active remote view."""
+    clean_host = host.strip()
+    if not clean_host or selected_host_is_local(clean_host):
+        return
+    remember_host_switch_view_state()
     stop_ttyd_session()
     expire_host_scoped_command_state()
-    st.session_state["ssh_connection_status"] = ""
-    st.session_state["ssh_connection_host"] = ""
+    st.session_state["ssh_connection_status"] = "reconnecting"
+    st.session_state["ssh_connection_host"] = clean_host
     st.session_state["ssh_connection_error"] = ""
-    st.session_state["ssh_connect_pending"] = ""
+    st.session_state["ssh_connect_pending"] = clean_host
+    st.session_state["ssh_connect_pending_message"] = (
+        f"Reconnecting to {ssh_connection_display(clean_host)}"
+    )
     st.session_state["ssh_disconnect_pending"] = ""
-    st.session_state["ssh_host_selected"] = local_hostname()
-    st.session_state["ssh_host_selector"] = local_hostname()
-    st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = ""
+    st.session_state["ssh_host_selected"] = clean_host
+    st.session_state["ssh_host_selector"] = clean_host
+    st.session_state[hhs_ui.SSH_RECONNECT_HOST_KEY] = clean_host
+    st.session_state["ssh_reconnect_restore_view_state"] = True
     st.session_state.pop(hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY, None)
-    queue_search_directory_home_reset()
     clear_registered_ssh_connection()
     cache_clear()
     save_ui_state()
@@ -483,10 +478,8 @@ def handle_remote_command_result(
     host: str, result: subprocess.CompletedProcess[str]
 ) -> bool:
     """Synchronize UI state when a remote command shows the SSH connection closed."""
-    if host and (
-        ssh_output_is_only_shared_close(result) or ssh_shared_connection_closed(result)
-    ):
-        clear_disconnected_ssh_host(host)
+    if host and ssh_shared_connection_closed(result):
+        schedule_ssh_reconnect(host)
         return True
     return False
 

@@ -424,3 +424,46 @@ PY
 'st.warning("Clear the chat and reset AI context entirely?")' '@st.dialog("Confirm model change")' \
     '@st.dialog("Confirm model deletion")'
 }
+
+@test "when a browser unloads then cleanup preserves shared SSH state" {
+  run python3 - "${terminal_ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def cleanup_session_resources(")
+end = source.index("def store_ttyd_event(", start)
+stopped_processes = []
+disconnected_hosts = []
+cleared_registrations = []
+namespace = {
+    "TTYD_CLEANUP_REGISTRY": {
+        "browser-token": {"ttyd_process": "browser-ttyd", "ssh_host": "example"},
+        "shutdown-token": {"ttyd_process": "shutdown-ttyd", "ssh_host": "example"},
+    },
+    "stop_process": stopped_processes.append,
+    "selected_host_is_local": lambda _host: False,
+    "build_ssh_disconnect_command": lambda host: host,
+    "run_cleanup_bash_command": lambda host, _timeout: disconnected_hosts.append(host),
+    "clear_registered_ssh_connection": lambda: cleared_registrations.append(True),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+namespace["cleanup_browser_session_resources"]("browser-token")
+assert stopped_processes == ["browser-ttyd"]
+assert disconnected_hosts == []
+assert cleared_registrations == []
+assert set(namespace["TTYD_CLEANUP_REGISTRY"]) == {"shutdown-token"}
+
+namespace["cleanup_session_resources"]("shutdown-token")
+assert stopped_processes == ["browser-ttyd", "shutdown-ttyd"]
+assert disconnected_hosts == ["example"]
+assert cleared_registrations == [True]
+PY
+  assert_success
+
+  assert_file_contains_many "${terminal_ui_file}" \
+'def cleanup_browser_session_resources' \
+    'cleanup_session_resources(token, disconnect_ssh=False)' \
+    'target=cleanup_browser_session_resources'
+}

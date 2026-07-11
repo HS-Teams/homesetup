@@ -964,28 +964,6 @@ def reset_search_directory_to_home(clear_results: bool = True) -> str:
     return search_path
 
 
-def queue_search_directory_home_reset(clear_results: bool = True) -> None:
-    """Queue a Search directory reset for the next pre-widget render phase."""
-    st.session_state["_hhs_search_directory_home_reset_pending"] = True
-    st.session_state["_hhs_search_directory_home_reset_clear_results"] = bool(
-        clear_results
-    )
-
-
-def apply_pending_search_directory_home_reset() -> None:
-    """Apply a queued Search directory reset before Search widgets render."""
-    if not st.session_state.pop("_hhs_search_directory_home_reset_pending", False):
-        st.session_state.pop("_hhs_search_directory_home_reset_clear_results", None)
-        return
-    clear_results = bool(
-        st.session_state.pop(
-            "_hhs_search_directory_home_reset_clear_results",
-            True,
-        )
-    )
-    reset_search_directory_to_home(clear_results=clear_results)
-
-
 def initialize_search_directory_home_default() -> None:
     """Ensure Search starts at home for the current host context."""
     current_context = search_host_context()

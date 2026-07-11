@@ -45,42 +45,109 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_not_contains "${ui_file}" 'format_func=str.upper'
 }
 
-@test "when remote SSH command closes then Streamlit UI should clear stale connection state" {
+@test "when remote SSH command closes then Streamlit UI should reconnect on demand" {
   assert_file_contains_many "${command_catalog_file}" \
 'def ssh_shared_connection_closed' 'def sanitize_remote_command_result'
-  assert_file_contains "${ssh_runtime_file}" 'def clear_disconnected_ssh_host'
-  run python3 - "${ui_file}" "${ssh_runtime_file}" <<'PY'
+  assert_file_contains "${ssh_runtime_file}" 'def schedule_ssh_reconnect'
+  run python3 - "${ssh_runtime_file}" "${cache_runtime_file}" <<'PY'
 from pathlib import Path
+import subprocess
 import sys
+from types import SimpleNamespace
 
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-ssh_runtime_source = Path(sys.argv[2]).read_text(encoding="utf-8")
-clear_body = ssh_runtime_source.split("def clear_disconnected_ssh_host", 1)[1].split("\ndef ", 1)[0]
-assert "queue_search_directory_home_reset()" in clear_body
-assert "reset_search_directory_to_home()" not in clear_body
-assert "def apply_pending_search_directory_home_reset" in source
-main_body = source.split("def main(", 1)[1].split('\n\nif __name__ == "__main__":', 1)[0]
-pending_reset_index = main_body.index("apply_pending_search_directory_home_reset()")
-initialize_search_index = main_body.index("initialize_search_directory_home_default()")
-render_main_index = main_body.index("render_main_view()")
-assert pending_reset_index < initialize_search_index < render_main_index
+ssh_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+cache_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+start = ssh_source.index("def schedule_ssh_reconnect(")
+end = ssh_source.index("def clear_host_scoped_session_state(", start)
+session_state = {
+    "active_view": "HHS",
+    "hhs_view": "SETTINGS",
+    "ssh_connection_status": "connected",
+    "ssh_connection_host": "example",
+}
+calls = []
+namespace = {
+    "st": SimpleNamespace(session_state=session_state),
+    "hhs_ui": SimpleNamespace(SSH_RECONNECT_HOST_KEY="ssh_reconnect_host"),
+    "hhs_ui_constants": SimpleNamespace(
+        FOOTER_REMOTE_WORKING_DIR_KEY="footer_remote_working_dir"
+    ),
+    "selected_host_is_local": lambda _host: False,
+    "remember_host_switch_view_state": lambda: calls.append("remember"),
+    "stop_ttyd_session": lambda: calls.append("stop_ttyd"),
+    "expire_host_scoped_command_state": lambda: calls.append("expire"),
+    "ssh_connection_display": lambda host: host,
+    "clear_registered_ssh_connection": lambda: calls.append("clear_registration"),
+    "cache_clear": lambda: calls.append("clear_cache"),
+    "save_ui_state": lambda: calls.append("save"),
+}
+exec("from __future__ import annotations\n" + ssh_source[start:end], namespace)
+namespace["schedule_ssh_reconnect"]("example")
+assert session_state["active_view"] == "HHS"
+assert session_state["hhs_view"] == "SETTINGS"
+assert session_state["ssh_connection_status"] == "reconnecting"
+assert session_state["ssh_connection_host"] == "example"
+assert session_state["ssh_host_selected"] == "example"
+assert session_state["ssh_connect_pending"] == "example"
+assert session_state["ssh_reconnect_host"] == "example"
+assert session_state["ssh_connect_pending_message"] == "Reconnecting to example"
+assert calls == ["remember", "stop_ttyd", "expire", "clear_registration", "clear_cache", "save"]
+
+start = cache_source.index("def complete_cached_background_command(")
+end = cache_source.index("def cached_command_job_name(", start)
+closed = subprocess.CompletedProcess(
+    ["ssh"], 255, "", "Shared connection to host closed.\n"
+)
+cache_state = {"settings_error": "old error"}
+handled = []
+
+class RerunRequested(Exception):
+    pass
+
+def rerun():
+    raise RerunRequested
+
+cache_namespace = {
+    "st": SimpleNamespace(session_state=cache_state, rerun=rerun),
+    "background_job_result": lambda _job: (closed, {"remote_host": "example"}),
+    "handle_remote_command_result": lambda host, result: handled.append(
+        (host, result)
+    ) or True,
+    "cache_background_command_result": lambda *_args: calls.append("unexpected_cache"),
+    "strip_ansi": lambda value: value,
+}
+exec("from __future__ import annotations\n" + cache_source[start:end], cache_namespace)
+try:
+    cache_namespace["complete_cached_background_command"](
+        "settings", "settings_error", "fallback"
+    )
+except RerunRequested:
+    pass
+else:
+    raise AssertionError("stale background SSH result did not request a rerun")
+assert handled == [("example", closed)]
+assert cache_state["settings_error"] == ""
+assert "unexpected_cache" not in calls
 PY
   assert_success
 
-  assert_file_contains "${ssh_runtime_file}" \
-'st.session_state\["ssh_host_selected"\] = local_hostname()'
+  assert_file_contains_many "${ssh_runtime_file}" \
+'st.session_state\["ssh_connect_pending"\] = clean_host' \
+    'st.session_state\[hhs_ui.SSH_RECONNECT_HOST_KEY\] = clean_host' '"hhs_view"'
   assert_file_contains "${command_runtime_file}" \
+'handle_remote_command_result(remote_host, result)'
+  assert_file_contains "${cache_runtime_file}" \
 'handle_remote_command_result(remote_host, result)'
   assert_file_contains_many "${command_runtime_file}" \
     'if use_cache and not ssh_shared_connection_closed(result)' \
     'if remote_host and not ssh_connection_is_alive(remote_host)' \
     'completed_disconnected_ssh_process(command_to_run, remote_host)' 'st.rerun()'
-  assert_file_contains_many "${command_catalog_file}" \
-    'sanitize_remote_command_result(' 'ConnectTimeout=5'
+  assert_file_contains "${command_catalog_file}" 'sanitize_remote_command_result('
+  assert_file_contains "${ssh_core_file}" 'ConnectTimeout=5'
 }
 
 @test "when remote commands print HomeSetup startup chatter then command output should be sanitized" {
-  run python3 - "${ssh_runtime_file}" <<'PY'
+  run python3 - "${command_catalog_file}" <<'PY'
 import re
 import os
 import subprocess
@@ -90,7 +157,7 @@ from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def remote_command_startup_line_is_noise(")
-end = source.index("def ssh_output_is_only_shared_close(")
+end = source.index("def completed_disconnected_ssh_process(")
 namespace = {
     "re": re,
     "subprocess": subprocess,
@@ -160,7 +227,7 @@ PY
 }
 
 @test "when remote terminal command fails then SSH close trailer should not clear connection" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${command_catalog_file}" <<'PY'
 import subprocess
 import sys
 from functools import lru_cache
@@ -168,7 +235,7 @@ from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def ssh_shared_connection_closed(")
-end = source.index("def ssh_output_is_only_shared_close(")
+end = source.index("def completed_disconnected_ssh_process(")
 namespace = {
     "strip_ansi": lambda value: value,
     "subprocess": subprocess,

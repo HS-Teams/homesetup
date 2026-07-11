@@ -59,6 +59,7 @@ command_remote_host = _unconfigured_dependency("command_remote_host")
 stop_path_picker_listing_jobs = _unconfigured_dependency("stop_path_picker_listing_jobs")
 push_floating_status = _unconfigured_dependency("push_floating_status")
 clear_firebase_aliases_cache = _unconfigured_dependency("clear_firebase_aliases_cache")
+handle_remote_command_result = _unconfigured_dependency("handle_remote_command_result")
 
 
 def configure_cache_runtime(
@@ -68,6 +69,9 @@ def configure_cache_runtime(
     stop_path_picker_listing_jobs: Callable[[], None],
     push_floating_status: Callable[[str, str], None],
     clear_firebase_aliases_cache: Callable[[], None],
+    handle_remote_command_result: Callable[
+        [str, subprocess.CompletedProcess[str]], bool
+    ],
 ) -> None:
     """Configure callbacks required by cache runtime helpers."""
     globals().update(
@@ -77,6 +81,7 @@ def configure_cache_runtime(
             "stop_path_picker_listing_jobs": stop_path_picker_listing_jobs,
             "push_floating_status": push_floating_status,
             "clear_firebase_aliases_cache": clear_firebase_aliases_cache,
+            "handle_remote_command_result": handle_remote_command_result,
         }
     )
 
@@ -592,6 +597,10 @@ def complete_cached_background_command(
     if completed is None:
         return None
     result, metadata = completed
+    remote_host = str(metadata.get("remote_host", "")).strip()
+    if handle_remote_command_result(remote_host, result):
+        st.session_state[error_state_key] = ""
+        st.rerun()
     if result.returncode == 0:
         cache_background_command_result(metadata, result)
         st.session_state[error_state_key] = ""

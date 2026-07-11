@@ -974,16 +974,21 @@ def render_ttyd_unavailable() -> None:
     st.error("ttyd is not available to the UI process.")
 
 
-def cleanup_session_resources(token: str) -> None:
-    """Close ttyd and SSH resources registered for a browser session token."""
+def cleanup_session_resources(token: str, *, disconnect_ssh: bool = True) -> None:
+    """Close resources registered for a browser session token."""
     entry = TTYD_CLEANUP_REGISTRY.pop(token, None)
     if not entry:
         return
     stop_process(entry.get("ttyd_process"))
     ssh_host = str(entry.get("ssh_host", "")).strip()
-    if ssh_host and not selected_host_is_local(ssh_host):
+    if disconnect_ssh and ssh_host and not selected_host_is_local(ssh_host):
         run_cleanup_bash_command(build_ssh_disconnect_command(ssh_host), 10)
         clear_registered_ssh_connection()
+
+
+def cleanup_browser_session_resources(token: str) -> None:
+    """Close browser-owned resources without disconnecting shared SSH state."""
+    cleanup_session_resources(token, disconnect_ssh=False)
 
 
 def schedule_cleanup_session_resources(token: str) -> None:
@@ -992,7 +997,7 @@ def schedule_cleanup_session_resources(token: str) -> None:
     if not clean_token:
         return
     thread = threading.Thread(
-        target=cleanup_session_resources,
+        target=cleanup_browser_session_resources,
         args=(clean_token,),
         name=f"hhs-ttyd-session-cleanup-{clean_token[:8]}",
         daemon=True,
@@ -1273,7 +1278,7 @@ def ttyd_event_url() -> str:
 
 
 def render_browser_cleanup_script() -> None:
-    """Install a browser unload hook that closes ttyd and SSH resources."""
+    """Install a browser unload hook that closes browser-owned resources."""
     token = update_browser_cleanup_registration()
     port = ensure_ttyd_cleanup_server()
     cleanup_url = f"http://{hhs_ui.TTYD_HOST}:{port}/cleanup?token={token}"

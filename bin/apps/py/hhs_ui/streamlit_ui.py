@@ -189,13 +189,11 @@ from hhs_ui.features.monitor_ui import (
     render_monitor_processes_panel,
 )
 from hhs_ui.features.search_ui import (
-    apply_pending_search_directory_home_reset,
     execute_pending_search_open_action,
     expand_path_with_environment,
     initialize_search_directory_home_default,
     normalize_search_directories,
     open_search_result_path,
-    queue_search_directory_home_reset,
     remote_environment_values,
     render_search_view,
     reset_search_directory_to_home,
@@ -3916,6 +3914,7 @@ def configure_cache_runtime_dependencies() -> None:
         stop_path_picker_listing_jobs=stop_path_picker_listing_jobs,
         push_floating_status=push_floating_status,
         clear_firebase_aliases_cache=clear_firebase_aliases_cache,
+        handle_remote_command_result=handle_remote_command_result,
     )
 
 
@@ -3927,7 +3926,6 @@ def configure_ssh_runtime_dependencies() -> None:
         reset_updater_remote_check_state=reset_updater_remote_check_state,
         update_remote_footer_working_directory=update_remote_footer_working_directory,
         reset_search_directory_to_home=reset_search_directory_to_home,
-        queue_search_directory_home_reset=queue_search_directory_home_reset,
         schedule_ollama_service_availability_refresh=(
             schedule_ollama_service_availability_refresh
         ),
@@ -4145,7 +4143,6 @@ def main() -> None:
     handle_footer_actions()
     render_background_job_status(UPDATER_UPDATE_JOB)
     render_footer_shell_version_dialog()
-    apply_pending_search_directory_home_reset()
     st.session_state.setdefault("home_view", "System")
     if st.session_state["home_view"] not in hhs_ui.HOME_VIEWS:
         st.session_state["home_view"] = "System"

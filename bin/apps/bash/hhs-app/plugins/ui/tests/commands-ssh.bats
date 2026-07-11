@@ -73,8 +73,8 @@ PY
   assert_file_contains_many "${ssh_runtime_file}" \
 'def restore_registered_ssh_connection_on_session_start' \
     'ssh_connection_restore_checked' \
-    'hhs_ui.SSH_RECONNECT_HOST_KEY' 'st.session_state\["ssh_connect_pending"\] = reconnect_host' \
-    'f"Reconnecting to {ssh_connection_display(reconnect_host)}"' \
+    'hhs_ui.SSH_RECONNECT_HOST_KEY' 'schedule_ssh_reconnect(reconnect_host)' \
+    'f"Reconnecting to {ssh_connection_display(clean_host)}"' \
     'st.session_state\["ssh_reconnect_restore_view_state"\] = True' 'def reconnect_view_state_snapshot' \
     'def remember_host_switch_view_state' 'def consume_host_switch_view_state' \
     'def restore_reconnect_view_state' 'loader_message = str(' \
@@ -118,6 +118,7 @@ assert "remember_host_switch_view_state()" in source.split("def request_ssh_host
 assert "remember_host_switch_view_state()" in source.split("def request_ssh_host_disconnection", 1)[1].split("\ndef ", 1)[0]
 view_state_keys_body = source.split("def reconnect_view_state_keys", 1)[1].split("\ndef ", 1)[0]
 assert '"ssh_view"' in view_state_keys_body
+assert '"hhs_view"' in view_state_keys_body
 assert '"ssh_explorer_local_path"' in view_state_keys_body
 assert '"ssh_explorer_remote_path"' in view_state_keys_body
 restore_reconnect_index = body.index("restore_reconnect_view_state(reconnect_state)")
@@ -138,9 +139,7 @@ assert disconnect_availability_refresh_index < clear_disconnect_body.index("save
 restore_body = source.split("def restore_registered_ssh_connection_on_session_start", 1)[1].split("\ndef ", 1)[0]
 assert "registered_ssh_connection_host() or reconnect_host" in restore_body
 assert "clear_disconnected_ssh_host(host)" not in restore_body
-assert 'st.session_state["ssh_connect_pending"] = reconnect_host' in restore_body
-assert 'st.session_state["ssh_connect_pending_message"] = (' in restore_body
-assert 'st.session_state["ssh_reconnect_restore_view_state"] = True' in restore_body
+assert "schedule_ssh_reconnect(reconnect_host)" in restore_body
 assert "reset_updater_remote_check_state()" in restore_body
 restore_registered_snapshot_index = restore_body.index("reconnect_state = reconnect_view_state_snapshot()")
 restore_registered_reset_index = restore_body.index("clear_host_scoped_session_state()")
@@ -185,7 +184,7 @@ PY
   assert_file_contains_many "${ssh_core_file}" \
 'ControlMaster=yes' 'ConnectionAttempts=1' 'def build_ssh_wrapped_command' 'bash -ic' \
     'safe_remote_shell = shlex.quote'
-  assert_file_contains_many "${ssh_core_file}" '"ssh",' '"-tt",'
+  assert_file_contains_many "${terminal_ui_file}" '"ssh",' '"-tt",'
   assert_file_not_contains_many "${ui_file}" \
 'JOB_NAME="${JOB_NAME:-HomeSetup-UI}"' 'source "${HOME}/.bashrc"' '[[ ! -s "${HOME}/.hhsrc" ]]' \
     '"HomeSetup" is not installed on the host.' 'def handle_missing_remote_homesetup' \
@@ -216,10 +215,10 @@ PY
   run test -s "${HHS_REPO_DIR}/assets/devel/ports-default.csv"
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
-'column_config: dict\[str, object\] | None = None' 'on_select: Callable\[\[\], None\] | str = "rerun"' \
-    'st.column_config.LinkColumn'
-  run grep -F -q 'display_text=r"http://(127\.0\.0\.1:\d+)"' "${ui_file}"
+  assert_file_contains_many "${table_ui_file}" \
+'column_config: dict\[str, object\] | None = None' 'on_select: Callable\[\[\], None\] | str = "rerun"'
+  assert_file_contains "${ssh_explorer_ui_file}" 'st.column_config.LinkColumn'
+  run grep -F -q 'display_text=r"http://(127\.0\.0\.1:\d+)"' "${ssh_explorer_ui_file}"
   assert_success
 
   assert_file_contains_many "${ssh_explorer_ui_file}" \
@@ -227,7 +226,7 @@ PY
     'def ssh_explorer_entry_is_visible' 'def ssh_explorer_sort_key'
   assert_file_not_contains "${ui_file}" 'def synchronize_ssh_explorer_table_selection'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ssh_explorer_ui_file}" \
 'def ssh_explorer_component' 'components.declare_component(' 'def handle_ssh_explorer_component_event' \
     'def ssh_explorer_component_event_paths' 'def render_ssh_explorer_component' \
     'def remote_explorer_parent_path' 'def normalize_local_explorer_path' 'def normalize_remote_explorer_path' \
@@ -239,14 +238,14 @@ PY
     'def build_remote_explorer_listing_command' 'def remote_explorer_target_assignment' \
     'def build_remote_explorer_create_folder_command' 'def parse_remote_explorer_created_dir' \
     'def parse_remote_explorer_rows' 'def build_scp_to_remote_command' 'def build_scp_to_local_command' \
-    'SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"' '"ssh_files"' 'scp -r' \
+    '"ssh_files"' 'scp -r' \
     'Copying local file(s)/folder(s) to remote' 'Copying remote file(s)/folder(s) to local' \
     'paths = ssh_explorer_component_event_paths(event)' 'ControlPath=' 'ssh_config_option()' \
     'def ssh_view_label' 'hhs_ui.SSH_VIEWS' 'format_func=ssh_view_label' 'render_view_segmented_control(' \
-    'view_segmented_control_widget_key(state_key)' 'render_ssh_tunnels_panel(host)' \
+    'render_ssh_tunnels_panel(host)' \
     'hhs_ui.SSH_TUNNEL_FILTERS' '"ssh_tunnel_filter"' '"ssh_tunnel_other_filter"' \
     'filter_ssh_tunnel_rows(rows, tunnel_filter, other_filter)' \
-    'st.session_state.setdefault("ssh_tunnel_filter", "All")' 'render_ssh_files_panel()' \
+    'render_ssh_files_panel()' \
     'event = render_ssh_explorer_component(' 'handle_ssh_explorer_component_event(event)' \
     'if action == "create_folder"' 'if action == "refresh"' 'refresh_ssh_explorer_paths(' \
     'if action == "delete"' 'request_ssh_explorer_delete_confirmation(' 'st.rerun()' \
@@ -256,6 +255,11 @@ PY
     'theme=ssh_explorer_component_theme()' '"ssh_explorer_local_path", ssh_explorer_local_default_path()' \
     '"ssh_explorer_remote_path", ssh_explorer_remote_default_path()' 'selectionHint=False' \
     'component_height = table_height(hhs_ui.ENV_TABLE_HEIGHT)' 'height=component_height'
+  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/core/ui_definitions.py" \
+'SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"'
+  assert_file_contains_many "${ui_file}" \
+'view_segmented_control_widget_key(state_key)' \
+    'st.session_state.setdefault("ssh_tunnel_filter", "All")'
   assert_file_contains "${table_ui_file}" 'def resolve_css_custom_property'
   assert_file_not_contains_many "${ui_file}" \
 'on_select=reset_ssh_explorer_remote_table_selection' 'on_select=reset_ssh_explorer_local_table_selection' \
@@ -320,9 +324,9 @@ PY
     'classList.toggle("active"' 'localBasePath: args.localPath' 'remoteBasePath: args.remotePath' \
     'sendCommand("parent", activeExplorerPanel(), "")' \
     'sendCommand("create_folder", activeExplorerPanel(), "")'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ssh_explorer_ui_file}" \
 'Folder created on local {created_name}' 'Folder created on remote {created_name}'
-  assert_file_not_contains "${ui_file}" 'Folder ready'
+  assert_file_not_contains "${ssh_explorer_ui_file}" 'Folder ready'
 
   run python3 - <<'PY'
 from pathlib import Path
@@ -372,7 +376,7 @@ PY
   run grep -F -q '<p>Connected to remote' "${ui_file}"
   assert_failure
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ssh_explorer_ui_file}" \
 'key=hhs_ui.SSH_TUNNEL_TABLE_KEY' 'checkbox=False'
   run python3 - "${command_catalog_file}" <<'PY'
 import csv
