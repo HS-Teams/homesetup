@@ -425,10 +425,11 @@ PY
     '@st.dialog("Confirm model deletion")'
 }
 
-@test "when a browser unloads then cleanup preserves shared SSH state" {
+@test "when a browser unloads then only the last SSH session disconnects" {
   run python3 - "${terminal_ui_file}" <<'PY'
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def cleanup_session_resources(")
@@ -446,24 +447,56 @@ namespace = {
     "build_ssh_disconnect_command": lambda host: host,
     "run_cleanup_bash_command": lambda host, _timeout: disconnected_hosts.append(host),
     "clear_registered_ssh_connection": lambda: cleared_registrations.append(True),
+    "hhs_ui_constants": SimpleNamespace(BROWSER_CLEANUP_GRACE_SECONDS=15.0),
+    "time": SimpleNamespace(sleep=lambda _seconds: None),
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
 
-namespace["cleanup_browser_session_resources"]("browser-token")
+namespace["TTYD_CLEANUP_REGISTRY"]["renewed-token"] = {
+    "ttyd_process": "renewed-ttyd",
+    "ssh_host": "example",
+    "lease_updated_at": 20.0,
+}
+namespace["cleanup_session_resources_after_grace"]("renewed-token", 10.0)
+assert "renewed-token" in namespace["TTYD_CLEANUP_REGISTRY"]
+assert stopped_processes == []
+
+namespace["cleanup_session_resources"]("browser-token")
 assert stopped_processes == ["browser-ttyd"]
 assert disconnected_hosts == []
 assert cleared_registrations == []
-assert set(namespace["TTYD_CLEANUP_REGISTRY"]) == {"shutdown-token"}
+assert set(namespace["TTYD_CLEANUP_REGISTRY"]) == {"renewed-token", "shutdown-token"}
 
 namespace["cleanup_session_resources"]("shutdown-token")
 assert stopped_processes == ["browser-ttyd", "shutdown-ttyd"]
+assert disconnected_hosts == []
+assert cleared_registrations == []
+
+namespace["cleanup_session_resources"]("renewed-token")
+assert stopped_processes == ["browser-ttyd", "shutdown-ttyd", "renewed-ttyd"]
 assert disconnected_hosts == ["example"]
 assert cleared_registrations == [True]
 PY
   assert_success
 
   assert_file_contains_many "${terminal_ui_file}" \
-'def cleanup_browser_session_resources' \
-    'cleanup_session_resources(token, disconnect_ssh=False)' \
-    'target=cleanup_browser_session_resources'
+'def cleanup_session_resources_after_grace' \
+    'time.sleep(hhs_ui_constants.BROWSER_CLEANUP_GRACE_SECONDS)' \
+    'target=cleanup_session_resources_after_grace' \
+    'def ssh_host_has_other_cleanup_registration'
+  assert_file_contains_many "${ui_file}" \
+'restore_registered_ssh_connection_on_session_start()' \
+    'update_browser_cleanup_registration()' 'render_background_job_polling_fragment()'
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+main = source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
+restore = main.index("restore_registered_ssh_connection_on_session_start()")
+register = main.index("update_browser_cleanup_registration()")
+poll = main.index("render_background_job_polling_fragment()")
+assert restore < register < poll
+PY
+  assert_success
 }

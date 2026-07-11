@@ -982,13 +982,27 @@ def cleanup_session_resources(token: str, *, disconnect_ssh: bool = True) -> Non
     stop_process(entry.get("ttyd_process"))
     ssh_host = str(entry.get("ssh_host", "")).strip()
     if disconnect_ssh and ssh_host and not selected_host_is_local(ssh_host):
+        if ssh_host_has_other_cleanup_registration(ssh_host):
+            return
         run_cleanup_bash_command(build_ssh_disconnect_command(ssh_host), 10)
         clear_registered_ssh_connection()
 
 
-def cleanup_browser_session_resources(token: str) -> None:
-    """Close browser-owned resources without disconnecting shared SSH state."""
-    cleanup_session_resources(token, disconnect_ssh=False)
+def ssh_host_has_other_cleanup_registration(ssh_host: str) -> bool:
+    """Return whether another browser session still owns the SSH host."""
+    return any(
+        str(entry.get("ssh_host", "")).strip() == ssh_host
+        for entry in list(TTYD_CLEANUP_REGISTRY.values())
+    )
+
+
+def cleanup_session_resources_after_grace(token: str, requested_at: float) -> None:
+    """Wait for a refreshed browser session before closing its resources."""
+    time.sleep(hhs_ui_constants.BROWSER_CLEANUP_GRACE_SECONDS)
+    entry = TTYD_CLEANUP_REGISTRY.get(token, {})
+    if float(entry.get("lease_updated_at", 0.0) or 0.0) > requested_at:
+        return
+    cleanup_session_resources(token)
 
 
 def schedule_cleanup_session_resources(token: str) -> None:
@@ -996,9 +1010,10 @@ def schedule_cleanup_session_resources(token: str) -> None:
     clean_token = token.strip()
     if not clean_token:
         return
+    requested_at = time.monotonic()
     thread = threading.Thread(
-        target=cleanup_browser_session_resources,
-        args=(clean_token,),
+        target=cleanup_session_resources_after_grace,
+        args=(clean_token, requested_at),
         name=f"hhs-ttyd-session-cleanup-{clean_token[:8]}",
         daemon=True,
     )
@@ -1260,11 +1275,21 @@ def update_browser_cleanup_registration() -> str:
     """Register the current ttyd and SSH resources for browser unload cleanup."""
     token = browser_cleanup_token()
     entry = TTYD_CLEANUP_REGISTRY.setdefault(token, {})
+    ssh_host = connected_ssh_host()
+    if not ssh_host:
+        ssh_host = str(
+            st.session_state.get("ssh_connect_pending")
+            or st.session_state.get("ssh_connection_host")
+            or ""
+        ).strip()
+        if selected_host_is_local(ssh_host):
+            ssh_host = ""
     entry.update(
         {
             "ttyd_process": st.session_state.get(hhs_ui_constants.TTYD_PROCESS_KEY),
-            "ssh_host": connected_ssh_host(),
+            "ssh_host": ssh_host,
             "working_dir": footer_working_directory(),
+            "lease_updated_at": time.monotonic(),
         }
     )
     return token
@@ -1278,7 +1303,7 @@ def ttyd_event_url() -> str:
 
 
 def render_browser_cleanup_script() -> None:
-    """Install a browser unload hook that closes browser-owned resources."""
+    """Install a browser unload hook that closes session resources after a grace."""
     token = update_browser_cleanup_registration()
     port = ensure_ttyd_cleanup_server()
     cleanup_url = f"http://{hhs_ui.TTYD_HOST}:{port}/cleanup?token={token}"

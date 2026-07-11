@@ -222,6 +222,18 @@ closed = subprocess.CompletedProcess(
 )
 sanitized_closed = namespace["sanitize_remote_command_result"]("remote-host", closed)
 assert sanitized_closed.stderr == closed.stderr
+
+command_failure = subprocess.CompletedProcess(
+    ["cmd"],
+    1,
+    "real settings error\n",
+    "Shared connection to 167.99.120.81 closed.\n",
+)
+sanitized_failure = namespace["sanitize_remote_command_result"](
+    "remote-host", command_failure
+)
+assert sanitized_failure.stdout == "real settings error\n"
+assert sanitized_failure.stderr == ""
 PY
   assert_success
 }

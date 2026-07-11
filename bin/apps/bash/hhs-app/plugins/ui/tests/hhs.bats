@@ -246,6 +246,68 @@ PY
   assert_success
 }
 
+@test "when Setman is unavailable then Settings list uses the SQLite database directly" {
+  run python3 - "${command_catalog_file}" <<'PY'
+import csv
+import io
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import textwrap
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def hhs_settings_sqlite_export_script(")
+end = source.index("def build_hhs_settings_list_command(", start)
+namespace = {"textwrap": textwrap}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+export_script = namespace["hhs_settings_sqlite_export_script"]()
+
+with tempfile.TemporaryDirectory() as temp_dir:
+    database = Path(temp_dir) / "setman.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE SETTINGS ("
+            "uuid TEXT, name TEXT, prefix TEXT, value TEXT, stype TEXT, modified TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO SETTINGS VALUES (?, ?, ?, ?, ?, ?)",
+            ("2", "z.setting", "", "z", "environment", "2026-07-11"),
+        )
+        connection.execute(
+            "INSERT INTO SETTINGS VALUES (?, ?, ?, ?, ?, ?)",
+            ("1", "A.setting", "", "a", "environment", "2026-07-10"),
+        )
+
+    result = subprocess.run(
+        [sys.executable, "-c", export_script, str(database)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    rows = list(csv.DictReader(io.StringIO(result.stdout)))
+    assert [row["name"] for row in rows] == ["A.setting", "z.setting"]
+
+    missing = subprocess.run(
+        [sys.executable, "-c", export_script, str(Path(temp_dir) / "missing.db")],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert missing.returncode == 0
+    assert missing.stdout.strip() == "uuid,name,prefix,value,settings type,modified"
+
+builder_body = source.split("def build_hhs_settings_list_command", 1)[1].split(
+    "\ndef ", 1
+)[0]
+assert "python3 -m setman export" not in builder_body
+assert "hhs_settings_sqlite_export_script()" in builder_body
+PY
+  assert_success
+}
+
 @test "when rendering HHS Firebase then configurations form should load file values" {
   run python3 - "${ui_file}" "${css_file}" "${table_ui_file}" "${cache_runtime_file}" <<'PY'
 import json

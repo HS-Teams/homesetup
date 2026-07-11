@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.92"
+VERSION = "0.1.94"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parents[1]
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -83,6 +83,7 @@ TTYD_PROCESS_KEY = "_hhs_ttyd_process"
 TTYD_PORT_KEY = "_hhs_ttyd_port"
 TTYD_SIGNATURE_KEY = "_hhs_ttyd_signature"
 TTYD_CLEANUP_TOKEN_KEY = "_hhs_ttyd_cleanup_token"
+BROWSER_CLEANUP_GRACE_SECONDS = 15.0
 AI_CONTEXT_UPLOAD_TYPES = (
     "txt",
     "md",

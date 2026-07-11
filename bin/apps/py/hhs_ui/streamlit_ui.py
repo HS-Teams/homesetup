@@ -254,6 +254,7 @@ from hhs_ui.widgets.terminal_ui import (
     render_terminal_document_view,
     render_ttyd_terminal_frame_hide_script,
     stop_ttyd_session,
+    update_browser_cleanup_registration,
 )
 from hhs_ui.widgets.status_ui import (
     push_floating_status,
@@ -4131,6 +4132,7 @@ def main() -> None:
         st.session_state["ssh_connection_error"] = ""
         st.session_state["ssh_connect_pending"] = ""
         st.session_state["ssh_disconnect_pending"] = ""
+    update_browser_cleanup_registration()
     render_background_job_polling_fragment()
     if execute_pending_ssh_disconnection():
         return

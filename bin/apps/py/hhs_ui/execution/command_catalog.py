@@ -918,6 +918,19 @@ def strip_remote_command_startup_chatter(value: str) -> str:
     return "".join(output_lines)
 
 
+def strip_ssh_shared_connection_close_notice(value: str) -> str:
+    """Remove OpenSSH's normal multiplexed-session close trailer."""
+    return "".join(
+        line
+        for line in value.splitlines(keepends=True)
+        if not re.fullmatch(
+            r"shared connection to .+ closed\.",
+            strip_ansi(line).strip(),
+            flags=re.IGNORECASE,
+        )
+    )
+
+
 def sanitize_remote_command_result(
     host: str, result: subprocess.CompletedProcess[str]
 ) -> subprocess.CompletedProcess[str]:
@@ -926,6 +939,8 @@ def sanitize_remote_command_result(
         return result
     stdout = strip_remote_command_startup_chatter(result.stdout or "")
     stderr = strip_remote_command_startup_chatter(result.stderr or "")
+    if result.returncode != 255:
+        stderr = strip_ssh_shared_connection_close_notice(stderr)
     if stdout == (result.stdout or "") and stderr == (result.stderr or ""):
         return result
     return subprocess.CompletedProcess(result.args, result.returncode, stdout, stderr)
@@ -1259,20 +1274,38 @@ def build_hhs_settings_plugin_command(arguments: list[str]) -> str:
     return build_hhs_settings_plugin_prefix() + f"__hhs settings {safe_arguments}"
 
 
+def hhs_settings_sqlite_export_script() -> str:
+    """Return a dependency-free script that exports the Setman database as CSV."""
+    return textwrap.dedent(
+        """\
+        import csv
+        import sqlite3
+        import sys
+        from pathlib import Path
+
+        database = Path(sys.argv[1]).expanduser()
+        writer = csv.writer(sys.stdout)
+        writer.writerow(["uuid", "name", "prefix", "value", "settings type", "modified"])
+        if not database.is_file():
+            raise SystemExit(0)
+        uri = f"{database.resolve().as_uri()}?mode=ro"
+        with sqlite3.connect(uri, uri=True) as connection:
+            writer.writerows(
+                connection.execute(
+                    "SELECT uuid, name, prefix, value, stype, modified "
+                    "FROM SETTINGS ORDER BY name COLLATE NOCASE"
+                )
+            )
+        """
+    )
+
+
 def build_hhs_settings_list_command() -> str:
     """Build the command that lists overridden system settings."""
+    export_script = shlex.quote(hhs_settings_sqlite_export_script())
     return (
         build_hhs_settings_plugin_prefix()
-        + 'export_file="$(mktemp "${TMPDIR:-/tmp}/hhs-settings.XXXXXX")" || exit 2; '
-        + 'csv_file="${export_file}.csv"; '
-        + 'if python3 -m setman export "${export_file}" >/dev/null; then '
-        + 'cat "${csv_file}"; '
-        + "ret_val=0; "
-        + "else "
-        + 'ret_val="$?"; '
-        + "fi; "
-        + 'rm -f "${export_file}" "${csv_file}"; '
-        + 'exit "${ret_val}"'
+        + f'python3 -c {export_script} "${{HHS_SETMAN_DB_FILE}}"'
     )
 
 
