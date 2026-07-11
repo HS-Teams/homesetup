@@ -234,7 +234,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
 # TC - 8
 
-@test "when syncing hspm then only untracked user packages are added to recovery" {
+@test "when syncing hspm then recovery is replaced with user-installed packages" {
   run bash --noprofile --norc -c '
     set -u
     export APP_NAME="hhs"
@@ -255,20 +255,73 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     export OLDIFS="${IFS}"
     export PLUGINS_DIR="${1}/plugins"
     mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
-    printf "%s\n" "test:already-tracked" > "${HHS_DIR}/.hspm"
+    printf "%s\n" "test:already-tracked" "test:stale-package" "other:foreign-package" > "${HHS_DIR}/.hspm"
     function usage() { return "${1:-0}"; }
     function quit() { return "${1:-0}"; }
     function __hhs_errcho() { printf "%s\n" "$*" >&2; }
     function brew() {
-      printf "%s\n" "already-tracked" "new-package" "new-package"
+      case "$*" in
+        "list --formula --installed-on-request")
+          printf "%s\n" "already-tracked" "new-package" "new-package"
+          ;;
+        "list --cask")
+          printf "%s\n" "new-cask"
+          ;;
+        *)
+          return 1
+          ;;
+      esac
     }
     source "${2}"
     execute sync
   ' -- "${BATS_TEST_TMPDIR}" "${hspm_plugin_file}"
   assert_success
-  assert_output --partial 'Synchronized 1 user-installed package(s) from brew.'
+  assert_output --partial 'Synchronized 3 user-installed package(s) from brew.'
   assert_file_contains "${BATS_TEST_TMPDIR}/hhs/.hspm" 'test:already-tracked'
   assert_file_contains "${BATS_TEST_TMPDIR}/hhs/.hspm" 'test:new-package'
+  assert_file_contains "${BATS_TEST_TMPDIR}/hhs/.hspm" 'test:new-cask'
+  assert_file_not_contains "${BATS_TEST_TMPDIR}/hhs/.hspm" 'test:stale-package'
+  assert_file_not_contains "${BATS_TEST_TMPDIR}/hhs/.hspm" 'other:foreign-package'
+}
+
+@test "when package discovery fails then hspm sync preserves recovery" {
+  run bash --noprofile --norc -c '
+    set -u
+    export APP_NAME="hhs"
+    export HHS_DIR="${1}/hhs-failure"
+    export HHS_LOG_DIR="${1}/log-failure"
+    export HHS_MY_OS="Darwin"
+    export HHS_MY_OS_RELEASE="test"
+    export HHS_MY_OS_PACKMAN="brew"
+    export HHS_DEV_TOOLS=""
+    export HHS_HIGHLIGHT_COLOR=""
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export ORANGE=""
+    export RED=""
+    export WHITE=""
+    export YELLOW=""
+    export OLDIFS="${IFS}"
+    export PLUGINS_DIR="${1}/plugins"
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    printf "%s\n" "test:keep-package" > "${HHS_DIR}/.hspm"
+    function usage() { return "${1:-0}"; }
+    function quit() { return "${1:-0}"; }
+    function __hhs_errcho() { printf "%s\n" "$*" >&2; }
+    function brew() {
+      [[ "$*" == "list --formula --installed-on-request" ]] && {
+        printf "%s\n" "partial-package"
+        return 0
+      }
+      return 1
+    }
+    source "${2}"
+    execute sync
+  ' -- "${BATS_TEST_TMPDIR}" "${hspm_plugin_file}"
+  assert_failure
+  assert_file_contains "${BATS_TEST_TMPDIR}/hhs-failure/.hspm" 'test:keep-package'
+  assert_file_not_contains "${BATS_TEST_TMPDIR}/hhs-failure/.hspm" 'test:partial-package'
 }
 
 # TC - 9

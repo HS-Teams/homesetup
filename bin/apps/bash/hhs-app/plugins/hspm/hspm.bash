@@ -15,7 +15,7 @@
 PLUGIN_NAME="hspm"
 
 # Current script version.
-VERSION=1.0.4
+VERSION=1.0.5
 
 # Namespace cleanup
 UNSETS=(
@@ -51,7 +51,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|reinstall|list|recover|sync
       uninstall <package...>       : Uninstall packages using matching recipes.
       reinstall <package...>       : Uninstall and install packages using matching recipes.
       recover                      : Recover packages previously installed by hspm.
-      sync                         : Add user-installed package manager packages to the recovery file.
+      sync                         : Replace recovery data with user-installed package manager packages.
 
     examples:
       Install a package recipe:
@@ -221,7 +221,8 @@ function user_installed_packages() {
 
   case "${HHS_MY_OS_PACKMAN}" in
     brew)
-      brew list --formula --installed-on-request
+      brew list --formula --installed-on-request || return 1
+      brew list --cask || return 1
       ;;
     apt | apt-get)
       command -v apt-mark &> /dev/null || {
@@ -246,28 +247,38 @@ function user_installed_packages() {
   esac
 }
 
-# @purpose: Add package-manager user installs absent from the HSPM recovery file.
+# @purpose: Replace recovery data with packages explicitly installed by the user.
 function sync_packages() {
 
-  local package package_list added_count=0 os=${HHS_MY_OS_RELEASE}
+  local package_count package_list os=${HHS_MY_OS_RELEASE} sync_file
 
   if ! package_list="$(user_installed_packages)"; then
     __hhs_errcho "${PLUGIN_NAME}" "Unable to list user-installed packages from ${HHS_MY_OS_PACKMAN}."
     return 1
   fi
 
-  while IFS= read -r package; do
-    [[ -n "${package}" ]] || continue
-    grep -qxF "${os}:${package}" "${BREADCRUMB_FILE}" && continue
-    add_breadcrumb "${package}"
-    added_count=$((added_count + 1))
-  done < <(printf '%s\n' "${package_list}" | LC_ALL=C sort -u)
-
-  if [[ ${added_count} -gt 0 ]]; then
-    echo -e "${GREEN}Synchronized ${added_count} user-installed package(s) from ${HHS_MY_OS_PACKMAN}.${NC}"
-  else
-    echo -e "${YELLOW}HSPM already tracks all user-installed ${HHS_MY_OS_PACKMAN} packages.${NC}"
+  sync_file="$(mktemp "${BREADCRUMB_FILE}.sync.XXXXXX")" || {
+    __hhs_errcho "${PLUGIN_NAME}" "Unable to create the HSPM recovery sync file."
+    return 1
+  }
+  if ! (
+    set -o pipefail
+    printf '%s\n' "${package_list}" | LC_ALL=C sort -u | awk -v os="${os}" \
+      'NF { print os ":" $0 }' > "${sync_file}"
+  ); then
+    rm -f "${sync_file}"
+    __hhs_errcho "${PLUGIN_NAME}" "Unable to prepare the HSPM recovery sync file."
+    return 1
   fi
+  package_count="$(wc -l < "${sync_file}")"
+  package_count="${package_count//[[:space:]]/}"
+  if ! mv -f "${sync_file}" "${BREADCRUMB_FILE}"; then
+    rm -f "${sync_file}"
+    __hhs_errcho "${PLUGIN_NAME}" "Unable to overwrite the HSPM recovery file."
+    return 1
+  fi
+
+  echo -e "${GREEN}Synchronized ${package_count} user-installed package(s) from ${HHS_MY_OS_PACKMAN}.${NC}"
 }
 
 # purpose: Unset all declared functions from the recipes
