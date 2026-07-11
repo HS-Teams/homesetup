@@ -67,13 +67,14 @@ from hhs_ui.ssh_runtime import connected_ssh_host
 from hhs_ui.status_ui import push_floating_status
 from hhs_ui.table_ui import (
     render_markdown_table,
-    render_table,
     resolve_css_custom_property,
 )
 from hhs_ui.theme_assets import theme_custom_properties
 from hhs_ui.ui_definitions import (
     HHS_FIREBASE_ACTION_JOB,
     HHS_FIREBASE_FIELDS,
+    HHS_HSPM_CATALOG_CACHE_TAG,
+    HHS_HSPM_ENV_OUTPUT_MARKER,
     HHS_HSPM_ACTION_JOB,
     HHS_SETTINGS_ACTION_JOB,
     HHS_SETUP_ACTION_JOB,
@@ -81,6 +82,9 @@ from hhs_ui.ui_definitions import (
     HHS_STARSHIP_ACTION_JOB,
 )
 from hhs_ui.ui_state import save_ui_state
+
+
+HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH = 165
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:
@@ -395,6 +399,7 @@ def hhs_hspm_action_noun(operation: str) -> str:
         "install": "Installation",
         "uninstall": "Uninstallation",
         "recover": "Recovery",
+        "sync": "Synchronization",
     }.get(operation, "Operation")
 
 
@@ -427,19 +432,20 @@ def queue_hhs_hspm_catalog_action(operation: str, package_names: list[str]) -> b
 
 
 def queue_hhs_hspm_recovery_action(action: str) -> bool:
-    """Queue a predefined HSPM recovery action."""
+    """Queue a predefined action from the HSPM recovery panel."""
     recovery_actions = {
-        "packages": ("-i", "Recovering packages"),
-        "tools": ("-t", "Loading recovery tools"),
-        "edit": ("-e", "Opening the recovery file"),
+        "packages": ("recover", "-i", "Recovering packages"),
+        "tools": ("recover", "-t", "Loading recovery tools"),
+        "sync": ("sync", "", "Synchronizing user-installed packages"),
+        "edit": ("recover", "-e", "Opening the recovery file"),
     }
     recovery_action = recovery_actions.get(action)
     if recovery_action is None:
         return False
-    option, description = recovery_action
+    operation, option, description = recovery_action
     st.session_state["hhs_hspm_action_execute_pending"] = {
-        "operation": "recover",
-        "command": build_hhs_hspm_command("recover", option),
+        "operation": operation,
+        "command": build_hhs_hspm_command(operation, option),
         "description": description,
         "success_fallback": f"{description} completed.",
         "error_fallback": f"{description} failed.",
@@ -464,6 +470,7 @@ def start_pending_hhs_hspm_action() -> None:
         hhs_ui_constants.UI_COMMAND_LONG_ACTION_TIMEOUT_SECONDS,
         pending,
         "Another HSPM action is already running.",
+        force_local=False,
         show_preloader_event=False,
     )
     if not started:
@@ -484,7 +491,7 @@ def complete_hhs_hspm_action_job() -> None:
     operation = str(metadata.get("operation", "")).strip()
     package_summary = hhs_hspm_package_summary(package_names)
     if result.returncode == 0:
-        if operation == "recover":
+        if operation in {"recover", "sync"}:
             cache_delete_tag("hhs_hspm_recovery")
         else:
             refresh_hhs_hspm_catalog_listing()
@@ -513,10 +520,13 @@ def hhs_view_label(hhs_view: str) -> str:
     return hhs_ui.HHS_VIEW_LABELS.get(hhs_view, hhs_view)
 
 
-def hhs_hspm_os_name() -> str:
-    """Return the OS name used by the HSPM catalog title."""
-    raw_os_name = os.environ.get("HHS_MY_OS", "").strip()
-    if not raw_os_name:
+def hhs_hspm_os_name(environment: dict[str, str] | None = None) -> str:
+    """Return the HSPM OS name from command metadata or local environment."""
+    if environment is None:
+        raw_os_name = os.environ.get("HHS_MY_OS", "").strip()
+    else:
+        raw_os_name = str(environment.get("HHS_MY_OS", "")).strip()
+    if not raw_os_name and environment is None:
         try:
             raw_os_name = os.uname().sysname
         except AttributeError:
@@ -535,9 +545,9 @@ def hhs_hspm_os_glyph(os_name: str) -> str:
     }.get(os_name, "")
 
 
-def hhs_hspm_catalog_title() -> str:
+def hhs_hspm_catalog_title(environment: dict[str, str] | None = None) -> str:
     """Return the HSPM catalog slide title with an OS glyph when known."""
-    os_name = hhs_hspm_os_name()
+    os_name = hhs_hspm_os_name(environment)
     glyph = hhs_hspm_os_glyph(os_name)
     if not os_name:
         return "Catalog"
@@ -546,8 +556,12 @@ def hhs_hspm_catalog_title() -> str:
     return f"Catalog ({os_name})"
 
 
-def hhs_hspm_package_manager_name() -> str:
-    """Return the package manager name used by the HSPM recovery title."""
+def hhs_hspm_package_manager_name(
+    environment: dict[str, str] | None = None,
+) -> str:
+    """Return the HSPM package manager from command metadata or local environment."""
+    if environment is not None:
+        return str(environment.get("HHS_MY_OS_PACKMAN", "")).strip()
     package_manager = os.environ.get("HHS_MY_OS_PACKMAN", "").strip()
     if package_manager:
         return package_manager
@@ -557,10 +571,10 @@ def hhs_hspm_package_manager_name() -> str:
     return ""
 
 
-def hhs_hspm_recovery_title() -> str:
+def hhs_hspm_recovery_title(environment: dict[str, str] | None = None) -> str:
     """Return the HSPM recovery slide title with OS glyph and package manager."""
-    glyph = hhs_hspm_os_glyph(hhs_hspm_os_name())
-    package_manager = hhs_hspm_package_manager_name()
+    glyph = hhs_hspm_os_glyph(hhs_hspm_os_name(environment))
+    package_manager = hhs_hspm_package_manager_name(environment)
     title_prefix = f"{glyph} " if glyph else ""
     if package_manager:
         return f"{title_prefix}Recovery ({package_manager})"
@@ -1090,7 +1104,7 @@ def render_hhs_setup_panel() -> None:
         ok_clicked = st.button(
             " Apply",
             key="hhs_setup_apply_button",
-            help="Apply",
+            help="Apply changes",
             disabled=action_running,
             width="stretch",
         )
@@ -1098,7 +1112,7 @@ def render_hhs_setup_panel() -> None:
         revert_clicked = st.button(
             " Cancel",
             key="hhs_setup_cancel_button",
-            help="Cancel",
+            help="Cancel modifications",
             disabled=action_running,
             width="stretch",
         )
@@ -1106,7 +1120,7 @@ def render_hhs_setup_panel() -> None:
         restore_clicked = st.button(
             " Restore",
             key="hhs_setup_restore_button",
-            help="Restore",
+            help="Restore settings from disk",
             disabled=action_running,
             width="stretch",
         )
@@ -1231,12 +1245,14 @@ def render_hhs_settings_controls(action_running: bool) -> None:
                     key="hhs_settings_add_name",
                     placeholder="setting.name",
                     accept_new_options=True,
+                    help="Choose or enter the HomeSetup setting to override.",
                     disabled=action_running,
                 )
             with variable_col:
                 st.text_input(
                     "Variable",
                     key="hhs_settings_add_variable",
+                    help="Generated environment variable for the selected setting.",
                     disabled=True,
                 )
             with value_col:
@@ -1244,13 +1260,14 @@ def render_hhs_settings_controls(action_running: bool) -> None:
                     "Value",
                     key="hhs_settings_add_value",
                     placeholder="value",
+                    help="Set the override value for the selected setting.",
                     disabled=action_running,
                 )
             with add_col:
                 st.button(
                     "",
                     key="hhs_settings_add_button",
-                    help="Override",
+                    help="Override HomeSetup configuration",
                     on_click=request_hhs_settings_add,
                     disabled=action_running,
                     width="stretch",
@@ -1297,7 +1314,7 @@ def render_hhs_settings_actions(
             st.button(
                 " Delete",
                 key="hhs_settings_delete_button",
-                help="Delete",
+                help="Delete configuration override",
                 on_click=request_hhs_settings_delete,
                 args=(selected_settings,),
                 disabled=action_running or not selected_settings,
@@ -1307,7 +1324,7 @@ def render_hhs_settings_actions(
             st.button(
                 "ﮊ Truncate",
                 key="hhs_settings_truncate_button",
-                help="Truncate",
+                help="Delete all configuration overrides",
                 on_click=request_hhs_settings_truncate,
                 disabled=action_running or not rows,
                 width="stretch",
@@ -1448,7 +1465,7 @@ def render_hhs_starship_controls(
     with st.container(key="hhs_starship_controls"):
         with st.expander("Configurations", expanded=True):
             cache_col, preset_col, apply_col, edit_col = st.columns(
-                [1.4, 1.1, 0.22, 0.22],
+                [1, 1, 0.08, 0.08],
                 gap="small",
                 vertical_alignment="bottom",
             )
@@ -1456,6 +1473,7 @@ def render_hhs_starship_controls(
                 st.text_input(
                     "Cache",
                     value=cache_path,
+                    help="Location of the generated Starship cache file.",
                     disabled=True,
                 )
             with preset_col:
@@ -1463,6 +1481,7 @@ def render_hhs_starship_controls(
                     "Preset",
                     preset_options,
                     key="hhs_starship_preset",
+                    help="Choose the Starship prompt preset to apply.",
                     disabled=action_running or not presets,
                 )
             with apply_col:
@@ -1514,6 +1533,7 @@ def render_hhs_starship_config_editor(
             height=360,
             disabled=not editing or action_running,
             label_visibility="collapsed",
+            help="Review or edit the active Starship configuration.",
         )
         if editing:
             st.button(
@@ -1939,40 +1959,36 @@ def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, s
     return rows
 
 
-def style_hhs_firebase_alias_row(row: pd.Series) -> list[str]:
-    """Return dataframe row styles for Firebase alias metadata."""
-    return [
-        (
-            "color: var(--hhs-secondary); font-weight: 800;"
-            if column == "Group"
-            else (
-                "color: var(--hhs-theme-primary-color); font-weight: 800;"
-                if column == "Alias"
-                else ""
-            )
-        )
-        for column in row.index
-    ]
-
-
 def render_hhs_firebase_aliases_table(action_running: bool) -> str:
     """Render the Firebase aliases table and return the selected alias."""
     alias_rows = firebase_alias_table_rows(fetch_firebase_aliases_with_preloader())
-    with st.container(key="hhs_firebase_aliases_table_panel"):
-        st.markdown(
-            '<div class="hhs-table-caption">Firebase Aliases</div>',
-            unsafe_allow_html=True,
-        )
-        _selected_index, selected_row = render_table(
-            alias_rows,
-            key="hhs_firebase_aliases_table",
-            empty_hint="Select a Firebase alias.",
-            headers=["Database", "Group", "Alias", "Count"],
-            checkbox=not action_running,
-            height=hhs_ui.ENV_TABLE_HEIGHT,
-            row_style=style_hhs_firebase_alias_row,
-        )
-    return str(selected_row.get("Alias", "")) if selected_row else ""
+    selected_rows = render_markdown_table(
+        "Firebase Aliases",
+        [row["Database"] for row in alias_rows],
+        [row["Database"] for row in alias_rows],
+        [False for _row in alias_rows],
+        "hhs_firebase_aliases_table",
+        disabled=action_running,
+        variable_column_label="Group",
+        item_column_label="Database",
+        variable_values=[row["Group"] for row in alias_rows],
+        extra_columns={
+            "Alias": [row["Alias"] for row in alias_rows],
+            "# Dotfiles": [row["Count"] for row in alias_rows],
+        },
+        multi_selection=False,
+        column_text_colors={
+            "Group": "var(--hhs-secondary)",
+            "Alias": "var(--hhs-theme-primary-color)",
+        },
+        show_value_column=False,
+    )
+    selected_aliases = [
+        row["Alias"]
+        for row, selected in zip(alias_rows, selected_rows, strict=True)
+        if selected
+    ]
+    return selected_aliases[0] if selected_aliases else ""
 
 
 def render_hhs_firebase_aliases_actions(
@@ -1993,7 +2009,7 @@ def render_hhs_firebase_aliases_actions(
             st.button(
                 " Upload",
                 key="hhs_firebase_alias_upload_button",
-                help="Upload",
+                help="Upload aliased dotfiles to Firebase",
                 on_click=request_hhs_firebase_alias_action,
                 args=("upload", clean_alias),
                 disabled=action_disabled,
@@ -2003,7 +2019,7 @@ def render_hhs_firebase_aliases_actions(
             st.button(
                 " Download",
                 key="hhs_firebase_alias_download_button",
-                help="Download",
+                help="Download aliased dotfiles From Firebase",
                 on_click=request_hhs_firebase_alias_action,
                 args=("download", clean_alias),
                 disabled=action_disabled,
@@ -2173,6 +2189,23 @@ def render_hhs_hspm_slide_title(title: str) -> None:
     )
 
 
+def parse_hhs_hspm_environment(output: str) -> dict[str, str]:
+    """Parse marked HSPM command environment metadata from command output."""
+    clean_output = strip_ansi(output or "").replace("\r", "")
+    marker_index = clean_output.rfind(HHS_HSPM_ENV_OUTPUT_MARKER)
+    if marker_index < 0:
+        return {}
+    values: dict[str, str] = {}
+    expected_names = {"HHS_MY_OS", "HHS_MY_OS_PACKMAN"}
+    for line in clean_output[marker_index + len(HHS_HSPM_ENV_OUTPUT_MARKER) :].splitlines():
+        if "\t" not in line:
+            continue
+        name, value = line.split("\t", 1)
+        if name in expected_names:
+            values[name] = value.strip()
+    return values
+
+
 def parse_hhs_hspm_catalog(output: str) -> list[dict[str, str]]:
     """Parse HSPM list output into catalog table rows."""
     rows: list[dict[str, str]] = []
@@ -2313,14 +2346,16 @@ def render_hhs_hspm_catalog_action_buttons(
         install_clicked = st.button(
             "Install",
             key="hhs_hspm_catalog_install_button",
+            help="Install the selected catalog recipes.",
             disabled=disabled,
-            width=180,
+            width=HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH,
         )
         uninstall_clicked = st.button(
             "Uninstall",
             key="hhs_hspm_catalog_uninstall_button",
+            help="Uninstall the selected catalog recipes.",
             disabled=disabled,
-            width=180,
+            width=HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH,
         )
     if install_clicked:
         if queue_hhs_hspm_catalog_action("install", selected_package_names):
@@ -2341,24 +2376,35 @@ def render_hhs_hspm_recovery_action_buttons(action_running: bool) -> None:
         packages_clicked = st.button(
             " Install Pkgs.",
             key="hhs_hspm_recovery_packages_button",
+            help="Recover packages listed in the recovery file.",
             disabled=action_running,
-            width=180,
+            width=HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH,
         )
         tools_clicked = st.button(
             " Install Tools",
             key="hhs_hspm_recovery_tools_button",
+            help="Install tools listed in $HHS_DEV_TOOLS.",
             disabled=action_running,
-            width=180,
+            width=HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH,
+        )
+        sync_clicked = st.button(
+            "痢 Sync",
+            key="hhs_hspm_recovery_sync_button",
+            help="Synchronize user-installed packages with the system package manager.",
+            disabled=action_running,
+            width=HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH,
         )
         edit_clicked = st.button(
             " Edit",
             key="hhs_hspm_recovery_edit_button",
+            help="Open the package recovery file for editing.",
             disabled=action_running,
-            width=180,
+            width=HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH,
         )
     for action, clicked in (
         ("packages", packages_clicked),
         ("tools", tools_clicked),
+        ("sync", sync_clicked),
         ("edit", edit_clicked),
     ):
         if clicked and queue_hhs_hspm_recovery_action(action):
@@ -2367,17 +2413,23 @@ def render_hhs_hspm_recovery_action_buttons(action_running: bool) -> None:
 
 def render_hhs_hspm_catalog_slide() -> None:
     """Render the HSPM catalog slider page."""
-    render_hhs_hspm_slide_title(hhs_hspm_catalog_title())
+    title_slot = st.empty()
+    with title_slot:
+        render_hhs_hspm_slide_title("Catalog")
     result = render_cached_command_result(
         build_hhs_hspm_command("list"),
         "Loading HSPM catalog",
-        "hhs_hspm_catalog",
+        HHS_HSPM_CATALOG_CACHE_TAG,
         hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
         hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
         "Unable to load HSPM catalog.",
+        force_local=False,
     )
     if result is None:
         return
+    hspm_environment = parse_hhs_hspm_environment(result.stdout)
+    with title_slot:
+        render_hhs_hspm_slide_title(hhs_hspm_catalog_title(hspm_environment))
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
@@ -2385,7 +2437,11 @@ def render_hhs_hspm_catalog_slide() -> None:
             )
         )
         return
-    rows = parse_rows_cached("hhs_hspm_catalog", result.stdout, parse_hhs_hspm_catalog)
+    rows = parse_rows_cached(
+        HHS_HSPM_CATALOG_CACHE_TAG,
+        result.stdout,
+        parse_hhs_hspm_catalog,
+    )
     if not rows:
         st.caption("No HSPM packages found.")
         return
@@ -2422,15 +2478,18 @@ def render_hhs_hspm_catalog_slide() -> None:
                 "Mark": st.column_config.CheckboxColumn(
                     "Mark",
                     disabled=action_running,
+                    help="Select recipes to install or uninstall.",
                     width=80,
                 ),
                 "Command": st.column_config.TextColumn(
                     "Command",
                     disabled=True,
+                    help="HSPM recipe command.",
                 ),
                 "Description": st.column_config.TextColumn(
                     "Description",
                     disabled=True,
+                    help="Package or application description.",
                 ),
             },
             width="stretch",
@@ -2444,17 +2503,23 @@ def render_hhs_hspm_catalog_slide() -> None:
 
 def render_hhs_hspm_recovery_slide() -> None:
     """Render the HSPM package recovery slider page."""
-    render_hhs_hspm_slide_title(hhs_hspm_recovery_title())
+    title_slot = st.empty()
+    with title_slot:
+        render_hhs_hspm_slide_title("Recovery")
     result = render_cached_command_result(
-        build_hhs_hspm_command("recover"),
-        "Loading HSPM recovery packages",
-        "hhs_hspm_recovery",
-        hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
-        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
+            build_hhs_hspm_command("recover"),
+            "Loading HSPM recovery packages",
+            "hhs_hspm_recovery",
+            hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+            hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
         "Unable to load HSPM recovery packages.",
+        force_local=False,
     )
     if result is None:
         return
+    hspm_environment = parse_hhs_hspm_environment(result.stdout)
+    with title_slot:
+        render_hhs_hspm_slide_title(hhs_hspm_recovery_title(hspm_environment))
     if result.returncode != 0:
         st.error(
             clean_command_status_message(
@@ -2479,8 +2544,16 @@ def render_hhs_hspm_recovery_slide() -> None:
             height=304,
             disabled=True,
             column_config={
-                "Command": st.column_config.TextColumn("Command", disabled=True),
-                "Status": st.column_config.TextColumn("Status", disabled=True),
+                "Command": st.column_config.TextColumn(
+                    "Command",
+                    disabled=True,
+                    help="HSPM recipe command eligible for recovery.",
+                ),
+                "Status": st.column_config.TextColumn(
+                    "Status",
+                    disabled=True,
+                    help="Installation status reported by the package manager.",
+                ),
             },
             width="stretch",
         )

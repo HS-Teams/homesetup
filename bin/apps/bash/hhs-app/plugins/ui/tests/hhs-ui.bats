@@ -68,6 +68,18 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     for recipe in "$1"/bin/apps/bash/hhs-app/plugins/hspm/recipes/*/*.recipe; do
       bash -n "${recipe}" || exit 1
     done
+    for recipe in "$1"/bin/apps/bash/hhs-app/plugins/hspm/recipes/*/*.recipe; do
+      default_recipe="${recipe%/*}/default.recipe"
+      bash --noprofile --norc -c "
+        set -u
+        source \"\$1\"
+        source \"\$2\"
+        declare -F _depends_ _install_ _uninstall_ _which_ >/dev/null
+      " -- "${default_recipe}" "${recipe}" || exit 1
+    done
+    if command -v shellcheck >/dev/null 2>&1; then
+      shellcheck -e SC1090,SC1091 "$1"/bin/apps/bash/hhs-app/plugins/hspm/recipes/*/*.recipe
+    fi
   ' -- "${HHS_REPO_DIR}"
   assert_success
 }
@@ -86,7 +98,32 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_contains "${vue_recipe_file}" 'npm install -g @vue/cli'
 
   assert_file_contains_many "${jenkins_recipe_file}" \
-'openjdk-21-jre' 'jenkins.io-2026.key'
+    'openjdk-21-jre' 'jenkins.io-2026.key'
+}
+
+@test "when reviewing hspm recipes then install and uninstall workflows should be safe" {
+  recipes_dir="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/recipes"
+  darwin_default="${recipes_dir}/Darwin/default.recipe"
+  colima_recipe="${recipes_dir}/Darwin/colima.recipe"
+  qt_recipe="${recipes_dir}/Darwin/qt.recipe"
+  docker_recipe="${recipes_dir}/Linux/docker.recipe"
+  ollama_recipe="${recipes_dir}/Linux/ollama.recipe"
+
+  assert_file_contains "${darwin_default}" 'list --formula "$1"'
+  assert_file_not_contains "${darwin_default}" 'info "$@"'
+  assert_file_contains_many "${colima_recipe}" \
+    'brew list --formula "${package}"' 'colima stop' 'brew uninstall "${package}"'
+  assert_file_not_contains_many "${colima_recipe}" \
+    'brew deps "$@"' 'cli-plugins/" -type f -print -delete'
+  assert_file_contains_many "${qt_recipe}" \
+    'if ! brew install qt; then' 'touch "${HHS_PATHS_FILE}"'
+  assert_file_contains_many "${docker_recipe}" \
+    "distribution='ubuntu'" "distribution='debian'" 'docker.sources' 'docker-compose-v2'
+  assert_file_not_contains "${docker_recipe}" 'download.docker.com/linux/ubuntu'
+  assert_file_contains_many "${ollama_recipe}" \
+    'mktemp "${TMPDIR:-/tmp}/ollama-install.XXXXXX"' 'systemctl disable ollama' \
+    'userdel ollama'
+  assert_file_not_contains "${ollama_recipe}" 'ollama uninstall'
 }
 
 # TC - 7
@@ -135,6 +172,181 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   ' -- "${BATS_TEST_TMPDIR}" "${hspm_plugin_file}"
   assert_failure
   assert_output --partial 'Failed to install "broken-package"'
+}
+
+@test "when hspm has a stale OS environment then list uses the execution host" {
+  run bash --noprofile --norc -c '
+    set -u
+    export APP_NAME="hhs"
+    export HHS_DIR="${1}/hhs"
+    export HHS_LOG_DIR="${1}/log"
+    export HHS_MY_OS="Darwin"
+    export HHS_MY_OS_RELEASE="test"
+    export HHS_MY_OS_PACKMAN="test-packman"
+    export HHS_DEV_TOOLS=""
+    export HHS_HIGHLIGHT_COLOR=""
+    export BLUE="" GREEN="" NC="" ORANGE="" RED="" WHITE="" YELLOW=""
+    export OLDIFS="${IFS}"
+    export PLUGINS_DIR="${1}/plugins"
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}" "${1}/bin" \
+      "${PLUGINS_DIR}/hspm/recipes/Linux" "${PLUGINS_DIR}/hspm/recipes/Darwin"
+    printf "%s\\n" "#!/usr/bin/env bash" "printf \"Linux\\n\"" > "${1}/bin/uname"
+    chmod +x "${1}/bin/uname"
+    export PATH="${1}/bin:${PATH}"
+    touch "${PLUGINS_DIR}/hspm/recipes/Linux/linux-only.recipe"
+    touch "${PLUGINS_DIR}/hspm/recipes/Darwin/darwin-only.recipe"
+    touch "${PLUGINS_DIR}/hspm/catalog.toml"
+    function usage() { return "${1:-0}"; }
+    function quit() { return "${1:-0}"; }
+    function __hhs_errcho() { printf "%s\\n" "$*" >&2; }
+    function __hhs_toml_get() { printf "%s\\n" "about=Linux test package"; }
+    source "${2}"
+    execute list
+    [[ "${HHS_MY_OS}" == "Linux" ]]
+    [[ "$(hspm_recipe_path "linux-only@21")" == "${PLUGINS_DIR}/hspm/recipes/Linux/linux-only.recipe" ]]
+  ' -- "${BATS_TEST_TMPDIR}" "${hspm_plugin_file}"
+  assert_success
+  assert_output --partial "Listing all available hspm 'Linux' packages"
+  assert_output --partial "linux-only"
+  refute_output --partial "darwin-only"
+  refute_output --partial "Darwin"
+  assert_file_contains_many "${hspm_plugin_file}" \
+    'function hspm_recipe_path' \
+    'HHS_MY_OS="\$(uname -s)"'
+}
+
+@test "when listing Temurin then supported Java versions are selectable" {
+  temurin_recipe_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/recipes/Linux/temurin.recipe"
+  legacy_recipe_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/recipes/Linux/adoptium17.recipe"
+  hspm_catalog_file="${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/hspm/catalog.toml"
+
+  run bash --noprofile --norc -c '
+    source "$1"
+    _catalog_
+    _temurin_version_ temurin@21
+  ' -- "${temurin_recipe_file}"
+  assert_success
+  assert_output --partial "temurin@17"
+  assert_output --partial "temurin@21"
+  refute [ -e "${legacy_recipe_file}" ]
+  assert_file_contains_many "${hspm_catalog_file}" '[temurin]' '[ollama]'
+}
+
+# TC - 8
+
+@test "when syncing hspm then only untracked user packages are added to recovery" {
+  run bash --noprofile --norc -c '
+    set -u
+    export APP_NAME="hhs"
+    export HHS_DIR="${1}/hhs"
+    export HHS_LOG_DIR="${1}/log"
+    export HHS_MY_OS="Darwin"
+    export HHS_MY_OS_RELEASE="test"
+    export HHS_MY_OS_PACKMAN="brew"
+    export HHS_DEV_TOOLS=""
+    export HHS_HIGHLIGHT_COLOR=""
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export ORANGE=""
+    export RED=""
+    export WHITE=""
+    export YELLOW=""
+    export OLDIFS="${IFS}"
+    export PLUGINS_DIR="${1}/plugins"
+    mkdir -p "${HHS_DIR}" "${HHS_LOG_DIR}"
+    printf "%s\n" "test:already-tracked" > "${HHS_DIR}/.hspm"
+    function usage() { return "${1:-0}"; }
+    function quit() { return "${1:-0}"; }
+    function __hhs_errcho() { printf "%s\n" "$*" >&2; }
+    function brew() {
+      printf "%s\n" "already-tracked" "new-package" "new-package"
+    }
+    source "${2}"
+    execute sync
+  ' -- "${BATS_TEST_TMPDIR}" "${hspm_plugin_file}"
+  assert_success
+  assert_output --partial 'Synchronized 1 user-installed package(s) from brew.'
+  assert_file_contains "${BATS_TEST_TMPDIR}/hhs/.hspm" 'test:already-tracked'
+  assert_file_contains "${BATS_TEST_TMPDIR}/hhs/.hspm" 'test:new-package'
+}
+
+# TC - 9
+
+@test "when connected to SSH then HSPM commands should use the remote command path" {
+  run python3 - "${HHS_REPO_DIR}" <<'PY'
+import __future__
+import ast
+import re
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+hspm_ui_source = (repo / "bin/apps/py/hhs_ui/hhs_app_ui.py").read_text()
+streamlit_ui_source = (repo / "bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+ssh_runtime_source = (repo / "bin/apps/py/hhs_ui/ssh_runtime.py").read_text()
+command_catalog_source = (repo / "bin/apps/py/hhs_ui/command_catalog.py").read_text()
+
+for function_name in (
+    "start_pending_hhs_hspm_action",
+    "render_hhs_hspm_catalog_slide",
+    "render_hhs_hspm_recovery_slide",
+):
+    body = hspm_ui_source.split(f"def {function_name}", 1)[1].split("\ndef ", 1)[0]
+    assert "force_local=False" in body, function_name
+
+home_tool_action = streamlit_ui_source.split(
+    "def execute_pending_home_tool_action", 1
+)[1].split("\ndef ", 1)[0]
+assert "build_hhs_hspm_command(operation, tool_name)" in home_tool_action
+assert "force_local=False" in home_tool_action
+assert "HHS_HSPM_ENV_OUTPUT_MARKER" in command_catalog_source
+
+hspm_ui_tree = ast.parse(hspm_ui_source)
+environment_parser = next(
+    node
+    for node in hspm_ui_tree.body
+    if isinstance(node, ast.FunctionDef) and node.name == "parse_hhs_hspm_environment"
+)
+parser_namespace = {
+    "HHS_HSPM_ENV_OUTPUT_MARKER": "__HHS_HSPM_ENV__",
+    "strip_ansi": lambda value: re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", value),
+}
+exec(
+    compile(
+        ast.Module(body=[environment_parser], type_ignores=[]),
+        "hhs_app_ui.py",
+        "exec",
+        flags=__future__.annotations.compiler_flag,
+    ),
+    parser_namespace,
+)
+assert parser_namespace["parse_hhs_hspm_environment"](
+    "__HHS_HSPM_ENV__\nHHS_MY_OS\tLinux\nHHS_MY_OS_PACKMAN\tapt-get\n"
+) == {"HHS_MY_OS": "Linux", "HHS_MY_OS_PACKMAN": "apt-get"}
+
+assert "hhs_hspm_catalog_recipes_v2" in (
+    repo / "bin/apps/py/hhs_ui/ui_definitions.py"
+).read_text()
+
+tree = ast.parse(ssh_runtime_source)
+function = next(
+    node
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef) and node.name == "effective_bash_command"
+)
+namespace = {
+    "selected_ssh_host": lambda: "remote-host",
+    "selected_host_is_local": lambda _host: False,
+    "selected_ssh_host_is_connected": lambda _host: True,
+    "build_ssh_wrapped_command": lambda command, host: f"{host}:{command}",
+}
+exec(compile(ast.Module(body=[function], type_ignores=[]), "ssh_runtime.py", "exec"), namespace)
+assert namespace["effective_bash_command"]("__hhs hspm execute list") == (
+    "remote-host:__hhs hspm execute list"
+)
+PY
+  assert_success
 }
 
 # TC - 4

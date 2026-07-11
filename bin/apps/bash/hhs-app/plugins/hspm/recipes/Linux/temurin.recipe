@@ -1,24 +1,48 @@
 #!/usr/bin/env bash
 
-function _about_() {
-  echo "Prebuilt OpenJDK binaries for free!"
-  return 0
+# @purpose: Publish supported Eclipse Temurin recipe commands.
+function _catalog_() {
+  printf '%s\n' 'temurin@17' 'temurin@21'
+}
+
+# @purpose: Return the selected Temurin Java version.
+function _temurin_version_() {
+
+  local package version
+
+  package="${1:-}"
+  version="${package#temurin@}"
+
+  case "${version}" in
+    17 | 21)
+      printf '%s\n' "${version}"
+      return 0
+      ;;
+    *)
+      __hhs_errcho "hspm.bash: use temurin@17 or temurin@21"
+      return 1
+      ;;
+  esac
 }
 
 function _which_() {
-  command -v 'java'
-  return $?
+
+  local version
+
+  version="$(_temurin_version_ "${1}")" || return 1
+  dpkg-query -W -f='${db:Status-Status}\n' "temurin-${version}-jdk" 2>/dev/null |
+    grep -qx 'installed'
 }
 
 function _depends_() {
 
   if [[ "${HHS_MY_OS_PACKMAN}" != 'apt' && "${HHS_MY_OS_PACKMAN}" != 'apt-get' ]]; then
-    __hhs_errcho "hspm.bash: Adoptium 17 recipe requires apt or apt-get"
+    __hhs_errcho "hspm.bash: Temurin recipe requires apt or apt-get"
     return 1
   fi
 
   if ! command -v dpkg >/dev/null || [[ ! -r /etc/os-release ]]; then
-    __hhs_errcho "hspm.bash: Adoptium 17 recipe requires dpkg and /etc/os-release"
+    __hhs_errcho "hspm.bash: Temurin recipe requires dpkg and /etc/os-release"
     return 1
   fi
 
@@ -27,8 +51,10 @@ function _depends_() {
 
 function _install_() {
 
-  local ret_val=1 arch codename keyring_dir source_dir key source_file download_url packages https_tools
+  local package="${1}" version ret_val=1 arch codename keyring_dir source_dir
+  local key source_file download_url packages https_tools
 
+  version="$(_temurin_version_ "${package}")" || return 1
   arch="$(dpkg --print-architecture)"
   # shellcheck disable=SC1091
   source /etc/os-release
@@ -38,7 +64,7 @@ function _install_() {
   key="${keyring_dir}/adoptium.gpg"
   source_file="${source_dir}/adoptium.list"
   download_url='https://packages.adoptium.net/artifactory'
-  packages=('temurin-17-jdk')
+  packages=("temurin-${version}-jdk")
   https_tools=('ca-certificates' 'curl' 'gnupg')
 
   command -v sudo &>/dev/null && SUDO=sudo
@@ -48,41 +74,37 @@ function _install_() {
     return 1
   fi
 
-  # 1. Update the apt package index and install packages to allow apt to use a repository over HTTPS:
-  echo "1. Update the apt package index and install packages to allow apt to use a repository over HTTPS ..."
+  echo "1. Update the apt package index and install repository dependencies ..."
   if ! ${SUDO} "${HHS_MY_OS_PACKMAN}" -y install "${https_tools[@]}" 1>/dev/null; then
     __hhs_errcho "hspm.bash: unable to install the required tools: [${https_tools[*]}]"
     return 1
   fi
 
-  # 2. Add Jenkins’s official GPG key:
-  echo "2. Add Adoptium’s official key ..."
+  echo "2. Add Adoptium's official key ..."
   if ${SUDO} install -m 0755 -d "${keyring_dir}"; then
-    if curl -fsSL "${download_url}/api/gpg/key/public" | ${SUDO} gpg --dearmor -o "${key}" >/dev/null; then
+    if curl -fsSL "${download_url}/api/gpg/key/public" |
+      ${SUDO} gpg --dearmor -o "${key}" >/dev/null; then
       if ${SUDO} chmod a+r "${key}"; then
         ret_val=0
       fi
     fi
   fi
 
-  if [[ $ret_val -ne 0 ]]; then
+  if [[ ${ret_val} -ne 0 ]]; then
     __hhs_errcho "hspm.bash: unable to set official Adoptium key"
     return 1
   fi
 
-  # 3. Set up adoptium repository:
-  echo "3. Set up adoptium repository ..."
-  if ! printf 'deb [arch=%s signed-by=%s] %s/deb %s main\n' "${arch}" "${key}" "${download_url}" "${codename}" |
-    ${SUDO} tee "${source_file}" >/dev/null; then
+  echo "3. Set up the Adoptium repository ..."
+  if ! printf 'deb [arch=%s signed-by=%s] %s/deb %s main\n' "${arch}" "${key}" \
+    "${download_url}" "${codename}" | ${SUDO} tee "${source_file}" >/dev/null; then
     __hhs_errcho "hspm.bash: unable to set official Adoptium repository"
     return 1
   fi
 
-  # 4. Update to apply the new repository:
   echo "4. Update to apply the new repository ..."
   if ${SUDO} "${HHS_MY_OS_PACKMAN}" update; then
-    # 5. Install packages:
-    echo "5. Install packages ..."
+    echo "5. Install Temurin ${version} ..."
     if ${SUDO} "${HHS_MY_OS_PACKMAN}" -y install "${packages[@]}"; then
       return 0
     fi
@@ -93,13 +115,14 @@ function _install_() {
 
 function _uninstall_() {
 
-  local keyring_dir source_dir key source_file packages
+  local package="${1}" version keyring_dir source_dir key source_file packages
 
+  version="$(_temurin_version_ "${package}")" || return 1
   keyring_dir='/usr/share/keyrings'
   source_dir='/etc/apt/sources.list.d'
   key="${keyring_dir}/adoptium.gpg"
   source_file="${source_dir}/adoptium.list"
-  packages=('temurin-17-jdk')
+  packages=("temurin-${version}-jdk")
 
   command -v sudo &>/dev/null && SUDO=sudo
 
@@ -109,12 +132,11 @@ function _uninstall_() {
     return 1
   fi
 
-  [[ -f "${key}" ]] && ${SUDO} rm -f "${key}"
-  [[ -f "${source_file}" ]] && ${SUDO} rm -f "${source_file}"
-
-  if ${SUDO} "${HHS_MY_OS_PACKMAN}" update; then
-    return 0
+  if ! dpkg-query -W -f='${db:Status-Status}\n' 'temurin-*-jdk' 2>/dev/null |
+    grep -qx 'installed'; then
+    [[ -f "${key}" ]] && ${SUDO} rm -f "${key}"
+    [[ -f "${source_file}" ]] && ${SUDO} rm -f "${source_file}"
   fi
 
-  return 1
+  ${SUDO} "${HHS_MY_OS_PACKMAN}" update
 }

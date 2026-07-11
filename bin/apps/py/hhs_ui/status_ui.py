@@ -59,7 +59,11 @@ def log_footer_status_message(message: str, kind: str) -> None:
     """Append one footer status message to the Streamlit server log."""
     logger = footer_status_file_logger()
     if logger is not None:
-        logger.info("Footer status [%s]: %s", kind.upper(), message)
+        log_level = {
+            "warn": logging.WARNING,
+            "error": logging.ERROR,
+        }.get(kind, logging.INFO)
+        logger.log(log_level, message)
 
 
 def footer_status_file_logger() -> logging.Logger | None:
@@ -71,6 +75,10 @@ def footer_status_file_logger() -> logging.Logger | None:
     logger = logging.getLogger("hhs_ui.footer_status")
     logger.setLevel(logging.INFO)
     logger.propagate = False
+    formatter = logging.Formatter(
+        "%(asctime)s.%(msecs)03d %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
     handler = registry.get("handler")
     if isinstance(handler, logging.FileHandler) and handler.baseFilename != str(log_path):
         logger.removeHandler(handler)
@@ -82,16 +90,11 @@ def footer_status_file_logger() -> logging.Logger | None:
             handler = logging.FileHandler(log_path, encoding="utf-8")
         except OSError:
             return None
-        handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s %(levelname)s %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
         logger.addHandler(handler)
         registry["handler"] = handler
     elif handler not in logger.handlers:
         logger.addHandler(handler)
+    handler.setFormatter(formatter)
     return logger
 
 

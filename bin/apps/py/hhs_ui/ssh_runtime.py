@@ -607,7 +607,7 @@ def complete_ssh_connection() -> bool:
         st.session_state["ssh_connection_error"] = strip_ansi(
             result.stderr or result.stdout or f"Unable to connect to SSH host {host}."
         )
-        st.session_state["ssh_connection_dialog_title"] = f"Failed to connect to {host}"
+        st.session_state["ssh_connection_dialog_title"] = ""
         push_floating_status(f"Failed to connect to remote: {host}", "error")
     return False
 

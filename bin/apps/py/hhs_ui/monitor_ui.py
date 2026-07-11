@@ -461,6 +461,7 @@ def render_monitor_logs_panel() -> None:
             step=hhs_ui_constants.LOG_TAIL_LINES_STEP,
             key="monitor_log_tail_lines",
             label_visibility="collapsed",
+            help="Set how many recent log lines to display.",
             on_change=handle_monitor_log_tail_lines_change,
             width=150,
         )
@@ -493,6 +494,7 @@ def render_monitor_logs_panel() -> None:
                     options=log_files,
                     key="monitor_log_file",
                     label_visibility="collapsed",
+                    help="Choose the log file to display.",
                     on_change=save_ui_state,
                 )
             with level_label_col:
@@ -507,6 +509,7 @@ def render_monitor_logs_panel() -> None:
                     key="monitor_log_level",
                     format_func=monitor_log_level_label,
                     label_visibility="collapsed",
+                    help="Filter entries by minimum log severity.",
                     on_change=save_ui_state,
                 )
             with tail_lines_label_col:

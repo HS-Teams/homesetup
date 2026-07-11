@@ -567,6 +567,7 @@
         checkbox.type = "checkbox";
         checkbox.checked = selected;
         checkbox.setAttribute("aria-label", `Select ${stringValue(row._name)}`);
+        checkbox.title = `Select ${stringValue(row._name)}`;
         checkbox.addEventListener("click", (event) => {
           event.stopPropagation();
           selectRow(panel, row);
@@ -616,6 +617,7 @@
         input.value = value;
         input.autocomplete = "off";
         input.setAttribute("aria-label", `${panel} path`);
+        input.title = `Enter ${panel} path`;
         input.addEventListener("focus", () => {
           activatePanel(panel);
         });

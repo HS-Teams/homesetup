@@ -1,48 +1,52 @@
 #!/usr/bin/env bash
+
 function _which_() {
-  if command -v ollama &>/dev/null; then
-    return 0
-  fi
-  return 1
+  command -v ollama >/dev/null
 }
 
 function _install_() {
-  local pkg_url
-  local install_script="/tmp/ollama-install.sh"
 
-  pkg_url="https://ollama.com/install.sh"
+  local install_script
 
-  if curl -fsSL "$pkg_url" -o "$install_script"; then
-    chmod +x "$install_script"
-    if bash "$install_script"; then
-      rm -f "$install_script"
-      return 0
-    fi
-  fi
-
-  rm -f "$install_script"
-
-  return 1
-}
-
-function _stop_ollama_() {
-  local sudo_cmd=()
-
-  command -v sudo &>/dev/null && sudo_cmd=(sudo)
-
-  if command -v systemctl &>/dev/null; then
-    "${sudo_cmd[@]}" systemctl stop ollama &>/dev/null || true
-  fi
-
-  pkill -f 'ollama serve' &>/dev/null || true
-}
-
-function _uninstall_() {
-  if command -v ollama &>/dev/null; then
-    _stop_ollama_
-    ollama uninstall
+  install_script="$(mktemp "${TMPDIR:-/tmp}/ollama-install.XXXXXX")" || return 1
+  if curl -fsSL 'https://ollama.com/install.sh' -o "${install_script}" &&
+    bash "${install_script}"; then
+    rm -f "${install_script}"
     return 0
   fi
 
+  rm -f "${install_script}"
   return 1
+}
+
+function _uninstall_() {
+
+  local ollama_path exit_code=0 library_path
+  local -a library_paths=('/usr/local/lib/ollama' '/usr/lib/ollama' '/lib/ollama')
+
+  ollama_path="$(command -v ollama || true)"
+  command -v sudo >/dev/null && SUDO=sudo
+
+  if command -v systemctl >/dev/null; then
+    ${SUDO} systemctl stop ollama >/dev/null 2>&1 || true
+    ${SUDO} systemctl disable ollama >/dev/null 2>&1 || true
+    ${SUDO} rm -f /etc/systemd/system/ollama.service
+    ${SUDO} systemctl daemon-reload || exit_code=1
+  fi
+
+  if [[ -n "${ollama_path}" ]] && ! ${SUDO} rm -f "${ollama_path}"; then
+    exit_code=1
+  fi
+  for library_path in "${library_paths[@]}"; do
+    [[ -d "${library_path}" ]] && ${SUDO} rm -rf "${library_path}" || true
+  done
+  if id -u ollama >/dev/null 2>&1; then
+    ${SUDO} userdel ollama || exit_code=1
+  fi
+  if getent group ollama >/dev/null 2>&1; then
+    ${SUDO} groupdel ollama || exit_code=1
+  fi
+  [[ -d /usr/share/ollama ]] && ${SUDO} rm -rf /usr/share/ollama || true
+
+  return "${exit_code}"
 }

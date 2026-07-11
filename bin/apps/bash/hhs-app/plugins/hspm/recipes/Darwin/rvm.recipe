@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+function _which_() {
+  [[ -s "${RVM_DIR:-${HOME}/.rvm}/scripts/rvm" ]]
+}
+
 function _install_() {
 
   local ret=1
@@ -12,7 +16,7 @@ function _install_() {
       --recv-keys 409B6B1796C275462A1703113804BB82D39DC0E3 7D2BAF1CF37B13E2069D6956105BD0E739499BDB
     ret=$?
     if [ $ret -eq 0 ]; then
-      curl -sSL https://get.rvm.io | bash -s stable --ruby
+      curl -fsSL https://get.rvm.io | bash -s stable --ruby
       ret=$?
     fi
   fi

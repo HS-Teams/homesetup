@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # shellcheck disable=SC1090
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+export NVM_DIR="${NVM_DIR:-${HOME}/.nvm}"
+[ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"
 
 function _install_() {
 
@@ -24,16 +25,16 @@ function _install_() {
 
 function _uninstall_() {
 
-  local ret=0
+  local ret=0 directory nvm_dir
 
-  [ -d "$NVM_DIR" ] && rm -rf "${NVM_DIR?}" &> /dev/null
-  ret=$?
+  nvm_dir="${NVM_DIR:-${HOME}/.nvm}"
   unset nvm
   unset NVM_DIR
 
-  [ -d "${HOME}/.nvm" ] && rm -rf "${HOME?}/.nvm" &> /dev/null
-  [ -d "${HOME}/.npm" ] && rm -rf "${HOME?}/.npm" &> /dev/null
-  [ -d "${HOME}/.bower" ] && rm -rf "${HOME?}/.bower" &> /dev/null
+  for directory in "${nvm_dir}" "${HOME}/.nvm" "${HOME}/.npm" "${HOME}/.bower"; do
+    [[ -d "${directory}" ]] || continue
+    rm -rf -- "${directory}" || ret=1
+  done
 
-  return $ret
+  return "${ret}"
 }

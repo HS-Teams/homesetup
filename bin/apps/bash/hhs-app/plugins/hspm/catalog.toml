@@ -104,6 +104,12 @@ about = "Node.js® is a JavaScript runtime built on Chrome's V8 JavaScript engin
 
 about = "Simple bash script to manage multiple active node.js versions."
 
+# O ###################################################################################################################
+
+[ollama]
+
+about = "Run large language models locally."
+
 # P ###################################################################################################################
 
 [pbcopy]
@@ -161,6 +167,10 @@ about = "Subversion is an open source version control system."
 [telnet]
 
 about = "Provide a bidirectional interactive text-oriented communication facility using a virtual terminal."
+
+[temurin]
+
+about = "Eclipse Temurin OpenJDK LTS. Choose temurin@17 or temurin@21."
 
 [tree]
 

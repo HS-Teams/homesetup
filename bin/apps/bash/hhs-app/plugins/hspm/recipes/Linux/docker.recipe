@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 
-function _about_() {
-  echo "Docker makes container capabilities approachable and easy to use."
-  return 0
-}
-
 function _depends_() {
+
   if [[ "${HHS_MY_OS_PACKMAN}" != 'apt' && "${HHS_MY_OS_PACKMAN}" != 'apt-get' ]]; then
     __hhs_errcho "hspm.bash: Docker recipe requires apt or apt-get"
     return 1
@@ -21,71 +17,83 @@ function _depends_() {
 
 function _install_() {
 
-  local ret_val=1 arch codename keyring_dir source_dir key source_file download_url packages https_tools
+  local arch codename distribution key keyring_dir source_dir source_file
+  local download_url package packages https_tools
+  local conflicts=()
 
   arch="$(dpkg --print-architecture)"
   # shellcheck disable=SC1091
   source /etc/os-release
-  codename="${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}"
-  keyring_dir='/usr/share/keyrings'
+  if [[ "${ID}" == 'ubuntu' || " ${ID_LIKE:-} " == *' ubuntu '* ]]; then
+    distribution='ubuntu'
+    codename="${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}"
+  elif [[ "${ID}" == 'debian' || " ${ID_LIKE:-} " == *' debian '* ]]; then
+    distribution='debian'
+    codename="${DEBIAN_CODENAME:-${VERSION_CODENAME:-}}"
+  else
+    __hhs_errcho "hspm.bash: Docker recipe supports Debian and Ubuntu APT hosts"
+    return 1
+  fi
+
+  if [[ -z "${codename}" ]]; then
+    __hhs_errcho "hspm.bash: unable to detect the ${distribution} release codename"
+    return 1
+  fi
+
+  keyring_dir='/etc/apt/keyrings'
   source_dir='/etc/apt/sources.list.d'
-  key="${keyring_dir}/docker.gpg"
-  source_file="${source_dir}/docker.list"
-  download_url='https://download.docker.com/linux/ubuntu'
+  key="${keyring_dir}/docker.asc"
+  source_file="${source_dir}/docker.sources"
+  download_url="https://download.docker.com/linux/${distribution}"
   packages=('docker-ce' 'docker-ce-cli' 'containerd.io' 'docker-buildx-plugin' 'docker-compose-plugin')
-  https_tools=('ca-certificates' 'curl' 'gnupg')
+  https_tools=('ca-certificates' 'curl')
 
   command -v sudo &>/dev/null && SUDO=sudo
 
-  if [[ -z "${codename}" ]]; then
-    __hhs_errcho "hspm.bash: unable to detect OS release codename for Docker repository"
-    return 1
-  fi
-
-  # 1. Execute the following command to uninstall all conflicting packages:
-  echo "1. Uninstall all conflicting packages ..."
-  for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do
-    ${SUDO} "${HHS_MY_OS_PACKMAN}" -y remove "${pkg}" >/dev/null
+  for package in docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc; do
+    dpkg-query -W -f='${db:Status-Status}' "${package}" 2>/dev/null |
+      grep -qx 'installed' && conflicts+=("${package}")
   done
-
-  # 2. Update the apt package index and install packages to allow apt to use a repository over HTTPS:
-  echo "2. Update the apt package index and install packages to allow apt to use a repository over HTTPS ..."
-  if ! ${SUDO} "${HHS_MY_OS_PACKMAN}" -y install "${https_tools[@]}" 1>/dev/null; then
-    __hhs_errcho "hspm.bash: unable to install the required tools: [${https_tools[*]}]"
-    return 1
-  fi
-
-  # 3. Add Docker’s official GPG key:
-  if ${SUDO} install -m 0755 -d "${keyring_dir}"; then
-    echo "3. Add Docker’s official GPG key ..."
-    if curl -fsSL "${download_url}/gpg" | ${SUDO} gpg --dearmor -o "${key}" >/dev/null; then
-      if ${SUDO} chmod a+r "${key}"; then
-        ret_val=0
-      fi
+  if [[ ${#conflicts[@]} -gt 0 ]]; then
+    echo "1. Uninstall conflicting Docker packages ..."
+    if ! ${SUDO} "${HHS_MY_OS_PACKMAN}" -y remove "${conflicts[@]}"; then
+      __hhs_errcho "hspm.bash: unable to remove conflicting packages: ${conflicts[*]}"
+      return 1
     fi
   fi
 
-  if [[ $ret_val -ne 0 ]]; then
-    __hhs_errcho "hspm.bash: unable to set official Docker GPG key"
+  echo "2. Install Docker repository dependencies ..."
+  if ! ${SUDO} "${HHS_MY_OS_PACKMAN}" -y install "${https_tools[@]}" 1>/dev/null; then
+    __hhs_errcho "hspm.bash: unable to install the required tools: ${https_tools[*]}"
     return 1
   fi
 
-  # 4. Set up docker repository:
-  echo "4. Set up docker repository ..."
-  if ! printf 'deb [arch=%s signed-by=%s] %s %s stable\n' "${arch}" "${key}" "${download_url}" "${codename}" |
-    ${SUDO} tee "${source_file}" >/dev/null; then
+  echo "3. Add Docker's official key ..."
+  if ! ${SUDO} install -m 0755 -d "${keyring_dir}" ||
+    ! ${SUDO} curl -fsSL "${download_url}/gpg" -o "${key}" ||
+    ! ${SUDO} chmod a+r "${key}"; then
+    __hhs_errcho "hspm.bash: unable to set official Docker key"
+    return 1
+  fi
+
+  echo "4. Set up the Docker repository ..."
+  if ! {
+    printf 'Types: deb\n'
+    printf 'URIs: %s\n' "${download_url}"
+    printf 'Suites: %s\n' "${codename}"
+    printf 'Components: stable\n'
+    printf 'Architectures: %s\n' "${arch}"
+    printf 'Signed-By: %s\n' "${key}"
+  } | ${SUDO} tee "${source_file}" >/dev/null; then
     __hhs_errcho "hspm.bash: unable to set official Docker repository"
     return 1
   fi
 
-  # 5. Update to apply the new repository:
   echo "5. Update to apply the new repository ..."
   if ${SUDO} "${HHS_MY_OS_PACKMAN}" update; then
-    # 6. Install packages:
-    echo "6. Install packages ..."
-    if ${SUDO} "${HHS_MY_OS_PACKMAN}" -y install "${packages[@]}"; then
-      return 0
-    fi
+    echo "6. Install Docker Engine ..."
+    ${SUDO} "${HHS_MY_OS_PACKMAN}" -y install "${packages[@]}"
+    return $?
   fi
 
   return 1
@@ -93,28 +101,29 @@ function _install_() {
 
 function _uninstall_() {
 
-  local keyring_dir source_dir key source_file packages
+  local keyring_dir source_dir key source_file package packages
+  local installed_packages=()
 
-  keyring_dir='/usr/share/keyrings'
+  keyring_dir='/etc/apt/keyrings'
   source_dir='/etc/apt/sources.list.d'
-  key="${keyring_dir}/docker.gpg"
-  source_file="${source_dir}/docker.list"
+  key="${keyring_dir}/docker.asc"
+  source_file="${source_dir}/docker.sources"
   packages=('docker-ce' 'docker-ce-cli' 'containerd.io' 'docker-buildx-plugin' 'docker-compose-plugin')
 
   command -v sudo &>/dev/null && SUDO=sudo
 
-  echo "Removing packages ${packages[*]} ..."
-  if ! ${SUDO} "${HHS_MY_OS_PACKMAN}" -y remove "${packages[@]}"; then
-    __hhs_errcho "hspm.bash: unable to uninstall packages: ${packages[*]}"
-    return 1
+  for package in "${packages[@]}"; do
+    dpkg-query -W -f='${db:Status-Status}' "${package}" 2>/dev/null |
+      grep -qx 'installed' && installed_packages+=("${package}")
+  done
+  if [[ ${#installed_packages[@]} -gt 0 ]]; then
+    echo "Removing packages ${installed_packages[*]} ..."
+    if ! ${SUDO} "${HHS_MY_OS_PACKMAN}" -y remove "${installed_packages[@]}"; then
+      __hhs_errcho "hspm.bash: unable to uninstall packages: ${installed_packages[*]}"
+      return 1
+    fi
   fi
 
-  [[ -f "${key}" ]] && ${SUDO} rm -f "${key}"
-  [[ -f "${source_file}" ]] && ${SUDO} rm -f "${source_file}"
-
-  if ${SUDO} "${HHS_MY_OS_PACKMAN}" update; then
-    return 0
-  fi
-
-  return 1
+  ${SUDO} rm -f "${key}" "${source_file}" "${source_dir}/docker.list" "${keyring_dir}/docker.gpg"
+  ${SUDO} "${HHS_MY_OS_PACKMAN}" update
 }

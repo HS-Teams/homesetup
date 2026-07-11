@@ -51,6 +51,7 @@ namespace = {
     "time": clock,
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
+namespace["log_footer_status_message"] = lambda _message, _kind: None
 
 namespace["push_floating_status"]("First", "success", 5.0)
 clock.now = 150.0
@@ -72,6 +73,73 @@ assert namespace["current_floating_status"]()["message"] == "Second"
 assert session_state["_hhs_floating_status_queue"][0]["displayed_at"] == 157.5
 assert namespace["pop_floating_status"]()["message"] == "Second"
 assert namespace["pop_floating_status"]() is None
+PY
+  assert_success
+}
+
+@test "when footer statuses are logged then their kind selects the log level" {
+  run python3 - "${status_ui_file}" <<'PY'
+import logging
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+assert "%(asctime)s.%(msecs)03d %(levelname)s %(message)s" in source
+start = source.index("def log_footer_status_message(")
+end = source.index("def footer_status_file_logger(", start)
+namespace = {"logging": logging}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+class Logger:
+    def __init__(self):
+        self.records = []
+
+    def log(self, level, message):
+        self.records.append((level, message))
+
+logger = Logger()
+namespace["footer_status_file_logger"] = lambda: logger
+namespace["log_footer_status_message"]("Synced packages.", "info")
+namespace["log_footer_status_message"]("Remote connection failed.", "error")
+namespace["log_footer_status_message"]("Retrying connection.", "warn")
+
+assert logger.records == [
+    (logging.INFO, "Synced packages."),
+    (logging.ERROR, "Remote connection failed."),
+    (logging.WARNING, "Retrying connection."),
+]
+PY
+  assert_success
+}
+
+@test "when choosing footer cleanup options then button controls must avoid checkbox inputs" {
+  run python3 - "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/footer_ui.py" \
+    "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.css" <<'PY'
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+css = Path(sys.argv[2]).read_text(encoding="utf-8")
+menu_markup = source.split(
+    "def footer_cache_clear_menu_markup", 1
+)[1].split("\ndef ", 1)[0]
+menu_script = source.split(
+    "def render_footer_cache_clear_menu_script", 1
+)[1].split("\ndef ", 1)[0]
+
+assert '<input type="checkbox"' not in source
+assert "st.checkbox(" not in source
+assert 'role="checkbox" aria-checked="false"' in menu_markup
+assert 'class="hhs-footer-cache-clear-option"' in menu_markup
+assert 'class="hhs-footer-cache-clear-submit"' in menu_markup
+assert 'option.setAttribute("aria-checked"' in menu_script
+assert '[role="checkbox"][aria-checked="true"]' in menu_script
+assert "window.parent.location.search = params.toString()" in menu_script
+assert "components.declare_component" not in source
+assert '.hhs-footer-cache-clear-option[aria-checked="true"]' in css
+assert ".hhs-footer-cache-clear-panel" in css
+assert ".st-key-footer_cache_clear_menu" not in css
+assert '.hhs-footer-cache-clear-panel input[type="checkbox"]' not in css
 PY
   assert_success
 }
@@ -343,7 +411,7 @@ assert 'variable_column_label="Group"' in aliases_table_body
 assert '[row["Database"] for row in alias_rows]' in aliases_table_body
 assert '[row["Group"] for row in alias_rows]' in aliases_table_body
 assert '"Alias": [row["Alias"] for row in alias_rows]' in aliases_table_body
-assert '"Count": [row["Count"] for row in alias_rows]' in aliases_table_body
+assert '"# Dotfiles": [row["Count"] for row in alias_rows]' in aliases_table_body
 assert "min_row_count=4" not in aliases_table_body
 assert "multi_selection=False" in aliases_table_body
 assert "show_value_column=False" in aliases_table_body

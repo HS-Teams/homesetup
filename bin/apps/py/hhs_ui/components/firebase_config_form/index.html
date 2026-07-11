@@ -346,6 +346,7 @@
         input.id = `firebase-${name}`;
         input.name = name;
         input.placeholder = stringValue(field.placeholder);
+        input.title = stringValue(field.placeholder || `Enter ${labelText}`);
         input.type = isPassword ? "password" : "text";
         input.value = stringValue(values[name]);
         input.disabled = Boolean(args.disabled);
@@ -434,8 +435,12 @@
         actions.className = "actions";
         fields.replaceChildren(...args.fields.map(createField));
         actions.replaceChildren(
-          createButton(" Save", "save", "Save"),
-          createButton("ﭯ Restore", "restore", "Restore original file values")
+          createButton(" Save", "save", "Save Firebase configuration"),
+          createButton(
+            "ﭯ Restore",
+            "restore",
+            "Restore previous Firebase configuration"
+          )
         );
         app.replaceChildren(fields, actions);
         updateRestoreButtonState();

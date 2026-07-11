@@ -776,7 +776,8 @@ PY
   run grep -F -q 'st.session_state["ssh_connection_dialog_title"] = ""' "${ui_file}"
   assert_success
 
-  assert_file_contains "${ui_file}" 'Failed to connect to {host}'
+  assert_file_not_contains "${ssh_runtime_file}" \
+    'ssh_connection_dialog_title"] = f"Failed to connect to {host}"'
 
   assert_file_not_contains "${ui_file}" 'st.error(st.session_state.get("ssh_connection_error", "SSH failed."))'
 }

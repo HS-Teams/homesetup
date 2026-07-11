@@ -15,19 +15,20 @@
 PLUGIN_NAME="hspm"
 
 # Current script version.
-VERSION=1.0.0
+VERSION=1.0.4
 
 # Namespace cleanup
 UNSETS=(
-  help version cleanup execute cleanup_recipes
+  help version cleanup execute cleanup_recipes hspm_recipe_path set_hspm_host_os
+  list_recipe_commands hspm_catalog_description
   uninstall_recipe reinstall_recipe list_recipes install_recipe
-  add_breadcrumb del_breadcrumb recover_packages
-  _install_ _uninstall_ _depends_ _which_
+  add_breadcrumb del_breadcrumb recover_packages sync_packages user_installed_packages
+  _install_ _uninstall_ _depends_ _which_ _catalog_ _temurin_version_
 )
 
 # Usage message
 read -r -d '' USAGE <<EOF
-usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|reinstall|list|recover} [options]
+usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|reinstall|list|recover|sync} [options]
 
  _   _ ____  ____  __  __
 | | | / ___||  _ \|  \/  |
@@ -50,6 +51,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|reinstall|list|recover} [op
       uninstall <package...>       : Uninstall packages using matching recipes.
       reinstall <package...>       : Uninstall and install packages using matching recipes.
       recover                      : Recover packages previously installed by hspm.
+      sync                         : Add user-installed package manager packages to the recovery file.
 
     examples:
       Install a package recipe:
@@ -58,6 +60,8 @@ usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|reinstall|list|recover} [op
         => ${APP_NAME} ${PLUGIN_NAME} recover -i
       Inspect the recovery list without changes:
         => ${APP_NAME} ${PLUGIN_NAME} recover
+      Sync user-installed packages into the recovery list:
+        => ${APP_NAME} ${PLUGIN_NAME} sync
 
     exit status:
       (0) Success
@@ -65,7 +69,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} {install|uninstall|reinstall|list|recover} [op
       (2) Failure due to program execution failures
 
   Notes:
-    - Package manager detection relies on common managers (brew, apt, yum, dnf, apk).
+    - Package manager detection relies on common managers (brew, apt, yum, dnf, apk, pacman).
 
 EOF
 
@@ -90,7 +94,7 @@ HSPM_CATALOG_FILE="${PLUGINS_DIR}/hspm/catalog.toml"
 BREADCRUMB_FILE="${HHS_DIR}/.hspm"
 
 # Known package managers
-KNOWN_PCG_MANAGERS=('brew' 'apt-get' 'apt' 'yum' 'dnf' 'apk')
+KNOWN_PCG_MANAGERS=('brew' 'apt-get' 'apt' 'yum' 'dnf' 'apk' 'pacman')
 
 # Sudo command
 SUDO=
@@ -115,6 +119,12 @@ function cleanup() {
   echo -n ''
 }
 
+# @purpose: Select recipes using the operating system executing HSPM.
+function set_hspm_host_os() {
+  HHS_MY_OS="$(uname -s)"
+  export HHS_MY_OS
+}
+
 # @purpose: HHS plugin required function
 function execute() {
 
@@ -123,13 +133,18 @@ function execute() {
   [[ -z "$1" || "$1" == "-h" || "$1" == "--help" ]] && usage 0
   [[ "$1" == "-v" || "$1" == "--version" ]] && version
 
+  # Always use the operating system of the host running HSPM. This avoids a
+  # stale or SSH-forwarded HHS_MY_OS selecting recipes for another platform.
+  set_hspm_host_os
+
   touch "${BREADCRUMB_FILE}" || quit 1 "Unable to access hspm file: ${BREADCRUMB_FILE}"
 
   if [[ -z "${HHS_MY_OS_PACKMAN}" ]]; then
     for pkg_man in "${KNOWN_PCG_MANAGERS[@]}"; do
       command -v "${pkg_man}" &> /dev/null && HHS_MY_OS_PACKMAN="${HHS_MY_OS_PACKMAN:-"${pkg_man}"}"
     done
-    [[ -z "${OS_APP_MAN}" ]] && quit 1 "hspm.bash: no suitable tool found to install software on this machine. Tried: ${KNOWN_PCG_MANAGERS[*]}"
+    [[ -z "${HHS_MY_OS_PACKMAN}" ]] && quit 1 \
+      "hspm.bash: no suitable tool found to install software on this machine. Tried: ${KNOWN_PCG_MANAGERS[*]}"
   fi
 
   cmd="$1"
@@ -172,6 +187,10 @@ function execute() {
       [[ "$1" == "-t" || "$2" == "-t" ]] && RECOVER_TOOLS=1
       recover_packages
       ;;
+    # Sync user-installed package-manager packages into recovery
+    sync)
+      sync_packages || exit_code=2
+      ;;
     # List available apps
     list)
       list_recipes
@@ -197,42 +216,147 @@ function del_breadcrumb() {
   ised -e "/${os}:${package}/d" "${BREADCRUMB_FILE}"
 }
 
-# purpose: Unset all declared functions from the recipes
-function cleanup_recipes() {
-  unset -f _install_ _uninstall_ _depends_ _which_
+# @purpose: List packages installed explicitly by the user for the active package manager.
+function user_installed_packages() {
+
+  case "${HHS_MY_OS_PACKMAN}" in
+    brew)
+      brew list --formula --installed-on-request
+      ;;
+    apt | apt-get)
+      command -v apt-mark &> /dev/null || {
+        echo "apt-mark is required to list manually installed packages." >&2
+        return 1
+      }
+      apt-mark showmanual
+      ;;
+    dnf | yum)
+      "${HHS_MY_OS_PACKMAN}" repoquery --userinstalled --qf '%{name}'
+      ;;
+    apk)
+      apk info --manual
+      ;;
+    pacman)
+      pacman -Qqe
+      ;;
+    *)
+      echo "Unsupported package manager: ${HHS_MY_OS_PACKMAN:-none}" >&2
+      return 1
+      ;;
+  esac
 }
 
-# purpose: List all available hspm recipes
-function list_recipes() {
+# @purpose: Add package-manager user installs absent from the HSPM recovery file.
+function sync_packages() {
 
-  local index=0 recipe pad_len=20 pad os app all_packages=()
+  local package package_list added_count=0 os=${HHS_MY_OS_RELEASE}
 
-  pad=$(printf '%0.1s' "."{1..60})
-
-  # shellcheck disable=SC2207
-  ALL_RECIPES=($(find "${RECIPES_DIR}/${HHS_MY_OS}" -type f -name "*.recipe" | sort))
-
-  if [[ ${#ALL_RECIPES[@]} -le 0 ]]; then
-    index=$((index + 1))
-    echo -e "${ORANGE}No recipes found matching OS='${HHS_MY_OS}'${NC}"
+  if ! package_list="$(user_installed_packages)"; then
+    __hhs_errcho "${PLUGIN_NAME}" "Unable to list user-installed packages from ${HHS_MY_OS_PACKMAN}."
+    return 1
   fi
 
-  IFS=$'\n' read -r -d '' -a all_packages < <(__hhs_toml_groups "${HSPM_CATALOG_FILE}")
-  IFS="${OLDIFS}"
+  while IFS= read -r package; do
+    [[ -n "${package}" ]] || continue
+    grep -qxF "${os}:${package}" "${BREADCRUMB_FILE}" && continue
+    add_breadcrumb "${package}"
+    added_count=$((added_count + 1))
+  done < <(printf '%s\n' "${package_list}" | LC_ALL=C sort -u)
+
+  if [[ ${added_count} -gt 0 ]]; then
+    echo -e "${GREEN}Synchronized ${added_count} user-installed package(s) from ${HHS_MY_OS_PACKMAN}.${NC}"
+  else
+    echo -e "${YELLOW}HSPM already tracks all user-installed ${HHS_MY_OS_PACKMAN} packages.${NC}"
+  fi
+}
+
+# purpose: Unset all declared functions from the recipes
+function cleanup_recipes() {
+  unset -f _install_ _uninstall_ _depends_ _which_ _catalog_ _temurin_version_
+}
+
+# @purpose: Return the OS-specific recipe file for a package command.
+function hspm_recipe_path() {
+
+  local package="${1}" recipe_name
+
+  recipe_name="${package%%@*}"
+  printf '%s/%s.recipe\n' "${RECIPES_DIR}/${HHS_MY_OS}" "${recipe_name}"
+}
+
+# @purpose: Print command names supplied by one HSPM recipe file.
+function list_recipe_commands() {
+
+  local recipe="${1}" recipe_name
+
+  cleanup_recipes
+  # shellcheck disable=SC1090
+  source "${recipe}"
+  if declare -F _catalog_ >/dev/null; then
+    _catalog_
+  else
+    recipe_name="$(basename "${recipe%.recipe}")"
+    printf '%s\n' "${recipe_name}"
+  fi
+  cleanup_recipes
+}
+
+# @purpose: Return the catalog description associated with a recipe command.
+function hspm_catalog_description() {
+
+  local package="${1}" base_package description
+
+  description="$(
+    __hhs_toml_get "${HSPM_CATALOG_FILE}" 'about' "${package}" || true
+  )"
+  if [[ -z "${description}" ]]; then
+    base_package="${package%%@*}"
+    description="$(
+      __hhs_toml_get "${HSPM_CATALOG_FILE}" 'about' "${base_package}" || true
+    )"
+  fi
+  description="${description#*=}"
+  [[ -n "${description}" ]] || description='No description available.'
+  printf '%s' "${description}"
+}
+
+# @purpose: List all available recipes for the current operating system.
+function list_recipes() {
+
+  local index=0 recipe package description pad_len=20 pad recipe_dir
+
+  pad=$(printf '%0.1s' "."{1..60})
+  set_hspm_host_os
+  recipe_dir="${RECIPES_DIR}/${HHS_MY_OS}"
+
+  ALL_RECIPES=()
+  if [[ ! -d "${recipe_dir}" ]]; then
+    echo -e "${ORANGE}No recipes found matching OS='${HHS_MY_OS}'${NC}"
+    return 0
+  fi
+  while IFS= read -r recipe; do
+    [[ "${recipe##*/}" == 'default.recipe' ]] && continue
+    ALL_RECIPES+=("${recipe}")
+  done < <(find "${recipe_dir}" -maxdepth 1 -type f -name "*.recipe" -print | sort)
+
+  if [[ ${#ALL_RECIPES[@]} -le 0 ]]; then
+    echo -e "${ORANGE}No recipes found matching OS='${HHS_MY_OS}'${NC}"
+    return 0
+  fi
 
   echo -e "\n${YELLOW}Listing all available hspm '${HHS_MY_OS}' packages ... ${NC}\n"
-  for package in "${all_packages[@]}"; do
-    [[ "${package}" == 'default' ]] && continue
-    recipe="${RECIPES_DIR}/${HHS_MY_OS}/${package}.recipe"
-    [[ -s "${recipe}" ]] && printf '%3s + %s' "${index}" "${HHS_HIGHLIGHT_COLOR}${package} "
-    [[ -s "${recipe}" ]] || printf '%3s - %s' "${index}" "${WHITE}${package} "
-    printf '%*.*s' 0 $((pad_len - ${#package})) "${pad}"
-    recipe_about="$(__hhs_toml_get "${HSPM_CATALOG_FILE}" 'about' "${package}")"
-    echo -e "${GREEN} => ${WHITE}${recipe_about#*=}${NC}"
-    ((index += 1))
+  for recipe in "${ALL_RECIPES[@]}"; do
+    while IFS= read -r package; do
+      [[ -n "${package}" ]] || continue
+      description="$(hspm_catalog_description "${package}")"
+      printf '%3s + %s' "${index}" "${HHS_HIGHLIGHT_COLOR}${package} "
+      printf '%*.*s' 0 $((pad_len - ${#package})) "${pad}"
+      echo -e "${GREEN} => ${WHITE}${description}${NC}"
+      ((index += 1))
+    done < <(list_recipe_commands "${recipe}")
   done
   echo -e "\n${YELLOW}Found (${#ALL_RECIPES[@]}) custom recipes."
-  echo -e "Packages enlisted with '+' have a custom installation recipe${NC}\n"
+  echo -e "Catalog descriptions are read from ${HSPM_CATALOG_FILE}${NC}\n"
 
   return 0
 }
@@ -243,11 +367,10 @@ function install_recipe() {
   local recipe package
 
   package="${1}"
-  recipe="${RECIPES_DIR}/$(uname -s)/${package}.recipe"
+  recipe="$(hspm_recipe_path "${package}")"
 
   # Source the default recipe, so we can override only what we need
   source "${RECIPES_DIR}/${HHS_MY_OS}/default.recipe"
-  package=$(basename "${recipe%\.*}")
 
   if [[ -f "${recipe}" ]]; then
     source "${recipe}"
@@ -275,11 +398,10 @@ function uninstall_recipe() {
   local recipe package
 
   package="${1}"
-  recipe="${RECIPES_DIR}/$(uname -s)/${package}.recipe"
+  recipe="$(hspm_recipe_path "${package}")"
 
   # Source the default recipe, so we can override only what we need
   source "${RECIPES_DIR}/${HHS_MY_OS}/default.recipe"
-  package=$(basename "${recipe%\.*}")
 
   if [[ -f "${recipe}" ]]; then
     source "${recipe}"

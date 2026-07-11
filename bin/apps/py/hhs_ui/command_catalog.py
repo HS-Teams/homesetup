@@ -26,6 +26,7 @@ from hhs_ui.ui_definitions import (
     FOOTER_VERSION_OUTPUT_MARKER,
     HHS_CONFIG_ENV_OUTPUT_MARKER,
     HHS_FIREBASE_FIELDS,
+    HHS_HSPM_ENV_OUTPUT_MARKER,
     HHS_PATHS_RAW_ENTRY_MARKER,
     HHS_SETUP_SETTINGS,
     SHOPT_DESCRIPTIONS,
@@ -1534,24 +1535,8 @@ def build_docker_image_delete_command(image_id: str) -> str:
     return f"docker image rm -f {shlex.quote(image_id)}"
 
 
-def build_hhs_hspm_command(
-    operation: str,
-    tool_name: str | list[str] | tuple[str, ...] = "",
-) -> str:
-    """Build the Bash command used to run an hspm tool operation."""
-    safe_operation = (
-        operation
-        if operation in {"install", "uninstall", "reinstall", "list", "recover"}
-        else ""
-    )
-    if isinstance(tool_name, str):
-        tool_names = [tool_name]
-    else:
-        tool_names = list(tool_name)
-    safe_tool_names = " ".join(
-        shlex.quote(name.strip()) for name in tool_names if name.strip()
-    )
-    safe_tool_args = f" {safe_tool_names}" if safe_tool_names else ""
+def _build_hhs_hspm_command_prefix() -> str:
+    """Build the shell setup shared by HSPM commands and metadata output."""
     return (
         'export HHS_DIR="${HHS_DIR}"; '
         'export HHS_HOME="${HHS_HOME}"; '
@@ -1563,9 +1548,47 @@ def build_hhs_hspm_command(
         'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_colors.bash"; '
         'source "${HHS_HOME}/dotfiles/bash/bash_env.bash"; '
-        'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"; '
+    )
+
+
+def _build_hhs_hspm_environment_output() -> str:
+    """Build marked HSPM environment output for catalog and recovery titles."""
+    return (
+        f'printf "%s\\n" "{HHS_HSPM_ENV_OUTPUT_MARKER}"; '
+        'printf "HHS_MY_OS\\t%s\\nHHS_MY_OS_PACKMAN\\t%s\\n" '
+        '"${HHS_MY_OS}" "${HHS_MY_OS_PACKMAN}"; '
+    )
+
+
+def build_hhs_hspm_command(
+    operation: str,
+    tool_name: str | list[str] | tuple[str, ...] = "",
+) -> str:
+    """Build the Bash command used to run an hspm tool operation."""
+    safe_operation = (
+        operation
+        if operation
+        in {"install", "uninstall", "reinstall", "list", "recover", "sync"}
+        else ""
+    )
+    if isinstance(tool_name, str):
+        tool_names = [tool_name]
+    else:
+        tool_names = list(tool_name)
+    safe_tool_names = " ".join(
+        shlex.quote(name.strip()) for name in tool_names if name.strip()
+    )
+    safe_tool_args = f" {safe_tool_names}" if safe_tool_names else ""
+    return (
+        _build_hhs_hspm_command_prefix()
+        + 'source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/hspm/hspm.bash"; '
         'function __hhs() { if [[ "$1" == "hspm" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
-        f"__hhs hspm execute {safe_operation}{safe_tool_args}"
+        + (
+            _build_hhs_hspm_environment_output()
+            if safe_operation in {"list", "recover"}
+            else ""
+        )
+        + f"__hhs hspm execute {safe_operation}{safe_tool_args}"
     )
 
 

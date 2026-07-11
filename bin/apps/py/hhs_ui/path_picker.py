@@ -965,6 +965,7 @@ def render_path_picker_body(
         selected_label,
         key="_hhs_folder_picker_current_dir_input",
         disabled=loading_children,
+        help=f"Enter the {selected_label.lower()} to browse.",
         on_change=apply_folder_picker_typed_directory,
     )
     selected_widget_key = folder_picker_child_selection_widget_key(
@@ -989,6 +990,7 @@ def render_path_picker_body(
             PATH_PICKER_LISTING_LOADER_MESSAGE if loading_children else empty_caption
         ),
         "disabled": loading_children or not bool(child_directories),
+        "help": f"Choose a {mode} in the current directory.",
     }
     if mode == "folder":
         selectbox_kwargs["on_change"] = open_folder_picker_selected_child
@@ -1007,6 +1009,7 @@ def render_path_picker_body(
         key="_hhs_folder_picker_include_dot_folders",
         value=False,
         disabled=loading_children,
+        help="Include folders whose names begin with a dot.",
         on_change=refresh_folder_picker_current_children,
     )
     with st.container(key="folder_picker_action_grid"):
@@ -1067,5 +1070,4 @@ def render_path_picker_listing_loader(job_name: str) -> None:
 def render_folder_picker_dialog(owner_context: str = "") -> bool:
     """Render the reusable path picker dialog when requested."""
     return render_path_picker_dialog(owner_context)
-
 

@@ -370,125 +370,113 @@ def render_footer_client_error_bridge_script() -> None:
 
 
 def footer_cache_clear_menu_markup() -> str:
-    """Return the native HTML footer cleanup menu without form semantics."""
+    """Return the footer cleanup menu using button-based checkbox controls."""
     clear_param = html.escape(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM, quote=True)
-    app_cache_param = html.escape(
-        hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM,
-        quote=True,
+    options = (
+        (
+            hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM,
+            "Clear application cache",
+            "Clear cached command data and refresh it when next needed",
+        ),
+        (
+            hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM,
+            "Clear application states",
+            "Clear saved UI selections and preferences",
+        ),
+        (
+            hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM,
+            "Clear AI history",
+            "Clear the HomeSetup AI conversation history",
+        ),
     )
-    app_states_param = html.escape(
-        hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM,
-        quote=True,
+    option_markup = "".join(
+        (
+            '<button class="hhs-footer-cache-clear-option" type="button" '
+            'role="checkbox" aria-checked="false" '
+            f'data-param="{html.escape(param, quote=True)}" '
+            f'title="{html.escape(tooltip, quote=True)}">'
+            '<span class="hhs-footer-cache-clear-option-mark" aria-hidden="true"></span>'
+            f'<span>{html.escape(label)}</span></button>'
+        )
+        for param, label, tooltip in options
     )
-    ai_history_param = html.escape(
-        hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM,
-        quote=True,
+    return (
+        '<details class="hhs-footer-cache-clear-menu">'
+        '<summary class="hhs-footer-cache-clear-trigger" '
+        'title="Clear application cache" aria-label="Clear application cache">'
+        '<span class="hhs-footer-glyph-button">♻</span></summary>'
+        f'<div class="hhs-footer-cache-clear-panel" data-clear-param="{clear_param}">'
+        f'{option_markup}'
+        '<button class="hhs-footer-cache-clear-submit" type="button" '
+        'title="Apply the selected cleanup options">OK</button>'
+        '</div></details>'
     )
-    return f"""
-      <details class="hhs-footer-cache-clear-menu">
-        <summary class="hhs-footer-cache-clear-trigger"
-                 title="Clear application cache"
-                 aria-label="Clear application cache">
-          <span class="hhs-footer-glyph-button">♻</span>
-        </summary>
-        <div class="hhs-footer-cache-clear-panel" data-clear-param="{clear_param}">
-          <label>
-            <input type="checkbox" data-param="{app_cache_param}">
-            <span>Clear application cache</span>
-          </label>
-          <label>
-            <input type="checkbox" data-param="{app_states_param}">
-            <span>Clear application states</span>
-          </label>
-          <label>
-            <input type="checkbox" data-param="{ai_history_param}">
-            <span>Clear AI history</span>
-          </label>
-          <button type="button">OK</button>
-        </div>
-      </details>
-    """.strip()
 
 
 def render_footer_cache_clear_menu_script() -> None:
-    """Submit footer cleanup choices without creating a browser form."""
+    """Manage safe button-based cleanup selections and submit them by query string."""
     render_script_html(
         """
         <script>
           (() => {
             const doc = window.parent.document;
             const panel = doc.querySelector(".hhs-footer-cache-clear-panel");
-            if (!panel || panel.dataset.clickHandlerInstalled === "true") {
+            if (!panel) {
               return;
             }
-            panel.dataset.clickHandlerInstalled = "true";
             const menu = panel.closest(".hhs-footer-cache-clear-menu");
-            const closeMenu = () => {
-              if (menu) {
-                menu.removeAttribute("open");
-              }
-            };
-            const outsidePointerHandler = (event) => {
-              if (!menu || !menu.open || menu.contains(event.target)) {
-                return;
-              }
-              closeMenu();
-            };
-            const outsideFocusHandler = () => {
-              window.setTimeout(() => {
-                const activeElement = doc.activeElement;
-                if (!menu || !menu.open || !activeElement || menu.contains(activeElement)) {
+            const closeMenu = () => menu?.removeAttribute("open");
+            if (panel.dataset.handlersInstalled !== "true") {
+              panel.dataset.handlersInstalled = "true";
+              panel.querySelectorAll('.hhs-footer-cache-clear-option[role="checkbox"]')
+                .forEach((option) => {
+                  option.addEventListener("click", () => {
+                    const selected = option.getAttribute("aria-checked") === "true";
+                    option.setAttribute("aria-checked", selected ? "false" : "true");
+                  });
+                });
+              panel.querySelector(".hhs-footer-cache-clear-submit")
+                ?.addEventListener("click", () => {
+                  const selectedOptions = Array.from(
+                    panel.querySelectorAll(
+                      '.hhs-footer-cache-clear-option[role="checkbox"][aria-checked="true"]'
+                    )
+                  );
+                  if (!selectedOptions.length) {
+                    closeMenu();
+                    return;
+                  }
+                  const params = new URLSearchParams(window.parent.location.search);
+                  params.set(panel.dataset.clearParam, "1");
+                  selectedOptions.forEach((option) => {
+                    params.set(option.dataset.param, "1");
+                  });
+                  window.parent.location.search = params.toString();
+                });
+              menu?.addEventListener("toggle", () => {
+                if (!menu.open) {
                   return;
                 }
-                closeMenu();
-              }, 0);
-            };
+                panel.querySelectorAll('.hhs-footer-cache-clear-option[role="checkbox"]')
+                  .forEach((option) => option.setAttribute("aria-checked", "false"));
+                doc.querySelectorAll(".hhs-footer-terminal-ai-menu[open]")
+                  .forEach((otherMenu) => otherMenu.removeAttribute("open"));
+              });
+            }
             if (window.parent.__hhsFooterCacheClearOutsideHandler) {
               doc.removeEventListener(
                 "pointerdown",
                 window.parent.__hhsFooterCacheClearOutsideHandler,
                 true
               );
-              doc.removeEventListener(
-                "focusin",
-                window.parent.__hhsFooterCacheClearOutsideHandler,
-                true
-              );
             }
-            if (window.parent.__hhsFooterCacheClearOutsideFocusHandler) {
-              window.parent.removeEventListener(
-                "blur",
-                window.parent.__hhsFooterCacheClearOutsideFocusHandler,
-                true
-              );
-            }
-            window.parent.__hhsFooterCacheClearOutsideHandler = outsidePointerHandler;
-            window.parent.__hhsFooterCacheClearOutsideFocusHandler = outsideFocusHandler;
-            doc.addEventListener("pointerdown", outsidePointerHandler, true);
-            doc.addEventListener("focusin", outsidePointerHandler, true);
-            window.parent.addEventListener("blur", outsideFocusHandler, true);
-            menu?.addEventListener("toggle", () => {
-              if (menu.open) {
-                doc.querySelectorAll(".hhs-footer-terminal-ai-menu[open]").forEach((otherMenu) => {
-                  otherMenu.removeAttribute("open");
-                });
-              }
-            });
-            panel.querySelector("button")?.addEventListener("click", () => {
-              const checkedOptions = Array.from(
-                panel.querySelectorAll('input[type="checkbox"][data-param]:checked')
-              );
-              if (!checkedOptions.length) {
+            const outsideHandler = (event) => {
+              if (menu?.open && !menu.contains(event.target)) {
                 closeMenu();
-                return;
               }
-              const params = new URLSearchParams(window.parent.location.search);
-              params.set(panel.dataset.clearParam, "1");
-              checkedOptions.forEach((option) => {
-                params.set(option.dataset.param, "1");
-              });
-              window.parent.location.search = params.toString();
-            });
+            };
+            window.parent.__hhsFooterCacheClearOutsideHandler = outsideHandler;
+            doc.addEventListener("pointerdown", outsideHandler, true);
           })();
         </script>
         """,
@@ -506,7 +494,8 @@ def footer_terminal_ai_menu_markup(enabled: bool) -> str:
             title="Open Terminal to ask AI about terminal output"
             aria-disabled="true">
         <span class="hhs-footer-terminal-ai-trigger hhs-footer-terminal-ai-trigger--disabled"
-              aria-label="Ask AI about terminal disabled">
+              aria-label="Ask AI about terminal disabled"
+              title="Open Terminal to ask AI about terminal output">
           <span class="hhs-footer-glyph-button"></span>
         </span>
       </span>
@@ -527,6 +516,7 @@ def footer_terminal_ai_menu_markup(enabled: bool) -> str:
               value=""
               placeholder="{default_prompt}"
               aria-label="Terminal AI prompt"
+              title="Describe how HomeSetup should analyze the captured terminal output"
             >
           </label>
           <label class="hhs-footer-terminal-ai-context-preview">
@@ -537,10 +527,11 @@ def footer_terminal_ai_menu_markup(enabled: bool) -> str:
               value=""
               placeholder="Terminal text"
               aria-label="Captured terminal text"
+              title="Terminal output that will be sent to HomeSetup AI"
               readonly
             >
           </label>
-          <button type="button">OK</button>
+          <button type="button" title="Send this terminal output to HomeSetup AI">OK</button>
         </div>
       </details>
     """.strip()
@@ -947,16 +938,16 @@ def render_footer() -> None:
     )
     st.html(f"""
         <footer class="hhs-app-footer">
-          <a class="hhs-footer-logo-link" href="{repository_url}" target="_blank" rel="noopener noreferrer" aria-label="HomeSetup repository">
+          <a class="hhs-footer-logo-link" href="{repository_url}" target="_blank" rel="noopener noreferrer" title="Open the HomeSetup repository" aria-label="HomeSetup repository">
             <img class="hhs-footer-logo" src="{logo_data_uri}" alt="" aria-hidden="true">
           </a>
           <span class="hhs-footer-version-group">
-            <a class="hhs-footer-link hhs-footer-repository-link" href="{repository_url}" target="_blank" rel="noopener noreferrer">HomeSetup - v{version}</a>{updater_markup}
+            <a class="hhs-footer-link hhs-footer-repository-link" href="{repository_url}" target="_blank" rel="noopener noreferrer" title="Open the HomeSetup repository">HomeSetup - v{version}</a>{updater_markup}
           </span>
           <span class="hhs-footer-glyph"></span>
           <a class="hhs-footer-link hhs-footer-working-dir-link"
              href="{working_dir_url}"
-             target="_self"{working_dir_attrs}>Working dir: <span class="hhs-footer-working-dir-value">{working_dir}</span></a>
+             target="_self" title="Open the working directory"{working_dir_attrs}>Working dir: <span class="hhs-footer-working-dir-value">{working_dir}</span></a>
           {status_group_markup}
         </footer>
         """)
@@ -1057,7 +1048,7 @@ def selected_footer_cleanup_labels(
     clear_application_states: bool,
     clear_ai_history: bool,
 ) -> list[str]:
-    """Return footer cleanup labels selected in the native popup menu."""
+    """Return the selected footer cleanup labels."""
     labels = []
     if clear_application_cache:
         labels.append("application cache")
@@ -1073,7 +1064,7 @@ def apply_footer_cache_clear_options(
     clear_application_states: bool,
     clear_ai_history: bool,
 ) -> None:
-    """Apply selected footer cleanup actions from query parameters."""
+    """Apply selected footer cleanup actions."""
     labels = selected_footer_cleanup_labels(
         clear_application_cache,
         clear_application_states,
@@ -1106,13 +1097,18 @@ def apply_footer_cache_clear_options(
 
 def remove_footer_cache_clear_query_params() -> None:
     """Remove footer cache clear query parameters from the browser URL."""
-    for name in (
+    clear_param_names = {
         hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM,
         hhs_ui.FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM,
         hhs_ui.FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM,
         hhs_ui.FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM,
-    ):
-        remove_query_param(name)
+    }
+    remaining_params = {
+        name: st.query_params.get_all(name)
+        for name in st.query_params
+        if name not in clear_param_names
+    }
+    st.query_params.from_dict(remaining_params)
 
 
 def handle_command_preloader_cancel_action() -> None:

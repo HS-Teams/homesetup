@@ -6,7 +6,8 @@ function _about_() {
 
 function _which_() {
 
-  if command -v "$1" &>/dev/null || "${HHS_MY_OS_PACKMAN}" info "$@" &>/dev/null; then
+  if command -v "$1" &>/dev/null ||
+    "${HHS_MY_OS_PACKMAN}" list --formula "$1" &>/dev/null; then
     return 0
   fi
 

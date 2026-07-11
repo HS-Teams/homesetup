@@ -165,7 +165,12 @@ def pop_dialog(
             key = str(button.get("key", ""))
             callback = button.get("callback")
             with column:
-                if st.button(label, key=key, width="stretch"):
+                if st.button(
+                    label,
+                    key=key,
+                    help=str(button.get("help", label)),
+                    width="stretch",
+                ):
                     handle_dialog_button_click(
                         callback if callable(callback) else None,
                         close_callback=close_callback,

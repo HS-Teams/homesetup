@@ -1065,6 +1065,35 @@ def render_ai_models_result() -> subprocess.CompletedProcess[str] | None:
     )
 
 
+def render_ai_chat_input_tooltip() -> None:
+    """Attach native tooltips to the Streamlit chat input controls."""
+    render_script_html(
+        """
+        <script>
+        (() => {
+            const documentRoot = window.parent.document;
+            const chatInput = documentRoot.querySelector('[data-testid="stChatInput"]');
+            if (!chatInput) {
+                return;
+            }
+
+            const input = chatInput.querySelector("textarea, [contenteditable='true']");
+            if (input) {
+                input.title = "Ask Ollama through HomeSetup.";
+            }
+
+            const submitButton = chatInput.querySelector("button");
+            if (submitButton) {
+                submitButton.title = "Send message to Ollama.";
+            }
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def render_ai_chat_panel() -> None:
     """Render the HomeSetup Ollama chat panel."""
     execute_pending_ai_context_action()
@@ -1169,7 +1198,9 @@ def render_ai_chat_panel() -> None:
         ):
             render_background_job_status(AI_ASK_JOB, "Generating response...")
 
-    if prompt := st.chat_input("Ask Ollama through HomeSetup"):
+    prompt = st.chat_input("Ask Ollama through HomeSetup")
+    render_ai_chat_input_tooltip()
+    if prompt:
         if not submit_ai_chat_prompt(prompt, ollama_model, context_size):
             return
         with st.chat_message(
@@ -1273,6 +1304,7 @@ def render_ai_prompt_file_panel() -> None:
         "Prompt",
         key="ai_prompt_editor",
         height=max(280, min(620, prompt_line_count * 22)),
+        help="Edit the prompt HomeSetup sends to Ollama.",
         label_visibility="collapsed",
     )
 
@@ -1289,6 +1321,7 @@ def render_ai_context_output_panel() -> None:
             "Ingest context",
             type=hhs_ui_constants.AI_CONTEXT_UPLOAD_TYPES,
             key="ai_context_upload",
+            help="Choose a supported text file to add to the Ollama context.",
             label_visibility="collapsed",
         )
     with ingest_col:

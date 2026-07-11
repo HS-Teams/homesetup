@@ -311,6 +311,7 @@ from hhs_ui.ui_definitions import (
     ALIAS_LIST_JOB,
     CONFIG_ACTION_JOB,
     DOCKER_ACTION_JOB,
+    HHS_HSPM_CATALOG_CACHE_TAG,
     HOME_TOOL_ACTION_JOB,
     HOME_TOOL_TLDR_JOB,
     MONITOR_PROCESS_ACTION_JOB,
@@ -634,6 +635,7 @@ def render_sidebar_terminal_button() -> None:
     st.button(
         " Terminal",
         key="terminal_open_button",
+        help="Open the interactive terminal.",
         on_click=open_document_view,
         args=("TERMINAL",),
         width="stretch",
@@ -682,6 +684,7 @@ def render_sidebar() -> None:
                 index=0,
                 key=f"ssh_host_connected_display_{connected_host_key}",
                 label_visibility="collapsed",
+                help="Shows the active connected host.",
                 disabled=True,
                 width="stretch",
             )
@@ -693,6 +696,7 @@ def render_sidebar() -> None:
                 options=host_options,
                 key="ssh_host_selector",
                 label_visibility="collapsed",
+                help="Choose the local machine or an SSH host.",
                 on_change=select_ssh_host_from_widget,
                 width="stretch",
             )
@@ -701,6 +705,7 @@ def render_sidebar() -> None:
                 st.button(
                     "ﮤ Disconnect",
                     key="ssh_disconnect_button",
+                    help="Disconnect from the current SSH host.",
                     on_click=request_ssh_host_disconnection,
                     width="stretch",
                 )
@@ -708,6 +713,7 @@ def render_sidebar() -> None:
                 st.button(
                     "ﮣ Connect",
                     key="ssh_connect_button",
+                    help="Connect to the selected SSH host.",
                     on_click=request_ssh_host_connect,
                     width="stretch",
                 )
@@ -719,6 +725,7 @@ def render_sidebar() -> None:
             placeholder="",
             disabled=False,
             label_visibility="collapsed",
+            help="Choose the HomeSetup color theme.",
             on_change=request_theme_reload,
             width="stretch",
         )
@@ -738,6 +745,7 @@ def render_sidebar() -> None:
             st.button(
                 "BACK",
                 key="document_back_button",
+                help="Return to the previous HomeSetup view.",
                 on_click=close_document_view,
                 width="stretch",
             )
@@ -748,6 +756,7 @@ def render_sidebar() -> None:
             st.button(
                 " README",
                 key="readme_open_button",
+                help="Open the HomeSetup README.",
                 on_click=open_document_view,
                 args=("README",),
                 width="stretch",
@@ -755,6 +764,7 @@ def render_sidebar() -> None:
             st.button(
                 " HANDBOOK",
                 key="handbook_open_button",
+                help="Open the HomeSetup handbook.",
                 on_click=open_document_view,
                 args=("HANDBOOK",),
                 width="stretch",
@@ -850,6 +860,7 @@ def render_active_view_control(visible_views: tuple[str, ...]) -> str:
         index=None,
         key=widget_key,
         label_visibility="collapsed",
+        help="Choose the HomeSetup section to display.",
         format_func=main_view_label,
         on_change=save_active_view_state,
         args=(widget_key, visible_views),
@@ -911,6 +922,7 @@ def render_view_segmented_control(
         format_func=format_func,
         key=widget_key,
         label_visibility="collapsed",
+        help=f"Choose the {label.lower()} to display.",
         on_change=save_view_segmented_control_state,
         args=(state_key, widget_key, options),
         width="stretch",
@@ -1331,6 +1343,7 @@ def render_config_add_controls(
                 name_label,
                 key=f"{key_prefix}_add_name",
                 placeholder=name_placeholder,
+                help=f"Enter the {name_label.lower()}.",
             )
     value_input_args: dict[str, object] = {
         "key": f"{key_prefix}_add_value",
@@ -1339,7 +1352,11 @@ def render_config_add_controls(
     if on_submit is not None:
         value_input_args["on_change"] = on_submit
     with value_col:
-        st.text_input(value_label, **value_input_args)
+        st.text_input(
+            value_label,
+            help=f"Enter the {value_label.lower()}.",
+            **value_input_args,
+        )
 
     action_index = 0
     if has_plus_btn:
@@ -2336,7 +2353,7 @@ def reset_hhs_hspm_catalog_table_selection() -> None:
 
 def refresh_hhs_hspm_catalog_listing() -> None:
     """Refresh cached HSPM catalog data and clear marked rows."""
-    cache_delete_tag("hhs_hspm_catalog")
+    cache_delete_tag(HHS_HSPM_CATALOG_CACHE_TAG)
     reset_hhs_hspm_catalog_table_selection()
 
 
@@ -3354,6 +3371,7 @@ def execute_pending_home_tool_action() -> None:
             build_hhs_hspm_command(operation, tool_name),
             f"{home_tool_action_noun(operation)} of {tool_name}",
             hhs_ui_constants.UI_COMMAND_LONG_ACTION_TIMEOUT_SECONDS,
+            force_local=False,
             metadata={"operation": operation, "tool_name": tool_name},
             show_preloader_event=True,
         )

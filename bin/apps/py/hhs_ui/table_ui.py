@@ -231,6 +231,7 @@ def render_selected_table_item(
                 f"{value}:",
                 key=edit_key,
                 max_chars=edit_max_chars,
+                help=f"Edit {edit_label.lower()}.",
                 on_change=edit_on_change,
                 placeholder=edit_label,
                 args=edit_args,
@@ -821,7 +822,8 @@ def render_chart_refresh_button(
 
 def render_standard_number_spinner(label: str, **input_kwargs: object) -> int:
     """Render the standard compact number spinner used by chart controls."""
-    return int(st.number_input(label, **input_kwargs))
+    help_text = str(input_kwargs.pop("help", f"Set {label.rstrip(':').lower()}."))
+    return int(st.number_input(label, help=help_text, **input_kwargs))
 
 
 def render_chart_top_n_input(
@@ -836,6 +838,7 @@ def render_chart_top_n_input(
         "step": 1,
         "key": key,
         "label_visibility": "collapsed",
+        "help": "Set the number of items shown in the chart.",
         "width": 150,
     }
     if on_change is not None:
@@ -858,7 +861,8 @@ def render_chart_text_input(
     if on_change is not None:
         input_kwargs["on_change"] = on_change
         input_kwargs["args"] = args
-    st.text_input(label, **input_kwargs)
+    help_text = str(input_kwargs.pop("help", f"Enter {label.rstrip(':').lower()}."))
+    st.text_input(label, help=help_text, **input_kwargs)
 
 
 def render_chart_controls(
@@ -1101,6 +1105,7 @@ def render_table_filter_controls(
             index=None,
             key=key,
             label_visibility="collapsed",
+            help="Filter the table rows.",
             on_change=save_ui_state,
         )
 
@@ -1114,6 +1119,7 @@ def render_table_filter_controls(
                 label_visibility="collapsed",
                 on_change=save_ui_state,
                 placeholder=placeholder,
+                help="Filter the table rows by text.",
             )
         with clear_filter_col:
             st.button(
@@ -1464,6 +1470,7 @@ def render_markdown_table(
         column_config[value_column_label] = st.column_config.CheckboxColumn(
             value_column_label,
             disabled=disabled,
+            help="Select rows for the available actions.",
             width=hhs_ui_constants.MARKDOWN_TABLE_MARK_COLUMN_WIDTH,
         )
     for column_label in extra_column_labels:
