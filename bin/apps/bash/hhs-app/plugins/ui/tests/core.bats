@@ -118,11 +118,12 @@ PY
   assert_file_not_contains_many "${ui_plugin_file}" \
 'defunct' "ui_process_tree""_pids"
   assert_file_contains_many "${ui_plugin_file}" \
-'is_owned_ui_pid "${pid}"' 'is_python_or_streamlit_pid "${pid}"'
+'is_hhs_ui_pid "${pid}"' 'is_owned_ui_pid "${pid}"' 'is_python_or_streamlit_pid "${pid}"'
   assert_file_not_contains "${ui_plugin_file}" 'def is_python_or_streamlit_pid'
 
   assert_file_contains_many "${ui_plugin_file}" \
-'^function is_python_or_streamlit_pid()' '^function validate_safe_streamlit_args()' \
+'^function is_python_or_streamlit_pid()' '^function is_hhs_ui_pid()' '^function is_hhs_ui_running()' \
+    '^function validate_safe_streamlit_args()' \
     'validate_safe_streamlit_args "$@"' '^function streamlit_theme_args()' 'startup_theme.py' \
     '"${theme_args\[@\]}"'
   run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/startup_theme.py"
@@ -273,6 +274,82 @@ PY
   assert_output --partial 'HomeSetup UI is running at http://localhost:28501'
 }
 
+@test "when HomeSetup UI is recognizable but unowned then it is opened without adoption" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
+    function usage() { return "${1:-0}"; }
+    function quit() { exit "${1:-0}"; }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { return 0; }
+    function __hhs_open() { printf "open:%s\n" "$1"; }
+    source "${3}"
+    function validate_ui_runtime() { return 0; }
+    function is_ui_running() { return 0; }
+    function is_managed_ui_running() { return 1; }
+    function is_hhs_ui_running() { return 0; }
+    function ui_hhs_port_pid() { printf "45678\n"; }
+    start_ui
+    launch_ui
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_output --partial 'HomeSetup UI is already running on port 28501 [PID=45678] outside UI plugin ownership.'
+  assert_output --partial 'Opening it without adopting it.'
+  assert_line --index 1 'HomeSetup UI is running at http://localhost:28501'
+  assert_line --index 3 'HomeSetup UI is running at http://localhost:28501'
+}
+
+@test "when HomeSetup UI is recognizable but unowned then stop and restart leave it running" {
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
+    export HHS_LOG_DIR="${2}/log"
+    export HHS_STREAMLIT_UI_PORT="28501"
+    export BLUE=""
+    export GREEN=""
+    export NC=""
+    export YELLOW=""
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
+    function usage() { exit "${1:-0}"; }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift || true
+      [[ $# -gt 0 ]] && printf "%s\n" "$*"
+      exit "${exit_code}"
+    }
+    function __hhs_is_venv() { return 0; }
+    function __hhs_has() { return 0; }
+    function __hhs_open() { return 0; }
+    function kill() {
+      [[ "$1" == "-0" ]] && return 0
+      printf "kill:%s\n" "$*"
+    }
+    source "${3}"
+    function is_ui_running() { return 0; }
+    function is_managed_ui_running() { return 1; }
+    function is_hhs_ui_running() { return 0; }
+    function ui_hhs_port_pid() { printf "45678\n"; }
+    function ui_known_pids() { return 0; }
+    stop_ui
+    restart_ui
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_failure
+  assert_output --partial 'outside UI plugin ownership. Leaving it running.'
+  assert_output --partial 'outside UI plugin ownership. Cannot restart it safely.'
+  refute_output --partial 'kill:'
+}
+
 @test "when starting UI with an unmanaged listener then plugin should leave it alone" {
   run bash --noprofile --norc -c '
     export APP_NAME="hhs"
@@ -305,10 +382,14 @@ PY
     source "${3}"
     function is_ui_running() { return 0; }
     function ui_port_pids() { printf "99999\n"; }
+    function ui_pid_command_name() { printf "Python\n"; }
+    function ui_pid_args() {
+      printf "python3 -m streamlit run /tmp/other.py --server.port 28501 --server.address 127.0.0.1\n"
+    }
     start_ui
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
   assert_failure
-  assert_output --partial 'Port 28501 is in use by a process [PID=99999] not started by the UI plugin.'
+  assert_output --partial 'Port 28501 is in use by another Streamlit application [PID=99999, process=Python].'
   assert_output --partial 'Cannot start HomeSetup UI.'
   refute_output --partial 'kill:'
   refute_output --partial 'open:'
@@ -446,6 +527,9 @@ PY
     function ui_pid_command_name() { printf "Python\n"; }
     function ui_pid_env() { printf "HHS_STREAMLIT_UI_OWNER=hhs-ui.123.456.789\n"; }
     is_owned_ui_pid 12345 && printf "env-owned\n" || printf "env-rejected\n"
+    function ui_pid_env() { return 0; }
+    is_hhs_ui_pid 12345 && printf "hhs-recognized\n" || printf "hhs-unrecognized\n"
+    is_owned_ui_pid 12345 && printf "untracked-owned\n" || printf "untracked-rejected\n"
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
   assert_success
   assert_line --index 0 'bad-rejected'
@@ -453,6 +537,8 @@ PY
   assert_line --index 2 'python-owned'
   assert_line --index 3 'streamlit-owned'
   assert_line --index 4 'env-owned'
+  assert_line --index 5 'hhs-recognized'
+  assert_line --index 6 'untracked-rejected'
 }
 
 @test "when restarting UI then launch path opens the browser after stop" {
@@ -479,6 +565,7 @@ PY
     function __hhs_has() { return 0; }
     function __hhs_open() { printf "open:%s\n" "$1"; }
     source "${3}"
+    function is_ui_running() { return 1; }
     function stop_ui() { printf "stop\n"; }
     function launch_ui() { printf "launch:%s\n" "$*"; open_ui; }
     restart_ui --flag
@@ -630,10 +717,12 @@ PY
     function is_ui_running() { return 0; }
     function ui_pids() { printf "88888\n"; }
     function ui_port_pids() { printf "99999\n"; }
+    function ui_pid_command_name() { printf "node\n"; }
+    function ui_pid_args() { printf "node server.js\n"; }
     stop_ui
   ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
   assert_success
-  assert_output --partial 'Port 28501 is in use by a process [PID=99999] not started by the UI plugin. Leaving it running.'
+  assert_output --partial 'Port 28501 is in use by another process [PID=99999, process=node]. Leaving it running.'
   refute_output --partial 'kill:'
 }
 

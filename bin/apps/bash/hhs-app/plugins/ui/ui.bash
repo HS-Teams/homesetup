@@ -15,7 +15,7 @@
 PLUGIN_NAME="ui"
 
 # Current HomeSetup UI plugin version.
-VERSION="0.0.6"
+VERSION="0.0.7"
 
 # Namespace cleanup.
 UNSETS=(
@@ -23,9 +23,10 @@ UNSETS=(
   get_ui_process_registry_file get_legacy_ui_process_registry_file is_ui_running open_ui ui_pids
   ui_port_pids ui_recorded_processes ui_recorded_pids
   ui_process_token ui_pid_command_name ui_pid_args ui_pid_env ui_pid_owner_env_token
-  is_python_or_streamlit_pid is_owned_ui_pid ui_known_pids ui_tracked_processes_alive
-  is_managed_ui_running new_ui_owner_token
-  record_ui_process cleanup_ui_process_files ui_port_owner_pid unmanaged_ui_port_message status_ui stop_ui
+  is_python_or_streamlit_pid is_hhs_ui_pid is_owned_ui_pid ui_known_pids ui_tracked_processes_alive
+  is_managed_ui_running is_hhs_ui_running ui_hhs_port_pid new_ui_owner_token
+  record_ui_process cleanup_ui_process_files ui_port_owner_pid ui_pid_nature ui_port_conflict_message
+  recognizable_hhs_ui_message status_ui stop_ui
   validate_safe_streamlit_args streamlit_theme_args start_ui restart_ui launch_ui validate_ui_runtime
 )
 
@@ -239,9 +240,9 @@ function is_python_or_streamlit_pid() {
   [[ "${first_arg}" =~ ^(python([0-9]+(\.[0-9]+)*)?|streamlit)$ ]]
 }
 
-# @purpose: Check whether a PID is owned by this UI plugin launch.
-function is_owned_ui_pid() {
-  local args env pid token
+# @purpose: Check whether a PID is the configured HomeSetup Streamlit UI.
+function is_hhs_ui_pid() {
+  local args pid
 
   pid="$1"
   [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
@@ -252,6 +253,14 @@ function is_owned_ui_pid() {
   [[ "${args}" == *"-m streamlit run ${STREAMLIT_UI}"* ]] || return 1
   [[ "${args}" == *"--server.port ${HHS_STREAMLIT_UI_PORT}"* ]] || return 1
   [[ "${args}" == *"--server.address 127.0.0.1"* ]] || return 1
+}
+
+# @purpose: Check whether a PID is owned by this UI plugin launch.
+function is_owned_ui_pid() {
+  local env pid token
+
+  pid="$1"
+  is_hhs_ui_pid "${pid}" || return 1
 
   env="$(ui_pid_env "${pid}")"
   token="$(ui_process_token "${pid}")"
@@ -291,6 +300,33 @@ function is_managed_ui_running() {
       [[ -z "${pid}" ]] && continue
       [[ "${pid}" == "${port_pid}" ]] && is_owned_ui_pid "${pid}" && return 0
     done < <(ui_known_pids)
+  done < <(ui_port_pids)
+
+  return 1
+}
+
+# @purpose: Check whether the configured port serves the HomeSetup Streamlit UI.
+function is_hhs_ui_running() {
+  local port_pid
+
+  is_ui_running || return 1
+  while IFS= read -r port_pid; do
+    [[ -z "${port_pid}" ]] && continue
+    is_hhs_ui_pid "${port_pid}" && return 0
+  done < <(ui_port_pids)
+
+  return 1
+}
+
+# @purpose: Print the HomeSetup UI process ID listening on the configured port.
+function ui_hhs_port_pid() {
+  local port_pid
+
+  while IFS= read -r port_pid; do
+    [[ "${port_pid}" =~ ^[0-9]+$ ]] || continue
+    is_hhs_ui_pid "${port_pid}" || continue
+    printf '%s\n' "${port_pid}"
+    return 0
   done < <(ui_port_pids)
 
   return 1
@@ -342,14 +378,49 @@ function ui_port_owner_pid() {
   return 1
 }
 
-# @purpose: Format a diagnostic message for an unmanaged HomeSetup Streamlit UI port listener.
-function unmanaged_ui_port_message() {
-  local pid suffix
+# @purpose: Describe the type of process occupying the configured UI port.
+function ui_pid_nature() {
+  local args pid
+
+  pid="$1"
+  args="$(ui_pid_args "${pid}")"
+  if is_hhs_ui_pid "${pid}"; then
+    printf 'the HomeSetup Streamlit UI\n'
+  elif [[ "${args}" == *"streamlit run"* ]]; then
+    printf 'another Streamlit application\n'
+  elif is_python_or_streamlit_pid "${pid}"; then
+    printf 'another Python application\n'
+  else
+    printf 'another process\n'
+  fi
+}
+
+# @purpose: Format a diagnostic message for a foreign UI port listener.
+function ui_port_conflict_message() {
+  local command_name nature pid suffix
 
   suffix="${1:-}"
   pid="$(ui_port_owner_pid || true)"
   [[ -z "${pid}" ]] && pid="unknown"
-  printf 'Port %s is in use by a process [PID=%s] not started by the UI plugin.%s\n' \
+  command_name="$(ui_pid_command_name "${pid}")"
+  [[ -z "${command_name}" ]] && command_name="unknown"
+  nature="$(ui_pid_nature "${pid}")"
+  printf 'Port %s is in use by %s [PID=%s, process=%s].%s\n' \
+    "${HHS_STREAMLIT_UI_PORT}" \
+    "${nature}" \
+    "${pid}" \
+    "${command_name}" \
+    "${suffix}"
+}
+
+# @purpose: Format a diagnostic message for an unowned HomeSetup UI listener.
+function recognizable_hhs_ui_message() {
+  local pid suffix
+
+  suffix="${1:-}"
+  pid="$(ui_hhs_port_pid || true)"
+  [[ -z "${pid}" ]] && pid="unknown"
+  printf 'HomeSetup UI is already running on port %s [PID=%s] outside UI plugin ownership.%s\n' \
     "${HHS_STREAMLIT_UI_PORT}" \
     "${pid}" \
     "${suffix}"
@@ -379,8 +450,10 @@ function status_ui() {
     else
       echo -e "${GREEN}HomeSetup UI is running at ${BLUE}${url}${NC}"
     fi
+  elif is_hhs_ui_running; then
+    echo -e "${YELLOW}$(recognizable_hhs_ui_message)${NC}"
   elif is_ui_running; then
-    echo -e "${YELLOW}$(unmanaged_ui_port_message)${NC}"
+    echo -e "${YELLOW}$(ui_port_conflict_message)${NC}"
   else
     echo -e "${YELLOW}HomeSetup UI is stopped on port ${HHS_STREAMLIT_UI_PORT}.${NC}"
   fi
@@ -402,7 +475,11 @@ function stop_ui() {
 
   if [[ "${found}" -eq 0 ]]; then
     if is_ui_running; then
-      echo -e "${YELLOW}$(unmanaged_ui_port_message " Leaving it running.")${NC}"
+      if is_hhs_ui_running; then
+        echo -e "${YELLOW}$(recognizable_hhs_ui_message " Leaving it running.")${NC}"
+      else
+        echo -e "${YELLOW}$(ui_port_conflict_message " Leaving it running.")${NC}"
+      fi
       cleanup_ui_process_files
       return 0
     fi
@@ -473,7 +550,12 @@ function start_ui() {
       open_ui
       return 0
     fi
-    quit 2 "$(unmanaged_ui_port_message " Cannot start HomeSetup UI.")"
+    if is_hhs_ui_running; then
+      echo -e "${YELLOW}$(recognizable_hhs_ui_message " Opening it without adopting it.")${NC}"
+      open_ui
+      return 0
+    fi
+    quit 2 "$(ui_port_conflict_message " Cannot start HomeSetup UI.")"
   fi
 
   validate_ui_runtime
@@ -530,7 +612,12 @@ function launch_ui() {
       open_ui
       quit 0
     fi
-    quit 2 "$(unmanaged_ui_port_message " Cannot open HomeSetup UI.")"
+    if is_hhs_ui_running; then
+      echo -e "${YELLOW}$(recognizable_hhs_ui_message " Opening it without adopting it.")${NC}"
+      open_ui
+      quit 0
+    fi
+    quit 2 "$(ui_port_conflict_message " Cannot open HomeSetup UI.")"
   fi
 
   start_ui "$@"
@@ -538,6 +625,12 @@ function launch_ui() {
 
 # @purpose: Restart the HomeSetup Streamlit UI server.
 function restart_ui() {
+  if is_ui_running && ! is_managed_ui_running; then
+    if is_hhs_ui_running; then
+      quit 2 "$(recognizable_hhs_ui_message " Cannot restart it safely.")"
+    fi
+    quit 2 "$(ui_port_conflict_message " Cannot restart HomeSetup UI.")"
+  fi
   stop_ui
   launch_ui "$@"
 }
