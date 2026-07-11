@@ -265,6 +265,32 @@ assert rows[0]["Value"] == "/Users/hjunior/HomeSetup/bin", rows
 PY
   assert_success
 }
+@test "when rendering Configs Environment then path values remain absolute" {
+  assert_file_contains_many "${ui_file}" \
+    'def render_env_rows' 'key=env_table_key()' 'translate_paths=False'
+
+  run python3 - "${table_ui_file}" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+module = ast.parse(Path(sys.argv[1]).read_text(encoding="utf-8"))
+render_table = next(
+    node
+    for node in module.body
+    if isinstance(node, ast.FunctionDef) and node.name == "render_table"
+)
+translate_paths = next(
+    argument
+    for argument in render_table.args.args
+    if argument.arg == "translate_paths"
+)
+default_offset = len(render_table.args.args) - len(render_table.args.defaults)
+default_index = render_table.args.args.index(translate_paths) - default_offset
+assert ast.literal_eval(render_table.args.defaults[default_index]) is True
+PY
+  assert_success
+}
 @test "when rendering history tables then compact columns are headless" {
   run python3 - "${table_ui_file}" "${ui_file}" "${command_catalog_file}" <<'PY'
 import sys

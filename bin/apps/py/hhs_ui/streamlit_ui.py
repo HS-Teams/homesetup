@@ -3085,6 +3085,7 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
     render_table(
         rows,
         key=env_table_key(),
+        translate_paths=False,
         height=hhs_ui.ENV_TABLE_HEIGHT,
         width=hhs_ui.ENV_TABLE_WIDTH,
         selected_label=lambda row, _index: f"Selected: {row['Name']}",

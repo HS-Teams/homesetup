@@ -617,13 +617,13 @@ def render_table(
     action_column_weights: list[float] | None = None,
     on_select: Callable[[], None] | str = "rerun",
     column_config: dict[str, object] | None = None,
+    translate_paths: bool = True,
 ) -> tuple[int | None, dict[str, str] | None]:
     """Render a reusable HomeSetup table and return the selected row."""
-    rendered_data = table_data if table_data is not None else display_table_rows(rows)
+    display_rows = display_table_rows(rows) if translate_paths else rows
+    rendered_data = table_data if table_data is not None else display_rows
     if row_style is not None:
-        rendered_data = pd.DataFrame(display_table_rows(rows)).style.apply(
-            row_style, axis=1
-        )
+        rendered_data = pd.DataFrame(display_rows).style.apply(row_style, axis=1)
 
     dataframe_args: dict[str, object] = {"hide_index": hide_index}
     if key is not None:
