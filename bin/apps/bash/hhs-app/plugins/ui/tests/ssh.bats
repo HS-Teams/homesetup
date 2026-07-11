@@ -45,6 +45,31 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_not_contains "${ui_file}" 'format_func=str.upper'
 }
 
+@test "when reconnecting SSH then a refused control socket is replaced safely" {
+  run python3 - "${ssh_core_file}" <<'PY'
+import hashlib
+import shlex
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def ssh_control_path(")
+end = source.index("def build_ssh_check_command(", start)
+namespace = {"hashlib": hashlib, "shlex": shlex}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+command = namespace["build_ssh_connect_command"]("example")
+control_path = namespace["ssh_control_path"]("example")
+check_index = command.index("-O check")
+unlink_index = command.index(f"rm -f {control_path}")
+connect_index = command.index("ssh -MNf")
+assert check_index < unlink_index < connect_index
+assert "ControlMaster=auto" in command
+assert "ControlMaster=yes" not in command
+PY
+  assert_success
+}
+
 @test "when remote SSH command closes then Streamlit UI should reconnect on demand" {
   assert_file_contains_many "${command_catalog_file}" \
 'def ssh_shared_connection_closed' 'def sanitize_remote_command_result'

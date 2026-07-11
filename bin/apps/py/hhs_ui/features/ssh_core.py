@@ -161,10 +161,15 @@ def build_ssh_connect_command(host: str) -> str:
     )
     connect_command = (
         f"ssh -MNf {safe_config_option} {ssh_options} "
-        "-o ControlMaster=yes -o ControlPersist=10m "
+        "-o ControlMaster=auto -o ControlPersist=10m "
         f"-o ControlPath={safe_control_path} {safe_host}"
     )
-    return f"{check_command} || {connect_command}"
+    return (
+        f"{check_command} || {{ "
+        f"rm -f {safe_control_path}; "
+        f"{connect_command}; "
+        "}"
+    )
 
 
 def build_ssh_check_command(host: str) -> str:

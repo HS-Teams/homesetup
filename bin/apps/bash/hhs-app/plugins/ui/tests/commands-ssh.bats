@@ -182,7 +182,7 @@ PY
   assert_success
 
   assert_file_contains_many "${ssh_core_file}" \
-'ControlMaster=yes' 'ConnectionAttempts=1' 'def build_ssh_wrapped_command' 'bash -ic' \
+'ControlMaster=auto' 'ConnectionAttempts=1' 'def build_ssh_wrapped_command' 'bash -ic' \
     'safe_remote_shell = shlex.quote'
   assert_file_contains_many "${terminal_ui_file}" '"ssh",' '"-tt",'
   assert_file_not_contains_many "${ui_file}" \
