@@ -1479,9 +1479,17 @@ def render_markdown_table(
             disabled=True,
         )
 
+    selection_marker = (
+        '<span class="hhs-markdown-table-single-selection"></span>'
+        if not multi_selection
+        else ""
+    )
     with st.container(key=f"{key_prefix}_markdown_table"):
         st.markdown(
-            f'<div class="hhs-markdown-table-caption">{html.escape(caption)}</div>',
+            (
+                '<div class="hhs-markdown-table-caption">'
+                f"{html.escape(caption)}{selection_marker}</div>"
+            ),
             unsafe_allow_html=True,
         )
         table_data_columns = {
@@ -1523,10 +1531,6 @@ def render_markdown_table(
                 bool(value) for value in edited_data[value_column_label].tolist()
             ]
         else:
-            st.markdown(
-                '<span class="hhs-markdown-table-single-selection"></span>',
-                unsafe_allow_html=True,
-            )
             selected_index = markdown_table_single_selected_index(
                 st.session_state.get(selection_key),
                 len(items),

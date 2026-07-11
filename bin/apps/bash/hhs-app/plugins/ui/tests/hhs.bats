@@ -839,6 +839,31 @@ PY
   assert_success
 }
 
+@test "when rendering Firebase aliases then caption and columns should fit the table panel" {
+  run python3 - "${table_ui_file}" "${css_file}" <<'PY'
+import sys
+from pathlib import Path
+
+table_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+css = Path(sys.argv[2]).read_text(encoding="utf-8")
+render_body = table_source.split("def render_markdown_table", 1)[1].split("\ndef ", 1)[0]
+dataframe_css = css.split(
+    'div[class*="st-key-"][class*="_markdown_table"] [data-testid="stDataFrame"] {',
+    1,
+)[1].split("}", 1)[0]
+
+assert render_body.count('hhs-markdown-table-single-selection') == 1
+assert "selection_marker = (" in render_body
+assert 'f"{html.escape(caption)}{selection_marker}</div>"' in render_body
+assert "        else:\n            selected_index = markdown_table_single_selected_index(" in render_body
+assert "overflow: visible" in dataframe_css
+assert "overflow-y: auto" not in dataframe_css
+assert ".st-key-hhs_firebase_aliases_table_panel" not in css
+assert ".hhs-table-caption" not in css
+PY
+  assert_success
+}
+
 # TC - 6
 
 @test "when listing services then HomeSetup UI should be included as a managed service" {
