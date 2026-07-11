@@ -51,7 +51,6 @@ from hhs_ui.execution.command_runtime import (
     background_job_result,
     background_job_state,
     render_background_job_status,
-    run_bash_command,
     start_background_bash_command,
 )
 from hhs_ui.widgets.dialog_ui import pop_dialog
@@ -891,94 +890,6 @@ def submit_ai_chat_prompt(
         push_floating_status("Ollama is still generating a response.", "warn")
         return False
     return True
-
-
-def run_hhs_ask_context() -> subprocess.CompletedProcess[str]:
-    """Run the __hhs ask context command and return the completed process."""
-    return run_bash_command(
-        build_hhs_ask_context_command(),
-        "Loading Ollama context...",
-        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        cache_tag="ai",
-    )
-
-
-def run_hhs_ask_prompt_file() -> subprocess.CompletedProcess[str]:
-    """Read the editable Ollama prompt file and return the completed process."""
-    return run_bash_command(
-        build_hhs_ask_prompt_file_command(),
-        "Loading Ollama prompt file...",
-        use_cache=False,
-        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        cache_tag="ai",
-    )
-
-
-def run_hhs_save_ask_prompt_file(prompt_text: str) -> subprocess.CompletedProcess[str]:
-    """Save the editable Ollama prompt file and return the completed process."""
-    return run_bash_command(
-        build_hhs_save_ask_prompt_file_command(prompt_text),
-        "Saving Ollama prompt file...",
-        use_cache=False,
-        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        cache_tag="ai",
-    )
-
-
-def run_hhs_revert_ask_prompt_file() -> subprocess.CompletedProcess[str]:
-    """Revert the editable Ollama prompt file and return the completed process."""
-    return run_bash_command(
-        build_hhs_revert_ask_prompt_file_command(),
-        "Reverting Ollama prompt file...",
-        use_cache=False,
-        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        cache_tag="ai",
-    )
-
-
-def run_hhs_ask_reset(close_dialogs: bool = False) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs ask reset command and return the completed process."""
-    return run_bash_command(
-        build_hhs_ask_reset_command(),
-        "Resetting Ollama context...",
-        close_dialogs=close_dialogs,
-        use_cache=False,
-        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        cache_tag="ai",
-    )
-
-
-def run_hhs_ask_ingest(file_path: str) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs ask ingest command and return the completed process."""
-    return run_bash_command(
-        build_hhs_ask_ingest_command(file_path),
-        "Ingesting Ollama context...",
-        use_cache=False,
-        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
-        cache_tag="ai",
-    )
-
-
-def run_hhs_ask_select_model(model_name: str) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs ask model selection command and return the completed process."""
-    return run_bash_command(
-        build_hhs_ask_select_model_command(model_name),
-        "Selecting Ollama model...",
-        use_cache=False,
-        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
-        cache_tag="ai",
-    )
-
-
-def run_ollama_delete_model(model_name: str) -> subprocess.CompletedProcess[str]:
-    """Run the Ollama model deletion command and return the completed process."""
-    return run_bash_command(
-        build_ollama_delete_model_command(model_name),
-        "Deleting Ollama model...",
-        use_cache=False,
-        timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
-        cache_tag="ai",
-    )
 
 
 def ai_model_table_key() -> str:

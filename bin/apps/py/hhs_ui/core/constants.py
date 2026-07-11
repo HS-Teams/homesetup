@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.89"
+VERSION = "0.1.90"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parents[1]
 APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
@@ -71,6 +71,8 @@ PARSED_ROWS_CACHE_KEY = "_hhs_parsed_rows_cache"
 PARSED_ROWS_CACHE_LIMIT = 100
 LOG_RENDER_CACHE_KEY = "_hhs_log_render_cache"
 LOG_RENDER_CACHE_LIMIT = 20
+UI_STATE_FILE_SYNCED_SESSION_KEY = "_hhs_ui_state_file_synchronized"
+UI_CACHE_FILE_SYNCED_SESSION_KEY = "_hhs_ui_cache_file_synchronized"
 AI_SERVICE_AVAILABLE_KEY = "_hhs_ai_service_available"
 AI_SERVICE_AVAILABILITY_LOADED_KEY = "_hhs_ai_service_availability_loaded"
 AI_SERVICE_AVAILABILITY_CONTEXT_KEY = "_hhs_ai_service_availability_context"
@@ -221,18 +223,14 @@ AI_PERFORMANCE_RECALC_INTERVAL = 5
 AI_PERFORMANCE_TIMING_LIMIT = 100
 PROCESS_TABLE_KEY = "monitor_process_table"
 HHS_STARSHIP_CURRENT_PRESET_KEY = "hhs_starship_current_preset"
-HHS_HSPM_SLIDER_ACTIVE_INDEX_KEY = "hhs_hspm_slider_active_index"
 PERSISTED_UI_KEYS = (
     "active_view",
     "ai_chat_messages",
-    "ai_clear_chat_execute_pending",
     "ai_context_error",
     "ai_context_output",
     "ai_model_performance_averages",
     "ai_model_performance_sample_counts",
     "ai_model_performance_timings",
-    "ai_model_delete_execute_pending",
-    "ai_model_select_execute_pending",
     "ai_prompt_editor",
     "ai_prompt_error",
     "ai_prompt_loaded",
@@ -259,7 +257,6 @@ PERSISTED_UI_KEYS = (
     "home_shopts_filter",
     "home_shopts_other_filter",
     "hhs_view",
-    HHS_HSPM_SLIDER_ACTIVE_INDEX_KEY,
     HHS_STARSHIP_CURRENT_PRESET_KEY,
     "history_commands_filter",
     "history_commands_other_filter",
@@ -308,9 +305,6 @@ PERSISTED_UI_KEY_PREFIXES = (
     "cmd_selected_value_",
     "dir_selected_value_",
     "env_selected_value_",
-    "history_command_selected_value_",
-    "history_directory_selected_value_",
-    "service_selected_value_",
 )
 ANSI_ESCAPE_PATTERN = re.compile(
     r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[()][A-Za-z0-9])"
@@ -393,7 +387,6 @@ ENV_TABLE_KEY = "env_vars_table"
 ENV_TABLE_RESET_COUNTER_KEY = "env_vars_table_reset_counter"
 ENV_TABLE_WIDTH = "stretch"
 AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT = 0
-ENV_VALUE_EDITOR_SCROLL_HELPER_HEIGHT = 0
 ENV_VALUE_EDITOR_HEIGHT = 40
 ENV_VALUE_EDITOR_KEY_PREFIX = "env_selected_value"
 ENV_VALUE_OVERRIDES_KEY = "env_value_overrides"
@@ -408,14 +401,12 @@ HOME_SHOPTS_TABLE_KEY = "home_shopts_table"
 HOME_SHOPTS_TABLE_RESET_COUNTER_KEY = "home_shopts_table_reset_counter"
 HISTORY_COMMAND_TABLE_KEY = "history_command_vars_table"
 HISTORY_COMMAND_TABLE_RESET_COUNTER_KEY = "history_command_vars_table_reset_counter"
-HISTORY_COMMAND_VALUE_EDITOR_KEY_PREFIX = "history_command_selected_value"
 HISTORY_INDEX_COLUMN_DIGIT_WIDTH = 9
 HISTORY_INDEX_COLUMN_MIN_WIDTH = 36
 HISTORY_INDEX_COLUMN_PADDING = 24
 HISTORY_DIRECTORY_TYPE_COLUMN_WIDTH = HISTORY_INDEX_COLUMN_DIGIT_WIDTH * 3
 HISTORY_DIRECTORY_TABLE_KEY = "history_directory_vars_table"
 HISTORY_DIRECTORY_TABLE_RESET_COUNTER_KEY = "history_directory_vars_table_reset_counter"
-HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX = "history_directory_selected_value"
 PATH_TABLE_HEIGHT = ENV_TABLE_HEIGHT
 PATH_TABLE_KEY = "path_vars_table"
 PATH_TABLE_RESET_COUNTER_KEY = "path_vars_table_reset_counter"
@@ -423,7 +414,6 @@ PATH_TYPE_COLUMN_WIDTH = 80
 PATH_TABLE_WIDTH = ENV_TABLE_WIDTH
 SERVICE_TABLE_KEY = "service_vars_table"
 SERVICE_TABLE_RESET_COUNTER_KEY = "service_vars_table_reset_counter"
-SERVICE_VALUE_EDITOR_KEY_PREFIX = "service_selected_value"
 SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"
 TWO_OPTION_FILTER_COLUMNS = [0.75, 3.25]
 THREE_OPTION_FILTER_COLUMNS = [1.1, 2.9]

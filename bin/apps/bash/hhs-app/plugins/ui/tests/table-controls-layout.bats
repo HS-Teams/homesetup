@@ -29,7 +29,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 'def render_table_controls_panel' 'st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True)' \
     'def render_table_filter_controls' 'def clear_table_other_filter' \
     'key=f"{other_key}_clear"' '""' 'on_click=clear_table_other_filter' \
-  assert_file_contains "${ui_file}" 'def render_env_add_controls'
+  assert_file_contains "${ui_file}" 'def render_config_add_controls'
   assert_file_contains_many "${constants_file}" \
 'TWO_OPTION_FILTER_COLUMNS = \[0.75, 3.25\]' \
     'THREE_OPTION_FILTER_COLUMNS = \[1.1, 2.9\]' \

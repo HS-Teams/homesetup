@@ -124,7 +124,7 @@ from pathlib import Path
 
 command_source = Path(sys.argv[1]).read_text(encoding="utf-8")
 ui_source = Path(sys.argv[2]).read_text(encoding="utf-8")
-start = command_source.index("def env_filter_pattern(")
+start = command_source.index("def row_matches_text_filter(")
 end = command_source.index("def parse_hhs_envs(")
 namespace = {
     "re": re,
@@ -144,11 +144,8 @@ namespace = {
 }
 exec("from __future__ import annotations\n" + command_source[start:end], namespace)
 tool_start = ui_source.index("def filter_tool_rows(")
-tool_end = ui_source.index("def complete_cached_status_background_command(")
+tool_end = ui_source.index("def process_monitor_chart_rows(")
 exec("from __future__ import annotations\n" + ui_source[tool_start:tool_end], namespace)
-
-assert namespace["env_filter_pattern"]("Containing", "PATH") == "PATH"
-assert namespace["env_filter_pattern"]("Other", "PATH") == "PATH"
 
 rows = [
     {"Name": "ollama", "Value": "Up"},

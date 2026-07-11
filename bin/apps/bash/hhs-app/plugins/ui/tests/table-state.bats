@@ -180,15 +180,193 @@ assert save_calls == []
 PY
   assert_success
 }
+
+@test "when synchronizing UI persistence then stale state and cache entries should be removed" {
+  run python3 - "${ui_state_file}" "${cache_runtime_file}" "${constants_file}" <<'PY'
+import ast
+import json
+import sys
+import tempfile
+import time
+from pathlib import Path
+from types import SimpleNamespace
+
+def load_functions(source_path, names, namespace):
+    tree = ast.parse(Path(source_path).read_text(encoding="utf-8"))
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name in names
+    ]
+    module = ast.Module(
+        body=[
+            ast.ImportFrom(
+                module="__future__",
+                names=[ast.alias(name="annotations")],
+                level=0,
+            ),
+            *functions,
+        ],
+        type_ignores=[],
+    )
+    exec(compile(ast.fix_missing_locations(module), str(source_path), "exec"), namespace)
+
+constants_tree = ast.parse(Path(sys.argv[3]).read_text(encoding="utf-8"))
+constants = {}
+for node in constants_tree.body:
+    if not (
+        isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+    ):
+        continue
+    try:
+        constants[node.targets[0].id] = ast.literal_eval(node.value)
+    except (ValueError, TypeError):
+        continue
+
+with tempfile.TemporaryDirectory() as tmp_dir:
+    cache_dir = Path(tmp_dir)
+    state_file = cache_dir / "streamlit-ui-state.json"
+    cache_file = cache_dir / "streamlit-ui-cache.json"
+    persisted_keys = tuple(
+        value.value
+        for node in constants_tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "PERSISTED_UI_KEYS"
+        for value in node.value.elts
+        if isinstance(value, ast.Constant) and isinstance(value.value, str)
+    )
+    state_constants = SimpleNamespace(
+        HHS_CACHE_DIR=cache_dir,
+        UI_STATE_FILE=state_file,
+        PERSISTED_UI_KEYS=persisted_keys,
+        PERSISTED_UI_KEY_PREFIXES=constants["PERSISTED_UI_KEY_PREFIXES"],
+        THEME_SELECTED_KEY="theme_selected",
+    )
+    state_namespace = {
+        "json": json,
+        "Path": Path,
+        "hhs_ui_constants": state_constants,
+        "st": SimpleNamespace(session_state={"active_view": "Home"}),
+        "validated_theme_name": lambda value: value if isinstance(value, str) else "",
+    }
+    load_functions(
+        sys.argv[1],
+        {
+            "is_persisted_ui_key",
+            "is_persistable_ui_value",
+            "read_ui_state_file",
+            "load_ui_state",
+            "ui_state_files",
+            "legacy_ui_state_files",
+            "unlink_legacy_ui_state_files",
+            "ui_state_source_file",
+            "ui_state_file_is_synchronized",
+            "save_ui_state",
+        },
+        state_namespace,
+    )
+
+    state_file.write_text(
+        json.dumps(
+            {
+                "active_view": "Home",
+                "ai_clear_chat_execute_pending": True,
+                "stale_state_key": "remove me",
+            }
+        ),
+        encoding="utf-8",
+    )
+    state_namespace["save_ui_state"]()
+    assert json.loads(state_file.read_text(encoding="utf-8")) == {
+        "active_view": "Home"
+    }
+
+    now = time.time()
+    cache_file.write_text(
+        json.dumps(
+            {
+                "command_tag:active:abc": {
+                    "expires_at": now + 60,
+                    "value": {"stdout": "active"},
+                },
+                "command_tag:expired:def": {
+                    "expires_at": now - 60,
+                    "value": {"stdout": "expired"},
+                },
+                "command_hash:legacy": {
+                    "expires_at": now + 60,
+                    "value": {"stdout": "legacy"},
+                },
+                "unsupported": {"value": {}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    cache_hhs_ui = SimpleNamespace(
+        HHS_CACHE_DIR=cache_dir,
+        UI_CACHE_FILE=cache_file,
+        UI_CACHE_SSH_CONNECTION_KEY="ui:ssh_connection",
+    )
+    cache_namespace = {
+        "json": json,
+        "Path": Path,
+        "time": time,
+        "hhs_ui": cache_hhs_ui,
+        "UI_CACHE_MEMORY": {},
+        "UI_CACHE_MEMORY_MTIME": None,
+        "prune_ui_cache_entries": lambda cache: {
+            key: entry
+            for key, entry in cache.items()
+            if key.startswith("ui:")
+            or (
+                isinstance(entry.get("expires_at"), (int, float))
+                and float(entry["expires_at"]) > time.time()
+            )
+        },
+    }
+    load_functions(
+        sys.argv[2],
+        {
+            "read_ui_cache_file",
+            "load_ui_cache",
+            "ui_cache_files",
+            "legacy_ui_cache_files",
+            "unlink_legacy_ui_cache_files",
+            "ui_cache_source_file",
+            "ui_cache_mtime",
+            "save_ui_cache",
+            "ui_cache_file_is_synchronized",
+            "sync_ui_cache_file",
+            "ui_cache_key_is_supported",
+        },
+        cache_namespace,
+    )
+    cache_namespace["sync_ui_cache_file"]()
+    assert list(json.loads(cache_file.read_text(encoding="utf-8"))) == [
+        "command_tag:active:abc"
+    ]
+PY
+  assert_success
+}
+
 @test "when rendering main navigation then AI visibility should refresh before Services view" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${ui_file}" "${command_runtime_file}" <<'PY'
 import ast
 import sys
 from pathlib import Path
 
-tree = ast.parse(Path(sys.argv[1]).read_text(encoding="utf-8"))
+trees = [
+    ast.parse(Path(path).read_text(encoding="utf-8"))
+    for path in sys.argv[1:]
+]
 functions = {
-    node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
+    node.name: node
+    for tree in trees
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
 }
 
 main_views = functions["main_views"]

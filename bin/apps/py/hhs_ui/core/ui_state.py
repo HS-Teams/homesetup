@@ -46,16 +46,22 @@ def is_persistable_ui_value(value: object) -> bool:
     return False
 
 
+def read_ui_state_file(state_file: Path) -> dict[str, object] | None:
+    """Return a JSON object from one UI state file, if valid."""
+    try:
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def load_ui_state() -> dict[str, object]:
     """Load persisted Streamlit UI selections from disk."""
     state_file = ui_state_source_file()
     if state_file is None:
         return {}
-    try:
-        data = json.loads(state_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    if not isinstance(data, dict):
+    data = read_ui_state_file(state_file)
+    if data is None:
         return {}
     return {
         key: value
@@ -91,6 +97,15 @@ def ui_state_source_file() -> Path | None:
         if state_file.exists():
             return state_file
     return None
+
+
+def ui_state_file_is_synchronized(data: dict[str, object]) -> bool:
+    """Return whether the visible state file exactly matches the current schema."""
+    if ui_state_source_file() != hhs_ui_constants.UI_STATE_FILE:
+        return False
+    if any(state_file.exists() for state_file in legacy_ui_state_files()):
+        return False
+    return read_ui_state_file(hhs_ui_constants.UI_STATE_FILE) == data
 
 
 def persisted_theme_name() -> str:
@@ -161,7 +176,7 @@ def save_ui_state() -> None:
         data[hhs_ui_constants.THEME_SELECTED_KEY] = persisted_theme
     else:
         data.pop(hhs_ui_constants.THEME_SELECTED_KEY, None)
-    if data == current_state:
+    if data == current_state and ui_state_file_is_synchronized(data):
         return
     hhs_ui_constants.UI_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     hhs_ui_constants.UI_STATE_FILE.write_text(

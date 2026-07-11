@@ -61,9 +61,8 @@ from hhs_ui.execution.command_runtime import (
     render_background_job_status,
 )
 from hhs_ui.widgets.feedback_ui import render_command_loader
-from hhs_ui.core.paths import homesetup_config_dir, homesetup_home
+from hhs_ui.core.paths import homesetup_config_dir
 from hhs_ui.features.search_ui import expand_path_with_environment
-from hhs_ui.features.ssh_runtime import connected_ssh_host
 from hhs_ui.widgets.status_ui import push_floating_status
 from hhs_ui.widgets.table_ui import (
     render_markdown_table,
@@ -579,25 +578,6 @@ def hhs_hspm_recovery_title(environment: dict[str, str] | None = None) -> str:
     if package_manager:
         return f"{title_prefix}Recovery ({package_manager})"
     return f"{title_prefix}Recovery"
-
-
-def hhs_hspm_recipe_file_path(package_name: str) -> Path | None:
-    """Return the local recipe path for a package on the selected OS."""
-    clean_package_name = package_name.strip()
-    if (
-        connected_ssh_host()
-        or not clean_package_name
-        or clean_package_name in {".", ".."}
-        or Path(clean_package_name).name != clean_package_name
-    ):
-        return None
-    recipe_path = (
-        homesetup_home()
-        / "bin/apps/bash/hhs-app/plugins/hspm/recipes"
-        / hhs_hspm_os_name()
-        / f"{clean_package_name}.recipe"
-    )
-    return recipe_path if recipe_path.is_file() else None
 
 
 def slider_pane_theme() -> dict[str, str]:
@@ -1657,13 +1637,6 @@ def sync_hhs_firebase_form_state(firebase_info: dict[str, object]) -> None:
         st.session_state[state_key] = values.get(property_name, "")
 
 
-def apply_pending_hhs_firebase_form_revert() -> None:
-    """Apply a queued Firebase form revert before rendering inputs."""
-    if not st.session_state.pop("_hhs_firebase_revert_pending", False):
-        return
-    restore_hhs_firebase_original_values()
-
-
 def restore_hhs_firebase_original_values() -> bool:
     """Restore Firebase form session values from the loaded config file."""
     original_values = st.session_state.get("_hhs_firebase_original_values", {})
@@ -1725,12 +1698,6 @@ def request_hhs_firebase_save() -> None:
             "error_fallback": "Unable to save Firebase configuration.",
         },
     )
-
-
-def request_hhs_firebase_revert() -> None:
-    """Queue reverting the Firebase form to the loaded config values."""
-    st.session_state["_hhs_firebase_revert_pending"] = True
-    save_ui_state()
 
 
 def request_hhs_firebase_alias_action(operation: str, selected_alias: str) -> None:
@@ -2164,7 +2131,6 @@ def render_hhs_firebase_panel() -> None:
 
     firebase_info = parse_hhs_firebase_info(result.stdout)
     sync_hhs_firebase_form_state(firebase_info)
-    apply_pending_hhs_firebase_form_revert()
     action_running = background_job_is_running(HHS_FIREBASE_ACTION_JOB)
     render_hhs_firebase_configurations(firebase_info, action_running)
 

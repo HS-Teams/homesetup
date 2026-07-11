@@ -36,7 +36,6 @@ from hhs_ui.core.ui_definitions import (
     STARSHIP_END_OUTPUT_MARKER,
     STARSHIP_HHS_DIR_OUTPUT_MARKER,
     STARSHIP_PRESETS_OUTPUT_MARKER,
-    TERMINAL_AI_DEFAULT_PROMPT,
 )
 
 
@@ -78,39 +77,6 @@ def normalized_monitor_log_tail_lines(value: object) -> int:
         hhs_ui_constants.MIN_LOG_TAIL_LINES,
         min(tail_lines, hhs_ui_constants.MAX_LOG_TAIL_LINES),
     )
-
-
-def terminal_output_line_is_noise(line: str) -> bool:
-    """Return whether a terminal output line is SSH/HomeSetup wrapper chatter."""
-    clean_line = strip_ansi(line).strip()
-    if not clean_line:
-        return False
-    if clean_line == "exit":
-        return True
-    if clean_line.startswith("[bash] HomeSetup is starting"):
-        return True
-    if remote_command_motd_line_is_boundary(clean_line):
-        return True
-    if re.fullmatch(r"Shell option \S+ set to (?:on|off)", clean_line):
-        return True
-    if re.fullmatch(
-        r"(?:Shared )?Connection to .+ closed\.", clean_line, re.IGNORECASE
-    ):
-        return True
-    if re.fullmatch(r"Shared connection to .+ closed\.", clean_line, re.IGNORECASE):
-        return True
-    return False
-
-
-def filter_terminal_output_noise(value: str) -> str:
-    """Return terminal output without SSH/HomeSetup wrapper chatter lines."""
-    lines = [
-        line for line in value.splitlines() if not terminal_output_line_is_noise(line)
-    ]
-    output = "\n".join(lines)
-    if value.endswith("\n") and output:
-        output += "\n"
-    return output
 
 
 def strip_ansi(value: str) -> str:
@@ -815,19 +781,6 @@ def ssh_shared_connection_closed(result: subprocess.CompletedProcess[str]) -> bo
         return False
     output = strip_ansi(f"{result.stdout or ''}\n{result.stderr or ''}").lower()
     return "shared connection to " in output and " closed" in output
-
-
-def strip_ssh_shared_connection_notice(value: str) -> str:
-    """Return command output without OpenSSH ControlMaster close notices."""
-    output_lines = []
-    for line in value.splitlines(keepends=True):
-        clean_line = strip_ansi(line).strip().lower()
-        if clean_line.startswith("shared connection to ") and clean_line.endswith(
-            " closed."
-        ):
-            continue
-        output_lines.append(line)
-    return "".join(output_lines)
 
 
 def remote_command_startup_line_is_noise(line: str) -> bool:
@@ -1746,48 +1699,6 @@ def build_hhs_ask_command(message: str) -> str:
     return build_hhs_ask_execute_command(["-k", message])
 
 
-def terminal_context_source_label(mode: str) -> str:
-    """Return a human-readable label for a terminal context capture mode."""
-    normalized_mode = re.sub(r"[^A-Za-z0-9_-]+", "", mode).lower()
-    if normalized_mode == "selection":
-        return "selected terminal text"
-    if normalized_mode == "visible":
-        return "visible terminal buffer"
-    return "terminal buffer"
-
-
-def terminal_context_markdown_fence(content: str) -> str:
-    """Return a Markdown fence long enough to wrap terminal content safely."""
-    fence = "```"
-    while fence in content:
-        fence += "`"
-    return fence
-
-
-def build_terminal_ai_context_prompt(
-    instruction: str,
-    content: str,
-    mode: str,
-    truncated: bool,
-) -> str:
-    """Build the AI chat prompt for an instruction plus terminal context."""
-    clean_instruction = instruction.strip() or TERMINAL_AI_DEFAULT_PROMPT
-    clean_content = content.strip()
-    source_label = terminal_context_source_label(mode)
-    truncation_note = ""
-    if truncated:
-        truncation_note = (
-            "\nTerminal context note: content was truncated to the most recent "
-            f"{int(hhs_ui.AI_TERMINAL_CONTEXT_MAX_CHARS)} characters."
-        )
-    fence = terminal_context_markdown_fence(clean_content)
-    return (
-        f"{clean_instruction}\n\n"
-        f"Terminal context source: {source_label}.{truncation_note}\n\n"
-        f"{fence}text\n{clean_content}\n{fence}"
-    )
-
-
 def build_hhs_ask_context_command() -> str:
     """Build the Bash command used to show the current Ollama ask context."""
     return build_hhs_ask_execute_command(["-c"])
@@ -1802,11 +1713,6 @@ def build_hhs_ask_prompt_file_command() -> str:
         "}; "
         'cat "${HHS_OLLAMA_PROMPT_FILE}"'
     )
-
-
-def build_hhs_ask_prompt_command() -> str:
-    """Build the Bash command used to render the active Ollama prompt."""
-    return build_hhs_ask_execute_command(["-p"])
 
 
 def build_hhs_save_ask_prompt_file_command(prompt_text: str) -> str:
@@ -2022,16 +1928,6 @@ def build_hhs_services_command(
         'function __hhs() { if [[ "$1" == "services" && "$2" == "execute" ]]; then shift 2; execute "$@"; else return 127; fi; }; '
         f'__hhs services execute "{safe_operation}" "{safe_service_name}"'
     )
-
-
-def env_filter_pattern(env_filter: str, other_filter: str = "") -> str | None:
-    """Return the __hhs_envs filter pattern for the selected UI filter."""
-    if env_filter == "HHS":
-        return "^HHS_"
-    if env_filter in ("Other", "Containing"):
-        clean_filter = other_filter.strip()
-        return clean_filter or None
-    return None
 
 
 def row_matches_text_filter(row: dict[str, str], text_filter: str) -> bool:

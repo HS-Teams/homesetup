@@ -90,7 +90,6 @@ assert "context = footer_version_context()" in homesetup_version_body
 assert "command = build_homesetup_version_command()" in homesetup_version_body
 assert "cached_background_command_result(\n        command, FOOTER_VERSION_CACHE_TAG" in homesetup_version_body
 assert "start_footer_homesetup_version_refresh(command, context)" in homesetup_version_body
-assert "run_hhs_envs(" not in homesetup_version_body
 assert 'return version or "loading"' in local_homesetup_version_body
 assert "background_command_metadata(command, FOOTER_VERSION_CACHE_TAG)" in start_footer_version_body
 assert "force_local=True" not in start_footer_version_body
@@ -292,21 +291,12 @@ assert 'open_remote_explorer_path(working_dir)' in open_footer_working_directory
 assert 'run_open_working_directory(working_dir)' in open_footer_working_directory_body
 assert 'def build_footer_working_directory_command' in ui_source
 assert 'return r' in ui_source and '__HHS_UI_PWD__' in ui_source and '\\pwd' in ui_source
-assert 'def run_footer_working_directory' in ui_source
-run_footer_working_directory_body = ui_source.split("def run_footer_working_directory", 1)[1].split("\ndef ", 1)[0]
-assert "ttl_seconds=0" in run_footer_working_directory_body
-assert "use_cache=False" in run_footer_working_directory_body
-assert "force_local=True" not in run_footer_working_directory_body
-assert 'cache_tag="system"' in run_footer_working_directory_body
-assert '"Loading remote working dir"' in run_footer_working_directory_body
-assert "show_overlay=False" not in run_footer_working_directory_body
 assert 'def parse_footer_working_directory_output' in ui_source
 assert 'def update_remote_footer_working_directory' in ui_source
 assert 'def footer_working_directory' in ui_source
 handle_footer_actions_body = ui_source.split("def handle_footer_actions", 1)[1].split("\ndef ", 1)[0]
 assert "open_footer_working_directory()" in handle_footer_actions_body
 footer_working_directory_body = ui_source.split("def footer_working_directory", 1)[1].split("\ndef ", 1)[0]
-assert 'run_footer_working_directory()' not in footer_working_directory_body
 assert 'hhs_ui_constants.FOOTER_REMOTE_WORKING_DIR_KEY' in footer_working_directory_body
 assert 'return os.getcwd()' in footer_working_directory_body
 assert 'def run_shell_version' in ui_source
@@ -329,8 +319,7 @@ assert 'footer_shell_version_output' in ui_source
 assert 'hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in ui_source
 assert 'footer_shell_version_dialog_close_button' in ui_source
 assert 'def build_hhs_updater_command' in ui_source
-assert 'def run_hhs_updater_check' in ui_source
-assert 'def run_hhs_updater_update' in ui_source
+assert 'def start_updater_check' in ui_source
 footer_actions_body = ui_source.split("def handle_footer_actions", 1)[1].split("\ndef ", 1)[0]
 assert "clear_footer_shell_version_dialog()" in footer_actions_body
 shell_result_index = footer_actions_body.index("result = run_shell_version()")

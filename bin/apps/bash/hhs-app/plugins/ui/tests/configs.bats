@@ -23,20 +23,15 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
 @test "when rendering configs then current command-backed tables and filters should be wired" {
   assert_file_contains_many "${ui_file}" \
-'__hhs_envs' '__hhs_paths' '__hhs_load_dir -l' '__hhs_command -l' '__hhs_aliases' 'def render_env_rows' \
-    'def build_hhs_env_action_command' 'def run_hhs_env_action' 'def build_hhs_path_action_command' \
-    'def run_hhs_path_action' 'def build_hhs_dir_action_command' 'def run_hhs_dir_action' \
-    'def build_hhs_command_action_command' 'def run_hhs_command_action' 'def build_hhs_alias_action_command' \
-    'def run_hhs_alias_action' 'def build_hhs_shopt_command' 'def build_hhs_shopt_setup_command' \
-    '\[\[ ! -s "${HHS_SHOPTS_FILE}" \]\]' 'awk.*print \$1.*=.*\$2' 'def build_hhs_shopt_load_saved_command' \
-    'def build_hhs_shopt_action_command' 'def run_hhs_shopt' 'def run_hhs_shopt_action' 'def parse_hhs_shopt' \
-    'SHOPT_DESCRIPTIONS = {' '"cdspell": "Corrects minor spelling errors in directory names used with cd."' \
-    'def shopt_description' '"Description": shopt_description(match.group(3).strip())' \
-    'headers=\["Status", "Option", "Description"\]'
+'def render_env_rows' 'def render_path_rows' 'def render_dir_rows' 'def render_cmd_rows' \
+    'def render_alias_rows' 'def render_home_shopts_panel'
   assert_file_contains "${constants_file}" 'SHOPT_LINE_PATTERN = re.compile'
 
   assert_file_contains_many "${command_catalog_file}" \
-'def filter_shopt_rows' 'f"__hhs_shopt {action} {shlex.quote(option_name)}"' \
+'def build_hhs_env_action_command' 'def build_hhs_path_action_command' \
+    'def build_hhs_dir_action_command' 'def build_hhs_command_action_command' \
+    'def build_hhs_alias_action_command' 'def build_hhs_shopt_action_command' \
+    'def filter_shopt_rows' 'f"__hhs_shopt {action} {shlex.quote(option_name)}"' \
     'build_hhs_shopt_load_saved_command()' '__hhs_shopt -p' \
     'shopt -s "${option}" 2>/dev/null || true' 'shopt -u "${option}" 2>/dev/null || true' \
     '"Status": shopt_status_value(state)' 'f"__hhs_paths {action_args}"' \
@@ -51,12 +46,13 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   run grep -q -- "-a {shlex.quote(f'{name}={value}')}" "${command_catalog_file}"
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${command_catalog_file}" \
 'safe_path = shlex.quote(path_value)' 'action_args = f"{shlex.quote(value)} {safe_name}"' \
     'action_args = f"-a {safe_name} {shlex.quote(value)}"' \
-    'f"-r {safe_name}" if operation == "del" else f"{safe_name} {shlex.quote(value)}"' \
-    'apply_selected_env_value(name, str(st.session_state.get(editor_key, "")))'
-  run grep -q -- '--del {safe_name}' "${ui_file}"
+    'f"-r {safe_name}" if operation == "del" else f"{safe_name} {shlex.quote(value)}"'
+  assert_file_contains "${ui_file}" \
+'apply_selected_env_value(name, str(st.session_state.get(editor_key, "")))'
+  run grep -q -- '--del {safe_name}' "${command_catalog_file}"
   assert_success
 
   assert_file_contains "${ui_file}" 'apply_env_add_form_value'
@@ -68,7 +64,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_not_contains "${ui_file}" 'env_add_button'
 
   assert_file_contains_many "${ui_file}" \
-'"Custom Variable"' 'def render_path_add_controls' 'def render_dir_add_controls' 'request_folder_picker'
+'"Custom Variable"' 'name_placeholder="Directory alias"' 'request_folder_picker'
   assert_file_contains_many "${path_picker_file}" \
     'def apply_folder_picker_selection' 'def open_folder_picker_selected_child' \
     'sync_folder_picker_child_selection(child_directories)' 'def folder_picker_child_selection_widget_key' \
@@ -85,7 +81,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'render_background_job_status(job_name, PATH_PICKER_LISTING_LOADER_MESSAGE)'
   assert_file_not_contains "${path_picker_file}" 'poll_background_job_completion(job_name)'
 
-  assert_file_contains "${ui_file}" 'stop_path_picker_listing_jobs()'
+  assert_file_contains "${path_picker_file}" 'stop_path_picker_listing_jobs()'
 
   assert_file_not_contains "${ui_file}" 'rerun_after_folder_picker_navigation()'
 
@@ -174,8 +170,8 @@ PY
   assert_file_not_contains "${ui_file}" 'value_group_col = st.columns'
 
   assert_file_contains_many "${ui_file}" \
-'args=(f"{key_prefix}_add_value", value_placeholder)' 'def render_cmd_add_controls' \
-    'def render_alias_add_controls' 'def render_filters_and_controls'
+'args=(f"{key_prefix}_add_value", value_placeholder)' 'def render_config_add_controls' \
+    'def render_filters_and_controls'
   run python3 - "${ui_file}" <<'PY'
 from pathlib import Path
 import sys

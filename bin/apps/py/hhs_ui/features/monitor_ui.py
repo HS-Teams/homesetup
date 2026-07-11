@@ -91,7 +91,6 @@ render_openable_file_pill = _unconfigured_dependency("render_openable_file_pill"
 render_persisted_expander_state_script = _unconfigured_dependency(
     "render_persisted_expander_state_script"
 )
-run_hhs_logs = _unconfigured_dependency("run_hhs_logs")
 
 
 def configure_monitor_ui(
@@ -102,7 +101,6 @@ def configure_monitor_ui(
     process_monitor_chart_rows: Callable[..., list[dict[str, float | str]]],
     render_openable_file_pill: Callable[[str, str], None],
     render_persisted_expander_state_script: Callable[[str, str], None],
-    run_hhs_logs: Callable[..., object],
 ) -> None:
     """Configure callbacks supplied by the root Streamlit UI module."""
     globals().update(
@@ -113,7 +111,6 @@ def configure_monitor_ui(
             "process_monitor_chart_rows": process_monitor_chart_rows,
             "render_openable_file_pill": render_openable_file_pill,
             "render_persisted_expander_state_script": render_persisted_expander_state_script,
-            "run_hhs_logs": run_hhs_logs,
         }
     )
 
@@ -607,8 +604,6 @@ def render_monitor_logs_once(
     log_text_filter: str = "",
 ) -> None:
     """Render the selected log once without automatic refresh."""
-    if False:
-        run_hhs_logs(selected_log, tail_lines, selected_level)
     result = render_cached_command_result(
         build_hhs_logs_command(selected_log, tail_lines, selected_level),
         "Loading logs",

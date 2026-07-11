@@ -563,14 +563,6 @@ def path_picker_child_paths(
         return []
 
 
-def folder_picker_label(directory: str) -> str:
-    """Return the display label for a folder picker option."""
-    if path_picker_uses_remote():
-        return posixpath.basename(str(directory).rstrip("/")) or str(directory)
-    path = Path(directory)
-    return path.name or str(path)
-
-
 def path_picker_label(path_value: str) -> str:
     """Return the display label for a folder or file picker option."""
     if path_picker_uses_remote():
@@ -639,14 +631,6 @@ def request_folder_picker(
 ) -> None:
     """Open the folder picker for a Streamlit input key."""
     request_path_picker(target_key, fallback_value, mode="folder")
-
-
-def request_file_picker(
-    target_key: str,
-    fallback_value: str = "",
-) -> None:
-    """Open the file picker for a Streamlit input key."""
-    request_path_picker(target_key, fallback_value, mode="file")
 
 
 def close_folder_picker() -> None:
@@ -1070,4 +1054,3 @@ def render_path_picker_listing_loader(job_name: str) -> None:
 def render_folder_picker_dialog(owner_context: str = "") -> bool:
     """Render the reusable path picker dialog when requested."""
     return render_path_picker_dialog(owner_context)
-

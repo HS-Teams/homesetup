@@ -127,39 +127,6 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 '"search_replace"' '"search_replacement"'
   assert_file_not_contains_many "${constants_file}" \
 '"search_result_query"' '"search_result_path"' '"search_result_type"'
-  run python3 - <<'PY'
-import ast
-from pathlib import Path
-
-tree = ast.parse(Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text())
-mutation_wrappers = {
-    "run_hhs_process_kill",
-    "run_hhs_ask_reset",
-    "run_hhs_ask_select_model",
-    "run_ollama_delete_model",
-    "run_hhs_service_action",
-}
-seen = set()
-
-for node in ast.walk(tree):
-    if not isinstance(node, ast.FunctionDef) or node.name not in mutation_wrappers:
-        continue
-    for call in ast.walk(node):
-        if not isinstance(call, ast.Call):
-            continue
-        if not isinstance(call.func, ast.Name) or call.func.id != "run_bash_command":
-            continue
-        use_cache = next((kw.value for kw in call.keywords if kw.arg == "use_cache"), None)
-        if not isinstance(use_cache, ast.Constant) or use_cache.value is not False:
-            raise SystemExit(f"{node.name} must pass use_cache=False")
-        seen.add(node.name)
-
-missing = mutation_wrappers - seen
-if missing:
-    raise SystemExit("missing mutation wrappers: " + ", ".join(sorted(missing)))
-PY
-  assert_success
-
   assert_file_contains_many "${ui_file}" \
 '"ﮣ Connect"' '"ﮤ Disconnect"' 'key="ssh_connect_button"' 'key="ssh_disconnect_button"'
   assert_file_not_contains "${ui_file}" 'class="hhs-vspacer"'

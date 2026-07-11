@@ -28,15 +28,16 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'render_home_docker_panel()' 'def render_home_docker_panel' \
     'with st.container(key="home_docker_panel")' 'def render_docker_agent_required_view' \
     'def docker_agent_failure_message' 'def docker_agent_is_running' \
-    'def build_docker_agent_check_command' 'Docker agent is not running' \
+    'Docker agent is not running' \
     'Docker command timedout' 'if not docker_agent_is_running()'
+  assert_file_contains "${command_catalog_file}" 'def build_docker_agent_check_command'
   assert_file_not_contains "${ui_file}" ' Docker Containers'
 
   assert_file_contains_many "${ui_file}" \
-'def run_docker_ps' 'def run_docker_images' 'with st.expander("All Containers", expanded=True)' \
+'with st.expander("All Containers", expanded=True)' \
     'with st.expander("Available Images", expanded=True)' 'def render_docker_command_table' \
-    'render_docker_container_table(run_docker_ps())' \
-    'render_docker_image_table(run_docker_images())' 'docker_container_table_key(),' \
+    'render_docker_container_table(containers_result)' \
+    'render_docker_image_table(images_result)' 'docker_container_table_key(),' \
     'docker_image_table_key(),' '"label": "Start"' '"label": "Stop"' \
     '"label": "Remove"' '"label": "Delete"'
   run grep -F -q '["CONTAINER ID", "IMAGE", "NAMES", "STATUS", "CREATED AT"]' "${ui_file}"
@@ -46,11 +47,12 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_success
 
   assert_file_contains_many "${ui_file}" \
-'def docker_container_is_up' '"disabled": lambda row, _index: docker_container_is_up(row)' \
+'"disabled": lambda row, _index: docker_container_is_up(row)' \
     '"disabled": lambda row, _index: not docker_container_is_up(row)' \
-    'build_docker_container_action_command' 'build_docker_image_delete_command' \
-    'docker image rm -f' 'docker ps -a --format' 'docker images --format'
-  run grep -F -q '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}' "${ui_file}"
+    'build_docker_container_action_command' 'build_docker_image_delete_command'
+  assert_file_contains_many "${command_catalog_file}" \
+'def docker_container_is_up' 'docker image rm -f' 'docker ps -a --format' 'docker images --format'
+  run grep -F -q '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}' "${command_catalog_file}"
   assert_success
 
   assert_file_contains "${ui_file}" 'return "docker ps -q >/dev/null 2>&1"'
@@ -59,9 +61,6 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 from pathlib import Path
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
-for function_name in ("run_docker_ps", "run_docker_images"):
-    body = source.split(f"def {function_name}", 1)[1].split("\ndef ", 1)[0]
-    assert "use_cache=False" not in body, function_name
 agent_body = source.split("def docker_agent_is_running", 1)[1].split("\ndef ", 1)[0]
 assert "use_cache=False" not in agent_body
 assert "show_overlay=False" not in agent_body

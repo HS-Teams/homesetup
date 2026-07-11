@@ -222,31 +222,31 @@ PY
 
   assert_file_not_contains "${ui_file}" 'Log level:'
 
-  assert_file_contains_many "${ui_file}" \
-'Bot N:' 'st.number_input(' 'def render_standard_number_spinner' 'render_standard_number_spinner("Top N"' \
+  assert_file_contains_many "${monitor_ui_file}" \
+'Bot N:' 'st.number_input(' 'render_standard_number_spinner("Top N"' \
     'render_standard_number_spinner(' 'key="monitor_log_tail_lines"' \
     'min_value=hhs_ui_constants.MIN_LOG_TAIL_LINES' 'max_value=hhs_ui_constants.MAX_LOG_TAIL_LINES' \
     'step=hhs_ui_constants.LOG_TAIL_LINES_STEP' 'width=150'
-  assert_file_not_contains_many "${ui_file}" \
+  assert_file_contains "${table_ui_file}" 'def render_standard_number_spinner'
+  assert_file_not_contains_many "${monitor_ui_file}" \
 'monitor_log_tail_lines_decrement_button' 'monitor_log_tail_lines_increment_button'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${monitor_ui_file}" \
 'on_change=handle_monitor_log_tail_lines_change' \
     'tail_button_state = "selected" if tail_enabled_value else "idle"' \
     'key=f"monitor_logs_tail_button_{tail_button_state}"' '"",'
-  assert_file_not_contains_many "${ui_file}" \
+  assert_file_not_contains_many "${monitor_ui_file}" \
 '""' 'tail_enabled_value = st.checkbox'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${monitor_ui_file}" \
 'on_click=toggle_monitor_logs_tail' 'key="monitor_log_clear_button"' '"",'
-  assert_file_not_contains "${ui_file}" '""'
+  assert_file_not_contains "${monitor_ui_file}" '""'
 
-  assert_file_contains_many "${ui_file}" \
-'key="monitor_log_level"' '__hhs logs' 'shlex.quote(safe_log_level)' \
-    'run_hhs_logs(selected_log, tail_lines, selected_level)' \
-    'build_hhs_logs_command(selected_log, tail_lines, selected_level)'
-  assert_file_not_contains_many "${ui_file}" \
-'run_hhs_logs(selected_log, 200, selected_level)' 'build_hhs_logs_command(selected_log, 200, selected_level)'
-  assert_file_contains_many "${ui_file}" \
-'def hhs_log_file_info(log_file: str)' '"HHS_LOG_DIR": str(hhs_log_dir())' \
+  assert_file_contains_many "${monitor_ui_file}" \
+'key="monitor_log_level"' 'build_hhs_logs_command(selected_log, tail_lines, selected_level)'
+  assert_file_not_contains "${monitor_ui_file}" \
+'build_hhs_logs_command(selected_log, 200, selected_level)'
+  assert_file_contains_many "${paths_file}" \
+'def hhs_log_file_info(log_file: str)' '"HHS_LOG_DIR": str(hhs_log_dir())'
+  assert_file_contains_many "${monitor_ui_file}" \
     'log_file_path, log_environment = hhs_log_file_info(selected_log)' \
     'log_display_path = display_path_value(log_file_path, log_environment)' \
     'render_openable_config_path(log_display_path, log_file_path)'

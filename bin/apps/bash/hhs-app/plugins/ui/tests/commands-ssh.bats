@@ -63,8 +63,6 @@ PY
 
   assert_file_contains_many "${command_runtime_file}" \
 'def run_bash_command('
-  assert_file_contains_many "${ui_file}" \
-'return run_bash_command(' 'def run_hhs_services_quietly'
   assert_file_contains_many "${ssh_core_file}" \
 'def parse_ssh_config_hosts' 'def build_ssh_connect_command' 'def build_ssh_disconnect_command'
   assert_file_contains "${constants_file}" 'UI_CACHE_SSH_CONNECTION_KEY'
@@ -205,8 +203,8 @@ PY
 '\["bash", "-lc"' 'source "{hhs_home}' 'export HHS_HOME="{hhs_home}' '/Users/hjunior/HomeSetup'
   assert_file_contains_many "${ssh_runtime_file}" \
 'or not selected_ssh_host_is_connected(host)' 'force_local: bool = False'
-  assert_file_contains_many "${ui_file}" \
-    'def run_ssh_tunnels' 'def annotate_ssh_tunnel_statuses' \
+  assert_file_contains_many "${ssh_explorer_ui_file}" \
+    'def annotate_ssh_tunnel_statuses' \
     'headers = \["Local Port", "Remote Host:Port", "Kind", "Status", "Link"\]'
   assert_file_contains_many "${command_catalog_file}" \
 'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"' 'source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"' \
@@ -224,8 +222,8 @@ PY
   run grep -F -q 'display_text=r"http://(127\.0\.0\.1:\d+)"' "${ui_file}"
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
-'def render_ssh_view' 'def render_ssh_tunnels_panel' 'def render_ssh_files_panel' 'def ssh_explorer_row_style' \
+  assert_file_contains_many "${ssh_explorer_ui_file}" \
+'def render_ssh_view' 'def render_ssh_tunnels_panel' 'def render_ssh_files_panel' \
     'def ssh_explorer_entry_is_visible' 'def ssh_explorer_sort_key'
   assert_file_not_contains "${ui_file}" 'def synchronize_ssh_explorer_table_selection'
 
@@ -631,11 +629,6 @@ sort_rows = [
 assert [
     row["_name"] for row in sorted(sort_rows, key=namespace["ssh_explorer_sort_key"])
 ] == ["Alpha", "beta", "alpha.txt", "zeta.txt"]
-dir_style = namespace["ssh_explorer_row_style"]({"Name": " src", "_kind": "Dir"})
-file_style = namespace["ssh_explorer_row_style"]({"Name": " notes.txt", "_kind": "File"})
-assert all("#38bdf8" in style for style in dir_style)
-assert all("font-weight: 800" in style for style in dir_style)
-assert all("#ffffff" in style for style in file_style)
 assert len(explorer_rows) == 1
 assert explorer_rows[0]["Name"].endswith("notes.txt")
 assert explorer_rows[0]["_name"] == "notes.txt"

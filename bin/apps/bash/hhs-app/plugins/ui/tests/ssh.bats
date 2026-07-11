@@ -47,7 +47,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
 @test "when remote SSH command closes then Streamlit UI should clear stale connection state" {
   assert_file_contains_many "${command_catalog_file}" \
-'def ssh_shared_connection_closed' 'def strip_ssh_shared_connection_notice'
+'def ssh_shared_connection_closed' 'def sanitize_remote_command_result'
   assert_file_contains "${ssh_runtime_file}" 'def clear_disconnected_ssh_host'
   run python3 - "${ui_file}" "${ssh_runtime_file}" <<'PY'
 from pathlib import Path
@@ -190,10 +190,6 @@ stale_connection = subprocess.CompletedProcess(
 )
 assert not namespace["ssh_shared_connection_closed"](command_failure)
 assert namespace["ssh_shared_connection_closed"](stale_connection)
-assert (
-    namespace["strip_ssh_shared_connection_notice"](command_failure.stderr)
-    == "ls: unrecognized option '--long'\n"
-)
 PY
   assert_success
 }

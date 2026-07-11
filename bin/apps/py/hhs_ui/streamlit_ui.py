@@ -67,7 +67,6 @@ from hhs_ui.execution.command_catalog import (
     build_hhs_history_command,
     build_hhs_history_dirs_command,
     build_hhs_process_kill_command,
-    build_hhs_logs_command,
     build_hhs_paths_command,
     build_hhs_path_action_command,
     build_hhs_dirs_command,
@@ -135,7 +134,6 @@ from hhs_ui.features.ai_ui import (
 )
 from hhs_ui.execution.cache_runtime import (
     cache_background_command_result,
-    cache_delete_command,
     cache_delete_tag,
     cache_get,
     cache_set,
@@ -150,6 +148,7 @@ from hhs_ui.execution.cache_runtime import (
     render_cached_command_result,
     safe_cache_tag,
     start_cached_background_command,
+    sync_ui_cache_file,
 )
 from hhs_ui.widgets.dialog_ui import execute_pending_dialog_callback, pop_dialog
 from hhs_ui.widgets.dom_scripts import render_combobox_vt100_shortcuts_script
@@ -992,9 +991,6 @@ def render_home_docker_panel() -> None:
     )
     if images_result is None:
         return
-    # Regression guard for the previous synchronous calls:
-    # render_docker_container_table(run_docker_ps())
-    # render_docker_image_table(run_docker_images())
     with st.container(key="home_docker_panel"):
         with st.expander("All Containers", expanded=True):
             render_docker_container_table(containers_result)
@@ -1286,18 +1282,6 @@ def render_filters_and_controls(
     return config_filter_return_value(filter_map, selected_label), other_filter
 
 
-def render_env_add_controls() -> None:
-    """Render the environment variable new-entry controls."""
-    render_named_value_add_controls(
-        "env",
-        "Name",
-        "Value",
-        "Custom Variable",
-        "Optional value",
-        apply_env_add_form_value,
-    )
-
-
 def config_add_columns(weights: list[float]) -> list:
     """Return Config add-row columns with the standard horizontal gap."""
     return st.columns(
@@ -1382,96 +1366,6 @@ def render_config_add_controls(
                 args=(f"{key_prefix}_add_value", value_placeholder),
                 width="stretch",
             )
-
-
-def render_named_value_add_controls(
-    key_prefix: str,
-    name_label: str,
-    value_label: str,
-    name_placeholder: str,
-    value_placeholder: str,
-    on_submit: Callable[[], None],
-    value_folder_picker: bool = False,
-) -> None:
-    """Render Name and Value add controls for a config listing."""
-    render_config_add_controls(
-        key_prefix,
-        name_label,
-        value_label,
-        name_placeholder,
-        value_placeholder,
-        on_submit=on_submit,
-        has_plus_btn=True,
-        has_file_picker_btn=value_folder_picker,
-    )
-
-
-def render_value_add_controls(
-    key_prefix: str,
-    value_label: str,
-    value_placeholder: str,
-    on_submit: Callable[[], None],
-    value_folder_picker: bool = False,
-) -> None:
-    """Render a Value add control for a config listing."""
-    render_config_add_controls(
-        key_prefix,
-        None,
-        value_label,
-        "",
-        value_placeholder,
-        on_submit=on_submit,
-        has_plus_btn=True,
-        has_file_picker_btn=value_folder_picker,
-    )
-
-
-def render_path_add_controls() -> None:
-    """Render the PATH new-entry controls."""
-    render_value_add_controls(
-        "path",
-        "Path",
-        "Custom path",
-        apply_path_add_form_value,
-        value_folder_picker=True,
-    )
-
-
-def render_dir_add_controls() -> None:
-    """Render the saved directory new-entry controls."""
-    render_named_value_add_controls(
-        "dir",
-        "Name",
-        "Path",
-        "Directory alias",
-        "Directory path",
-        apply_dir_add_form_value,
-        value_folder_picker=True,
-    )
-
-
-def render_cmd_add_controls() -> None:
-    """Render the saved command new-entry controls."""
-    render_named_value_add_controls(
-        "cmd",
-        "Name",
-        "Command",
-        "Command alias",
-        "Command value",
-        apply_cmd_add_form_value,
-    )
-
-
-def render_alias_add_controls() -> None:
-    """Render the alias new-entry controls."""
-    render_named_value_add_controls(
-        "alias",
-        "Name",
-        "Expression",
-        "Alias",
-        "Alias expression",
-        apply_alias_add_form_value,
-    )
 
 
 def render_home_tools_panel() -> None:
@@ -1849,229 +1743,6 @@ def update_ollama_service_availability_refresh() -> None:
         start_hhs_services_list_refresh(completion_rerun=False)
 
 
-def run_hhs_envs(
-    prefix_filter: str | None = None, refresh_cache: bool = False
-) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs_envs command and return the completed process."""
-    return run_bash_command(
-        build_hhs_envs_command(prefix_filter),
-        "Loading environment variables...",
-        use_cache=not refresh_cache,
-        cache_tag="env",
-    )
-
-
-def run_hhs_updater_check(
-    refresh_cache: bool = False,
-) -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup updater check after refreshing the installed version."""
-    command = build_hhs_envs_command("^HHS_VERSION$")
-    if refresh_cache:
-        cache_delete_command(command, "env")
-    run_hhs_envs("^HHS_VERSION$", refresh_cache=refresh_cache)
-    return run_bash_command(
-        build_hhs_updater_command("check"),
-        "Checking HomeSetup updates...",
-        use_cache=not refresh_cache,
-        cache_tag="updater",
-    )
-
-
-def run_hhs_updater_update() -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup updater update command and return the completed process."""
-    return run_bash_command(
-        build_hhs_updater_command("update"),
-        "Updating HomeSetup...",
-        ttl_seconds=0,
-        use_cache=False,
-        timeout_seconds=600,
-        force_local=True,
-        cache_tag="updater",
-    )
-
-
-def run_docker_ps() -> subprocess.CompletedProcess[str]:
-    """Run the Docker container listing command and return the completed process."""
-    return run_bash_command(
-        build_docker_ps_command(),
-        "Loading Docker containers...",
-        cache_tag="docker",
-    )
-
-
-def run_docker_images() -> subprocess.CompletedProcess[str]:
-    """Run the Docker image listing command and return the completed process."""
-    return run_bash_command(
-        build_docker_images_command(),
-        "Loading Docker images...",
-        cache_tag="docker",
-    )
-
-
-def run_hhs_logs(
-    log_file: str,
-    tail_lines: int = hhs_ui_constants.DEFAULT_LOG_TAIL_LINES,
-    log_level: str = "ALL_LEVELS",
-) -> subprocess.CompletedProcess[str]:
-    """Run the __hhs logs command and return the completed process."""
-    return run_bash_command(
-        build_hhs_logs_command(log_file, tail_lines, log_level),
-        "Loading logs...",
-        cache_tag="monitor_logs",
-    )
-
-
-def run_hhs_env_action(
-    operation: str, name: str, value: str = ""
-) -> subprocess.CompletedProcess[str]:
-    """Run a persistent custom environment variable action."""
-    return run_bash_command(
-        build_hhs_env_action_command(operation, name, value),
-        "Updating environment variables...",
-        ttl_seconds=0,
-        use_cache=False,
-        cache_tag="env",
-    )
-
-
-def run_hhs_shopt_action(
-    operation: str, option_name: str
-) -> subprocess.CompletedProcess[str]:
-    """Run a shell option set or unset action."""
-    return run_bash_command(
-        build_hhs_shopt_action_command(operation, option_name),
-        "Updating shell option...",
-        ttl_seconds=0,
-        use_cache=False,
-        cache_tag="shopt",
-    )
-
-
-def run_docker_container_action(
-    operation: str, container_id: str
-) -> subprocess.CompletedProcess[str]:
-    """Run a Docker container action and return the completed process."""
-    return run_bash_command(
-        build_docker_container_action_command(operation, container_id),
-        f"Running docker {operation}...",
-        ttl_seconds=0,
-        use_cache=False,
-        timeout_seconds=20,
-        cache_tag="docker",
-    )
-
-
-def run_docker_image_delete(image_id: str) -> subprocess.CompletedProcess[str]:
-    """Run Docker image deletion and return the completed process."""
-    return run_bash_command(
-        build_docker_image_delete_command(image_id),
-        "Deleting Docker image...",
-        ttl_seconds=0,
-        use_cache=False,
-        timeout_seconds=30,
-        cache_tag="docker",
-    )
-
-
-def run_tool_tldr(tool_name: str) -> subprocess.CompletedProcess[str]:
-    """Run tldr for the selected Home tool."""
-    return run_bash_command(
-        build_tool_tldr_command(tool_name),
-        f"Loading TLDR for {tool_name}...",
-        use_cache=False,
-        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        cache_tag="tools",
-    )
-
-
-def run_hhs_process_kill(process_name: str) -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup process kill command and return the completed process."""
-    return run_bash_command(
-        build_hhs_process_kill_command(process_name),
-        "Killing process...",
-        use_cache=False,
-        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        cache_tag="monitor_process",
-    )
-
-
-def run_hhs_services_quietly(
-    operation: str = "status", service_name: str = ""
-) -> subprocess.CompletedProcess[str]:
-    """Run the HomeSetup services command without command-result caching."""
-    return run_bash_command(
-        build_hhs_services_command(operation, service_name),
-        "Loading services...",
-        use_cache=False,
-        cache_tag="services",
-    )
-
-
-def run_hhs_service_action(
-    operation: str, service_name: str
-) -> subprocess.CompletedProcess[str]:
-    """Run a HomeSetup service action without command-result caching."""
-    return run_bash_command(
-        build_hhs_services_command(operation, service_name),
-        f"Service {operation}: {service_name}",
-        use_cache=False,
-        timeout_seconds=hhs_ui_constants.UI_COMMAND_SERVICE_ACTION_TIMEOUT_SECONDS,
-        cache_tag="services",
-    )
-
-
-def run_hhs_path_action(
-    operation: str, path_value: str, old_path_value: str = ""
-) -> subprocess.CompletedProcess[str]:
-    """Run a persistent PATH entry action."""
-    return run_bash_command(
-        build_hhs_path_action_command(operation, path_value, old_path_value),
-        "Updating PATH entries...",
-        ttl_seconds=0,
-        use_cache=False,
-        cache_tag="path",
-    )
-
-
-def run_hhs_dir_action(
-    operation: str, name: str, value: str = ""
-) -> subprocess.CompletedProcess[str]:
-    """Run a persistent saved directory action."""
-    return run_bash_command(
-        build_hhs_dir_action_command(operation, name, value),
-        "Updating saved directories...",
-        ttl_seconds=0,
-        use_cache=False,
-        cache_tag="dirs",
-    )
-
-
-def run_hhs_command_action(
-    operation: str, name: str, value: str = ""
-) -> subprocess.CompletedProcess[str]:
-    """Run a persistent saved command action."""
-    return run_bash_command(
-        build_hhs_command_action_command(operation, name, value),
-        "Updating saved commands...",
-        ttl_seconds=0,
-        use_cache=False,
-        cache_tag="cmds",
-    )
-
-
-def run_hhs_alias_action(
-    operation: str, name: str, value: str = ""
-) -> subprocess.CompletedProcess[str]:
-    """Run a persistent custom alias action."""
-    return run_bash_command(
-        build_hhs_alias_action_command(operation, name, value),
-        "Updating custom aliases...",
-        ttl_seconds=0,
-        use_cache=False,
-        cache_tag="aliases",
-    )
-
-
 def filter_tool_rows(
     rows: list[dict[str, str]], tools_filter: str = "All", other_filter: str = ""
 ) -> list[dict[str, str]]:
@@ -2118,21 +1789,6 @@ def process_monitor_chart_rows(
     if metric == "CPU":
         rows = [row for row in rows if float(row["Value"]) > 0.0]
     return rows[: max(1, int(limit))]
-
-
-def service_value_editor_key(index: int) -> str:
-    """Return the Streamlit widget key for a selected service value viewer."""
-    return f"{hhs_ui.SERVICE_VALUE_EDITOR_KEY_PREFIX}_{index}"
-
-
-def history_command_value_editor_key(index: int) -> str:
-    """Return the Streamlit widget key for a selected history command value viewer."""
-    return f"{hhs_ui.HISTORY_COMMAND_VALUE_EDITOR_KEY_PREFIX}_{index}"
-
-
-def history_directory_value_editor_key(index: int) -> str:
-    """Return the Streamlit widget key for a selected history directory value viewer."""
-    return f"{hhs_ui.HISTORY_DIRECTORY_VALUE_EDITOR_KEY_PREFIX}_{index}"
 
 
 def docker_container_table_key() -> str:
@@ -2183,19 +1839,23 @@ def reset_docker_image_table_selection() -> None:
 
 def home_tools_table_key() -> str:
     """Return the Home Tools dataframe key for the current selection generation."""
-    reset_counter = st.session_state.setdefault("home_tools_table_reset_counter", 0)
+    reset_counter = st.session_state.setdefault(
+        hhs_ui.HOME_TOOLS_TABLE_RESET_COUNTER_KEY, 0
+    )
     if not isinstance(reset_counter, int):
         reset_counter = 0
-        st.session_state["home_tools_table_reset_counter"] = reset_counter
+        st.session_state[hhs_ui.HOME_TOOLS_TABLE_RESET_COUNTER_KEY] = reset_counter
     return f"home_tools_table_{reset_counter}"
 
 
 def reset_home_tools_table_selection() -> None:
     """Reset the Home Tools dataframe selection for the next rerun."""
-    reset_counter = st.session_state.setdefault("home_tools_table_reset_counter", 0)
+    reset_counter = st.session_state.setdefault(
+        hhs_ui.HOME_TOOLS_TABLE_RESET_COUNTER_KEY, 0
+    )
     if not isinstance(reset_counter, int):
         reset_counter = 0
-    st.session_state["home_tools_table_reset_counter"] = reset_counter + 1
+    st.session_state[hhs_ui.HOME_TOOLS_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
 
 
 def home_shopts_table_key() -> str:
@@ -3057,29 +2717,6 @@ def apply_alias_add_form_value() -> None:
     if not name:
         return
     apply_selected_alias_value(name, value, clear_form_key_prefix="alias")
-
-
-def scroll_to_env_value_editor(editor_key: str) -> None:
-    """Scroll the browser viewport to the selected environment value editor."""
-    selector = f'div[class*="st-key-{editor_key}"] textarea'
-    render_script_html(
-        f"""
-        <script>
-          (() => {{
-            const editor_selector = {selector!r};
-            const scroll_to_editor = () => {{
-              const target = window.parent.document.querySelector(editor_selector);
-              if (target) {{
-                target.scrollIntoView({{ behavior: "smooth", block: "center" }});
-                target.focus({{ preventScroll: true }});
-              }}
-            }};
-            window.setTimeout(scroll_to_editor, 75);
-          }})();
-        </script>
-        """,
-        height=hhs_ui.ENV_VALUE_EDITOR_SCROLL_HELPER_HEIGHT,
-    )
 
 
 def render_env_rows(rows: list[dict[str, str]]) -> None:
@@ -4268,7 +3905,6 @@ def configure_monitor_ui_dependencies() -> None:
         process_monitor_chart_rows=process_monitor_chart_rows,
         render_openable_file_pill=render_openable_file_pill,
         render_persisted_expander_state_script=render_persisted_expander_state_script,
-        run_hhs_logs=run_hhs_logs,
     )
 
 
@@ -4410,6 +4046,9 @@ def main() -> None:
         layout="wide",
     )
     restore_ui_state()
+    if not st.session_state.get(hhs_ui_constants.UI_CACHE_FILE_SYNCED_SESSION_KEY):
+        sync_ui_cache_file()
+        st.session_state[hhs_ui_constants.UI_CACHE_FILE_SYNCED_SESSION_KEY] = True
     restore_persisted_theme_selection()
     st.session_state.setdefault("updater_last_check_output", "")
     st.session_state.setdefault("updater_update_available", False)
@@ -4520,7 +4159,7 @@ def main() -> None:
         st.session_state["home_tools_filter"], hhs_ui.HOME_TOOLS_FILTERS
     )
     st.session_state.setdefault("home_tools_other_filter", "")
-    st.session_state.setdefault("home_tools_table_reset_counter", 0)
+    st.session_state.setdefault(hhs_ui.HOME_TOOLS_TABLE_RESET_COUNTER_KEY, 0)
     st.session_state.setdefault("home_shopts_filter", "All")
     st.session_state["home_shopts_filter"] = normalized_table_filter_selection(
         st.session_state["home_shopts_filter"], hhs_ui.SHOPTS_FILTERS
@@ -4692,6 +4331,9 @@ def main() -> None:
     st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(
         st.session_state.get("history_stats_top_n")
     )
+    if not st.session_state.get(hhs_ui_constants.UI_STATE_FILE_SYNCED_SESSION_KEY):
+        save_ui_state()
+        st.session_state[hhs_ui_constants.UI_STATE_FILE_SYNCED_SESSION_KEY] = True
     complete_background_action_jobs()
     execute_pending_dialog_callback()
     apply_pending_folder_picker_selection()

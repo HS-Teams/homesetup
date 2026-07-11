@@ -21,61 +21,6 @@ load "${HHS_REPO_DIR}/tests/test_helper"
 load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
-@test "when remote terminal prints wrapper chatter then command output should be filtered" {
-  run python3 - "${command_catalog_file}" <<'PY'
-import re
-import sys
-from functools import lru_cache
-from pathlib import Path
-
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-start = source.index("def terminal_output_line_is_noise(")
-end = source.index("def strip_ansi(")
-motd_start = source.index("def homesetup_motd_template(")
-motd_end = source.index("def strip_remote_command_motd_block(")
-namespace = {
-    "re": re,
-    "strip_ansi": lambda value: value,
-    "strip_ssh_shared_connection_notice": lambda value: value,
-    "homesetup_home": lambda: Path(".").resolve(),
-    "lru_cache": lru_cache,
-}
-exec(
-    "from __future__ import annotations\n"
-    + source[motd_start:motd_end]
-    + "\n"
-    + source[start:end],
-    namespace,
-)
-motd_fragments = namespace["homesetup_motd_fragment_groups"]()[0]
-rendered_motd = f"[Linux-ubuntu/bash] {' root '.join(motd_fragments)} v1.9.18 "
-
-stdout = (
-    "[bash] HomeSetup is starting...\n"
-    f"{rendered_motd}\n"
-    "Shell option expand_aliases set to on \n"
-    "Shell option checkwinsize set to on \n"
-    "bash: cd: /etc/gabiroba: No such file or directory\n"
-    "exit\n"
-    "__HHS_TERMINAL_CWD__/etc/ssl\n"
-)
-output = namespace["filter_terminal_output_noise"](stdout)
-assert "HomeSetup is starting" not in output
-assert "Welcome root" not in output
-assert "Shell option expand_aliases" not in output
-assert "\nexit\n" not in f"\n{output}\n"
-assert "bash: cd: /etc/gabiroba: No such file or directory" in output
-assert "__HHS_TERMINAL_CWD__" in output
-
-stderr = "Shared connection to 167.99.120.81 closed.\nConnection to host closed.\nreal error\n"
-filtered = namespace["filter_terminal_output_noise"](stderr)
-assert "Shared connection" not in filtered
-assert "Connection to host closed" not in filtered
-assert filtered == "real error\n"
-PY
-  assert_success
-}
-
 # TC - 13
 
 @test "when using Ask AI then chat and model settings should support context, reset, select, and delete" {
@@ -102,33 +47,31 @@ PY
   assert_success
 
   assert_file_contains_many "${command_catalog_file}" \
-'build_hhs_ask_execute_command(\["-k", message\])' 'def build_terminal_ai_context_prompt' \
-    'TERMINAL_AI_DEFAULT_PROMPT' 'build_hhs_ask_execute_command(\["-c"\])' \
-    'build_hhs_ask_execute_command(\["-p"\])' 'build_hhs_ask_execute_command(\["-r"\])' \
+'build_hhs_ask_execute_command(\["-k", message\])' 'build_hhs_ask_execute_command(\["-c"\])' \
+    'build_hhs_ask_execute_command(\["-r"\])' \
     'build_hhs_ask_execute_command(\["-i", file_path\])' 'build_hhs_ask_execute_command(\["-m"\])' \
     'def build_hhs_ask_prompt_file_command' 'def build_hhs_save_ask_prompt_file_command' \
     'def build_hhs_revert_ask_prompt_file_command' 'cat "${HHS_OLLAMA_PROMPT_FILE}"' \
     'prompt_file="${HHS_OLLAMA_PROMPT_FILE}"' \
     'cp -f "${HHS_OLLAMA_PROMPT_SOURCE}" "${HHS_OLLAMA_PROMPT_FILE}"' \
     'def build_hhs_ask_ingest_command'
-  assert_file_contains_many "${ui_file}" \
-'page_icon=str(hhs_ui.APP_FAVICON_FILE)' 'def submit_ai_chat_prompt' \
+  assert_file_contains "${ui_file}" 'page_icon=str(hhs_ui.APP_FAVICON_FILE)'
+  assert_file_contains_many "${ai_ui_file}" \
+'def submit_ai_chat_prompt' \
     'build_hhs_ask_command(clean_prompt)' '"Asking AI..."' \
     'submit_ai_chat_prompt(prompt, ollama_model, context_size)' \
     'def render_ai_context_panel' 'def render_ai_prompt_file_panel' 'def render_ai_context_output_panel' \
     'def refresh_ai_context' 'def clear_ai_context_history' 'def refresh_ai_prompt' \
     'def refresh_ai_prompt_file' 'def save_ai_prompt_file' 'def revert_ai_prompt_file' \
-    'def run_hhs_ask_prompt_file' 'def run_hhs_save_ask_prompt_file' \
-    'def run_hhs_revert_ask_prompt_file' 'def ingest_ai_context_upload' \
-    'def run_hhs_ask_ingest'
+    'def ingest_ai_context_upload' 'start_background_bash_command('
   assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/core/constants.py" 'AI_CONTEXT_UPLOAD_TYPES = ('
 
-  assert_file_contains "${ui_file}" 'st.file_uploader('
+  assert_file_contains "${ai_ui_file}" 'st.file_uploader('
 
   assert_file_contains_many "${css_file}" \
 '\[data-testid="stFileUploader"\] button' '\[data-testid="stFileUploader"\] button \*' '.stButton button' \
     '.stButton button \*'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ai_ui_file}" \
 'type=hhs_ui_constants.AI_CONTEXT_UPLOAD_TYPES' 'key="ai_context_upload"' 'key="ai_ingest_context_button"' \
     '" Ingest"'
   run python3 - <<'PY'
@@ -183,24 +126,22 @@ assert "frfree" not in clean_output
 PY
   assert_success
 
-  run python3 - <<'PY'
+  run python3 - "${ai_ui_file}" <<'PY'
+import sys
 from pathlib import Path
 
-ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+ui_source = Path(sys.argv[1]).read_text()
 refresh_body = ui_source.split("def refresh_ai_context", 1)[1].split("\ndef ", 1)[0]
 context_body = ui_source.split("def render_ai_context_panel", 1)[1].split("\ndef ", 1)[0]
 clear_context_body = ui_source.split("def clear_ai_context_history", 1)[1].split("\ndef ", 1)[0]
 complete_context_body = ui_source.split("def complete_ai_context_action_job", 1)[1].split("\ndef ", 1)[0]
 assert "queue_ai_context_action(" in refresh_body
 assert "build_hhs_ask_context_command()" in refresh_body
-assert "run_hhs_ask_context()" not in refresh_body
-assert "run_hhs_ask_context()" not in context_body
 assert "run_hhs_ask_prompt()" not in context_body
 assert "render_ai_prompt_file_panel()" in context_body
 assert "render_ai_context_output_panel()" in context_body
 assert "queue_ai_context_action(" in clear_context_body
 assert "build_hhs_ask_reset_command()" in clear_context_body
-assert "run_hhs_ask_reset(close_dialogs=True)" not in clear_context_body
 assert 'st.session_state["ai_context_output"] = ""' in complete_context_body
 assert 'st.session_state["ai_context_error"] = ""' in complete_context_body
 assert 'st.session_state["ai_chat_messages"] = []' in complete_context_body
@@ -236,7 +177,6 @@ PY
 'key="ai_show_context_button"' 'show_ai_chat_context'
   assert_file_contains_many "${ui_file}" \
 '" Clear"' 'build_hhs_ask_reset_command()'
-  assert_file_not_contains "${ui_file}" 'run_hhs_ask_reset(close_dialogs=True)'
 
   assert_file_contains_many "${ui_file}" \
 'st.session_state\["ai_context_output"\] = ""' 'st.session_state\["ai_context_error"\] = ""'

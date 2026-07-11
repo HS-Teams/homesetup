@@ -81,6 +81,15 @@ def configure_cache_runtime(
     )
 
 
+def read_ui_cache_file(cache_file: Path) -> dict[str, object] | None:
+    """Return a JSON object from one UI cache file, if valid."""
+    try:
+        data = json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def load_ui_cache() -> dict[str, dict[str, object]]:
     """Load the UI cache file and prune expired entries without writing on reads."""
     global UI_CACHE_MEMORY, UI_CACHE_MEMORY_MTIME
@@ -93,13 +102,8 @@ def load_ui_cache() -> dict[str, dict[str, object]]:
         UI_CACHE_MEMORY = {}
         UI_CACHE_MEMORY_MTIME = 0.0
         return {}
-    try:
-        data = json.loads(cache_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        UI_CACHE_MEMORY = {}
-        UI_CACHE_MEMORY_MTIME = cache_mtime
-        return {}
-    if not isinstance(data, dict):
+    data = read_ui_cache_file(cache_file)
+    if data is None:
         UI_CACHE_MEMORY = {}
         UI_CACHE_MEMORY_MTIME = cache_mtime
         return {}
@@ -167,13 +171,32 @@ def save_ui_cache(cache: dict[str, dict[str, object]]) -> None:
         return
 
 
+def ui_cache_file_is_synchronized(cache: dict[str, dict[str, object]]) -> bool:
+    """Return whether the visible cache file exactly matches the current schema."""
+    if ui_cache_source_file() != hhs_ui.UI_CACHE_FILE:
+        return False
+    if any(cache_file.exists() for cache_file in legacy_ui_cache_files()):
+        return False
+    return read_ui_cache_file(hhs_ui.UI_CACHE_FILE) == cache
+
+
+def sync_ui_cache_file() -> None:
+    """Prune and migrate the persisted UI cache without creating an empty file."""
+    cache_file = ui_cache_source_file()
+    cache = load_ui_cache()
+    if cache_file is None and not cache:
+        return
+    if ui_cache_file_is_synchronized(cache):
+        return
+    save_ui_cache(cache)
+
+
 def ui_cache_key_is_supported(key: object) -> bool:
     """Return whether a persisted UI cache key belongs to the supported schema."""
     if not isinstance(key, str):
         return False
     return (
-        key.startswith("command_hash:")
-        or key.startswith("command_tag:")
+        key.startswith("command_tag:")
         or key.startswith("search_terms:")
         or key == hhs_ui.UI_CACHE_SSH_CONNECTION_KEY
     )
@@ -371,19 +394,6 @@ def cache_set(
         "value": value,
     }
     save_ui_cache(cache)
-
-
-def cache_delete(key_prefix: str) -> None:
-    """Delete cache entries matching a key or key prefix."""
-    cache = load_ui_cache()
-    updated_cache = {
-        key: value
-        for key, value in cache.items()
-        if key != key_prefix and not key.startswith(f"{key_prefix}:")
-    }
-    if updated_cache != cache:
-        save_ui_cache(updated_cache)
-    command_result_snapshot_delete(key_prefix)
 
 
 def cache_delete_tag(cache_tag: str) -> None:

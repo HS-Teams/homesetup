@@ -43,7 +43,6 @@ from hhs_ui.execution.command_runtime import (
     background_job_result,
     background_job_state,
     render_background_job_status,
-    run_bash_command,
     start_background_bash_command,
 )
 from hhs_ui.widgets.dialog_ui import pop_dialog
@@ -94,15 +93,6 @@ def configure_ssh_explorer_ui(
             "start_background_action_job": start_background_action_job,
             "render_view_segmented_control": render_view_segmented_control,
         }
-    )
-
-
-def run_ssh_tunnels(host: str) -> subprocess.CompletedProcess[str]:
-    """Run the SSH tunnel listing command and return the completed process."""
-    return run_bash_command(
-        build_ssh_tunnels_command(host),
-        "Loading SSH tunnels...",
-        cache_tag="ssh",
     )
 
 
@@ -298,13 +288,6 @@ def ssh_explorer_kind_label(kind: str) -> str:
 def ssh_explorer_entry_is_visible(name: str) -> bool:
     """Return whether an explorer entry name should be visible."""
     return bool(name) and name not in {".", ".."} and not name.startswith(".")
-
-
-def ssh_explorer_row_style(row: pd.Series) -> list[str]:
-    """Return dataframe row styles for SSH explorer file and folder entries."""
-    if str(row.get("_kind", "")) == "Dir":
-        return ["color: #38bdf8; font-weight: 800;"] * len(row)
-    return ["color: #ffffff;"] * len(row)
 
 
 def ssh_explorer_row(

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-try:
-    from .core import constants as _constants
-except ImportError:
-    from core import constants as _constants
+from .core import constants as _constants
 
 __all__ = tuple(name for name in dir(_constants) if name.isupper())
 

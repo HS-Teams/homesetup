@@ -636,7 +636,7 @@ PY
 }
 
 @test "when parsing footer working directory then startup banners should be ignored" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${footer_ui_file}" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -661,14 +661,13 @@ PY
 }
 
 @test "when rendering footer working directory then local cwd should not issue pwd" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${footer_ui_file}" <<'PY'
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = source.index("def footer_working_directory(")
-end = source.index("def run_hhs_updater_check(")
 session_state = {}
 namespace = {
     "hhs_ui_constants": SimpleNamespace(
@@ -679,7 +678,7 @@ namespace = {
     "st": SimpleNamespace(session_state=session_state),
     "os": SimpleNamespace(getcwd=lambda: "/local/cwd"),
 }
-exec(source[start:end], namespace)
+exec(source[start:], namespace)
 
 assert namespace["footer_working_directory"]() == "/local/cwd"
 session_state["_hhs_footer_local_working_dir"] = "/terminal/local"

@@ -1242,18 +1242,6 @@ def run_shell_version() -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_footer_working_directory() -> subprocess.CompletedProcess[str]:
-    """Run the active host shell command used by the footer working-directory status."""
-    return run_bash_command(
-        build_footer_working_directory_command(),
-        "Loading remote working dir",
-        ttl_seconds=0,
-        use_cache=False,
-        timeout_seconds=10,
-        cache_tag="system",
-    )
-
-
 def parse_footer_working_directory_output(output: str) -> str:
     """Return the marked working directory from noisy local or remote shell output."""
     clean_output = strip_ansi(output or "").replace("\r", "")
