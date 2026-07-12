@@ -230,12 +230,12 @@ PY
   assert_file_contains_many "${ssh_explorer_ui_file}" \
 'def ssh_explorer_component' 'components.declare_component(' 'def handle_ssh_explorer_component_event' \
     'def ssh_explorer_component_event_paths' 'def render_ssh_explorer_component' \
-    'def remote_explorer_parent_path' 'def normalize_local_explorer_path' 'def normalize_remote_explorer_path' \
+    'def normalize_local_explorer_path' 'def normalize_remote_explorer_path' \
     'def ssh_explorer_local_default_path' 'def ssh_explorer_remote_default_path' \
-    'def open_ssh_explorer_parent' 'def refresh_ssh_explorer_paths' 'def set_remote_footer_working_directory' \
+    'def refresh_ssh_explorer_paths' 'def set_remote_footer_working_directory' \
     'def build_recoverable_delete_command' 'def request_ssh_explorer_delete_confirmation' \
     'def render_ssh_explorer_delete_dialog' 'def create_ssh_explorer_folder' \
-    'def ssh_explorer_component_theme' 'def open_ssh_explorer_selection' \
+    'def ssh_explorer_component_theme' \
     'def build_remote_explorer_listing_command' 'def remote_explorer_target_assignment' \
     'def build_remote_explorer_create_folder_command' 'def parse_remote_explorer_created_dir' \
     'def parse_remote_explorer_rows' 'def build_scp_to_remote_command' 'def build_scp_to_local_command' \
@@ -247,10 +247,11 @@ PY
     'hhs_ui.SSH_TUNNEL_FILTERS' '"ssh_tunnel_filter"' '"ssh_tunnel_other_filter"' \
     'filter_ssh_tunnel_rows(rows, tunnel_filter, other_filter)' \
     'render_ssh_files_panel()' \
-    'event = render_ssh_explorer_component(' 'handle_ssh_explorer_component_event(event)' \
+    'render_ssh_explorer_component(' 'def handle_ssh_explorer_component_change' \
+    'on_change=handle_ssh_explorer_component_change' \
     'if action == "create_folder"' 'if action == "refresh"' 'refresh_ssh_explorer_paths(' \
-    'if action == "delete"' 'request_ssh_explorer_delete_confirmation(' 'st.rerun()' \
-    'key="ssh_explorer_component"' 'localRows=local_rows' 'localLoading=local_loading' \
+    'if action == "delete"' 'request_ssh_explorer_delete_confirmation(' \
+    'key=SSH_EXPLORER_COMPONENT_KEY' 'localRows=local_rows' 'localLoading=local_loading' \
     'remoteRows=remote_rows or \[\]' 'remoteLoading=remote_loading' 'loading=explorer_loading' \
     'explorer_loading = local_loading or remote_loading' 'tableHeight=table_height(hhs_ui.ENV_TABLE_HEIGHT)' \
     'theme=ssh_explorer_component_theme()' '"ssh_explorer_local_path", ssh_explorer_local_default_path()' \
@@ -260,7 +261,7 @@ PY
 'SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"'
   assert_file_contains_many "${ui_file}" \
 'view_segmented_control_widget_key(state_key)' \
-    'st.session_state.setdefault("ssh_tunnel_filter", "All")'
+    '("ssh_tunnel_filter", "All")'
   assert_file_contains "${table_ui_file}" 'def resolve_css_custom_property'
   assert_file_not_contains_many "${ui_file}" \
 'on_select=reset_ssh_explorer_remote_table_selection' 'on_select=reset_ssh_explorer_local_table_selection' \
@@ -315,7 +316,9 @@ PY
   assert_file_not_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html" 'function createLoadingState'
 
   assert_file_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html" \
-'app.replaceChildren()' 'Streamlit.setFrameHeight(0)'
+'app.replaceChildren()' 'height: 100vh'
+  assert_file_not_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html" \
+    'requestAnimationFrame' 'ResizeObserver' 'Streamlit.setFrameHeight('
   assert_file_not_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html" \
 '.loading-state' 'Loading files'
   assert_file_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html" \
@@ -323,7 +326,6 @@ PY
     '"--hhs-primary": themeValues.primary || themeValues.primaryColor' 'border-color: var(--hhs-primary)' \
     '.panel.active .panel-title' 'let activePanel = "local"' 'function activatePanel' \
     'classList.toggle("active"' 'localBasePath: args.localPath' 'remoteBasePath: args.remotePath' \
-    'sendCommand("parent", activeExplorerPanel(), "")' \
     'sendCommand("create_folder", activeExplorerPanel(), "")'
   assert_file_contains_many "${ssh_explorer_ui_file}" \
 'Folder created on local {created_name}' 'Folder created on remote {created_name}'
@@ -336,19 +338,22 @@ component = Path("bin/apps/py/hhs_ui/components/ssh_explorer/index.html").read_t
     encoding="utf-8"
 )
 controls = component[
-    component.index("function createTransferControls") : component.index("function resizeFrame")
+    component.index("function createTransferControls") : component.index("function render(nextArgs)")
 ]
-assert controls.index('""') < controls.index('""') < controls.index('""')
-assert controls.index('""') < controls.index('""')
+assert controls.index('""') < controls.index('""') < controls.index('""')
 assert '""' in controls
 assert '""' in controls
+assert '""' not in controls
+assert '""' not in controls
 PY
   assert_success
 
   assert_file_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html" \
 'args.selectionHint ? "Select a row to interact" : ""' 'function selectRow' 'function sendCommand' \
-    'Streamlit.setComponentValue' '""' '""' 'sendCommand("refresh", "all", "")' '""' '""' \
-    'sendCommand("delete", activeExplorerPanel(), "")' '""' '""' '""'
+    'Streamlit.setComponentValue' '""' 'sendCommand("refresh", "all", "")' '""' '""' \
+    'sendCommand("delete", activeExplorerPanel(), "")' '""' '""'
+  assert_file_not_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html" \
+    '""' '""' 'sendCommand("parent"' 'sendCommand("open"'
   run python3 - <<'PY'
 from pathlib import Path
 
@@ -379,7 +384,8 @@ PY
 
   assert_file_contains_many "${ssh_explorer_ui_file}" \
 'key=hhs_ui.SSH_TUNNEL_TABLE_KEY' 'checkbox=False'
-  run python3 - "${command_catalog_file}" <<'PY'
+  run python3 - "${command_catalog_file}" "${ssh_explorer_ui_file}" \
+    "${table_ui_file}" <<'PY'
 import csv
 import hashlib
 import os
@@ -540,14 +546,18 @@ assert namespace["filter_ssh_tunnel_rows"](filter_rows, "Other", "localhost") ==
 assert namespace["ssh_tunnel_kind"]({"Type": "Local", "Destination": "localhost:80"}) == "HTTP"
 assert namespace["ssh_tunnel_kind"]({"Type": "Dynamic", "Bind": "127.0.0.1:1080"}) == "SOCKS"
 
+source = Path(sys.argv[2]).read_text(encoding="utf-8")
+table_source = Path(sys.argv[3]).read_text(encoding="utf-8")
+resolver_start = table_source.index("def resolve_css_custom_property(")
+exec(
+    "from __future__ import annotations\n"
+    + table_source[resolver_start:],
+    namespace,
+)
 explorer_start = source.index("def ssh_explorer_mtime_text(")
 explorer_end = source.index("def render_ssh_view(")
 exec("from __future__ import annotations\n" + source[explorer_start:explorer_end], namespace)
 
-assert namespace["remote_explorer_parent_path"]("/home/me/project") == "/home/me"
-assert namespace["remote_explorer_parent_path"]("/root") == "/"
-assert namespace["remote_explorer_parent_path"]("/") == "/"
-assert namespace["remote_explorer_parent_path"](".") == ".."
 assert namespace["ssh_explorer_size_text"]("4096", "Dir") == "--"
 assert namespace["ssh_explorer_size_text"]("2048", "File") == "2.0 KB"
 assert namespace["ssh_explorer_row"](
@@ -740,7 +750,8 @@ PY
     'close_callback=close_ssh_connection_dialog'
   assert_file_contains_many "${dialog_ui_file}" \
     'button[aria-label="Close"]' 'close_button.click()'
-  assert_file_contains_many "${ui_file}" 'render_dialog()' 'if render_ssh_connection_dialog()'
+  assert_file_contains "${dialog_ui_file}" 'render_dialog()'
+  assert_file_contains "${ui_file}" 'if render_ssh_connection_dialog()'
   run python3 - <<'PY'
 import ast
 from pathlib import Path
@@ -759,19 +770,22 @@ PY
 'return True' 'dismiss_streamlit_dialog()' 'set_overlay(False)' \
     'f"Connected to remote  {ssh_connection_display(host)}"' \
     'push_floating_status(f"Failed to connect to remote: {host}", "error")'
-  assert_file_contains_many "${ui_file}" \
-    'push_floating_status("Opened working directory.", "info")' \
+  assert_file_contains "${footer_ui_file}" \
+    'push_floating_status("Opened working directory.", "info")'
+  assert_file_contains_many "${ai_ui_file}" \
     '"success_fallback": "AI chat history cleared."' 'status_message or f"Selected AI model: {new_model}"' \
-    'status_message or f"Deleted AI model: {model_name}"' \
+    'status_message or f"Deleted AI model: {model_name}"'
+  assert_file_contains_many "${ui_file}" \
     'push_floating_status(f"Loaded TLDR: {tool_name}", "info")' \
     'status_message or f"Killed process: {process_name}"' \
-    'status_message or f"Service {operation} completed: {service_name}"' \
+    'status_message or f"Service {operation} completed: {service_name}"'
+  assert_file_contains_many "${status_ui_file}" \
     'kind_aliases = {"success": "info", "warning": "warn"}' \
     'clean_message = clean_command_status_message(str(message))' 'clean_kind not in {"info", "warn", "error"}'
   assert_file_contains "${command_catalog_file}" 'def clean_command_status_message'
   assert_file_not_contains "${ui_file}" 'Successfully connected to {host}'
 
-  run grep -F -q 'st.session_state["ssh_connection_dialog_title"] = ""' "${ui_file}"
+  run grep -F -q 'st.session_state["ssh_connection_dialog_title"] = ""' "${ssh_runtime_file}"
   assert_success
 
   assert_file_not_contains "${ssh_runtime_file}" \
@@ -781,3 +795,50 @@ PY
 }
 
 # TC - 11
+
+@test "when selecting SSH explorer paths then both panels should use scoped folder pickers" {
+  assert_file_contains_many "${ssh_explorer_ui_file}" \
+    'def request_ssh_explorer_path_picker' 'def apply_ssh_explorer_path_picker_selection' \
+    'if action == "pick_path"' 'mode="folder"' 'use_remote = False' 'use_remote = True' \
+    'apply_ssh_explorer_path_picker_selection()'
+  assert_file_contains_many "${path_picker_file}" \
+    'PATH_PICKER_REMOTE_OVERRIDE_KEY = "_hhs_folder_picker_use_remote"' \
+    'use_remote: bool | None = None' 'if isinstance(remote_override, bool)' \
+    'st.session_state.pop(PATH_PICKER_REMOTE_OVERRIDE_KEY, None)'
+
+  local component_file
+  component_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html"
+  assert_file_contains_many "${component_file}" \
+    'const button = createElement("button", "icon-button", "")' \
+    'button.type = "button"' 'button.title = `Select ${panel} folder`' \
+    'const requestPicker = () =>' \
+    'button.addEventListener("pointerdown", (event) =>' \
+    'event.button !== 0' 'event.preventDefault()' \
+    'button.addEventListener("keydown", (event) =>' \
+    'event.key !== "Enter" && event.key !== " "' \
+    'button.addEventListener("click", (event) =>' 'event.detail === 0' \
+    'sendCommand("pick_path", panel, input.value)' \
+    'const submitPath = () =>' 'input.addEventListener("keydown", (event) =>' \
+    'if (event.key !== "Enter")' 'submitPath()' \
+    'sendCommand("submit_path", panel, input.value)' \
+    'const maxFolderSuggestions = 5' 'function folderRows(panel)' \
+    'function folderNameFragment(panel, typedPath)' 'function rankedFolderRows(panel, typedPath)' \
+    'if (!fragment)' 'match.name.toLowerCase().startsWith(fragment)' \
+    '.slice(0, maxFolderSuggestions)' 'stringValue(row._kind) === "Dir"' \
+    'createElement("div", "folder-suggestions")' \
+    'createElement("button", "folder-suggestion", name)' \
+    'input.setAttribute("aria-autocomplete", "list")' \
+    'input.addEventListener("input", () =>' 'renderSuggestions()' \
+    'const acceptAndSubmitSuggestion = (index = activeSuggestionIndex) =>' \
+    'acceptAndSubmitSuggestion(index)' \
+    'event.key === "Tab" && acceptAndSubmitSuggestion()' \
+    'if (!acceptAndSubmitSuggestion())'
+  assert_file_not_contains "${component_file}" 'form.addEventListener("submit"'
+  assert_file_not_contains "${component_file}" 'button.title = "Open path"'
+  assert_file_not_contains "${component_file}" 'createElement("datalist"'
+  assert_file_not_contains "${component_file}" 'input.setAttribute("list"'
+  assert_file_not_contains "${component_file}" 'indexOf(fragment)'
+  assert_file_contains_many "${ssh_explorer_ui_file}" \
+    'if action == "submit_path" and panel == "local"' \
+    'if action == "submit_path" and panel == "remote"'
+}

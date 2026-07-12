@@ -49,6 +49,7 @@ from hhs_ui.widgets.dialog_ui import pop_dialog
 from hhs_ui.widgets.feedback_ui import render_command_loader
 from hhs_ui.features.ssh_core import ssh_config_option, ssh_control_path
 from hhs_ui.features.ssh_runtime import connected_ssh_host
+from hhs_ui.widgets.path_picker import request_path_picker
 from hhs_ui.widgets.status_ui import push_floating_status
 from hhs_ui.widgets.table_ui import (
     display_table_rows,
@@ -65,6 +66,10 @@ from hhs_ui.core.ui_definitions import (
     SSH_FILE_TRANSFER_JOB,
 )
 from hhs_ui.core.ui_state import save_ui_state
+
+SSH_EXPLORER_LOCAL_PICKER_KEY = "_hhs_ssh_explorer_local_picker_value"
+SSH_EXPLORER_REMOTE_PICKER_KEY = "_hhs_ssh_explorer_remote_picker_value"
+SSH_EXPLORER_COMPONENT_KEY = "ssh_explorer_component"
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:
@@ -557,36 +562,6 @@ def refresh_ssh_explorer_paths(
     save_ui_state()
 
 
-def remote_explorer_parent_path(path: str) -> str:
-    """Return a POSIX parent directory path for the remote explorer."""
-    clean_path = path.strip() or "."
-    normalized_path = posixpath.normpath(clean_path)
-    if normalized_path == "/":
-        return "/"
-    parent_path = posixpath.dirname(normalized_path)
-    if parent_path:
-        return parent_path
-    if normalized_path in {"", "."}:
-        return ".."
-    return "."
-
-
-def open_ssh_explorer_parent(panel: str, local_path: str, remote_path: str) -> None:
-    """Open the parent directory for one SSH explorer panel."""
-    if panel == "remote":
-        open_remote_explorer_path(remote_explorer_parent_path(remote_path))
-    else:
-        open_local_explorer_path(str(local_explorer_directory(local_path).parent))
-
-
-def open_ssh_explorer_selection(panel: str, path: str) -> None:
-    """Open the selected SSH explorer row on the given panel."""
-    if panel == "local":
-        open_local_explorer_path(path)
-    elif panel == "remote":
-        open_remote_explorer_path(path)
-
-
 def create_remote_explorer_folder(remote_path: str) -> None:
     """Queue creation of the requested remote explorer folder path."""
     clean_remote_path = remote_path.strip() or ssh_explorer_remote_default_path()
@@ -1029,7 +1004,6 @@ def handle_ssh_explorer_component_event(event: object) -> bool:
 
     action = ssh_explorer_component_event_text(event, "action")
     panel = ssh_explorer_component_event_text(event, "panel")
-    path = ssh_explorer_component_event_text(event, "path")
     paths = ssh_explorer_component_event_paths(event)
     local_path = ssh_explorer_component_event_text(
         event,
@@ -1072,14 +1046,8 @@ def handle_ssh_explorer_component_event(event: object) -> bool:
         remote_path, remote_base_path
     )
 
-    if action == "parent":
-        open_ssh_explorer_parent(panel, normalized_local_path, normalized_remote_path)
-        return True
     if action == "create_folder":
         create_ssh_explorer_folder(panel, normalized_local_path, normalized_remote_path)
-        return True
-    if action == "open":
-        open_ssh_explorer_selection(panel, path)
         return True
     if action == "refresh":
         refresh_ssh_explorer_paths(
@@ -1087,6 +1055,13 @@ def handle_ssh_explorer_component_event(event: object) -> bool:
             local_base_path,
             remote_path,
             remote_base_path,
+        )
+        return True
+    if action == "pick_path":
+        request_ssh_explorer_path_picker(
+            panel,
+            normalized_local_path,
+            normalized_remote_path,
         )
         return True
     if action == "submit_path" and panel == "local":
@@ -1114,20 +1089,62 @@ def handle_ssh_explorer_component_event(event: object) -> bool:
     return False
 
 
+def handle_ssh_explorer_component_change() -> None:
+    """Apply the latest Explorer event during Streamlit's widget callback phase."""
+    handle_ssh_explorer_component_event(
+        st.session_state.get(SSH_EXPLORER_COMPONENT_KEY)
+    )
+
+
+def request_ssh_explorer_path_picker(
+    panel: str, local_path: str, remote_path: str
+) -> None:
+    """Open a folder picker scoped to one SSH explorer panel."""
+    if panel == "local":
+        target_key = SSH_EXPLORER_LOCAL_PICKER_KEY
+        fallback_path = local_path
+        use_remote = False
+    elif panel == "remote":
+        target_key = SSH_EXPLORER_REMOTE_PICKER_KEY
+        fallback_path = remote_path
+        use_remote = True
+    else:
+        return
+    st.session_state.pop(target_key, None)
+    request_path_picker(
+        target_key,
+        fallback_path,
+        mode="folder",
+        use_remote=use_remote,
+    )
+
+
+def apply_ssh_explorer_path_picker_selection() -> None:
+    """Apply a completed folder-picker selection to its explorer panel."""
+    local_path = str(st.session_state.pop(SSH_EXPLORER_LOCAL_PICKER_KEY, "")).strip()
+    remote_path = str(
+        st.session_state.pop(SSH_EXPLORER_REMOTE_PICKER_KEY, "")
+    ).strip()
+    if local_path:
+        open_local_explorer_path(local_path)
+    if remote_path:
+        open_remote_explorer_path(remote_path)
+
+
 def render_ssh_explorer_component(
     local_rows: list[dict[str, str]] | None,
     remote_rows: list[dict[str, str]] | None,
     local_path: str,
     remote_path: str,
     transfer_running: bool,
-) -> dict[str, object] | None:
-    """Render the SSH explorer component and return its command event."""
+) -> None:
+    """Render the SSH explorer component with callback-driven commands."""
     component = ssh_explorer_component()
     component_height = table_height(hhs_ui.ENV_TABLE_HEIGHT)
     local_loading = local_rows is None
     remote_loading = remote_rows is None
     explorer_loading = local_loading or remote_loading
-    return component(
+    component(
         localRows=local_rows or [],
         remoteRows=remote_rows or [],
         localPath=local_path,
@@ -1140,13 +1157,15 @@ def render_ssh_explorer_component(
         theme=ssh_explorer_component_theme(),
         transferRunning=transfer_running,
         height=component_height,
-        key="ssh_explorer_component",
+        key=SSH_EXPLORER_COMPONENT_KEY,
         default=None,
+        on_change=handle_ssh_explorer_component_change,
     )
 
 
 def render_ssh_files_panel() -> None:
     """Render a three-column local/remote file explorer using scp transfers."""
+    apply_ssh_explorer_path_picker_selection()
     complete_ssh_explorer_transfer()
     execute_pending_ssh_explorer_action()
     execute_pending_ssh_explorer_delete()
@@ -1186,15 +1205,13 @@ def render_ssh_files_panel() -> None:
         or background_job_is_running(SSH_EXPLORER_ACTION_JOB)
         or background_job_is_running(SSH_EXPLORER_DELETE_JOB)
     )
-    event = render_ssh_explorer_component(
+    render_ssh_explorer_component(
         local_rows,
         remote_rows,
         local_path,
         remote_path,
         transfer_running,
     )
-    if handle_ssh_explorer_component_event(event):
-        st.rerun()
 
 
 def render_ssh_view() -> None:

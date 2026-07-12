@@ -91,9 +91,54 @@
 
       .path-form {
         display: grid;
-        gap: 0.8rem;
+        gap: 1rem;
         grid-template-columns: minmax(0, 1fr) 2.8rem;
         margin-bottom: 1rem;
+        position: relative;
+      }
+
+      .folder-suggestions {
+        background: var(--hhs-field);
+        border: 1px solid var(--hhs-border);
+        border-radius: 4px;
+        box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.28);
+        display: flex;
+        flex-direction: column;
+        left: 0;
+        max-height: 12rem;
+        overflow-y: auto;
+        position: absolute;
+        top: calc(2.8rem + 0.35rem);
+        width: calc(100% - 3.8rem);
+        z-index: 20;
+      }
+
+      .folder-suggestions[hidden] {
+        display: none;
+      }
+
+      .folder-suggestion {
+        background: transparent;
+        border: 0;
+        border-bottom: 1px solid var(--hhs-border-muted);
+        color: var(--hhs-file);
+        cursor: pointer;
+        min-height: 2.35rem;
+        overflow: hidden;
+        padding: 0 0.8rem;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .folder-suggestion:last-child {
+        border-bottom: 0;
+      }
+
+      .folder-suggestion:hover,
+      .folder-suggestion.active {
+        background: var(--hhs-hover);
+        color: var(--hhs-folder);
       }
 
       .path-input,
@@ -310,9 +355,6 @@
         setComponentReady() {
           this.sendMessage("streamlit:componentReady", { apiVersion: 1 });
         },
-        setFrameHeight(height) {
-          this.sendMessage("streamlit:setFrameHeight", { height });
-        },
         setComponentValue(value) {
           this.sendMessage("streamlit:setComponentValue", {
             dataType: "json",
@@ -322,6 +364,7 @@
       };
 
       const app = document.getElementById("app");
+      const maxFolderSuggestions = 5;
       let args = {
         localRows: [],
         remoteRows: [],
@@ -374,10 +417,6 @@
         return visibleRows(panel).filter((row) => paths.has(stringValue(row.Path)));
       }
 
-      function primarySelectedRow(panel = selectedPanel) {
-        return selectedRows(panel)[0] || null;
-      }
-
       function selectedStatus(panel) {
         const rows = selectedRows(panel);
         if (rows.length === 0) {
@@ -387,8 +426,6 @@
       }
 
       function syncPanelState() {
-        const selected = primarySelectedRow();
-        const selectedKind = selected ? stringValue(selected._kind) : "";
         const localSelectionCount = selectedRows("local").length;
         const remoteSelectionCount = selectedRows("remote").length;
         document.querySelectorAll(".panel").forEach((element) => {
@@ -407,10 +444,6 @@
           const statusText = selectedStatus(element.dataset.panel);
           element.textContent = statusText;
           element.hidden = !statusText;
-        });
-        document.querySelectorAll("[data-transfer-action='open']").forEach((button) => {
-          button.disabled =
-            selectedRows(selectedPanel).length !== 1 || selectedKind !== "Dir";
         });
         document
           .querySelectorAll("[data-transfer-action='copy_to_remote']")
@@ -607,33 +640,201 @@
         return shell;
       }
 
+      function folderRows(panel) {
+        return visibleRows(panel).filter(
+          (row) => stringValue(row._kind) === "Dir"
+        );
+      }
+
+      function folderNameFragment(panel, typedPath) {
+        const cleanPath = stringValue(typedPath).trim();
+        const basePath = stringValue(
+          panel === "local" ? args.localPath : args.remotePath
+        ).replace(/\/+$/, "");
+        if (!cleanPath || cleanPath === basePath) {
+          return "";
+        }
+        const suffix = cleanPath.toLowerCase().startsWith(basePath.toLowerCase())
+          ? cleanPath.slice(basePath.length).replace(/^\/+/, "")
+          : cleanPath;
+        return suffix.split("/").pop().trim();
+      }
+
+      function rankedFolderRows(panel, typedPath) {
+        const fragment = folderNameFragment(panel, typedPath).toLowerCase();
+        if (!fragment) {
+          return [];
+        }
+        return folderRows(panel)
+          .map((row) => {
+            const name = stringValue(row._name);
+            return { row, name };
+          })
+          .filter((match) => match.name.toLowerCase().startsWith(fragment))
+          .sort(
+            (left, right) =>
+              left.name.length - right.name.length ||
+              left.name.localeCompare(right.name)
+          )
+          .slice(0, maxFolderSuggestions)
+          .map((match) => match.row);
+      }
+
       function createPathForm(panel, value) {
-        const form = createElement("form", "path-form");
+        const pathControls = createElement("div", "path-form");
         const input = createElement("input", "path-input");
-        const button = createElement("button", "icon-button", "");
+        const button = createElement("button", "icon-button", "");
+        const suggestions = createElement("div", "folder-suggestions");
+        let suggestionRows = [];
+        let activeSuggestionIndex = -1;
+        suggestions.id = `${panel}-folder-suggestions`;
+        suggestions.hidden = true;
+        suggestions.setAttribute("role", "listbox");
         input.id = `${panel}-path`;
         input.name = "path";
         input.type = "text";
         input.value = value;
         input.autocomplete = "off";
+        input.setAttribute("aria-autocomplete", "list");
+        input.setAttribute("aria-controls", suggestions.id);
+        input.setAttribute("aria-expanded", "false");
         input.setAttribute("aria-label", `${panel} path`);
         input.title = `Enter ${panel} path`;
+
+        const hideSuggestions = () => {
+          suggestionRows = [];
+          activeSuggestionIndex = -1;
+          suggestions.hidden = true;
+          suggestions.replaceChildren();
+          input.setAttribute("aria-expanded", "false");
+        };
+        const syncActiveSuggestion = () => {
+          suggestions.querySelectorAll(".folder-suggestion").forEach(
+            (suggestion, index) => {
+              const active = index === activeSuggestionIndex;
+              suggestion.classList.toggle("active", active);
+              suggestion.setAttribute("aria-selected", String(active));
+            }
+          );
+        };
+        const submitPath = () => {
+          activatePanel(panel);
+          sendCommand("submit_path", panel, input.value);
+        };
+        const acceptSuggestion = (index = activeSuggestionIndex) => {
+          const selectedIndex = index >= 0 ? index : 0;
+          const selectedRow = suggestionRows[selectedIndex];
+          if (!selectedRow) {
+            return false;
+          }
+          input.value = stringValue(selectedRow.Path);
+          input.setSelectionRange(input.value.length, input.value.length);
+          hideSuggestions();
+          activatePanel(panel);
+          return true;
+        };
+        const acceptAndSubmitSuggestion = (index = activeSuggestionIndex) => {
+          if (!acceptSuggestion(index)) {
+            return false;
+          }
+          submitPath();
+          return true;
+        };
+        const renderSuggestions = () => {
+          suggestionRows = rankedFolderRows(panel, input.value);
+          suggestions.replaceChildren();
+          if (suggestionRows.length === 0) {
+            hideSuggestions();
+            return;
+          }
+          activeSuggestionIndex = 0;
+          suggestionRows.forEach((row, index) => {
+            const name = stringValue(row._name);
+            const suggestion = createElement("button", "folder-suggestion", name);
+            suggestion.type = "button";
+            suggestion.title = name;
+            suggestion.setAttribute("role", "option");
+            suggestion.addEventListener("mousedown", (event) => {
+              event.preventDefault();
+            });
+            suggestion.addEventListener("click", () => {
+              acceptAndSubmitSuggestion(index);
+            });
+            suggestions.appendChild(suggestion);
+          });
+          suggestions.hidden = false;
+          input.setAttribute("aria-expanded", "true");
+          syncActiveSuggestion();
+        };
         input.addEventListener("focus", () => {
           activatePanel(panel);
         });
         input.addEventListener("input", () => {
           activatePanel(panel);
+          renderSuggestions();
         });
-        button.type = "submit";
-        button.title = "Open path";
-        form.addEventListener("submit", (event) => {
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowDown" && suggestionRows.length > 0) {
+            event.preventDefault();
+            activeSuggestionIndex =
+              (activeSuggestionIndex + 1) % suggestionRows.length;
+            syncActiveSuggestion();
+            return;
+          }
+          if (event.key === "ArrowUp" && suggestionRows.length > 0) {
+            event.preventDefault();
+            activeSuggestionIndex =
+              (activeSuggestionIndex - 1 + suggestionRows.length) %
+              suggestionRows.length;
+            syncActiveSuggestion();
+            return;
+          }
+          if (event.key === "Escape") {
+            hideSuggestions();
+            return;
+          }
+          if (event.key === "Tab" && acceptAndSubmitSuggestion()) {
+            event.preventDefault();
+            return;
+          }
+          if (event.key !== "Enter") {
+            return;
+          }
           event.preventDefault();
-          activatePanel(panel);
-          sendCommand("submit_path", panel, input.value);
+          if (!acceptAndSubmitSuggestion()) {
+            submitPath();
+          }
         });
-        form.appendChild(input);
-        form.appendChild(button);
-        return form;
+        input.addEventListener("blur", hideSuggestions);
+        button.type = "button";
+        button.title = `Select ${panel} folder`;
+        const requestPicker = () => {
+          activatePanel(panel);
+          sendCommand("pick_path", panel, input.value);
+        };
+        button.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) {
+            return;
+          }
+          event.preventDefault();
+          requestPicker();
+        });
+        button.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") {
+            return;
+          }
+          event.preventDefault();
+          requestPicker();
+        });
+        button.addEventListener("click", (event) => {
+          if (event.detail === 0) {
+            requestPicker();
+          }
+        });
+        pathControls.appendChild(input);
+        pathControls.appendChild(suggestions);
+        pathControls.appendChild(button);
+        return pathControls;
       }
 
       function createPanel(panel, title, path) {
@@ -670,9 +871,6 @@
       }
 
       function createTransferControls() {
-        const selected = primarySelectedRow();
-        const selectedKind = selected ? stringValue(selected._kind) : "";
-        const selectedPath = selected ? stringValue(selected.Path) : "";
         const activeSelectionCount = selectedRows(activeExplorerPanel()).length;
         const localSelectionCount = selectedRows("local").length;
         const remoteSelectionCount = selectedRows("remote").length;
@@ -688,16 +886,6 @@
           createTransferButton("", "Create folder", disabled, () => {
             sendCommand("create_folder", activeExplorerPanel(), "");
           }, "create_folder")
-        );
-        transfer.appendChild(
-          createTransferButton("", "Open parent directory", false, () => {
-            sendCommand("parent", activeExplorerPanel(), "");
-          }, "parent")
-        );
-        transfer.appendChild(
-          createTransferButton("", "Open selected folder", selectedKind !== "Dir", () => {
-            sendCommand("open", selectedPanel, selectedPath);
-          }, "open")
         );
         transfer.appendChild(
           createTransferButton(
@@ -735,11 +923,6 @@
         return Boolean(args.loading || args.localLoading || args.remoteLoading);
       }
 
-      function resizeFrame() {
-        const height = Math.ceil(document.documentElement.scrollHeight);
-        Streamlit.setFrameHeight(height);
-      }
-
       function render(nextArgs) {
         if (nextArgs) {
           args = {
@@ -763,7 +946,6 @@
             remote: new Set(),
           };
           app.replaceChildren();
-          requestAnimationFrame(() => Streamlit.setFrameHeight(0));
           return;
         }
         app.replaceChildren(
@@ -771,7 +953,6 @@
           createTransferControls(),
           createPanel("remote", "Remote", stringValue(args.remotePath, "."))
         );
-        requestAnimationFrame(resizeFrame);
       }
 
       window.addEventListener("message", (event) => {
@@ -786,7 +967,6 @@
         });
       });
 
-      new ResizeObserver(resizeFrame).observe(document.body);
       Streamlit.setComponentReady();
       render();
     </script>

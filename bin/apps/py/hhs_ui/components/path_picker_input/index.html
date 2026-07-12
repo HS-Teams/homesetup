@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --picker-bg: #171321;
+        --picker-border: #825445;
+        --picker-hover: #2c2037;
+        --picker-page-bg: #171321;
+        --picker-primary: #b02b9d;
+        --picker-text: #f3edf7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        background: var(--picker-page-bg);
+        margin: 0;
+        overflow: hidden;
+        padding: 0;
+      }
+
+      body,
+      button,
+      input {
+        font-family: var(--picker-font, monospace);
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        width: 100%;
+      }
+
+      label {
+        color: var(--picker-text);
+        font-size: 0.9rem;
+        font-weight: 600;
+        line-height: 1.2;
+      }
+
+      input {
+        background: var(--picker-bg);
+        border: 1px solid var(--picker-border);
+        border-radius: 4px;
+        color: var(--picker-text);
+        font-size: 1rem;
+        min-height: 2.5rem;
+        outline: 0;
+        padding: 0 0.75rem;
+        width: 100%;
+      }
+
+      input:focus {
+        border-color: var(--picker-primary);
+        box-shadow: 0 0 0 1px var(--picker-primary);
+      }
+
+      input:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .suggestions {
+        background: var(--picker-bg);
+        border: 1px solid var(--picker-border);
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        margin-top: 0.35rem;
+        max-height: 12rem;
+        overflow-y: auto;
+        width: 100%;
+      }
+
+      .suggestions[hidden] {
+        display: none;
+      }
+
+      .suggestion {
+        background: transparent;
+        border: 0;
+        border-bottom: 1px solid var(--picker-border);
+        color: var(--picker-text);
+        cursor: pointer;
+        font-size: 1rem;
+        min-height: 2.35rem;
+        overflow: hidden;
+        padding: 0 0.75rem;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .suggestion:last-child {
+        border-bottom: 0;
+      }
+
+      .suggestion.active {
+        background: var(--picker-hover);
+        color: var(--picker-primary);
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app"></main>
+    <script>
+      "use strict";
+
+      const Streamlit = {
+        RENDER_EVENT: "streamlit:render",
+        sendMessage(type, data = {}) {
+          window.parent.postMessage({ isStreamlitMessage: true, type, ...data }, "*");
+        },
+        setComponentReady() {
+          this.sendMessage("streamlit:componentReady", { apiVersion: 1 });
+        },
+        setComponentValue(value) {
+          this.sendMessage("streamlit:setComponentValue", {
+            dataType: "json",
+            value,
+          });
+        },
+        setFrameHeight(height) {
+          this.sendMessage("streamlit:setFrameHeight", { height });
+        },
+      };
+
+      const app = document.getElementById("app");
+      const maxSuggestions = 5;
+      let args = {
+        currentDirectory: "",
+        disabled: false,
+        label: "Path",
+        suggestions: [],
+        value: "",
+      };
+      let activeSuggestionIndex = -1;
+      let draftDirty = false;
+      let draftValue = "";
+      let lastFrameHeight = 0;
+      let lastRenderSignature = "";
+      let lastServerValue = "";
+      let visibleSuggestions = [];
+
+      function stringValue(value, fallback = "") {
+        if (value === null || value === undefined) {
+          return fallback;
+        }
+        return String(value);
+      }
+
+      function createElement(tagName, className = "", text = undefined) {
+        const element = document.createElement(tagName);
+        if (className) {
+          element.className = className;
+        }
+        if (text !== undefined) {
+          element.textContent = text;
+        }
+        return element;
+      }
+
+      function syncFrameHeight() {
+        const content = app.firstElementChild;
+        const measuredHeight = content ? content.getBoundingClientRect().height : 1;
+        const contentHeight = Math.max(1, Math.ceil(measuredHeight));
+        if (
+          contentHeight === lastFrameHeight &&
+          Math.abs(window.innerHeight - contentHeight) <= 1
+        ) {
+          return;
+        }
+        lastFrameHeight = contentHeight;
+        Streamlit.setFrameHeight(contentHeight);
+      }
+
+      function applyTheme(theme) {
+        const themeValues = theme || {};
+        const styles = document.documentElement.style;
+        const font = stringValue(themeValues.font);
+        if (font) {
+          styles.setProperty("--picker-font", font);
+        }
+        styles.setProperty(
+          "--picker-bg",
+          stringValue(themeValues.secondaryBackgroundColor, "#171321")
+        );
+        styles.setProperty(
+          "--picker-page-bg",
+          stringValue(themeValues.backgroundColor, "#171321")
+        );
+        styles.setProperty(
+          "--picker-text",
+          stringValue(themeValues.textColor, "#f3edf7")
+        );
+        styles.setProperty(
+          "--picker-primary",
+          stringValue(themeValues.primaryColor, "#b02b9d")
+        );
+      }
+
+      function pathFragment(value) {
+        const cleanPath = stringValue(value).trim().replace(/\\/g, "/");
+        const basePath = stringValue(args.currentDirectory)
+          .trim()
+          .replace(/\\/g, "/")
+          .replace(/\/+$/, "");
+        if (!cleanPath || cleanPath === basePath) {
+          return "";
+        }
+        const suffix = cleanPath.toLowerCase().startsWith(basePath.toLowerCase())
+          ? cleanPath.slice(basePath.length).replace(/^\/+/, "")
+          : cleanPath;
+        return suffix.split("/").pop().trim();
+      }
+
+      function rankedSuggestions(value) {
+        const fragment = pathFragment(value).toLowerCase();
+        if (!fragment) {
+          return [];
+        }
+        const suggestions = Array.isArray(args.suggestions) ? args.suggestions : [];
+        return suggestions
+          .map((suggestion) => ({
+            name: stringValue(suggestion.name),
+            path: stringValue(suggestion.path),
+          }))
+          .filter(
+            (suggestion) =>
+              suggestion.name &&
+              suggestion.path &&
+              suggestion.name.toLowerCase().startsWith(fragment)
+          )
+          .sort(
+            (left, right) =>
+              left.name.length - right.name.length ||
+              left.name.localeCompare(right.name)
+          )
+          .slice(0, maxSuggestions);
+      }
+
+      function eventId() {
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+
+      function submitPath(path) {
+        draftValue = stringValue(path).trim();
+        draftDirty = true;
+        Streamlit.setComponentValue({ eventId: eventId(), path: draftValue });
+      }
+
+      function renderField(restoreFocus = false) {
+        const field = createElement("div", "field");
+        const label = createElement("label", "", stringValue(args.label, "Path"));
+        const input = createElement("input");
+        const suggestions = createElement("div", "suggestions");
+        activeSuggestionIndex = -1;
+        visibleSuggestions = [];
+        label.htmlFor = "path-picker-input";
+        input.id = "path-picker-input";
+        input.type = "text";
+        input.value = draftValue;
+        input.disabled = Boolean(args.disabled);
+        input.autocomplete = "off";
+        input.setAttribute("aria-autocomplete", "list");
+        input.setAttribute("aria-controls", "path-picker-suggestions");
+        input.setAttribute("aria-expanded", "false");
+        suggestions.id = "path-picker-suggestions";
+        suggestions.hidden = true;
+        suggestions.setAttribute("role", "listbox");
+
+        const hideSuggestions = () => {
+          activeSuggestionIndex = -1;
+          visibleSuggestions = [];
+          suggestions.hidden = true;
+          suggestions.replaceChildren();
+          input.setAttribute("aria-expanded", "false");
+          syncFrameHeight();
+        };
+        const syncActiveSuggestion = () => {
+          suggestions.querySelectorAll(".suggestion").forEach(
+            (suggestion, index) => {
+              const active = index === activeSuggestionIndex;
+              suggestion.classList.toggle("active", active);
+              suggestion.setAttribute("aria-selected", String(active));
+            }
+          );
+        };
+        const acceptSuggestion = (index = activeSuggestionIndex) => {
+          const selectedIndex = index >= 0 ? index : 0;
+          const selected = visibleSuggestions[selectedIndex];
+          if (!selected) {
+            return false;
+          }
+          input.value = selected.path;
+          draftValue = selected.path;
+          hideSuggestions();
+          submitPath(selected.path);
+          return true;
+        };
+        const showSuggestions = () => {
+          visibleSuggestions = rankedSuggestions(input.value);
+          suggestions.replaceChildren();
+          if (visibleSuggestions.length === 0) {
+            hideSuggestions();
+            return;
+          }
+          activeSuggestionIndex = 0;
+          visibleSuggestions.forEach((suggestionValue, index) => {
+            const suggestion = createElement(
+              "button",
+              "suggestion",
+              suggestionValue.name
+            );
+            suggestion.type = "button";
+            suggestion.title = suggestionValue.name;
+            suggestion.tabIndex = -1;
+            suggestion.setAttribute("role", "option");
+            suggestion.addEventListener("pointerenter", () => {
+              activeSuggestionIndex = index;
+              syncActiveSuggestion();
+            });
+            suggestion.addEventListener("pointerdown", (event) => {
+              if (event.button !== 0) {
+                return;
+              }
+              event.preventDefault();
+              acceptSuggestion(index);
+            });
+            suggestions.appendChild(suggestion);
+          });
+          suggestions.hidden = false;
+          input.setAttribute("aria-expanded", "true");
+          syncActiveSuggestion();
+          syncFrameHeight();
+        };
+
+        input.addEventListener("input", () => {
+          draftValue = input.value;
+          draftDirty = true;
+          showSuggestions();
+        });
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowDown" && visibleSuggestions.length > 0) {
+            event.preventDefault();
+            activeSuggestionIndex =
+              (activeSuggestionIndex + 1) % visibleSuggestions.length;
+            syncActiveSuggestion();
+            return;
+          }
+          if (event.key === "ArrowUp" && visibleSuggestions.length > 0) {
+            event.preventDefault();
+            activeSuggestionIndex =
+              (activeSuggestionIndex - 1 + visibleSuggestions.length) %
+              visibleSuggestions.length;
+            syncActiveSuggestion();
+            return;
+          }
+          if (event.key === "Escape") {
+            hideSuggestions();
+            return;
+          }
+          if (event.key === "Tab" && acceptSuggestion()) {
+            event.preventDefault();
+            return;
+          }
+          if (event.key !== "Enter") {
+            return;
+          }
+          event.preventDefault();
+          if (!acceptSuggestion()) {
+            hideSuggestions();
+            submitPath(input.value);
+          }
+        });
+        input.addEventListener("blur", hideSuggestions);
+        field.appendChild(label);
+        field.appendChild(input);
+        field.appendChild(suggestions);
+        app.replaceChildren(field);
+        if (draftDirty) {
+          showSuggestions();
+        } else {
+          syncFrameHeight();
+        }
+        if (restoreFocus && !input.disabled) {
+          input.focus();
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+      }
+
+      function render(nextArgs, theme) {
+        const restoreFocus = document.activeElement?.id === "path-picker-input";
+        const nextValues = { ...args, ...(nextArgs || {}) };
+        const nextServerValue = stringValue(nextValues.value);
+        const nextRenderSignature = JSON.stringify({
+          currentDirectory: stringValue(nextValues.currentDirectory),
+          disabled: Boolean(nextValues.disabled),
+          label: stringValue(nextValues.label),
+          suggestions: Array.isArray(nextValues.suggestions)
+            ? nextValues.suggestions
+            : [],
+          value: nextServerValue,
+        });
+        args = nextValues;
+        applyTheme(theme);
+        if (nextRenderSignature === lastRenderSignature) {
+          syncFrameHeight();
+          return;
+        }
+        lastRenderSignature = nextRenderSignature;
+        if (!draftDirty || nextServerValue !== lastServerValue) {
+          draftValue = nextServerValue;
+          draftDirty = false;
+        }
+        lastServerValue = nextServerValue;
+        renderField(restoreFocus);
+      }
+
+      window.addEventListener("message", (event) => {
+        if (event.data?.type !== Streamlit.RENDER_EVENT) {
+          return;
+        }
+        render(event.data.args || {}, event.data.theme || {});
+      });
+
+      Streamlit.setComponentReady();
+      render(args, {});
+    </script>
+  </body>
+</html>

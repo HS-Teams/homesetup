@@ -21,6 +21,29 @@ load "${HHS_REPO_DIR}/tests/test_helper"
 load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
+@test "when Streamlit reloads UI modules then runtime dependencies should be rewired" {
+  run python3 - "${ui_file}" <<'PY'
+import ast
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+tree = ast.parse(source)
+function = next(
+    node
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
+    and node.name == "configure_runtime_dependencies"
+)
+body = ast.get_source_segment(source, function) or ""
+assert "configure_terminal_runtime_dependencies()" in body
+assert "configure_ssh_explorer_ui_dependencies()" in body
+assert "_hhs_runtime_dependencies_configured_version" not in body
+assert "return" not in body
+PY
+  assert_success
+}
+
 @test "when organizing HomeSetup UI modules then responsibilities should be grouped by package" {
   run python3 - "${HHS_REPO_DIR}/bin/apps/py/hhs_ui" <<'PY'
 import sys

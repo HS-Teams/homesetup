@@ -4034,12 +4034,7 @@ def configure_search_ui_dependencies() -> None:
 
 
 def configure_runtime_dependencies() -> None:
-    """Wire cross-module callbacks once per UI version and browser session."""
-    configured_version = st.session_state.get(
-        "_hhs_runtime_dependencies_configured_version"
-    )
-    if configured_version == hhs_ui.VERSION:
-        return
+    """Wire cross-module callbacks for the currently loaded module instances."""
     configure_dialog_runtime_dependencies()
     configure_dom_script_dependencies()
     configure_feedback_runtime_dependencies()
@@ -4055,7 +4050,6 @@ def configure_runtime_dependencies() -> None:
     configure_ssh_explorer_ui_dependencies()
     configure_footer_ui_dependencies()
     configure_search_ui_dependencies()
-    st.session_state["_hhs_runtime_dependencies_configured_version"] = hhs_ui.VERSION
 
 
 def initialize_core_session_state() -> None:

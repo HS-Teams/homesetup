@@ -10,9 +10,11 @@ import posixpath
 import shlex
 import textwrap
 from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 import hhs_ui
 import hhs_ui.core.constants as hhs_ui_constants
@@ -21,6 +23,10 @@ from hhs_ui.core.ui_definitions import (
     PATH_PICKER_LISTING_JOB_PREFIX,
     PATH_PICKER_LISTING_LOADER_MESSAGE,
 )
+
+PATH_PICKER_REMOTE_OVERRIDE_KEY = "_hhs_folder_picker_use_remote"
+PATH_PICKER_INPUT_COMPONENT_KEY = "_hhs_path_picker_input_component"
+PATH_PICKER_INPUT_LAST_EVENT_KEY = "_hhs_path_picker_input_last_event_id"
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:
@@ -43,6 +49,15 @@ start_background_bash_command = _unconfigured_dependency("start_background_bash_
 push_floating_status = _unconfigured_dependency("push_floating_status")
 render_background_job_status = _unconfigured_dependency("render_background_job_status")
 clear_preloader = _unconfigured_dependency("clear_preloader")
+
+
+@lru_cache(maxsize=1)
+def path_picker_input_component() -> Callable[..., dict[str, object] | None]:
+    """Return the registered path-picker autocomplete input component."""
+    return components.declare_component(
+        "hhs_path_picker_input",
+        path=str(hhs_ui.PATH_PICKER_INPUT_COMPONENT_DIR),
+    )
 
 
 def configure_path_picker(
@@ -87,6 +102,9 @@ def folder_picker_start_directory(value: str = "") -> str:
 
 def path_picker_uses_remote() -> bool:
     """Return whether the reusable path picker should browse the SSH host."""
+    remote_override = st.session_state.get(PATH_PICKER_REMOTE_OVERRIDE_KEY)
+    if isinstance(remote_override, bool):
+        return remote_override
     return bool(connected_ssh_host())
 
 
@@ -602,8 +620,14 @@ def request_path_picker(
     target_key: str,
     fallback_value: str = "",
     mode: str = "folder",
+    *,
+    use_remote: bool | None = None,
 ) -> None:
     """Open the reusable path picker for a Streamlit input key."""
+    if use_remote is None:
+        st.session_state.pop(PATH_PICKER_REMOTE_OVERRIDE_KEY, None)
+    else:
+        st.session_state[PATH_PICKER_REMOTE_OVERRIDE_KEY] = use_remote
     picker_mode = "file" if mode == "file" else "folder"
     current_value = str(st.session_state.get(target_key, "") or fallback_value)
     start_path = path_picker_start_path(current_value, picker_mode)
@@ -639,6 +663,7 @@ def close_folder_picker() -> None:
     st.session_state.pop("_hhs_folder_picker_mode", None)
     st.session_state.pop("_hhs_folder_picker_target_key", None)
     st.session_state.pop("_hhs_folder_picker_owner_context", None)
+    st.session_state.pop(PATH_PICKER_REMOTE_OVERRIDE_KEY, None)
     st.session_state.pop("_hhs_folder_picker_selected_dir", None)
     st.session_state.pop("_hhs_folder_picker_path_kinds", None)
     st.session_state.pop("_hhs_folder_picker_visible_child_paths", None)
@@ -804,6 +829,47 @@ def apply_folder_picker_typed_directory() -> None:
     prune_folder_picker_child_selection_widget_keys()
 
 
+def handle_path_picker_input_change() -> None:
+    """Apply one submitted autocomplete input value."""
+    event = st.session_state.get(PATH_PICKER_INPUT_COMPONENT_KEY)
+    if not isinstance(event, dict):
+        return
+    event_id = str(event.get("eventId", "")).strip()
+    if not event_id or st.session_state.get(PATH_PICKER_INPUT_LAST_EVENT_KEY) == event_id:
+        return
+    st.session_state[PATH_PICKER_INPUT_LAST_EVENT_KEY] = event_id
+    submitted_path = str(event.get("path", "")).strip()
+    if not submitted_path:
+        return
+    st.session_state["_hhs_folder_picker_current_dir_input"] = submitted_path
+    apply_folder_picker_typed_directory()
+
+
+def render_path_picker_input(
+    selected_label: str,
+    current_directory: str,
+    child_paths: list[str],
+    disabled: bool,
+) -> None:
+    """Render the path-picker text input with child-path autocomplete."""
+    suggestions = [
+        {"name": path_picker_label(path), "path": path} for path in child_paths
+    ]
+    path_picker_input_component()(
+        label=selected_label,
+        value=str(
+            st.session_state.get("_hhs_folder_picker_current_dir_input", "")
+        ),
+        currentDirectory=current_directory,
+        suggestions=suggestions,
+        disabled=disabled,
+        key=PATH_PICKER_INPUT_COMPONENT_KEY,
+        default=None,
+        on_change=handle_path_picker_input_change,
+        height=72,
+    )
+
+
 def open_folder_picker_parent() -> None:
     """Move the folder picker to the parent directory."""
     if path_picker_uses_remote():
@@ -893,20 +959,23 @@ def render_path_picker_dialog(owner_context: str = "") -> bool:
 
     with st.container(key="hhs_path_picker_overlay"):
         with st.container(key="hhs_path_picker_panel"):
-            title_col, close_col = st.columns([1.0, 0.08], vertical_alignment="center")
-            with title_col:
-                st.markdown(
-                    f'<h2 class="hhs-path-picker-title">{html.escape(title)}</h2>',
-                    unsafe_allow_html=True,
+            with st.container(key="folder_picker_header"):
+                title_col, close_col = st.columns(
+                    [1.0, 0.08], vertical_alignment="center"
                 )
-            with close_col:
-                st.button(
-                    "×",
-                    key="folder_picker_header_close_button",
-                    help="Close",
-                    on_click=close_folder_picker,
-                    width="content",
-                )
+                with title_col:
+                    st.markdown(
+                        f'<h2 class="hhs-path-picker-title">{html.escape(title)}</h2>',
+                        unsafe_allow_html=True,
+                    )
+                with close_col:
+                    st.button(
+                        "×",
+                        key="folder_picker_header_close_button",
+                        help="Close",
+                        on_click=close_folder_picker,
+                        width="content",
+                    )
             render_path_picker_body(
                 mode,
                 selected_label,
@@ -945,12 +1014,11 @@ def render_path_picker_body(
     sync_folder_picker_child_selection(child_directories)
     if loading_children:
         render_path_picker_listing_loader(loading_job_name)
-    st.text_input(
+    render_path_picker_input(
         selected_label,
-        key="_hhs_folder_picker_current_dir_input",
-        disabled=loading_children,
-        help=f"Enter the {selected_label.lower()} to browse.",
-        on_change=apply_folder_picker_typed_directory,
+        current_directory,
+        child_directories,
+        loading_children,
     )
     selected_widget_key = folder_picker_child_selection_widget_key(
         current_directory, mode, include_dot_folders

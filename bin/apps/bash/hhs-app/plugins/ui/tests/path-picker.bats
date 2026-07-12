@@ -128,6 +128,7 @@ namespace = {
     ),
     "PATH_PICKER_LISTING_JOB_PREFIX": "path_picker_listing",
     "PATH_PICKER_LISTING_LOADER_MESSAGE": "Loading directories and files...",
+    "PATH_PICKER_REMOTE_OVERRIDE_KEY": "_hhs_folder_picker_use_remote",
     "st": types.SimpleNamespace(session_state=session_state),
     "connected_ssh_host": lambda: host,
     "run_bash_command": run_bash_command,
@@ -148,6 +149,7 @@ assert "dialog_rendered = pop_dialog(" not in dialog_body
 assert "folder_picker_owner_matches(owner_context)" in dialog_body
 assert 'st.container(key="hhs_path_picker_overlay")' in dialog_body
 assert 'st.container(key="hhs_path_picker_panel")' in dialog_body
+assert 'st.container(key="folder_picker_header")' in dialog_body
 assert 'key="folder_picker_header_close_button"' in dialog_body
 assert "return True" in dialog_body
 assert dialog_body.index("prepare_path_picker_dialog_listing(mode)") < dialog_body.index(
@@ -160,11 +162,12 @@ assert render_body.index(
     "current_directory = folder_picker_browsing_directory()"
 ) < render_body.index("path_picker_child_paths(")
 assert render_body.index("path_picker_child_paths(") < render_body.index(
-    "st.text_input("
+    "render_path_picker_input("
 )
 assert render_body.index(
     "sync_folder_picker_child_selection(child_directories)"
-) < render_body.index("st.text_input(")
+) < render_body.index("render_path_picker_input(")
+assert "st.text_input(" not in render_body
 assert "st.caption(empty_caption)" not in render_body
 assert "PATH_PICKER_LISTING_LOADER_MESSAGE" in render_body
 assert "render_path_picker_listing_loader(loading_job_name)" in render_body
@@ -173,6 +176,34 @@ assert "loading_children or not bool(child_directories)" in render_body
 assert 'selectbox_kwargs["on_change"] = open_folder_picker_selected_child' in render_body
 assert 'selectbox_kwargs["args"] = (selected_widget_key,)' in render_body
 assert render_body.index("st.selectbox(") < render_body.index("st.checkbox(")
+component = (
+    Path(sys.argv[1]).parents[1] / "components" / "path_picker_input" / "index.html"
+).read_text(encoding="utf-8")
+assert "const maxSuggestions = 5" in component
+assert "function pathFragment(value)" in component
+assert "suggestion.name.toLowerCase().startsWith(fragment)" in component
+assert "const suggestion = createElement(" in component
+assert '"button",' in component
+assert '"suggestion",' in component
+assert "suggestionValue.name" in component
+assert 'event.key === "Tab" && acceptSuggestion()' in component
+assert "submitPath(selected.path)" in component
+assert "input.addEventListener(\"input\"" in component
+assert "content.getBoundingClientRect().height" in component
+assert "document.documentElement.scrollHeight" not in component
+assert "--picker-page-bg" in component
+assert "themeValues.backgroundColor" in component
+assert 'let lastFrameHeight = 0' in component
+assert 'let lastRenderSignature = ""' in component
+assert "contentHeight === lastFrameHeight" in component
+assert "nextRenderSignature === lastRenderSignature" in component
+assert 'suggestion.addEventListener("pointerenter"' in component
+assert ".suggestion:hover" not in component
+stylesheet = (
+    Path(sys.argv[1]).parents[1] / "static" / "css" / "streamlit_ui.css"
+).read_text(encoding="utf-8")
+assert ".st-key-folder_picker_header" in stylesheet
+assert "margin-bottom: 2rem" in stylesheet
 assert namespace["path_picker_uses_remote"]()
 assert namespace["remote_path_picker_default_directory"]() == "$HOME"
 assert namespace["folder_picker_owner_context_for_target"]("search_path") == "search"
@@ -209,6 +240,20 @@ assert namespace["request_path_picker"]("search_path", "/srv", "folder") is None
 assert session_state["_hhs_folder_picker_owner_context"] == "search"
 assert session_state["_hhs_folder_picker_current_dir"] == "/srv"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "/srv"
+
+assert namespace["request_path_picker"](
+    "local_path", str(Path.home()), "folder", use_remote=False
+) is None
+assert namespace["path_picker_uses_remote"]() is False
+assert session_state["_hhs_folder_picker_use_remote"] is False
+namespace["close_folder_picker"]()
+assert "_hhs_folder_picker_use_remote" not in session_state
+
+assert namespace["request_path_picker"](
+    "remote_path", "/srv", "folder", use_remote=True
+) is None
+assert namespace["path_picker_uses_remote"]() is True
+assert session_state["_hhs_folder_picker_use_remote"] is True
 
 command_count = len(commands)
 session_state["_hhs_folder_picker_mode"] = "folder"
@@ -293,6 +338,7 @@ assert "raw_target=/home/root" in commands[-1][0]
 assert statuses == []
 namespace["close_folder_picker"]()
 assert "_hhs_folder_picker_owner_context" not in session_state
+assert "_hhs_folder_picker_use_remote" not in session_state
 assert stopped_prefixes
 PY
   assert_success
@@ -343,6 +389,7 @@ namespace = {
         session_state=session_state,
     ),
     "connected_ssh_host": lambda: "",
+    "PATH_PICKER_REMOTE_OVERRIDE_KEY": "_hhs_folder_picker_use_remote",
     "dismiss_streamlit_dialog": lambda: None,
 }
 exec("from __future__ import annotations\n" + source[start:end], namespace)
