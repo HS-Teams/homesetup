@@ -293,7 +293,7 @@ else
     # @alias: Shortcut for hhs settings plug-in
     alias __hhs_settings="__hhs_ensure_venv '__hhs_settings' && __hhs settings execute"
 
-    if [[ ${HHS_AI_ENABLED} -eq 1 ]] && __hhs_has_module 'hspylib-askai'; then
+    if [[ ${HHS_AI_ENABLED} -eq 1 ]]; then
       # @alias: Shortcut for the AskAI python module
       alias taius="__hhs_ensure_venv 'taius' && python3 -m askai"
     fi

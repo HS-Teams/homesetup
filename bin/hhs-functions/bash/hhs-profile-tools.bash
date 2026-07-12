@@ -71,10 +71,15 @@ if __hhs_has jenv; then
   }
 fi
 
-if __hhs_has docker && __hhs_has colima && [[ -z "${HHS_HAS_DOCKER}" ]]; then
+if __hhs_has docker && __hhs_has colima; then
 
   # @function: Lazy load helper function to initialize Docker-Daemon for the terminal.
   function __hhs_activate_docker() {
+
+    if docker info &>/dev/null; then
+      echo "${GREEN}Docker is already active.${NC}"
+      return 0
+    fi
 
     DK_LOC='/Applications/Docker.app'
     # Docker desktop daemon setup

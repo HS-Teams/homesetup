@@ -27,11 +27,13 @@ else
 
   # Preferred editor
   if [[ -z "${EDITOR}" ]]; then
-    __hhs_has "nvim" && export EDITOR="nvim"
-  elif [[ -z "${EDITOR}" ]]; then
-    __hhs_has "vim" && export EDITOR="vim"
-  else
-    __hhs_has "vi" && export EDITOR="${EDITOR:-vi}"
+    if __hhs_has "nvim"; then
+      export EDITOR="nvim"
+    elif __hhs_has "vim"; then
+      export EDITOR="vim"
+    elif __hhs_has "vi"; then
+      export EDITOR="vi"
+    fi
   fi
 
   # ----------------------------------------------------------------------------
@@ -51,7 +53,7 @@ else
   # OS Release
 
   # Darwin
-  if [[ "Darwin" == "$(uname -s)" ]]; then
+  if [[ "Darwin" == "${HHS_MY_OS}" ]]; then
     # Hide the annoying warning about zsh
     export BASH_SILENCE_DEPRECATION_WARNING=${BASH_SILENCE_DEPRECATION_WARNING:-1}
     # Disable Streamlit usage stats gathering
@@ -111,8 +113,17 @@ else
 
   export HHS_GITHUB_URL='https://github.com/HS-Teams/homesetup'
   export HHS_ASKAI_URL='https://github.com/HS-Teams/askai'
-  export HHS_HAS_DOCKER=$(__hhs_has docker && docker info &> /dev/null && echo '1')
-  export HHS_AI_ENABLED=$(__hhs_has_module hspylib-askai &>/dev/null && echo '1')
+  HHS_HAS_DOCKER=''
+  __hhs_has docker && HHS_HAS_DOCKER=1
+  export HHS_HAS_DOCKER
+  export HHS_AI_ENABLED=''
+  for hhs_askai_module in "${HHS_VENV_PATH}"/lib/python*/site-packages/askai/__init__.py; do
+    if [[ -f "${hhs_askai_module}" ]]; then
+      export HHS_AI_ENABLED=1
+      break
+    fi
+  done
+  unset hhs_askai_module
 
   # ----------------------------------------------------------------------------
   # Module configs

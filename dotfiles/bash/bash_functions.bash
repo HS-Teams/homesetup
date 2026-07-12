@@ -20,11 +20,27 @@ else
 
   export HHS_ACTIVE_DOTFILES="${HHS_ACTIVE_DOTFILES} bash_functions"
 
+  # Collect source files recursively in lexical order without starting discovery subprocesses.
+  function __hhs_collect_source_files__() {
+    local source_path
+
+    for source_path in "${1}"/*; do
+      [[ -e "${source_path}" || -L "${source_path}" ]] || continue
+      if [[ -d "${source_path}" && ! -L "${source_path}" ]]; then
+        __hhs_collect_source_files__ "${source_path}"
+      elif [[ -f "${source_path}" && "${source_path}" == *.bash ]]; then
+        all+=("${source_path}")
+      fi
+    done
+  }
+
+  hhs_dotglob_enabled=0
+  \shopt -q dotglob && hhs_dotglob_enabled=1
+  \shopt -s dotglob
+
   # Load all function files.
   all=()
-  while IFS= read -r line; do
-    all+=("$line")
-  done < <(find "${HHS_HOME}/bin/hhs-functions/bash" -type f -name "*.bash" | sort | uniq)
+  __hhs_collect_source_files__ "${HHS_HOME}/bin/hhs-functions/bash"
   __hhs_log "DEBUG" "Loading (${#all[@]}) hhs-function files"
   for file in "${all[@]}"; do
     __hhs_log "DEBUG" "Loading ${file}"
@@ -33,14 +49,16 @@ else
 
   # Load all dev tools files.
   all=()
-  while IFS= read -r line; do
-    all+=("$line")
-  done < <(find "${HHS_HOME}/bin/dev-tools/bash" -type f -name "*.bash" | sort | uniq)
+  __hhs_collect_source_files__ "${HHS_HOME}/bin/dev-tools/bash"
   __hhs_log "DEBUG" "Loading (${#all[@]}) dev-tools files"
   for file in "${all[@]}"; do
     __hhs_log "DEBUG" "Loading ${file}"
     __hhs_source "${file}" || __hhs_log "ERROR" "Unable to source file: ${file}"
   done
+
+  [[ ${hhs_dotglob_enabled} -eq 1 ]] || \shopt -u dotglob
+  unset hhs_dotglob_enabled source_path
+  unset -f __hhs_collect_source_files__
 
   # Unalias any hhs found because we need this name to use for HomeSetup
   unalias hhs &> /dev/null

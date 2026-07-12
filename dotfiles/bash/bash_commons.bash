@@ -92,17 +92,20 @@ function __hhs_ensure_venv() {
 # @param $* [Req] : The log level. One of ["WARN", "DEBUG", "INFO", "ERROR", "ALL"].
 function __hhs_log() {
 
-  local level="${1}" message="${2}"
+  local level="${1}" message="${2}" timestamp
 
   [[ $# -lt 2 || '-h' == "$1" ]] && { echo "usage: ${FUNCNAME[0]} <level> <message>"; return 1; }
 
   case "${level}" in
   'INFO' | 'WARN' | 'ERROR' | 'ALL')
-    printf "%s %5.5s  %s\n" "$(date +'%m-%d-%y %H:%M:%S ')" "${level}" "${message}" >>"${HHS_LOG_FILE}"
+    timestamp="${HHS_INITIALIZATION_LOG_TIMESTAMP:-$(date +'%m-%d-%y %H:%M:%S ')}"
+    printf "%s %5.5s  %s\n" "${timestamp}" "${level}" "${message}" >>"${HHS_LOG_FILE}"
     ;;
   'DEBUG')
-    [[ "${HHS_VERBOSE_LOGS}" -eq 1 ]] &&
-      printf "%s %5.5s  %s\n" "$(date +'%m-%d-%y %H:%M:%S ')" "${level}" "${message}" >>"${HHS_LOG_FILE}"
+    if [[ "${HHS_VERBOSE_LOGS}" -eq 1 ]]; then
+      timestamp="${HHS_INITIALIZATION_LOG_TIMESTAMP:-$(date +'%m-%d-%y %H:%M:%S ')}"
+      printf "%s %5.5s  %s\n" "${timestamp}" "${level}" "${message}" >>"${HHS_LOG_FILE}"
+    fi
     ;;
   *)
     echo "${FUNCNAME[0]}: invalid log level \"${level}\" !" 2>&1
@@ -137,7 +140,7 @@ function __hhs_source() {
 # @param $* [Req] : The alias expression.
 function __hhs_alias() {
 
-  local all_args alias_expr alias_name
+  local all_args alias_expr alias_name command_name
 
   [[ $# -eq 0 || '-h' == "$1" ]] && { echo "usage: ${FUNCNAME[0]} <alias_name>='<alias_expr>'"; return 1; }
 
@@ -145,7 +148,25 @@ function __hhs_alias() {
   alias_expr="${all_args#*=}"
   alias_name="${all_args//=*/}"
 
-  if ! type "$alias_name" >/dev/null 2>&1; then
+  if [[ "${HHS_INITIALIZING:-0}" -eq 1 ]]; then
+    if [[ -z "${HHS_ALIAS_COMMAND_CATALOG_INITIALIZED:-}" ]]; then
+      HHS_ALIAS_COMMAND_CATALOG=$'\n'
+      while IFS= read -r command_name; do
+        HHS_ALIAS_COMMAND_CATALOG+="${command_name}"$'\n'
+      done < <(compgen -A command)
+      HHS_ALIAS_COMMAND_CATALOG_INITIALIZED=1
+    fi
+
+    if [[ "${HHS_ALIAS_COMMAND_CATALOG}" != *$'\n'"${alias_name}"$'\n'* ]]; then
+      if alias "${alias_name}"="${alias_expr}" >/dev/null 2>&1; then
+        HHS_ALIAS_COMMAND_CATALOG+="${alias_name}"$'\n'
+        return 0
+      fi
+      __hhs_errcho "${FUNCNAME[0]}" "Failed to alias: \"${alias_name}\" !" 2>&1
+    else
+      __hhs_log "WARN" "Setting alias: \"${alias_name}\" was skipped because it already exists !"
+    fi
+  elif ! type "${alias_name}" >/dev/null 2>&1; then
     alias "${alias_name}"="${alias_expr}" >/dev/null 2>&1 && return 0
     __hhs_errcho "${FUNCNAME[0]}" "Failed to alias: \"${alias_name}\" !" 2>&1
   else

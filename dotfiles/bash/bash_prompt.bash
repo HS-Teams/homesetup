@@ -212,9 +212,25 @@ else
     export PS2=${HHS_CUSTOM_PS2:-$PS2_STYLE}
   fi
 
-  # ColorLS integration. Copy HomeSetup config files if they are not found.
-  if gem which colorls &>/dev/null; then
-    colorls_dir="$(dirname "$(gem which colorls)")/yaml"
+  # ColorLS integration. Cache the Ruby library path because resolving it starts Ruby.
+  colorls_root=''
+  colorls_cache_file="${HHS_CACHE_DIR}/colorls-root-v1.path"
+  if __hhs_has colorls; then
+    if [[ -s "${colorls_cache_file}" ]]; then
+      IFS= read -r colorls_root <"${colorls_cache_file}"
+      [[ -s "${colorls_root}/tab_complete.sh" ]] || colorls_root=''
+    fi
+    if [[ -z "${colorls_root}" ]] && __hhs_has gem; then
+      colorls_library="$(gem which colorls 2>/dev/null)"
+      if [[ -s "${colorls_library}" ]]; then
+        colorls_root="${colorls_library%/*}"
+        printf '%s\n' "${colorls_root}" >"${colorls_cache_file}"
+      fi
+    fi
+  fi
+
+  if [[ -n "${colorls_root}" ]]; then
+    colorls_dir="${colorls_root}/yaml"
     hhs_colorls_dir="${HHS_HOME}/assets/colorls/hhs-preset"
     [[ -d "${colorls_dir}" ]] || \mkdir -p "${colorls_dir}"
     [[ -f "${colorls_dir}/dark_colors.yaml" ]] || \cp "${hhs_colorls_dir}/dark_colors.yaml" "${colorls_dir}"
@@ -223,7 +239,8 @@ else
     [[ -f "${colorls_dir}/files.yaml" ]] || \cp "${hhs_colorls_dir}/files.yaml" "${colorls_dir}"
     [[ -f "${colorls_dir}/folder_aliases.yaml" ]] || \cp "${hhs_colorls_dir}/folder_aliases.yaml" "${colorls_dir}"
     [[ -f "${colorls_dir}/folders.yaml" ]] || \cp "${hhs_colorls_dir}/folders.yaml" "${colorls_dir}"
-    __hhs_source "$(dirname "$(gem which colorls)")"/tab_complete.sh
+    __hhs_source "${colorls_root}/tab_complete.sh"
   fi
+  unset colorls_cache_file colorls_dir colorls_library colorls_root hhs_colorls_dir
 
 fi

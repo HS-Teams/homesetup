@@ -125,6 +125,8 @@ echo -e "HomeSetup is starting: $(date)\n" >"${HHS_LOG_FILE}"
 
 # Source the bash common functions. Logs are available below here.
 source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"
+HHS_INITIALIZING=1
+HHS_INITIALIZATION_LOG_TIMESTAMP="$(date +'%m-%d-%y %H:%M:%S ')"
 
 # -----------------------------------------------------------------------------------
 # Initialization setup (homesetup.toml).
@@ -132,21 +134,24 @@ if [[ ! -s "${HHS_SETUP_FILE}" ]]; then
   __hhs_log "WARN" "HomeSetup initialization file '${HHS_SETUP_FILE}' was not found. Using defaults."
   \cp "${HHS_HOME}/dotfiles/homesetup.toml" "${HHS_SETUP_FILE}"
 fi
-re='^([a-zA-Z0-9_.]+) *= *(.*)'
-while read -r pref; do
-  if [[ ${pref} =~ ${re} ]]; then
-    key="${BASH_REMATCH[1]}"
-    val="${BASH_REMATCH[2]}"
-    case "$(tr '[:lower:]' '[:upper:]' <<<"${val}")" in
-      TRUE)  val=1 ;;
-      FALSE) val="" ;;
-    esac
-    val="${val//\"/}"
-    val="${val//\'/}"
-    key=$(tr '[:lower:]' '[:upper:]' <<<"${key}")
-    export "${key}=${val}"
-  fi
-done <"${HHS_SETUP_FILE}"
+while IFS=$'\t' read -r key val; do
+  export "${key}=${val}"
+done < <(
+  awk '
+    /^[[:space:]]*[a-zA-Z0-9_.]+[[:space:]]*=/ {
+      separator = index($0, "=")
+      key = substr($0, 1, separator - 1)
+      value = substr($0, separator + 1)
+      gsub(/[[:space:]]/, "", key)
+      sub(/^[[:space:]]*/, "", value)
+      gsub(/[\047\042]/, "", value)
+      normalized = toupper(value)
+      if (normalized == "TRUE") value = "1"
+      if (normalized == "FALSE") value = ""
+      printf "%s\t%s\n", toupper(key), value
+    }
+  ' "${HHS_SETUP_FILE}"
+)
 
 # -----------------------------------------------------------------------------------
 # Settings (homesetup.toml) are available as environment variables from this point
@@ -154,10 +159,10 @@ done <"${HHS_SETUP_FILE}"
 # Add custom paths to the system `$PATH`.
 if [[ -f "${HHS_DIR}/.path" ]]; then
   __hhs_log "DEBUG" "Adding custom system PATH's"
-  all="$(grep . "${HHS_DIR}/.path" | grep -v -e '^$')"
-  for f_path in ${all}; do
-    [[ -n "${f_path}" ]] && PATH="${f_path}:${PATH}"
-  done
+  while IFS= read -r f_path || [[ -n "${f_path}" ]]; do
+    [[ -z "${f_path}" || "${f_path}" == \#* ]] && continue
+    PATH="${f_path}:${PATH}"
+  done <"${HHS_DIR}/.path"
 fi
 
 # Input method resources
@@ -296,13 +301,41 @@ for file in "${CUSTOM_DOTFILES[@]}"; do
   fi
 done
 
-# Load system settings using setman.
+# Load system settings using Setman. Regenerate the export only when one of its inputs changes.
 if [[ ${HHS_EXPORT_SETTINGS} -eq 1 ]] && __hhs_is_venv; then
-  # Update the settings configuration.
-  echo "hhs.setman.database = ${HHS_SETMAN_DB_FILE}" >"${HHS_SETMAN_CONFIG_FILE}"
-  tmp_file="$(mktemp)"
-  if ${PYTHON3} -m setman source -n hhs -f "${tmp_file}" && __hhs_source "${tmp_file}"; then
-    __hhs_log "INFO" "System settings loaded !"
+  setman_config="hhs.setman.database = ${HHS_SETMAN_DB_FILE}"
+  setman_current_config=''
+  [[ -r "${HHS_SETMAN_CONFIG_FILE}" ]] && IFS= read -r setman_current_config <"${HHS_SETMAN_CONFIG_FILE}"
+  if [[ "${setman_current_config}" != "${setman_config}" ]]; then
+    printf '%s\n' "${setman_config}" >"${HHS_SETMAN_CONFIG_FILE}"
+  fi
+
+  setman_cache_file="${HHS_CACHE_DIR}/setman-export-v1.bash"
+  setman_cache_refresh_failed=0
+  setman_module_file=''
+  for setman_candidate in "${HHS_VENV_PATH}"/lib/python*/site-packages/setman/__init__.py; do
+    [[ -f "${setman_candidate}" ]] && setman_module_file="${setman_candidate}"
+  done
+
+  if [[ ! -s "${setman_cache_file}" || "${HHS_SETMAN_DB_FILE}" -nt "${setman_cache_file}" ||
+        "${HHS_SETMAN_CONFIG_FILE}" -nt "${setman_cache_file}" ||
+        "${setman_module_file}" -nt "${setman_cache_file}" ]]; then
+    tmp_file="${setman_cache_file}.${BASHPID:-$$}.tmp"
+    if ${PYTHON3} -m setman source -n hhs -f "${tmp_file}"; then
+      \chmod 600 "${tmp_file}"
+      \mv -f "${tmp_file}" "${setman_cache_file}"
+    else
+      setman_cache_refresh_failed=1
+      \rm -f "${tmp_file}"
+    fi
+  fi
+
+  if __hhs_source "${setman_cache_file}"; then
+    if [[ ${setman_cache_refresh_failed} -eq 1 ]]; then
+      __hhs_log "WARN" "System settings loaded from stale cache after Setman export failed !"
+    else
+      __hhs_log "INFO" "System settings loaded !"
+    fi
   else
     __hhs_log "ERROR" "Failed to load system settings !"
   fi
@@ -321,8 +354,10 @@ if [[ ${HHS_LOAD_COMPLETIONS} -eq 1 ]]; then
       fi
     done
   fi
-  while read -r cpl; do
-    app_name="$(basename "${cpl//-completion/}")"
+  for cpl in "${HHS_HOME}/bin/completions/${HHS_MY_SHELL}"/*-completion."${HHS_MY_SHELL}"; do
+    [[ -f "${cpl}" ]] || continue
+    app_name="${cpl##*/}"
+    app_name="${app_name//-completion/}"
     app_name="${app_name//\.${HHS_MY_SHELL}/}"
     if __hhs_has "${app_name}"; then
       if [[ ${HHS_USE_BLESH} -eq 1 && "${app_name}" == "fzf" ]]; then
@@ -336,28 +371,31 @@ if [[ ${HHS_LOAD_COMPLETIONS} -eq 1 ]]; then
     else
       __hhs_log "WARN" "Skipping completion \"${app_name}\" because the application was not detected!"
     fi
-  done < <(find "${HHS_HOME}/bin/completions" -type f -name "*-completion.${HHS_MY_SHELL}")
+  done
   export HHS_COMPLETIONS
 fi
 
 # Load bash key bindings.
 if [[ ${HHS_LOAD_KEY_BINDINGS} -eq 1 ]]; then
   __hhs_log "INFO" "Loading bash HomeSetup key bindings"
-  while read -r bnd; do
-    app_name="$(basename "${bnd//-key-bindings/}")"
+  for bnd in "${HHS_HOME}/bin/key-bindings/${HHS_MY_SHELL}"/*-key-bindings."${HHS_MY_SHELL}"; do
+    [[ -f "${bnd}" ]] || continue
+    app_name="${bnd##*/}"
+    app_name="${app_name//-key-bindings/}"
     app_name="${app_name//\.${HHS_MY_SHELL}/}"
     if __hhs_has "${app_name}"; then
       __hhs_source "${bnd}" && HHS_BINDINGS="${HHS_BINDINGS}${app_name} "
     else
       __hhs_log "WARN" "Skipping key binding \"${app_name}\" because the application was not detected!"
     fi
-  done < <(find "${HHS_HOME}/bin/key-bindings" -type f -name '*-key-bindings.bash')
+  done
   export HHS_BINDINGS
 fi
 
 # Restore the last used directory
 if [[ ${HHS_RESTORE_LAST_DIR} -eq 1 && -s "${HHS_DIR}/.last_dirs" ]]; then
-  last_dir="$(grep -m 1 . "${HHS_DIR}/.last_dirs")"
+  IFS= read -r last_dir <"${HHS_DIR}/.last_dirs"
+  [[ "${last_dir}" == '~/'* ]] && last_dir="${HOME}/${last_dir#\~/}"
   \cd "${last_dir}" 2> /dev/null || {
     __hhs_log "WARN" "Unable to enter last directory: '${last_dir}' because it was not found !"
     \cd "${HOME}"
@@ -374,40 +412,74 @@ else
 fi
 
 # Attach atuin to bash if it's enabled
-if __hhs_has 'atuin' && [[ ${HHS_USE_ATUIN} -eq 1 ]] && __hhs_has "atuin"; then
+if [[ ${HHS_USE_ATUIN} -eq 1 ]] && __hhs_has 'atuin'; then
   __hhs_log "DEBUG" "Attaching Atuin plug-in"
   if ! eval "$(atuin init bash)" || ! atuin import auto &>/dev/null; then
     __hhs_log "WARN" "Atuin was not enabled !"
   fi
 fi
 
-# Start the Ollama server if it's enabled
+# Reuse one clock read for short-lived health caching and update scheduling.
+current_epoch=''
+current_update_stamp=''
+if [[ ${HHS_OLLAMA_AI_AUTOSTART:-0} -eq 1 || ${HHS_NO_AUTO_UPDATE:-0} -ne 1 ]]; then
+  read -r current_epoch current_update_stamp < <(date '+%s %s%S')
+fi
+
+# Start the Ollama server if it's enabled. Cache successful health checks briefly across terminals.
 if __hhs_has 'ollama' && [[ ${HHS_OLLAMA_AI_AUTOSTART} -eq 1 ]]; then
-  __hhs_log "DEBUG" "Starting Ollama server"
-  if ! ollama ps &>/dev/null; then
-    nohup ollama serve >"${HHS_LOG_DIR}/ollama.log" 2>&1 &
-    pid=$!
-    kill -0 "$pid" 2>/dev/null || __hhs_log "ERROR" "Unable to start Ollama server!"
-    __hhs_log "INFO" "Ollama server started with PID: ${pid}"
+  ollama_health_cache="${HHS_CACHE_DIR}/ollama-health.timestamp"
+  ollama_health_timestamp=0
+  [[ -r "${ollama_health_cache}" ]] && IFS= read -r ollama_health_timestamp <"${ollama_health_cache}"
+  [[ "${ollama_health_timestamp}" =~ ^[0-9]+$ ]] || ollama_health_timestamp=0
+
+  if ((current_epoch >= ollama_health_timestamp && current_epoch - ollama_health_timestamp < 30)); then
+    __hhs_log "DEBUG" "Ollama health check is still current"
   else
-    __hhs_log "INFO" "Ollama server is already running with PID: $(pgrep 'ollama')"
+    __hhs_log "DEBUG" "Starting Ollama server"
+    if ! ollama ps &>/dev/null; then
+      nohup ollama serve >"${HHS_LOG_DIR}/ollama.log" 2>&1 &
+      pid=$!
+      if kill -0 "${pid}" 2>/dev/null; then
+        printf '%s\n' "${current_epoch}" >"${ollama_health_cache}"
+        __hhs_log "INFO" "Ollama server started with PID: ${pid}"
+      else
+        __hhs_log "ERROR" "Unable to start Ollama server!"
+      fi
+    else
+      printf '%s\n' "${current_epoch}" >"${ollama_health_cache}"
+      __hhs_log "INFO" "Ollama server is already running with PID: $(pgrep 'ollama')"
+    fi
   fi
 fi
 
-# Check for HomeSetup updates.
-if [[ ${HHS_NO_AUTO_UPDATE} -ne 1 ]]; then
-  if [[ ! -s "${HHS_DIR}/.last_update" || $(date "+%s%S") -ge $(grep . "${HHS_DIR}/.last_update") ]]; then
-    echo
-    echo -e "${BLUE}Checking for updates ...${NC}"
-    if __hhs_is_reachable 'https://github.com/'; then
-      __hhs updater execute check
-    else
-      __hhs_errcho 'hhsrc' "HomeSetup GitHub website is unreachable !"
+# Schedule HomeSetup updates without blocking the first prompt.
+if [[ ${HHS_NO_AUTO_UPDATE:-0} -ne 1 ]]; then
+  last_update=0
+  [[ -r "${HHS_DIR}/.last_update" ]] && IFS= read -r last_update <"${HHS_DIR}/.last_update"
+  [[ "${last_update}" =~ ^[0-9]+$ ]] || last_update=0
+
+  if [[ ${current_update_stamp} -ge ${last_update} ]]; then
+    update_lock_file="${HHS_CACHE_DIR}/startup-update.pid"
+    update_pid=''
+    [[ -r "${update_lock_file}" ]] && IFS= read -r update_pid <"${update_lock_file}"
+    if [[ ! "${update_pid}" =~ ^[0-9]+$ ]] || ! kill -0 "${update_pid}" 2>/dev/null; then
+      \rm -f "${update_lock_file}"
+      (
+        trap '\rm -f "${update_lock_file}"' EXIT
+        if __hhs_is_reachable 'https://github.com/'; then
+          __hhs updater execute check
+        else
+          __hhs_errcho 'hhsrc' "HomeSetup GitHub website is unreachable !"
+        fi
+      ) >>"${HHS_LOG_DIR}/startup-update.log" 2>&1 &
+      update_pid=$!
+      printf '%s\n' "${update_pid}" >"${update_lock_file}"
+      disown "${update_pid}" 2>/dev/null || true
+      __hhs_log "INFO" "HomeSetup update check scheduled with PID: ${update_pid}"
     fi
-    sleep 1
-  else
-    echo -en "\033[1J\033[H"
   fi
+  echo -en "\033[1J\033[H"
 fi
 
 # Remove PATH duplicates
@@ -432,10 +504,9 @@ fi
 
 # HomeSetup MOTDs
 if [[ -d "${HHS_MOTD_DIR}" ]]; then
-  all=$(find "${HHS_MOTD_DIR}" -type f | sort | uniq)
-  for motd in ${all}; do
+  while IFS= read -r motd; do
     echo -e "$(eval "echo -e \"$(<"${motd}")\"")"
-  done
+  done < <(find "${HHS_MOTD_DIR}" -type f | sort -u)
 fi
 
 
@@ -450,5 +521,11 @@ diff_time_ms=$((diff_time-(diff_time_sec*1000)))
 __hhs_log "INFO" "HomeSetup initialization completed in ${diff_time_sec}s ${diff_time_ms}ms" >>"${HHS_LOG_FILE}"
 echo '' >>"${HHS_LOG_FILE}"
 
-unset -f started finished diff_time diff_time_sec diff_time_ms state option line file all
-unset -f f_path tmp_file re_key_pair prefs cpl bnd pref re motd all app_name last_dir re
+unset HHS_ALIAS_COMMAND_CATALOG HHS_ALIAS_COMMAND_CATALOG_INITIALIZED HHS_INITIALIZING
+unset HHS_INITIALIZATION_LOG_TIMESTAMP
+unset started finished diff_time diff_time_sec diff_time_ms state option line file all
+unset f_path tmp_file re_key_pair prefs cpl bnd pref re motd app_name last_dir key val
+unset setman_cache_file setman_cache_refresh_failed setman_candidate setman_config setman_current_config
+unset setman_module_file
+unset current_epoch current_update_stamp last_update ollama_health_cache ollama_health_timestamp pid
+unset update_lock_file update_pid
