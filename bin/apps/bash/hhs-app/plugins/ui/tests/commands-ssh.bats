@@ -821,10 +821,12 @@ PY
     'const submitPath = () =>' 'input.addEventListener("keydown", (event) =>' \
     'if (event.key !== "Enter")' 'submitPath()' \
     'sendCommand("submit_path", panel, input.value)' \
-    'const maxFolderSuggestions = 5' 'function folderRows(panel)' \
+    'function folderRows(panel)' \
     'function folderNameFragment(panel, typedPath)' 'function rankedFolderRows(panel, typedPath)' \
-    'if (!fragment)' 'match.name.toLowerCase().startsWith(fragment)' \
-    '.slice(0, maxFolderSuggestions)' 'stringValue(row._kind) === "Dir"' \
+    'fragment === null' 'const matchingRows = normalizedFragment' \
+    'match.name.toLowerCase().startsWith(normalizedFragment)' \
+    'activeSuggestion?.scrollIntoView({ block: "nearest" })' \
+    'stringValue(row._kind) === "Dir"' \
     'createElement("div", "folder-suggestions")' \
     'createElement("button", "folder-suggestion", name)' \
     'input.setAttribute("aria-autocomplete", "list")' \
@@ -838,6 +840,8 @@ PY
   assert_file_not_contains "${component_file}" 'createElement("datalist"'
   assert_file_not_contains "${component_file}" 'input.setAttribute("list"'
   assert_file_not_contains "${component_file}" 'indexOf(fragment)'
+  assert_file_not_contains "${component_file}" 'const maxFolderSuggestions'
+  assert_file_not_contains "${component_file}" '.slice(0, maxFolderSuggestions)'
   assert_file_contains_many "${ssh_explorer_ui_file}" \
     'if action == "submit_path" and panel == "local"' \
     'if action == "submit_path" and panel == "remote"'

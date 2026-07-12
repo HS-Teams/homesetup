@@ -134,7 +134,6 @@
       };
 
       const app = document.getElementById("app");
-      const maxSuggestions = 5;
       let args = {
         currentDirectory: "",
         disabled: false,
@@ -213,8 +212,14 @@
           .trim()
           .replace(/\\/g, "/")
           .replace(/\/+$/, "");
-        if (!cleanPath || cleanPath === basePath) {
+        if (!cleanPath) {
+          return null;
+        }
+        if (cleanPath.endsWith("/")) {
           return "";
+        }
+        if (cleanPath === basePath) {
+          return null;
         }
         const suffix = cleanPath.toLowerCase().startsWith(basePath.toLowerCase())
           ? cleanPath.slice(basePath.length).replace(/^\/+/, "")
@@ -223,28 +228,28 @@
       }
 
       function rankedSuggestions(value) {
-        const fragment = pathFragment(value).toLowerCase();
-        if (!fragment) {
+        const fragment = pathFragment(value);
+        if (fragment === null) {
           return [];
         }
+        const normalizedFragment = fragment.toLowerCase();
         const suggestions = Array.isArray(args.suggestions) ? args.suggestions : [];
-        return suggestions
+        const availableSuggestions = suggestions
           .map((suggestion) => ({
             name: stringValue(suggestion.name),
             path: stringValue(suggestion.path),
           }))
-          .filter(
-            (suggestion) =>
-              suggestion.name &&
-              suggestion.path &&
-              suggestion.name.toLowerCase().startsWith(fragment)
-          )
-          .sort(
-            (left, right) =>
-              left.name.length - right.name.length ||
-              left.name.localeCompare(right.name)
-          )
-          .slice(0, maxSuggestions);
+          .filter((suggestion) => suggestion.name && suggestion.path);
+        const matchingSuggestions = normalizedFragment
+          ? availableSuggestions.filter((suggestion) =>
+              suggestion.name.toLowerCase().startsWith(normalizedFragment)
+            )
+          : availableSuggestions;
+        return matchingSuggestions.sort(
+          (left, right) =>
+            left.name.length - right.name.length ||
+            left.name.localeCompare(right.name)
+        );
       }
 
       function eventId() {
@@ -286,13 +291,18 @@
           syncFrameHeight();
         };
         const syncActiveSuggestion = () => {
+          let activeSuggestion = null;
           suggestions.querySelectorAll(".suggestion").forEach(
             (suggestion, index) => {
               const active = index === activeSuggestionIndex;
               suggestion.classList.toggle("active", active);
               suggestion.setAttribute("aria-selected", String(active));
+              if (active) {
+                activeSuggestion = suggestion;
+              }
             }
           );
+          activeSuggestion?.scrollIntoView({ block: "nearest" });
         };
         const acceptSuggestion = (index = activeSuggestionIndex) => {
           const selectedIndex = index >= 0 ? index : 0;

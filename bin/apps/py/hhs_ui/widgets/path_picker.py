@@ -322,7 +322,7 @@ def remember_folder_picker_visible_child_paths(child_paths: list[str]) -> None:
 
 
 def queue_folder_picker_directory_load(directory: str) -> None:
-    """Queue a remote picker directory load without changing the visible listing."""
+    """Queue a remote picker directory load with an empty child selection."""
     selected_directory = (
         normalize_remote_path_picker_path(directory)
         if path_picker_uses_remote()
@@ -334,6 +334,7 @@ def queue_folder_picker_directory_load(directory: str) -> None:
         set_folder_picker_current_directory(selected_directory)
         return
     stop_path_picker_listing_jobs()
+    clear_folder_picker_child_selection()
     st.session_state["_hhs_folder_picker_pending_dir"] = selected_directory
 
 
@@ -641,12 +642,9 @@ def request_path_picker(
     st.session_state["_hhs_folder_picker_current_dir"] = start_directory
     st.session_state["_hhs_folder_picker_current_dir_input"] = start_path
     st.session_state.setdefault("_hhs_folder_picker_include_dot_folders", False)
-    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
-    st.session_state.pop("_hhs_folder_picker_path_kinds", None)
-    st.session_state.pop("_hhs_folder_picker_visible_child_paths", None)
     stop_path_picker_listing_jobs()
     clear_folder_picker_listing_cache()
-    prune_folder_picker_child_selection_widget_keys()
+    clear_folder_picker_child_selection()
 
 
 def request_folder_picker(
@@ -664,12 +662,9 @@ def close_folder_picker() -> None:
     st.session_state.pop("_hhs_folder_picker_target_key", None)
     st.session_state.pop("_hhs_folder_picker_owner_context", None)
     st.session_state.pop(PATH_PICKER_REMOTE_OVERRIDE_KEY, None)
-    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
-    st.session_state.pop("_hhs_folder_picker_path_kinds", None)
-    st.session_state.pop("_hhs_folder_picker_visible_child_paths", None)
     stop_path_picker_listing_jobs()
     clear_folder_picker_listing_cache()
-    prune_folder_picker_child_selection_widget_keys()
+    clear_folder_picker_child_selection()
 
 
 def selected_folder_picker_path() -> str:
@@ -725,7 +720,12 @@ def folder_picker_child_selection_widget_key(
     directory: str, mode: str, include_dot_folders: bool
 ) -> str:
     """Return a directory-scoped widget key for the path picker child combo."""
-    key_material = "\0".join((str(directory), str(mode), str(include_dot_folders)))
+    revision = str(
+        st.session_state.get("_hhs_folder_picker_child_selection_revision", 0)
+    )
+    key_material = "\0".join(
+        (str(directory), str(mode), str(include_dot_folders), revision)
+    )
     digest = hashlib.sha1(key_material.encode("utf-8")).hexdigest()[:16]
     return f"_hhs_folder_picker_selected_dir_widget_{digest}"
 
@@ -736,6 +736,20 @@ def prune_folder_picker_child_selection_widget_keys(active_key: str = "") -> Non
     for key in list(st.session_state.keys()):
         if str(key).startswith(key_prefix) and key != active_key:
             st.session_state.pop(key, None)
+
+
+def clear_folder_picker_child_selection() -> None:
+    """Clear child options and their selectbox state before a directory change."""
+    current_revision = int(
+        st.session_state.get("_hhs_folder_picker_child_selection_revision", 0) or 0
+    )
+    st.session_state["_hhs_folder_picker_child_selection_revision"] = (
+        current_revision + 1
+    )
+    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
+    st.session_state.pop("_hhs_folder_picker_path_kinds", None)
+    st.session_state.pop("_hhs_folder_picker_visible_child_paths", None)
+    prune_folder_picker_child_selection_widget_keys()
 
 
 def folder_picker_browsing_directory() -> str:
@@ -755,9 +769,7 @@ def refresh_folder_picker_current_children() -> None:
         queue_folder_picker_directory_load(current_directory)
         return
     st.session_state["_hhs_folder_picker_current_dir"] = current_directory
-    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
-    st.session_state.pop("_hhs_folder_picker_path_kinds", None)
-    prune_folder_picker_child_selection_widget_keys()
+    clear_folder_picker_child_selection()
 
 
 def prepare_path_picker_dialog_listing(mode: str) -> None:
@@ -787,10 +799,8 @@ def set_folder_picker_current_directory(
     )
     st.session_state["_hhs_folder_picker_current_dir"] = selected_directory
     st.session_state["_hhs_folder_picker_current_dir_input"] = selected_directory
+    clear_folder_picker_child_selection()
     if not load_children:
-        st.session_state.pop("_hhs_folder_picker_selected_dir", None)
-        st.session_state.pop("_hhs_folder_picker_path_kinds", None)
-        prune_folder_picker_child_selection_widget_keys()
         return
     include_dot_folders = bool(
         st.session_state.get("_hhs_folder_picker_include_dot_folders", False)
@@ -816,17 +826,13 @@ def apply_folder_picker_typed_directory() -> None:
         current_directory = path_picker_current_directory(selected_path, mode)
         st.session_state["_hhs_folder_picker_current_dir"] = current_directory
         st.session_state["_hhs_folder_picker_current_dir_input"] = selected_path
-        st.session_state.pop("_hhs_folder_picker_selected_dir", None)
-        st.session_state.pop("_hhs_folder_picker_path_kinds", None)
-        prune_folder_picker_child_selection_widget_keys()
+        clear_folder_picker_child_selection()
         return
     selected_path = path_picker_start_path(typed_path, mode)
     current_directory = path_picker_current_directory(selected_path, mode)
     st.session_state["_hhs_folder_picker_current_dir"] = current_directory
     st.session_state["_hhs_folder_picker_current_dir_input"] = selected_path
-    st.session_state.pop("_hhs_folder_picker_selected_dir", None)
-    st.session_state.pop("_hhs_folder_picker_path_kinds", None)
-    prune_folder_picker_child_selection_widget_keys()
+    clear_folder_picker_child_selection()
 
 
 def handle_path_picker_input_change() -> None:
@@ -1018,7 +1024,7 @@ def render_path_picker_body(
         selected_label,
         current_directory,
         child_directories,
-        loading_children,
+        disabled=False,
     )
     selected_widget_key = folder_picker_child_selection_widget_key(
         current_directory, mode, include_dot_folders
@@ -1082,7 +1088,6 @@ def render_path_picker_body(
                 "",
                 key="folder_picker_parent_button",
                 help="Parent",
-                disabled=loading_children,
                 on_click=open_folder_picker_parent,
                 width="content",
             )

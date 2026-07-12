@@ -52,6 +52,13 @@ def run_bash_command(command, *args, **kwargs):
     return path_picker_result(command)
 
 def path_picker_result(command):
+    if "raw_target=/home/root/empty" in command:
+        return subprocess.CompletedProcess(
+            ["ssh"],
+            0,
+            "__HHS_PICKER_CWD__\t/home/root/empty\n",
+            "",
+        )
     if "raw_target=/home/root/app" in command:
         return subprocess.CompletedProcess(
             ["ssh"],
@@ -171,7 +178,7 @@ assert "st.text_input(" not in render_body
 assert "st.caption(empty_caption)" not in render_body
 assert "PATH_PICKER_LISTING_LOADER_MESSAGE" in render_body
 assert "render_path_picker_listing_loader(loading_job_name)" in render_body
-assert "disabled=loading_children" in render_body
+assert "disabled=False" in render_body
 assert "loading_children or not bool(child_directories)" in render_body
 assert 'selectbox_kwargs["on_change"] = open_folder_picker_selected_child' in render_body
 assert 'selectbox_kwargs["args"] = (selected_widget_key,)' in render_body
@@ -179,9 +186,16 @@ assert render_body.index("st.selectbox(") < render_body.index("st.checkbox(")
 component = (
     Path(sys.argv[1]).parents[1] / "components" / "path_picker_input" / "index.html"
 ).read_text(encoding="utf-8")
-assert "const maxSuggestions = 5" in component
+assert "const maxSuggestions" not in component
+assert ".slice(0, maxSuggestions)" not in component
+assert "max-height: 12rem" in component
+assert "overflow-y: auto" in component
 assert "function pathFragment(value)" in component
-assert "suggestion.name.toLowerCase().startsWith(fragment)" in component
+assert 'cleanPath.endsWith("/")' in component
+assert "fragment === null" in component
+assert "const matchingSuggestions = normalizedFragment" in component
+assert "suggestion.name.toLowerCase().startsWith(normalizedFragment)" in component
+assert "if (!fragment)" not in component
 assert "const suggestion = createElement(" in component
 assert '"button",' in component
 assert '"suggestion",' in component
@@ -193,6 +207,19 @@ assert "content.getBoundingClientRect().height" in component
 assert "document.documentElement.scrollHeight" not in component
 assert "--picker-page-bg" in component
 assert "themeValues.backgroundColor" in component
+explorer_component = (
+    Path(sys.argv[1]).parents[1] / "components" / "ssh_explorer" / "index.html"
+).read_text(encoding="utf-8")
+assert "const maxFolderSuggestions" not in explorer_component
+assert ".slice(0, maxFolderSuggestions)" not in explorer_component
+assert "max-height: 12rem" in explorer_component
+assert "overflow-y: auto" in explorer_component
+assert 'cleanPath.endsWith("/")' in explorer_component
+assert "fragment === null" in explorer_component
+assert "const matchingRows = normalizedFragment" in explorer_component
+assert "match.name.toLowerCase().startsWith(normalizedFragment)" in explorer_component
+assert 'activeSuggestion?.scrollIntoView({ block: "nearest" })' in component
+assert 'activeSuggestion?.scrollIntoView({ block: "nearest" })' in explorer_component
 assert 'let lastFrameHeight = 0' in component
 assert 'let lastRenderSignature = ""' in component
 assert "contentHeight === lastFrameHeight" in component
@@ -262,16 +289,25 @@ session_state["_hhs_folder_picker_current_dir_input"] = "/home/root"
 session_state["_hhs_folder_picker_path_kinds"] = {"/home/root/app": "Dir"}
 session_state["_hhs_folder_picker_selected_dir"] = "/home/root/app"
 namespace["remember_folder_picker_visible_child_paths"](["/home/root/app"])
+old_widget_key = namespace["folder_picker_child_selection_widget_key"](
+    "/home/root", "folder", False
+)
+session_state[old_widget_key] = "/home/root/app"
 namespace["open_folder_picker_selected_directory"]()
+new_widget_key = namespace["folder_picker_child_selection_widget_key"](
+    "/home/root", "folder", False
+)
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
 assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root"
 assert session_state["_hhs_folder_picker_pending_dir"] == "/home/root/app"
-assert session_state["_hhs_folder_picker_selected_dir"] == "/home/root/app"
-assert session_state["_hhs_folder_picker_path_kinds"] == {"/home/root/app": "Dir"}
+assert "_hhs_folder_picker_selected_dir" not in session_state
+assert "_hhs_folder_picker_path_kinds" not in session_state
+assert old_widget_key not in session_state
+assert new_widget_key != old_widget_key
 assert len(commands) == command_count
 assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is False
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root"
-assert namespace["folder_picker_visible_child_paths"]() == ["/home/root/app"]
+assert namespace["folder_picker_visible_child_paths"]() == []
 assert len(commands) == command_count + 1
 assert commands[-1][1]["show_preloader_event"] is True
 assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is True
@@ -316,6 +352,16 @@ assert session_state["_hhs_folder_picker_pending_dir"] == "/home/root/app"
 assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is True
 assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/app"
 assert len(commands) == command_count + 2
+
+namespace["queue_folder_picker_directory_load"]("/home/root/empty")
+assert "_hhs_folder_picker_selected_dir" not in session_state
+assert namespace["folder_picker_visible_child_paths"]() == []
+assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is False
+assert namespace["load_pending_remote_path_picker_directory"]("folder", False) is True
+assert session_state["_hhs_folder_picker_current_dir"] == "/home/root/empty"
+assert session_state["_hhs_folder_picker_current_dir_input"] == "/home/root/empty"
+assert namespace["folder_picker_visible_child_paths"]() == []
+assert "_hhs_folder_picker_selected_dir" not in session_state
 
 session_state["_hhs_folder_picker_mode"] = "file"
 session_state["_hhs_folder_picker_current_dir"] = "/home/root"
@@ -419,6 +465,12 @@ assert session_state[widget_key] == str(beta.resolve())
 assert other_widget_key not in session_state
 assert widget_key.startswith("_hhs_folder_picker_selected_dir_widget_")
 
+namespace["clear_folder_picker_child_selection"]()
+revised_widget_key = namespace["folder_picker_child_selection_widget_key"](
+    str(apps.resolve()), "folder", False
+)
+assert revised_widget_key != widget_key
+
 session_state["_hhs_folder_picker_mode"] = "folder"
 session_state["_hhs_folder_picker_current_dir"] = str(home)
 session_state["_hhs_folder_picker_current_dir_input"] = str(home)
@@ -427,6 +479,7 @@ namespace["open_folder_picker_selected_child"](widget_key)
 assert session_state["_hhs_folder_picker_current_dir"] == str(beta.resolve())
 assert session_state["_hhs_folder_picker_current_dir_input"] == str(beta.resolve())
 assert "_hhs_folder_picker_selected_dir" not in session_state
+assert widget_key not in session_state
 
 session_state["_hhs_folder_picker_mode"] = "file"
 session_state["_hhs_folder_picker_current_dir"] = str(home)

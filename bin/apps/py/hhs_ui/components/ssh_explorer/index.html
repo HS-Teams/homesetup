@@ -364,7 +364,6 @@
       };
 
       const app = document.getElementById("app");
-      const maxFolderSuggestions = 5;
       let args = {
         localRows: [],
         remoteRows: [],
@@ -647,12 +646,20 @@
       }
 
       function folderNameFragment(panel, typedPath) {
-        const cleanPath = stringValue(typedPath).trim();
+        const cleanPath = stringValue(typedPath).trim().replace(/\\/g, "/");
         const basePath = stringValue(
           panel === "local" ? args.localPath : args.remotePath
-        ).replace(/\/+$/, "");
-        if (!cleanPath || cleanPath === basePath) {
+        )
+          .replace(/\\/g, "/")
+          .replace(/\/+$/, "");
+        if (!cleanPath) {
+          return null;
+        }
+        if (cleanPath.endsWith("/")) {
           return "";
+        }
+        if (cleanPath === basePath) {
+          return null;
         }
         const suffix = cleanPath.toLowerCase().startsWith(basePath.toLowerCase())
           ? cleanPath.slice(basePath.length).replace(/^\/+/, "")
@@ -661,22 +668,26 @@
       }
 
       function rankedFolderRows(panel, typedPath) {
-        const fragment = folderNameFragment(panel, typedPath).toLowerCase();
-        if (!fragment) {
+        const fragment = folderNameFragment(panel, typedPath);
+        if (fragment === null) {
           return [];
         }
-        return folderRows(panel)
-          .map((row) => {
-            const name = stringValue(row._name);
-            return { row, name };
-          })
-          .filter((match) => match.name.toLowerCase().startsWith(fragment))
+        const normalizedFragment = fragment.toLowerCase();
+        const availableRows = folderRows(panel).map((row) => {
+          const name = stringValue(row._name);
+          return { row, name };
+        });
+        const matchingRows = normalizedFragment
+          ? availableRows.filter((match) =>
+              match.name.toLowerCase().startsWith(normalizedFragment)
+            )
+          : availableRows;
+        return matchingRows
           .sort(
             (left, right) =>
               left.name.length - right.name.length ||
               left.name.localeCompare(right.name)
           )
-          .slice(0, maxFolderSuggestions)
           .map((match) => match.row);
       }
 
@@ -709,13 +720,18 @@
           input.setAttribute("aria-expanded", "false");
         };
         const syncActiveSuggestion = () => {
+          let activeSuggestion = null;
           suggestions.querySelectorAll(".folder-suggestion").forEach(
             (suggestion, index) => {
               const active = index === activeSuggestionIndex;
               suggestion.classList.toggle("active", active);
               suggestion.setAttribute("aria-selected", String(active));
+              if (active) {
+                activeSuggestion = suggestion;
+              }
             }
           );
+          activeSuggestion?.scrollIntoView({ block: "nearest" });
         };
         const submitPath = () => {
           activatePanel(panel);
