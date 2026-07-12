@@ -8,16 +8,18 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.94"
+VERSION = "0.1.101"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parents[1]
-APP_CSS_FILE = APP_DIR / "streamlit_ui.css"
-APP_THEME_CSS_FILE = APP_DIR / "themes/dracula.css"
+APP_STATIC_DIR = APP_DIR / "static"
+APP_CSS_FILE = APP_STATIC_DIR / "css/streamlit_ui.css"
+APP_THEME_CSS_FILE = APP_STATIC_DIR / "themes/dracula.css"
 SSH_EXPLORER_COMPONENT_DIR = APP_DIR / "components/ssh_explorer"
 FIREBASE_CONFIG_COMPONENT_DIR = APP_DIR / "components/firebase_config_form"
 APP_FONT_FAMILY = "Droid Sans Mono for Powerline Nerd Font Complete"
 APP_FONT_FILE = (
-    APP_DIR / "assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
+    APP_STATIC_DIR
+    / "fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
 )
 TTYD_HOST = "127.0.0.1"
 TTYD_IFRAME_HEIGHT = 760
@@ -50,6 +52,8 @@ UI_COMMAND_DISK_TIMEOUT_SECONDS = 45
 UI_COMMAND_SERVICE_ACTION_TIMEOUT_SECONDS = 180
 UI_COMMAND_LONG_ACTION_TIMEOUT_SECONDS = 1800
 UI_COMMAND_MODEL_DOWNLOAD_TIMEOUT_SECONDS = 3600
+BACKGROUND_JOB_COMPLETION_RERUN_RETRY_SECONDS = 4.0
+BACKGROUND_JOB_COMPLETION_RERUN_MAX_ATTEMPTS = 3
 DEFAULT_TOP_N = 10
 MIN_TOP_N = 1
 MAX_TOP_N = 100
@@ -77,7 +81,7 @@ AI_SERVICE_AVAILABLE_KEY = "_hhs_ai_service_available"
 AI_SERVICE_AVAILABILITY_LOADED_KEY = "_hhs_ai_service_availability_loaded"
 AI_SERVICE_AVAILABILITY_CONTEXT_KEY = "_hhs_ai_service_availability_context"
 AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY = "_hhs_ai_service_availability_refreshed_at"
-AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS = 30.0
+AI_SERVICE_AVAILABILITY_REFRESH_INTERVAL_SECONDS = 300.0
 AI_TERMINAL_CONTEXT_MAX_CHARS = 12000
 TTYD_PROCESS_KEY = "_hhs_ttyd_process"
 TTYD_PORT_KEY = "_hhs_ttyd_port"

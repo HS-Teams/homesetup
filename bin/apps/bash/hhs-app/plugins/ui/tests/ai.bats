@@ -313,7 +313,9 @@ PY
 }
 
 @test "when UI creates disposable files then cache paths should be deterministic" {
-  run python3 - "${ui_file}" "${constants_file}" "${ui_plugin_file}" <<'PY'
+  run python3 - "${ui_file}" "${constants_file}" "${ui_plugin_file}" \
+    "${ai_ui_file}" "${command_runtime_file}" "${ui_state_file}" "${search_ui_file}" \
+    "${cache_runtime_file}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -323,6 +325,16 @@ source = (
     + Path(sys.argv[2]).read_text(encoding="utf-8")
     + "\n"
     + Path(sys.argv[3]).read_text(encoding="utf-8")
+    + "\n"
+    + Path(sys.argv[4]).read_text(encoding="utf-8")
+    + "\n"
+    + Path(sys.argv[5]).read_text(encoding="utf-8")
+    + "\n"
+    + Path(sys.argv[6]).read_text(encoding="utf-8")
+    + "\n"
+    + Path(sys.argv[7]).read_text(encoding="utf-8")
+    + "\n"
+    + Path(sys.argv[8]).read_text(encoding="utf-8")
 )
 required_fragments = (
     "def ui_disposable_files_dir() -> Path:",
@@ -331,7 +343,7 @@ required_fragments = (
     'UI_STATE_FILE = HHS_CACHE_DIR / "streamlit-ui-state.json"',
     'UI_CACHE_FILE = HHS_CACHE_DIR / "streamlit-ui-cache.json"',
     'TTYD_INDEX_FILE = HHS_CACHE_DIR / "streamlit-ttyd-index.html"',
-    'return (hhs_ui.HHS_CACHE_DIR / ".streamlit-ui-state",)',
+    'return (hhs_ui_constants.HHS_CACHE_DIR / ".streamlit-ui-state",)',
     'return (hhs_ui.HHS_CACHE_DIR / ".streamlit-ui-cache",)',
     (
         'HHS_STREAMLIT_UI_RUNTIME_DIR="${HHS_STREAMLIT_UI_RUNTIME_DIR:-'
@@ -353,9 +365,10 @@ required_fragments = (
     "queue_ai_context_action(",
     "build_hhs_ask_ingest_command(str(tmp_file_path))",
     "def safe_background_job_name(job_name: str) -> str:",
-    "def background_job_output_path(job_name: str, stream_name: str) -> Path:",
-    'stdout_path = str(background_job_output_path(job_name, "stdout"))',
-    'stderr_path = str(background_job_output_path(job_name, "stderr"))',
+    "def background_job_session_token() -> str:",
+    "def background_job_output_path(",
+    'background_job_output_path(job_name, "stdout", session_token)',
+    'background_job_output_path(job_name, "stderr", session_token)',
     'download_dir = ui_disposable_files_dir() / "hhs-search-open.dir"',
     "shutil.rmtree(download_dir, ignore_errors=True)",
     "download_dir.mkdir(parents=True, exist_ok=True)",
@@ -398,7 +411,7 @@ PY
 
   assert_file_contains_many "${ui_file}" \
 'status == "Downloaded"' 'color: #4da3ff'
-  run grep -q -- '--hhs-model-accent: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
+  run grep -q -- '--hhs-model-accent: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
   assert_success
 }
 

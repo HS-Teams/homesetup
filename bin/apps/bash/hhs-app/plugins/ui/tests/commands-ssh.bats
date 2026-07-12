@@ -182,7 +182,8 @@ PY
   assert_success
 
   assert_file_contains_many "${ssh_core_file}" \
-'ControlMaster=auto' 'ConnectionAttempts=1' 'def build_ssh_wrapped_command' 'bash -ic' \
+'ControlMaster=auto' 'ConnectionAttempts=1' 'def build_ssh_wrapped_command' \
+    'ssh -T' 'bash --noprofile --norc -c' \
     'safe_remote_shell = shlex.quote'
   assert_file_contains_many "${terminal_ui_file}" '"ssh",' '"-tt",'
   assert_file_not_contains_many "${ui_file}" \
@@ -289,7 +290,7 @@ PY
   run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
   assert_success
 
-  run cmp -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2" "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
+  run cmp -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2" "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
   assert_success
 
   assert_file_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/components/ssh_explorer/index.html" \

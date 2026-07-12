@@ -34,7 +34,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 '_hhs_footer_visibility_sequence' 'dataset.hhsFooterVisibilitySequence'
   assert_file_not_contains "${css_file}" '.hhs-footer-hidden .hhs-app-footer'
 
-  assert_file_contains "${ui_file}" 'timeout_seconds=effective_timeout'
+  assert_file_contains "${command_runtime_file}" 'timeout_seconds=effective_timeout'
   assert_file_contains "${dialog_ui_file}" 'def close_all_dialogs()'
   assert_file_contains_many "${feedback_ui_file}" \
 'close_all_dialogs()' \
@@ -68,9 +68,10 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'events.finish.subscribe(cb_event_handler=enqueue_command_preloader_event)' '"hhs:command-preloader"'
   assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/core/ui_definitions.py" \
     'COMMAND_PRELOADER_BUS = "hhs-ui-command-preloader"'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${command_runtime_file}" \
     'show_preloader_event: bool = False' '"preloader_token": command_preloader_token' \
-    'finish_background_job_preloader(' 'show_preloader_event=True'
+    'finish_background_job_preloader('
+  assert_file_contains "${ui_file}" 'show_preloader_event=True'
   run python3 - "${feedback_ui_file}" <<'PY'
 from pathlib import Path
 import html
@@ -118,7 +119,8 @@ assert 'data-hhs-preloader-token="search_command:token&amp;1"' in rendered
 PY
   assert_success
 
-  run python3 - "${feedback_ui_file}" "${ui_file}" "${command_runtime_file}" <<'PY'
+  run python3 - "${feedback_ui_file}" "${ui_file}" "${command_runtime_file}" \
+    "${footer_ui_file}" <<'PY'
 from pathlib import Path
 import ast
 import html
@@ -128,6 +130,7 @@ import types
 feedback_source = Path(sys.argv[1]).read_text(encoding="utf-8")
 ui_source = Path(sys.argv[2]).read_text(encoding="utf-8")
 command_runtime_source = Path(sys.argv[3]).read_text(encoding="utf-8")
+footer_source = Path(sys.argv[4]).read_text(encoding="utf-8")
 start = feedback_source.index("def loader_label_html(")
 end = feedback_source.index("def render_command_loader_timer(")
 namespace = {
@@ -167,8 +170,8 @@ assert 'typeof parentWindow.__hhsRenderCommandElapsed !== "function"' in feedbac
 assert "def command_overlay_close_button_html" in feedback_source
 assert "def command_overlay_close_helper_js" in feedback_source
 assert "def stop_background_job_by_preloader_token" in command_runtime_source
-assert "def handle_command_preloader_cancel_action" in ui_source
-assert "hhs_ui.COMMAND_PRELOADER_CANCEL_QUERY_PARAM" in ui_source
+assert "def handle_command_preloader_cancel_action" in footer_source
+assert "hhs_ui.COMMAND_PRELOADER_CANCEL_QUERY_PARAM" in footer_source
 assert 'class="hhs-tab-loader-close"' in feedback_source
 assert "bindCommandOverlayClose(overlay)" in feedback_source
 assert "bindCommandLoaderClose(loader)" in feedback_source
@@ -241,7 +244,7 @@ PY
 'elapsed_ratio >= 0.3 && elapsed_ratio < 0.6' 'elapsedRatio >= 0.3 && elapsedRatio < 0.6'
   assert_file_contains_many "${feedback_ui_file}" \
 'hhs-loader-elapsed-warning' 'hhs-loader-elapsed-danger'
-  assert_file_contains "${ui_file}" 'set_overlay(False)'
+  assert_file_contains "${command_runtime_file}" 'set_overlay(False)'
   assert_file_contains_many "${command_runtime_file}" \
 'def run_bash_subprocess' \
     'result = run_bash_subprocess(command_to_run, effective_timeout)' 'subprocess.Popen(' \
@@ -267,5 +270,5 @@ PY
 
   assert_file_contains_many "${css_file}" \
 'height: 0 !important' 'position: fixed'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css" 'background: var(--hhs-background)'
+  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css" 'background: var(--hhs-background)'
 }

@@ -25,21 +25,27 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   run test -s "${css_file}"
   assert_success
 
-  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/assets/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
+  run test -s "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/fonts/Droid-Sans-Mono-for-Powerline-Nerd-Font-Complete.woff2"
   assert_success
 
   assert_file_contains_many "${constants_file}" \
-'APP_CSS_FILE = APP_DIR / "streamlit_ui.css"' \
+'APP_STATIC_DIR = APP_DIR / "static"' \
+'APP_CSS_FILE = APP_STATIC_DIR / "css/streamlit_ui.css"' \
     'APP_FONT_FAMILY = "Droid Sans Mono for Powerline Nerd Font Complete"'
+  assert_file_contains_many "${theme_assets_file}" \
+'def static_asset_url' 'def app_font_url' '/app/static/' \
+    '<link rel="stylesheet" href="{app_css_url}">' \
+    '<link rel="stylesheet" href="{theme_css_url}">'
+  assert_file_not_contains "${theme_assets_file}" 'def load_app_font_data_uri'
   run grep -q -- '--hhs-ui-font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace' "${css_file}"
   assert_success
 
   assert_file_contains "${css_file}" 'overflow-x: hidden'
 
-  run grep -q -- '--hhs-theme-background-color: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
+  run grep -q -- '--hhs-theme-background-color: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-background: var(--hhs-theme-background-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
+  run grep -q -- '--hhs-background: var(--hhs-theme-background-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
   assert_success
 
   assert_file_contains_many "${theme_assets_file}" \
@@ -136,13 +142,13 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_contains_many "${css_file}" \
 '.st-key-ssh_connect_button button' '.st-key-ssh_disconnect_button button' 'background: #16a34a' \
     'background: #dc2626' 'color: #ffffff' 'min-height: 2.55rem'
-  run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
+  run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-markdown-table-value: var(--hhs-theme-primary-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
+  run grep -q -- '--hhs-markdown-table-value: var(--hhs-theme-primary-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-theme-text-color-accent:' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/themes/dracula.css"
+  run grep -q -- '--hhs-theme-text-color-accent:' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
   assert_success
 
   assert_file_contains_many "${css_file}" \

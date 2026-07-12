@@ -114,7 +114,7 @@ PY
 
 @test "when choosing footer cleanup options then button controls must avoid checkbox inputs" {
   run python3 - "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/widgets/footer_ui.py" \
-    "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/streamlit_ui.css" <<'PY'
+    "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/css/streamlit_ui.css" <<'PY'
 import sys
 from pathlib import Path
 

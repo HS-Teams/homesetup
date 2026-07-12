@@ -15,7 +15,7 @@ HHS_DIR = Path(os.environ.get("HHS_DIR", str(APP_DIR))).expanduser()
 HHS_CACHE_DIR = Path(os.environ.get("HHS_CACHE_DIR", str(HHS_DIR / "cache"))).expanduser()
 UI_STATE_FILE = HHS_CACHE_DIR / "streamlit-ui-state.json"
 LEGACY_UI_STATE_FILE = HHS_CACHE_DIR / ".streamlit-ui-state"
-THEMES_DIR = HHS_HOME / "bin/apps/py/hhs_ui/themes"
+THEMES_DIR = HHS_HOME / "bin/apps/py/hhs_ui/static/themes"
 DEFAULT_THEME_NAME = "dracula"
 THEME_SELECTED_KEY = "theme_selected"
 

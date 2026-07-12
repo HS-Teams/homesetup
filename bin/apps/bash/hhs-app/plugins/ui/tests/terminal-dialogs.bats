@@ -24,7 +24,9 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 @test "when confirming actions then reusable pop_dialog component should be used" {
   assert_file_contains_many "${ui_file}" \
 'render_folder_picker_dialog()' \
-    'execute_pending_dialog_callback()' 'st.session_state\["_hhs_dialog_dismiss_requested"\] = True'
+    'execute_pending_dialog_callback()'
+  assert_file_contains "${ssh_runtime_file}" \
+    'st.session_state\["_hhs_dialog_dismiss_requested"\] = True'
   assert_file_contains_many "${dialog_ui_file}" \
 'def pop_dialog(' \
     'def queue_dialog_callback' 'def execute_pending_dialog_callback' 'def handle_dialog_button_click' \
@@ -203,7 +205,7 @@ PY
   assert_file_not_contains_many "${terminal_ui_file}" \
 "def normalize_terminal_ai_request" "def store_terminal_ai_request" "def pop_footer_terminal_ai_request" \
     "def terminal_ai_request_endpoint_url" '"/terminal-ai-request"' "handle_terminal_ai_request"
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${footer_ui_file}" \
 "contextDelayMs = 700" "requestTerminalContext(true)" "requestTerminalContext(false)" \
     "waitForTerminalContextEvent(contextDelayMs)"
   assert_file_contains "${terminal_ui_file}" "parentWindow.__hhsTtydEventUrl"
@@ -325,7 +327,7 @@ disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
 connect_index = main_body.index("execute_pending_ssh_connection()")
 ssh_dialog_index = main_body.index("render_ssh_connection_dialog()")
 ai_initialize_index = main_body.index("initialize_ollama_service_availability()")
-ai_refresh_index = main_body.index("update_ollama_service_availability_refresh()")
+ai_refresh_index = main_body.index("render_ollama_service_availability_polling_fragment()")
 background_poll_index = main_body.index("render_background_job_polling_fragment()")
 footer_actions_index = main_body.index("handle_footer_actions()")
 updater_status_index = main_body.index("render_background_job_status(UPDATER_UPDATE_JOB)")
@@ -401,7 +403,7 @@ PY
   assert_file_contains_many "${css_file}" \
 'max-height: var(--hhs-ttyd-max-height, 760px)' 'background: var(--hhs-terminal-background-color, #000000)' \
     'height: calc(100% - 20px)' 'width: calc(100% - 20px)'
-  for theme_file in "${HHS_REPO_DIR}"/bin/apps/py/hhs_ui/themes/*.css; do
+  for theme_file in "${HHS_REPO_DIR}"/bin/apps/py/hhs_ui/static/themes/*.css; do
     run grep -q -- '--hhs-terminal-background-color: #000000' "${theme_file}"
     assert_success
 

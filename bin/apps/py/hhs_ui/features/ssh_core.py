@@ -211,12 +211,21 @@ def build_ssh_disconnect_command(host: str) -> str:
 
 
 def build_ssh_wrapped_command(command: str, host: str) -> str:
-    """Build a command that executes the provided Bash command over SSH Bash."""
+    """Build a non-interactive SSH command with explicit HomeSetup defaults."""
     safe_host = shlex.quote(host)
     safe_control_path = shlex.quote(ssh_control_path(host))
-    safe_remote_command = shlex.quote(command)
-    safe_remote_shell = shlex.quote(f"bash -ic {safe_remote_command}")
+    remote_environment = (
+        'export HHS_HOME="${HHS_HOME:-${HOME}/HomeSetup}"; '
+        'export HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"; '
+        'export HHS_CACHE_DIR="${HHS_CACHE_DIR:-${HHS_DIR}/cache}"; '
+        'export HHS_LOG_DIR="${HHS_LOG_DIR:-${HHS_DIR}/log}"; '
+        'export HHS_MY_SHELL="${HHS_MY_SHELL:-bash}"; '
+    )
+    safe_remote_command = shlex.quote(f"{remote_environment}{command}")
+    safe_remote_shell = shlex.quote(
+        f"bash --noprofile --norc -c {safe_remote_command}"
+    )
     return (
-        f"ssh -tt {ssh_config_option()} {ssh_batch_options()} "
+        f"ssh -T {ssh_config_option()} {ssh_batch_options()} "
         f"-o ControlPath={safe_control_path} {safe_host} {safe_remote_shell}"
     )

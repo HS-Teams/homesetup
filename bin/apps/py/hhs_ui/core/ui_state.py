@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 
 import streamlit as st
@@ -46,13 +47,28 @@ def is_persistable_ui_value(value: object) -> bool:
     return False
 
 
-def read_ui_state_file(state_file: Path) -> dict[str, object] | None:
-    """Return a JSON object from one UI state file, if valid."""
+@lru_cache(maxsize=32)
+def cached_ui_state_file(
+    state_file: str, modified_token: int, size_token: int
+) -> dict[str, object] | None:
+    """Return cached JSON state keyed by path and filesystem identity tokens."""
+    del modified_token, size_token
     try:
-        data = json.loads(state_file.read_text(encoding="utf-8"))
+        data = json.loads(Path(state_file).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def read_ui_state_file(state_file: Path) -> dict[str, object] | None:
+    """Return a JSON object from one UI state file, if valid."""
+    try:
+        file_stat = state_file.stat()
+    except OSError:
+        return None
+    return cached_ui_state_file(
+        str(state_file), file_stat.st_mtime_ns, file_stat.st_size
+    )
 
 
 def load_ui_state() -> dict[str, object]:

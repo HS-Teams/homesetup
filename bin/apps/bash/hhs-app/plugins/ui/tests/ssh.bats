@@ -70,6 +70,33 @@ PY
   assert_success
 }
 
+@test "when running remote UI commands then interactive shell startup is bypassed" {
+  run python3 - "${ssh_core_file}" <<'PY'
+import shlex
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def build_ssh_wrapped_command(")
+namespace = {
+    "shlex": shlex,
+    "ssh_control_path": lambda host: f"/tmp/{host}.sock",
+    "ssh_config_option": lambda: '-F "${HOME}/.ssh/config"',
+    "ssh_batch_options": lambda: "-o BatchMode=yes",
+}
+exec("from __future__ import annotations\n" + source[start:], namespace)
+command = namespace["build_ssh_wrapped_command"]("printf ready", "example")
+assert command.startswith('ssh -T -F "${HOME}/.ssh/config" -o BatchMode=yes')
+assert "ssh -tt" not in command
+assert "bash -ic" not in command
+assert "bash --noprofile --norc -c" in command
+assert 'HHS_HOME="${HHS_HOME:-${HOME}/HomeSetup}"' in command
+assert 'HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"' in command
+assert "printf ready" in command
+PY
+  assert_success
+}
+
 @test "when remote SSH command closes then Streamlit UI should reconnect on demand" {
   assert_file_contains_many "${command_catalog_file}" \
 'def ssh_shared_connection_closed' 'def sanitize_remote_command_result'

@@ -38,6 +38,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import hhs_ui
 import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.core.performance import measure_ui_phase, timed_ui_phase
 from hhs_ui.execution.command_catalog import (
     normalized_monitor_top_n,
     normalized_history_stats_top_n,
@@ -1730,16 +1731,27 @@ def schedule_ollama_service_availability_refresh() -> None:
     start_hhs_services_list_refresh()
 
 
-def update_ollama_service_availability_refresh() -> None:
-    """Complete or poll the services refresh that drives AI tab visibility."""
+def complete_ollama_service_availability_refresh() -> None:
+    """Consume a completed services refresh and update AI tab visibility."""
     previous_availability = ollama_service_is_available()
     result = complete_hhs_services_list_refresh()
     if result is not None and ollama_service_is_available() != previous_availability:
         st.rerun()
+
+
+def update_ollama_service_availability_refresh() -> None:
+    """Schedule service discovery when its host-scoped result is due."""
+    complete_ollama_service_availability_refresh()
     if background_job_is_running(SERVICE_LIST_JOB):
         return
     if ollama_service_availability_refresh_due():
         start_hhs_services_list_refresh(completion_rerun=False)
+
+
+@st.fragment(run_every="30s")
+def render_ollama_service_availability_polling_fragment() -> None:
+    """Refresh AI service discovery independently from command job polling."""
+    update_ollama_service_availability_refresh()
 
 
 def filter_tool_rows(
@@ -3950,7 +3962,9 @@ def configure_command_runtime_dependencies() -> None:
         handle_remote_command_result=handle_remote_command_result,
         ssh_connection_is_alive=ssh_connection_is_alive,
         ui_disposable_files_dir=ui_disposable_files_dir,
-        update_ollama_service_availability_refresh=update_ollama_service_availability_refresh,
+        complete_ollama_service_availability_refresh=(
+            complete_ollama_service_availability_refresh
+        ),
     )
 
 
@@ -4019,9 +4033,13 @@ def configure_search_ui_dependencies() -> None:
     )
 
 
-def main() -> None:
-    """Configure and render the HomeSetup Streamlit UI."""
-    install_footer_status_log_handler()
+def configure_runtime_dependencies() -> None:
+    """Wire cross-module callbacks once per UI version and browser session."""
+    configured_version = st.session_state.get(
+        "_hhs_runtime_dependencies_configured_version"
+    )
+    if configured_version == hhs_ui.VERSION:
+        return
     configure_dialog_runtime_dependencies()
     configure_dom_script_dependencies()
     configure_feedback_runtime_dependencies()
@@ -4037,6 +4055,272 @@ def main() -> None:
     configure_ssh_explorer_ui_dependencies()
     configure_footer_ui_dependencies()
     configure_search_ui_dependencies()
+    st.session_state["_hhs_runtime_dependencies_configured_version"] = hhs_ui.VERSION
+
+
+def initialize_core_session_state() -> None:
+    """Initialize app-wide session state once for a browser session."""
+    initialized_version = st.session_state.get(
+        "_hhs_core_session_state_initialized_version"
+    )
+    if initialized_version == hhs_ui.VERSION:
+        return
+    st.session_state.setdefault("active_view", "Home")
+    st.session_state.setdefault("ai_chat_messages", [])
+    st.session_state.setdefault(hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY, False)
+    st.session_state.setdefault(
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY, False
+    )
+    st.session_state.setdefault(
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY, ""
+    )
+    st.session_state.setdefault(
+        hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY, 0.0
+    )
+    if not isinstance(st.session_state["ai_chat_messages"], list):
+        st.session_state["ai_chat_messages"] = []
+    for state_key, default_value in (
+        ("ai_clear_chat_pending", False),
+        ("ai_clear_chat_execute_pending", False),
+        ("ai_context_action_execute_pending", None),
+        ("ai_prompt_action_execute_pending", None),
+        ("ai_model_select_pending", None),
+        ("ai_model_select_execute_pending", None),
+        ("ai_model_select_error", ""),
+        ("ai_model_delete_pending", None),
+        ("ai_model_delete_execute_pending", None),
+        ("ai_model_delete_error", ""),
+        ("ai_context_output", ""),
+        ("ai_context_error", ""),
+        ("ai_prompt_editor", ""),
+        ("ai_prompt_error", ""),
+        ("ai_prompt_loaded", False),
+    ):
+        st.session_state.setdefault(state_key, default_value)
+    for state_key in ("ai_model_performance_timings",):
+        if not isinstance(st.session_state.setdefault(state_key, []), list):
+            st.session_state[state_key] = []
+    for state_key in (
+        "ai_model_performance_averages",
+        "ai_model_performance_sample_counts",
+    ):
+        if not isinstance(st.session_state.setdefault(state_key, {}), dict):
+            st.session_state[state_key] = {}
+    if not isinstance(st.session_state["ai_prompt_editor"], str):
+        st.session_state["ai_prompt_editor"] = ""
+    if not isinstance(st.session_state["ai_prompt_error"], str):
+        st.session_state["ai_prompt_error"] = ""
+    if not isinstance(st.session_state["ai_prompt_loaded"], bool):
+        st.session_state["ai_prompt_loaded"] = False
+    st.session_state.setdefault("ai_view", "CHAT")
+    if st.session_state["ai_view"] not in hhs_ui.AI_VIEWS:
+        st.session_state["ai_view"] = "CHAT"
+    st.session_state.setdefault(hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY, False)
+    st.session_state.setdefault(hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY, "Home")
+    st.session_state.setdefault(hhs_ui.DOCUMENT_SELECTED_KEY, "README")
+    for state_key, default_value in (
+        ("ssh_host_selected", local_hostname()),
+        ("ssh_connect_pending", ""),
+        ("ssh_connect_pending_message", ""),
+        ("ssh_disconnect_pending", ""),
+        ("ssh_connection_status", ""),
+        ("ssh_connection_host", ""),
+        ("ssh_connection_error", ""),
+        ("ssh_connection_dialog_title", ""),
+        ("ssh_explorer_delete_pending", None),
+        (hhs_ui.SSH_RECONNECT_HOST_KEY, ""),
+    ):
+        st.session_state.setdefault(state_key, default_value)
+    st.session_state["_hhs_core_session_state_initialized_version"] = hhs_ui.VERSION
+
+
+def initialize_feature_session_state() -> None:
+    """Initialize feature-specific state once after the execution host is known."""
+    initialized_version = st.session_state.get(
+        "_hhs_feature_session_state_initialized_version"
+    )
+    if initialized_version == hhs_ui.VERSION:
+        return
+    defaults = (
+        ("home_view", "System"),
+        ("hhs_view", "SETUP"),
+        ("home_tools_filter", "All"),
+        ("home_tools_other_filter", ""),
+        (hhs_ui.HOME_TOOLS_TABLE_RESET_COUNTER_KEY, 0),
+        ("home_shopts_filter", "All"),
+        ("home_shopts_other_filter", ""),
+        (hhs_ui.HOME_SHOPTS_TABLE_RESET_COUNTER_KEY, 0),
+        ("home_tool_action_execute_pending", None),
+        ("home_tool_tldr_execute_pending", None),
+        ("config_action_execute_pending", None),
+        ("hhs_setup_action_execute_pending", None),
+        ("hhs_settings_action_execute_pending", None),
+        ("hhs_starship_action_execute_pending", None),
+        ("docker_action_execute_pending", None),
+        ("config_view", "ENV"),
+        ("env_filter", "All"),
+        ("env_other_filter", ""),
+        ("history_view", "COMMANDS"),
+        ("monitor_view", "DISK"),
+        ("search_type", "Files"),
+        ("search_directories", []),
+        ("search_query", None),
+        ("search_ignore_case", False),
+        ("search_words", False),
+        ("search_binary", False),
+        ("search_replace", False),
+        ("search_replacement", ""),
+        ("search_result_query", ""),
+        ("search_result_ignore_case", False),
+        ("search_result_words", False),
+        ("search_result_binary", False),
+        ("search_result_replace", False),
+        ("search_result_replacement", ""),
+        ("search_open_execute_pending", None),
+        ("search_filter", "All"),
+        ("search_other_filter", ""),
+        ("search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE),
+        ("ssh_view", "TUNNELS"),
+        ("ssh_tunnel_filter", "All"),
+        ("ssh_tunnel_other_filter", ""),
+        ("monitor_process_filter", "All"),
+        ("monitor_process_other_filter", ""),
+        ("monitor_process_action_execute_pending", None),
+        ("monitor_log_file", ""),
+        ("monitor_log_filter", "All"),
+        ("monitor_log_other_filter", ""),
+        ("monitor_log_level", "ALL_LEVELS"),
+        ("monitor_logs_tail", True),
+        ("alias_filter", "All"),
+        ("path_filter", "All"),
+        ("dirs_filter", "All"),
+        ("cmds_filter", "All"),
+        ("service_filter", "All"),
+        ("ssh_explorer_action_execute_pending", None),
+        ("ssh_explorer_delete_execute_pending", None),
+        ("history_commands_filter", "All"),
+        ("history_directories_filter", "All"),
+    )
+    for state_key, default_value in defaults:
+        st.session_state.setdefault(state_key, default_value)
+
+    view_defaults = (
+        ("home_view", hhs_ui.HOME_VIEWS, "System"),
+        ("hhs_view", hhs_ui.HHS_VIEWS, "SETUP"),
+        ("config_view", hhs_ui.CONFIG_VIEWS, "ENV"),
+        ("history_view", hhs_ui.HISTORY_VIEWS, "COMMANDS"),
+        ("monitor_view", hhs_ui.MONITOR_VIEWS, "DISK"),
+        ("search_filter", hhs_ui.SEARCH_FILTERS, "All"),
+        ("ssh_view", hhs_ui.SSH_VIEWS, "TUNNELS"),
+    )
+    for state_key, allowed_values, default_value in view_defaults:
+        if st.session_state[state_key] not in allowed_values:
+            st.session_state[state_key] = default_value
+
+    if st.session_state["home_tools_filter"] == "Not Found":
+        st.session_state["home_tools_filter"] = "Not Installed"
+    filter_options = (
+        ("home_tools_filter", hhs_ui.HOME_TOOLS_FILTERS),
+        ("home_shopts_filter", hhs_ui.SHOPTS_FILTERS),
+        ("env_filter", hhs_ui.ENV_FILTERS),
+        ("ssh_tunnel_filter", hhs_ui.SSH_TUNNEL_FILTERS),
+        ("monitor_log_filter", hhs_ui.LOG_FILTERS),
+        ("alias_filter", hhs_ui.LIST_FILTERS),
+        ("path_filter", hhs_ui.PATH_FILTERS),
+        ("dirs_filter", hhs_ui.LIST_FILTERS),
+        ("cmds_filter", hhs_ui.LIST_FILTERS),
+        ("history_commands_filter", hhs_ui.HISTORY_FILTERS),
+        ("history_directories_filter", hhs_ui.HISTORY_FILTERS),
+    )
+    for state_key, options in filter_options:
+        st.session_state[state_key] = normalized_table_filter_selection(
+            st.session_state[state_key], options
+        )
+
+    st.session_state["search_type"] = normalized_search_type(
+        st.session_state.get("search_type")
+    )
+    initialize_search_directory_home_default()
+    st.session_state["search_directories"] = normalize_search_directories(
+        st.session_state.get("search_directories", []),
+        str(st.session_state.get("search_path", "")),
+    )
+    st.session_state.setdefault("search_result_type", st.session_state["search_type"])
+    st.session_state["search_result_type"] = normalized_search_type(
+        st.session_state.get("search_result_type")
+    )
+    st.session_state.setdefault("search_result_path", st.session_state["search_path"])
+    if not str(st.session_state.get("search_result_path", "")).strip():
+        st.session_state["search_result_path"] = st.session_state["search_path"]
+
+    normalize_monitor_process_filter_state()
+    default_disk_directory = monitor_default_disk_directory()
+    st.session_state.setdefault("monitor_disk_directory", default_disk_directory)
+    if not str(st.session_state["monitor_disk_directory"]).strip():
+        st.session_state["monitor_disk_directory"] = default_disk_directory
+    st.session_state.setdefault(
+        "monitor_disk_directory_applied",
+        st.session_state["monitor_disk_directory"],
+    )
+    synchronize_monitor_disk_directory_with_host()
+    st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
+        st.session_state.get("monitor_disk_top_n")
+    )
+    for metric in ("CPU", "MEM"):
+        top_n_key = monitor_process_top_n_state_key(metric)
+        st.session_state[top_n_key] = normalized_monitor_top_n(
+            st.session_state.get(top_n_key)
+        )
+    st.session_state["monitor_log_level"] = selected_monitor_log_level()
+    st.session_state["monitor_log_tail_lines"] = normalized_monitor_log_tail_lines(
+        st.session_state.get("monitor_log_tail_lines")
+    )
+    if st.session_state["service_filter"] == "Started":
+        st.session_state["service_filter"] = "Up"
+    elif st.session_state["service_filter"] == "Stopped":
+        st.session_state["service_filter"] = "Down"
+    st.session_state["service_filter"] = normalized_table_filter_selection(
+        st.session_state["service_filter"], hhs_ui.SERVICE_FILTERS
+    )
+    normalize_persisted_table_text_filter_states(
+        *(
+            key
+            for key in hhs_ui_constants.PERSISTED_UI_KEYS
+            if isinstance(key, str) and key.endswith("_other_filter")
+        )
+    )
+    st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(
+        st.session_state.get("history_stats_top_n")
+    )
+    st.session_state["_hhs_feature_session_state_initialized_version"] = (
+        hhs_ui.VERSION
+    )
+
+
+def normalize_monitor_process_filter_state() -> None:
+    """Normalize legacy process-filter state during session initialization."""
+    other_filter = clean_table_text_filter_value(
+        st.session_state.get("monitor_process_other_filter")
+    )
+    filter_value = st.session_state.get("monitor_process_filter")
+    process_filter = "" if filter_value is None else str(filter_value).strip()
+    if not process_filter or process_filter == "None":
+        process_filter = "All"
+        other_filter = ""
+    elif process_filter in ("Other", "Others"):
+        process_filter = "Containing"
+    elif process_filter not in hhs_ui.PROCESS_FILTERS:
+        other_filter = process_filter
+        process_filter = "Containing"
+    st.session_state["monitor_process_filter"] = process_filter
+    st.session_state["monitor_process_other_filter"] = other_filter
+
+
+@timed_ui_phase("main")
+def main() -> None:
+    """Configure and render the HomeSetup Streamlit UI."""
+    install_footer_status_log_handler()
+    configure_runtime_dependencies()
     selected_theme = persisted_theme_name()
     configure_app_font_theme(selected_theme)
     st.set_page_config(
@@ -4061,69 +4345,7 @@ def main() -> None:
     render_styles()
     if st.session_state.get("theme_reload_pending"):
         render_theme_reload_overlay()
-    st.session_state.setdefault("active_view", "Home")
-    st.session_state.setdefault("ai_chat_messages", [])
-    st.session_state.setdefault(hhs_ui_constants.AI_SERVICE_AVAILABLE_KEY, False)
-    st.session_state.setdefault(
-        hhs_ui_constants.AI_SERVICE_AVAILABILITY_LOADED_KEY,
-        False,
-    )
-    st.session_state.setdefault(
-        hhs_ui_constants.AI_SERVICE_AVAILABILITY_CONTEXT_KEY,
-        "",
-    )
-    st.session_state.setdefault(
-        hhs_ui_constants.AI_SERVICE_AVAILABILITY_REFRESHED_AT_KEY,
-        0.0,
-    )
-    if not isinstance(st.session_state["ai_chat_messages"], list):
-        st.session_state["ai_chat_messages"] = []
-    st.session_state.setdefault("ai_clear_chat_pending", False)
-    st.session_state.setdefault("ai_clear_chat_execute_pending", False)
-    st.session_state.setdefault("ai_context_action_execute_pending", None)
-    st.session_state.setdefault("ai_prompt_action_execute_pending", None)
-    st.session_state.setdefault("ai_model_select_pending", None)
-    st.session_state.setdefault("ai_model_select_execute_pending", None)
-    st.session_state.setdefault("ai_model_select_error", "")
-    st.session_state.setdefault("ai_model_delete_pending", None)
-    st.session_state.setdefault("ai_model_delete_execute_pending", None)
-    st.session_state.setdefault("ai_model_delete_error", "")
-    st.session_state.setdefault("ai_model_performance_timings", [])
-    if not isinstance(st.session_state["ai_model_performance_timings"], list):
-        st.session_state["ai_model_performance_timings"] = []
-    st.session_state.setdefault("ai_model_performance_averages", {})
-    if not isinstance(st.session_state["ai_model_performance_averages"], dict):
-        st.session_state["ai_model_performance_averages"] = {}
-    st.session_state.setdefault("ai_model_performance_sample_counts", {})
-    if not isinstance(st.session_state["ai_model_performance_sample_counts"], dict):
-        st.session_state["ai_model_performance_sample_counts"] = {}
-    st.session_state.setdefault("ai_context_output", "")
-    st.session_state.setdefault("ai_context_error", "")
-    st.session_state.setdefault("ai_prompt_editor", "")
-    if not isinstance(st.session_state["ai_prompt_editor"], str):
-        st.session_state["ai_prompt_editor"] = ""
-    st.session_state.setdefault("ai_prompt_error", "")
-    if not isinstance(st.session_state["ai_prompt_error"], str):
-        st.session_state["ai_prompt_error"] = ""
-    st.session_state.setdefault("ai_prompt_loaded", False)
-    if not isinstance(st.session_state["ai_prompt_loaded"], bool):
-        st.session_state["ai_prompt_loaded"] = False
-    st.session_state.setdefault("ai_view", "CHAT")
-    if st.session_state["ai_view"] not in hhs_ui.AI_VIEWS:
-        st.session_state["ai_view"] = "CHAT"
-    st.session_state.setdefault(hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY, False)
-    st.session_state.setdefault(hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY, "Home")
-    st.session_state.setdefault(hhs_ui.DOCUMENT_SELECTED_KEY, "README")
-    st.session_state.setdefault("ssh_host_selected", local_hostname())
-    st.session_state.setdefault("ssh_connect_pending", "")
-    st.session_state.setdefault("ssh_connect_pending_message", "")
-    st.session_state.setdefault("ssh_disconnect_pending", "")
-    st.session_state.setdefault("ssh_connection_status", "")
-    st.session_state.setdefault("ssh_connection_host", "")
-    st.session_state.setdefault("ssh_connection_error", "")
-    st.session_state.setdefault("ssh_connection_dialog_title", "")
-    st.session_state.setdefault("ssh_explorer_delete_pending", None)
-    st.session_state.setdefault(hhs_ui.SSH_RECONNECT_HOST_KEY, "")
+    initialize_core_session_state()
     restore_registered_ssh_connection_on_session_start()
     synchronize_selected_ssh_host_with_connection()
     if selected_host_is_local():
@@ -4141,205 +4363,27 @@ def main() -> None:
     if render_ssh_connection_dialog():
         return
     initialize_ollama_service_availability()
-    update_ollama_service_availability_refresh()
+    render_ollama_service_availability_polling_fragment()
     handle_footer_actions()
     render_background_job_status(UPDATER_UPDATE_JOB)
     render_footer_shell_version_dialog()
-    st.session_state.setdefault("home_view", "System")
-    if st.session_state["home_view"] not in hhs_ui.HOME_VIEWS:
-        st.session_state["home_view"] = "System"
-    st.session_state.setdefault("hhs_view", "SETUP")
-    if st.session_state["hhs_view"] not in hhs_ui.HHS_VIEWS:
-        st.session_state["hhs_view"] = "SETUP"
-    st.session_state.setdefault("home_tools_filter", "All")
-    if st.session_state["home_tools_filter"] == "Not Found":
-        st.session_state["home_tools_filter"] = "Not Installed"
-    st.session_state["home_tools_filter"] = normalized_table_filter_selection(
-        st.session_state["home_tools_filter"], hhs_ui.HOME_TOOLS_FILTERS
-    )
-    st.session_state.setdefault("home_tools_other_filter", "")
-    st.session_state.setdefault(hhs_ui.HOME_TOOLS_TABLE_RESET_COUNTER_KEY, 0)
-    st.session_state.setdefault("home_shopts_filter", "All")
-    st.session_state["home_shopts_filter"] = normalized_table_filter_selection(
-        st.session_state["home_shopts_filter"], hhs_ui.SHOPTS_FILTERS
-    )
-    st.session_state.setdefault("home_shopts_other_filter", "")
-    st.session_state.setdefault(hhs_ui.HOME_SHOPTS_TABLE_RESET_COUNTER_KEY, 0)
-    st.session_state.setdefault("home_tool_action_execute_pending", None)
-    st.session_state.setdefault("home_tool_tldr_execute_pending", None)
-    st.session_state.setdefault("config_action_execute_pending", None)
-    st.session_state.setdefault("hhs_setup_action_execute_pending", None)
-    st.session_state.setdefault("hhs_settings_action_execute_pending", None)
-    st.session_state.setdefault("hhs_starship_action_execute_pending", None)
-    st.session_state.setdefault("docker_action_execute_pending", None)
-    st.session_state.setdefault("config_view", "ENV")
-    if st.session_state["config_view"] not in hhs_ui.CONFIG_VIEWS:
-        st.session_state["config_view"] = "ENV"
-    st.session_state.setdefault("env_filter", "All")
-    st.session_state["env_filter"] = normalized_table_filter_selection(
-        st.session_state["env_filter"], hhs_ui.ENV_FILTERS
-    )
-    st.session_state.setdefault("env_other_filter", "")
-    st.session_state.setdefault("history_view", "COMMANDS")
-    if st.session_state["history_view"] not in hhs_ui.HISTORY_VIEWS:
-        st.session_state["history_view"] = "COMMANDS"
-    st.session_state.setdefault("monitor_view", "DISK")
-    if st.session_state["monitor_view"] not in hhs_ui.MONITOR_VIEWS:
-        st.session_state["monitor_view"] = "DISK"
-    st.session_state.setdefault("search_type", "Files")
-    st.session_state["search_type"] = normalized_search_type(
-        st.session_state.get("search_type")
-    )
+    initialize_feature_session_state()
     initialize_search_directory_home_default()
-    st.session_state.setdefault("search_directories", [])
-    st.session_state["search_directories"] = normalize_search_directories(
-        st.session_state.get("search_directories", []),
-        str(st.session_state.get("search_path", "")),
-    )
-    st.session_state.setdefault("search_query", None)
-    st.session_state.setdefault("search_ignore_case", False)
-    st.session_state.setdefault("search_words", False)
-    st.session_state.setdefault("search_binary", False)
-    st.session_state.setdefault("search_replace", False)
-    st.session_state.setdefault("search_replacement", "")
-    st.session_state.setdefault("search_result_type", st.session_state["search_type"])
-    st.session_state["search_result_type"] = normalized_search_type(
-        st.session_state.get("search_result_type")
-    )
-    st.session_state.setdefault("search_result_path", st.session_state["search_path"])
-    if not str(st.session_state.get("search_result_path", "")).strip():
-        st.session_state["search_result_path"] = st.session_state["search_path"]
-    st.session_state.setdefault("search_result_query", "")
-    st.session_state.setdefault("search_result_ignore_case", False)
-    st.session_state.setdefault("search_result_words", False)
-    st.session_state.setdefault("search_result_binary", False)
-    st.session_state.setdefault("search_result_replace", False)
-    st.session_state.setdefault("search_result_replacement", "")
-    st.session_state.setdefault("search_open_execute_pending", None)
-    st.session_state.setdefault("search_filter", "All")
-    if st.session_state["search_filter"] not in hhs_ui.SEARCH_FILTERS:
-        st.session_state["search_filter"] = "All"
-    st.session_state.setdefault("search_other_filter", "")
-    st.session_state.setdefault(
-        "search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE
-    )
-    st.session_state.setdefault("ssh_view", "TUNNELS")
-    if st.session_state["ssh_view"] not in hhs_ui.SSH_VIEWS:
-        st.session_state["ssh_view"] = "TUNNELS"
-    st.session_state.setdefault("ssh_tunnel_filter", "All")
-    st.session_state["ssh_tunnel_filter"] = normalized_table_filter_selection(
-        st.session_state["ssh_tunnel_filter"], hhs_ui.SSH_TUNNEL_FILTERS
-    )
-    st.session_state.setdefault("ssh_tunnel_other_filter", "")
-    st.session_state.setdefault("monitor_process_filter", "All")
-    st.session_state.setdefault("monitor_process_other_filter", "")
-    st.session_state["monitor_process_other_filter"] = clean_table_text_filter_value(
-        st.session_state.get("monitor_process_other_filter")
-    )
-    monitor_process_filter_value = st.session_state.get("monitor_process_filter")
-    monitor_process_filter = (
-        ""
-        if monitor_process_filter_value is None
-        else str(monitor_process_filter_value).strip()
-    )
-    if not monitor_process_filter:
-        st.session_state["monitor_process_filter"] = "All"
-        st.session_state["monitor_process_other_filter"] = ""
-    elif monitor_process_filter == "None":
-        st.session_state["monitor_process_filter"] = "All"
-        st.session_state["monitor_process_other_filter"] = ""
-    elif monitor_process_filter in ("Other", "Others"):
-        st.session_state["monitor_process_filter"] = "Containing"
-    elif monitor_process_filter not in hhs_ui.PROCESS_FILTERS:
-        st.session_state["monitor_process_other_filter"] = monitor_process_filter
-        st.session_state["monitor_process_filter"] = "Containing"
-    else:
-        st.session_state["monitor_process_filter"] = monitor_process_filter
-    st.session_state.setdefault("monitor_process_action_execute_pending", None)
-    st.session_state.setdefault(
-        "monitor_disk_directory", monitor_default_disk_directory()
-    )
-    if not str(st.session_state["monitor_disk_directory"]).strip():
-        st.session_state["monitor_disk_directory"] = monitor_default_disk_directory()
-    st.session_state.setdefault(
-        "monitor_disk_directory_applied",
-        st.session_state["monitor_disk_directory"],
-    )
     synchronize_monitor_disk_directory_with_host()
-    st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(
-        st.session_state.get("monitor_disk_top_n")
-    )
-    for metric in ("CPU", "MEM"):
-        top_n_key = monitor_process_top_n_state_key(metric)
-        st.session_state[top_n_key] = normalized_monitor_top_n(
-            st.session_state.get(top_n_key)
-        )
-    st.session_state.setdefault("monitor_log_file", "")
-    st.session_state.setdefault("monitor_log_filter", "All")
-    st.session_state["monitor_log_filter"] = normalized_table_filter_selection(
-        st.session_state["monitor_log_filter"], hhs_ui.LOG_FILTERS
-    )
-    st.session_state.setdefault("monitor_log_other_filter", "")
-    st.session_state.setdefault("monitor_log_level", "ALL_LEVELS")
-    st.session_state["monitor_log_level"] = selected_monitor_log_level()
-    st.session_state["monitor_log_tail_lines"] = normalized_monitor_log_tail_lines(
-        st.session_state.get("monitor_log_tail_lines")
-    )
-    st.session_state.setdefault("monitor_logs_tail", True)
-    st.session_state.setdefault("alias_filter", "All")
-    st.session_state["alias_filter"] = normalized_table_filter_selection(
-        st.session_state["alias_filter"], hhs_ui.LIST_FILTERS
-    )
-    st.session_state.setdefault("path_filter", "All")
-    st.session_state["path_filter"] = normalized_table_filter_selection(
-        st.session_state["path_filter"], hhs_ui.PATH_FILTERS
-    )
-    st.session_state.setdefault("dirs_filter", "All")
-    st.session_state["dirs_filter"] = normalized_table_filter_selection(
-        st.session_state["dirs_filter"], hhs_ui.LIST_FILTERS
-    )
-    st.session_state.setdefault("cmds_filter", "All")
-    st.session_state["cmds_filter"] = normalized_table_filter_selection(
-        st.session_state["cmds_filter"], hhs_ui.LIST_FILTERS
-    )
-    st.session_state.setdefault("service_filter", "All")
-    if st.session_state["service_filter"] == "Started":
-        st.session_state["service_filter"] = "Up"
-    elif st.session_state["service_filter"] == "Stopped":
-        st.session_state["service_filter"] = "Down"
-    st.session_state["service_filter"] = normalized_table_filter_selection(
-        st.session_state["service_filter"], hhs_ui.SERVICE_FILTERS
-    )
-    st.session_state.setdefault("ssh_explorer_action_execute_pending", None)
-    st.session_state.setdefault("ssh_explorer_delete_execute_pending", None)
-    for history_filter_key in (
-        "history_commands_filter",
-        "history_directories_filter",
-    ):
-        st.session_state.setdefault(history_filter_key, "All")
-        st.session_state[history_filter_key] = normalized_table_filter_selection(
-            st.session_state[history_filter_key], hhs_ui.HISTORY_FILTERS
-        )
-    normalize_persisted_table_text_filter_states(
-        *(
-            key
-            for key in hhs_ui_constants.PERSISTED_UI_KEYS
-            if isinstance(key, str) and key.endswith("_other_filter")
-        )
-    )
-    st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(
-        st.session_state.get("history_stats_top_n")
-    )
     if not st.session_state.get(hhs_ui_constants.UI_STATE_FILE_SYNCED_SESSION_KEY):
         save_ui_state()
         st.session_state[hhs_ui_constants.UI_STATE_FILE_SYNCED_SESSION_KEY] = True
     complete_background_action_jobs()
     execute_pending_dialog_callback()
     apply_pending_folder_picker_selection()
-    render_sidebar()
-    render_main_view()
+    active_view = str(st.session_state.get("active_view", "Home"))
+    with measure_ui_phase("sidebar", view=active_view):
+        render_sidebar()
+    with measure_ui_phase("main_view", view=active_view):
+        render_main_view()
     render_combobox_vt100_shortcuts_script()
-    render_footer_status_fragment()
+    with measure_ui_phase("footer", view=active_view):
+        render_footer_status_fragment()
     render_footer_client_error_bridge_script()
     install_footer_status_log_handler()
     render_folder_picker_dialog()

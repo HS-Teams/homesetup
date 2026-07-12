@@ -188,6 +188,7 @@ import json
 import sys
 import tempfile
 import time
+from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -247,6 +248,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     )
     state_namespace = {
         "json": json,
+        "lru_cache": lru_cache,
         "Path": Path,
         "hhs_ui_constants": state_constants,
         "st": SimpleNamespace(session_state={"active_view": "Home"}),
@@ -257,6 +259,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
         {
             "is_persisted_ui_key",
             "is_persistable_ui_value",
+            "cached_ui_state_file",
             "read_ui_state_file",
             "load_ui_state",
             "ui_state_files",
@@ -432,11 +435,20 @@ update_calls = {
     for call in ast.walk(update)
     if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
 }
-assert "complete_hhs_services_list_refresh" in update_calls
+assert "complete_ollama_service_availability_refresh" in update_calls
 assert "background_job_is_running" in update_calls
 assert "poll_background_job_completion" not in update_calls
 assert "ollama_service_availability_refresh_due" in update_calls
 assert "start_hhs_services_list_refresh" in update_calls
+
+complete_refresh = functions["complete_ollama_service_availability_refresh"]
+complete_refresh_calls = {
+    call.func.id
+    for call in ast.walk(complete_refresh)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "complete_hhs_services_list_refresh" in complete_refresh_calls
+assert "ollama_service_is_available" in complete_refresh_calls
 
 polling = functions["render_background_job_polling_fragment"]
 polling_calls = {
@@ -444,7 +456,18 @@ polling_calls = {
     for call in ast.walk(polling)
     if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
 }
-assert "update_ollama_service_availability_refresh" in polling_calls
+assert "background_jobs_require_completion_polling" in polling_calls
+assert "background_jobs_completion_needs_app_rerun" in polling_calls
+assert "complete_ollama_service_availability_refresh" in polling_calls
+assert "update_ollama_service_availability_refresh" not in polling_calls
+
+ollama_polling = functions["render_ollama_service_availability_polling_fragment"]
+ollama_polling_calls = {
+    call.func.id
+    for call in ast.walk(ollama_polling)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "update_ollama_service_availability_refresh" in ollama_polling_calls
 
 main = functions["main"]
 main_calls = {
@@ -453,8 +476,18 @@ main_calls = {
     if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
 }
 assert "initialize_ollama_service_availability" in main_calls
-assert "update_ollama_service_availability_refresh" in main_calls
+assert "render_ollama_service_availability_polling_fragment" in main_calls
+assert "render_background_job_polling_fragment" in main_calls
 assert "render_main_view" in main_calls
+assert "_render_background_job_polling_fragment" not in Path(sys.argv[2]).read_text(
+    encoding="utf-8"
+)
+main_source = ast.get_source_segment(
+    Path(sys.argv[1]).read_text(encoding="utf-8"), main
+)
+assert main_source.index("render_background_job_polling_fragment()") < main_source.index(
+    "execute_pending_ssh_connection()"
+)
 
 render_main_view = functions["render_main_view"]
 render_main_view_calls = {
@@ -514,6 +547,110 @@ assert refresh_due() is False
 PY
   assert_success
 }
+@test "when a completion rerun is interrupted then polling retries without looping forever" {
+  run python3 - "${command_runtime_file}" <<'PY'
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def background_job_completion_needs_app_rerun(")
+end = source.index("def background_job_result(", start)
+clock = {"now": 100.0}
+session_state = {}
+
+class CompletedProcess:
+    def poll(self):
+        return 0
+
+class RunningProcess:
+    def poll(self):
+        return None
+
+namespace = {
+    "st": SimpleNamespace(session_state=session_state),
+    "time": SimpleNamespace(monotonic=lambda: clock["now"]),
+    "hhs_ui_constants": SimpleNamespace(
+        BACKGROUND_JOB_COMPLETION_RERUN_RETRY_SECONDS=4.0,
+        BACKGROUND_JOB_COMPLETION_RERUN_MAX_ATTEMPTS=3,
+    ),
+    "background_job_process": lambda job: job.get("process"),
+    "background_job_has_timed_out": lambda _job: False,
+    "stop_process": lambda _process: None,
+    "background_job_session_items": lambda: list(session_state.items()),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+needs_rerun = namespace["background_job_completion_needs_app_rerun"]
+requires_polling = namespace["background_jobs_require_completion_polling"]
+
+state_key = "_hhs_background_job_model"
+job = {
+    "process": CompletedProcess(),
+    "metadata": {},
+    "completion_rerun_queued": True,
+}
+session_state[state_key] = job
+assert requires_polling() is True
+assert needs_rerun(state_key, job) is True
+assert "completion_rerun_queued" not in job
+assert job["completion_rerun_attempts"] == 1
+assert needs_rerun(state_key, job) is False
+
+clock["now"] = 104.1
+assert needs_rerun(state_key, job) is True
+clock["now"] = 108.2
+assert needs_rerun(state_key, job) is True
+clock["now"] = 112.3
+assert needs_rerun(state_key, job) is False
+assert requires_polling() is False
+
+job["process"] = RunningProcess()
+assert requires_polling() is True
+job["metadata"] = {"completion_rerun": False}
+assert requires_polling() is False
+assert needs_rerun(state_key, job) is False
+PY
+  assert_success
+}
+
+@test "when browser sessions run the same job then output files stay isolated" {
+  run python3 - "${command_runtime_file}" <<'PY'
+from pathlib import Path
+import re
+import sys
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def safe_background_job_name(")
+end = source.index("def background_job_state(", start)
+tokens = iter(("a" * 16, "b" * 16))
+streamlit = SimpleNamespace(session_state={})
+namespace = {
+    "Path": Path,
+    "re": re,
+    "secrets": SimpleNamespace(token_hex=lambda _size: next(tokens)),
+    "st": streamlit,
+    "ui_disposable_files_dir": lambda: Path("/tmp/hhs-ui-test"),
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+session_token = namespace["background_job_session_token"]
+output_path = namespace["background_job_output_path"]
+
+first_token = session_token()
+assert first_token == "a" * 16
+assert session_token() == first_token
+first_path = output_path("cached models", "stdout", first_token)
+assert first_path.name == f"{first_token}-cached_models-stdout.log"
+
+streamlit.session_state = {}
+second_token = session_token()
+second_path = output_path("cached models", "stdout", second_token)
+assert second_token == "b" * 16
+assert second_path != first_path
+PY
+  assert_success
+}
+
 @test "when cached content is fresh then background refresh loaders should stay hidden" {
   run python3 - "${ui_file}" "${command_runtime_file}" "${cache_runtime_file}" <<'PY'
 import ast

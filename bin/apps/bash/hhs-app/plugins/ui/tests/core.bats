@@ -31,6 +31,7 @@ expected_groups = {
     "core": {
         "constants.py",
         "paths.py",
+        "performance.py",
         "process_resources.py",
         "runtime.py",
         "theme_assets.py",
@@ -86,6 +87,9 @@ PY
   assert_success
 
   run grep -q -- '--server.address 127.0.0.1' "${ui_plugin_file}"
+  assert_success
+
+  run grep -q -- '--server.enableStaticServing true' "${ui_plugin_file}"
   assert_success
 
   run grep -q -- '--browser.serverAddress localhost' "${ui_plugin_file}"
@@ -146,6 +150,7 @@ arg_index = command.rindex('"$@"')
 assert command.index("--server.address 127.0.0.1") < arg_index
 assert command.index('--browser.serverAddress localhost') < arg_index
 assert command.index('--server.headless true') < arg_index
+assert command.index('--server.enableStaticServing true') < arg_index
 assert command.index('--browser.gatherUsageStats false') < arg_index
 assert command.index('"${theme_args[@]}"') < arg_index
 launch_body = source.split("function launch_ui()", 1)[1].split("\n# @purpose:", 1)[0]

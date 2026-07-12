@@ -15,7 +15,7 @@
 PLUGIN_NAME="ui"
 
 # Current HomeSetup UI plugin version.
-VERSION="0.0.7"
+VERSION="0.0.14"
 
 # Namespace cleanup.
 UNSETS=(
@@ -519,7 +519,9 @@ function validate_safe_streamlit_args() {
   for arg in "$@"; do
     protected_option="${arg%%=*}"
     case "${protected_option}" in
-      --browser.serverAddress | --browser.serverPort | --server.address | --server.enableCORS | --server.enableXsrfProtection | --server.port)
+      --browser.serverAddress | --browser.serverPort | --server.address | \
+        --server.enableCORS | --server.enableStaticServing | \
+        --server.enableXsrfProtection | --server.port)
         quit 1 "Protected Streamlit option is managed by HomeSetup UI and cannot be overridden: ${protected_option}"
         ;;
     esac
@@ -577,6 +579,7 @@ function start_ui() {
     --server.address 127.0.0.1 \
     --server.port "${HHS_STREAMLIT_UI_PORT}" \
     --server.headless true \
+    --server.enableStaticServing true \
     --browser.serverAddress localhost \
     --browser.serverPort "${HHS_STREAMLIT_UI_PORT}" \
     --browser.gatherUsageStats false \

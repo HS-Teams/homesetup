@@ -60,8 +60,8 @@ cache_set = _unconfigured_dependency("cache_set")
 handle_remote_command_result = _unconfigured_dependency("handle_remote_command_result")
 ssh_connection_is_alive = _unconfigured_dependency("ssh_connection_is_alive")
 ui_disposable_files_dir = _unconfigured_dependency("ui_disposable_files_dir")
-update_ollama_service_availability_refresh = _unconfigured_dependency(
-    "update_ollama_service_availability_refresh"
+complete_ollama_service_availability_refresh = _unconfigured_dependency(
+    "complete_ollama_service_availability_refresh"
 )
 
 
@@ -87,7 +87,7 @@ def configure_command_runtime(
     ],
     ssh_connection_is_alive: Callable[[str], bool],
     ui_disposable_files_dir: Callable[[], Path],
-    update_ollama_service_availability_refresh: Callable[[], None],
+    complete_ollama_service_availability_refresh: Callable[[], None],
 ) -> None:
     """Configure callbacks required by command runtime helpers."""
     globals().update(
@@ -106,8 +106,8 @@ def configure_command_runtime(
             "handle_remote_command_result": handle_remote_command_result,
             "ssh_connection_is_alive": ssh_connection_is_alive,
             "ui_disposable_files_dir": ui_disposable_files_dir,
-            "update_ollama_service_availability_refresh": (
-                update_ollama_service_availability_refresh
+            "complete_ollama_service_availability_refresh": (
+                complete_ollama_service_availability_refresh
             ),
         }
     )
@@ -256,12 +256,29 @@ def safe_background_job_name(job_name: str) -> str:
     return safe_name or "job"
 
 
-def background_job_output_path(job_name: str, stream_name: str) -> Path:
-    """Return the deterministic cache path for one background job output stream."""
+def background_job_session_token() -> str:
+    """Return a stable, process-unique token for this browser session's job files."""
+    state_key = "_hhs_background_job_session_token"
+    token = str(st.session_state.get(state_key, "")).strip()
+    if not re.fullmatch(r"[a-f0-9]{16}", token):
+        token = secrets.token_hex(8)
+        st.session_state[state_key] = token
+    return token
+
+
+def background_job_output_path(
+    job_name: str, stream_name: str, session_token: str
+) -> Path:
+    """Return a browser-session-scoped path for one background job stream."""
     safe_stream_name = re.sub(r"[^A-Za-z0-9_-]+", "_", stream_name.strip())
+    safe_session_token = re.sub(r"[^a-f0-9]+", "", session_token.lower())
     return (
         ui_disposable_files_dir()
-        / f"{safe_background_job_name(job_name)}-{safe_stream_name or 'output'}.log"
+        / (
+            f"{safe_session_token or 'session'}-"
+            f"{safe_background_job_name(job_name)}-"
+            f"{safe_stream_name or 'output'}.log"
+        )
     )
 
 
@@ -416,8 +433,13 @@ def start_background_bash_command(
     if background_job_is_running(job_name):
         return False
 
-    stdout_path = str(background_job_output_path(job_name, "stdout"))
-    stderr_path = str(background_job_output_path(job_name, "stderr"))
+    session_token = background_job_session_token()
+    stdout_path = str(
+        background_job_output_path(job_name, "stdout", session_token)
+    )
+    stderr_path = str(
+        background_job_output_path(job_name, "stderr", session_token)
+    )
 
     remote_host = command_remote_host(force_local=force_local)
     effective_timeout = effective_command_timeout_seconds(
@@ -495,20 +517,34 @@ def cleanup_background_job_files(job: dict[str, object]) -> None:
 def background_job_completion_needs_app_rerun(
     state_key: str, job: dict[str, object]
 ) -> bool:
-    """Return whether one completed background job should trigger one app rerun."""
+    """Request bounded rerun retries until a completed job is consumed."""
     process = background_job_process(job)
     if process is None:
         return False
     if process.poll() is None and background_job_has_timed_out(job):
         stop_process(process)
-    if process.poll() is None or bool(job.get("completion_rerun_queued")):
+    if process.poll() is None:
         return False
     metadata = job.get("metadata")
     if isinstance(metadata, dict) and metadata.get("completion_rerun") is False:
-        job["completion_rerun_queued"] = True
-        st.session_state[state_key] = job
         return False
-    job["completion_rerun_queued"] = True
+    try:
+        attempts = int(job.get("completion_rerun_attempts", 0) or 0)
+    except (TypeError, ValueError):
+        attempts = 0
+    if attempts >= hhs_ui_constants.BACKGROUND_JOB_COMPLETION_RERUN_MAX_ATTEMPTS:
+        return False
+    try:
+        requested_at = float(job.get("completion_rerun_requested_at", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        requested_at = 0.0
+    now = time.monotonic()
+    retry_seconds = hhs_ui_constants.BACKGROUND_JOB_COMPLETION_RERUN_RETRY_SECONDS
+    if requested_at and now - requested_at < retry_seconds:
+        return False
+    job.pop("completion_rerun_queued", None)
+    job["completion_rerun_attempts"] = attempts + 1
+    job["completion_rerun_requested_at"] = now
     st.session_state[state_key] = job
     return True
 
@@ -519,6 +555,29 @@ def background_jobs_completion_needs_app_rerun() -> bool:
         background_job_completion_needs_app_rerun(state_key, job)
         for state_key, job in background_job_session_items()
     )
+
+
+def background_jobs_require_completion_polling() -> bool:
+    """Return whether a live or newly completed job requires fast polling."""
+    for _state_key, job in background_job_session_items():
+        process = background_job_process(job)
+        if process is None:
+            continue
+        metadata = job.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("completion_rerun") is False:
+            continue
+        try:
+            attempts = int(job.get("completion_rerun_attempts", 0) or 0)
+        except (TypeError, ValueError):
+            attempts = 0
+        if (
+            process.poll() is not None
+            and attempts
+            >= hhs_ui_constants.BACKGROUND_JOB_COMPLETION_RERUN_MAX_ATTEMPTS
+        ):
+            continue
+        return True
+    return False
 
 
 def background_job_result(
@@ -618,7 +677,9 @@ def render_background_job_status_if_blocking(
 
 @st.fragment(run_every="2s")
 def render_background_job_polling_fragment() -> None:
-    """Poll all background jobs from one always-mounted fragment."""
-    update_ollama_service_availability_refresh()
+    """Poll job completion without performing unrelated service refreshes."""
+    complete_ollama_service_availability_refresh()
+    if not background_jobs_require_completion_polling():
+        return
     if background_jobs_completion_needs_app_rerun():
         st.rerun()

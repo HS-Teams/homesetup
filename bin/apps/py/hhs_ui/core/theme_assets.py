@@ -7,6 +7,7 @@ from base64 import b64encode
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 
 import streamlit as st
 from streamlit import config as st_config
@@ -51,6 +52,19 @@ def cached_data_uri(file_path: str, mime_type: str, mtime_token: float) -> str:
 def load_data_uri(file_path: Path, mime_type: str) -> str:
     """Load a binary file as a browser data URI through the static asset cache."""
     return cached_data_uri(str(file_path), mime_type, file_mtime_token(file_path))
+
+
+def static_asset_url(file_path: Path) -> str:
+    """Return a cache-busted Streamlit static-serving URL for an app asset."""
+    try:
+        relative_path = file_path.resolve().relative_to(
+            hhs_ui_constants.APP_STATIC_DIR.resolve()
+        )
+        modified_token = file_path.stat().st_mtime_ns
+    except (OSError, ValueError):
+        return ""
+    encoded_path = quote(relative_path.as_posix(), safe="/")
+    return f"/app/static/{encoded_path}?v={modified_token}"
 
 
 def load_app_css() -> str:
@@ -162,9 +176,9 @@ def load_app_theme_css() -> str:
     return load_text_file(theme_css_file(selected_theme))
 
 
-def load_app_font_data_uri() -> str:
-    """Load the HomeSetup UI font as a browser-embeddable data URI."""
-    return load_data_uri(hhs_ui_constants.APP_FONT_FILE, "font/woff2")
+def app_font_url() -> str:
+    """Return the browser-cacheable URL for the HomeSetup UI font."""
+    return static_asset_url(hhs_ui_constants.APP_FONT_FILE)
 
 
 def load_app_image_data_uri(image_file: Path, mime_type: str) -> str:
@@ -173,11 +187,11 @@ def load_app_image_data_uri(image_file: Path, mime_type: str) -> str:
 
 
 def load_app_font_face_css() -> str:
-    """Load the HomeSetup UI font as an embeddable CSS font face."""
+    """Return the HomeSetup UI font-face rule using its static asset URL."""
     return (
         "@font-face {"
         f'font-family: "{hhs_ui_constants.APP_FONT_FAMILY}";'
-        f'src: url("{load_app_font_data_uri()}") format("woff2");'
+        f'src: url("{app_font_url()}") format("woff2");'
         "font-style: normal;"
         "font-weight: 400;"
         "font-display: swap;"
@@ -194,7 +208,7 @@ def configure_app_font_theme(theme_name: object = "") -> None:
         [
             {
                 "family": hhs_ui_constants.APP_FONT_FAMILY,
-                "url": load_app_font_data_uri(),
+                "url": app_font_url(),
                 "weight": "400",
                 "style": "normal",
             }
@@ -206,15 +220,16 @@ def configure_app_font_theme(theme_name: object = "") -> None:
 
 
 def render_styles() -> None:
-    """Render app-level Streamlit styles."""
+    """Render cacheable app-level Streamlit styles."""
+    app_css_url = static_asset_url(hhs_ui_constants.APP_CSS_FILE)
+    theme_css_url = static_asset_url(
+        theme_css_file(st.session_state.get(hhs_ui_constants.THEME_SELECTED_KEY, ""))
+    )
     st.markdown(
         (
-            "<style>"
-            f"{load_app_font_face_css()}"
-            f"{hhs_ui_constants.APP_CSS}"
-            f"{load_app_css()}"
-            f"{load_app_theme_css()}"
-            "</style>"
+            f'<link rel="stylesheet" href="{app_css_url}">'
+            f'<link rel="stylesheet" href="{theme_css_url}">'
+            f"<style>{load_app_font_face_css()}{hhs_ui_constants.APP_CSS}</style>"
         ),
         unsafe_allow_html=True,
     )
