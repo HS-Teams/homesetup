@@ -57,8 +57,9 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_not_contains "${ollama_recipe_file}" 'OllamaInstall.sh'
 
   assert_file_contains_many "${ollama_recipe_file}" \
-'systemctl stop ollama' "pkill -f 'ollama serve'"
-  assert_file_contains "${ollama_darwin_recipe_file}" 'brew services stop ollama'
+'systemctl stop ollama' 'systemctl disable ollama'
+  assert_file_contains_many "${ollama_darwin_recipe_file}" \
+    'brew services stop ollama' "pkill -f 'ollama serve'"
 }
 
 # TC - 5

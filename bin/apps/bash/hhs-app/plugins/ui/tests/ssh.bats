@@ -28,18 +28,15 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     '"ssh_tunnel_filter"' '"ssh_tunnel_other_filter"' \
     'SSH_RECONNECT_HOST_KEY = "ssh_reconnect_host"' 'SSH_RECONNECT_HOST_KEY,' \
     'SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'SSH_EXPLORER_COMPONENT_DIR'
-  assert_file_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'SSH_VIEW_LABELS' 'SSH_VIEWS'
+  assert_hhs_ui_exports SSH_EXPLORER_COMPONENT_DIR SSH_VIEW_LABELS SSH_VIEWS
   assert_file_not_contains_many "${constants_file}" \
 'SSH_EXPLORER_LOCAL_TABLE_KEY' 'SSH_EXPLORER_REMOTE_TABLE_KEY'
-  assert_file_not_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'SSH_EXPLORER_LOCAL_TABLE_KEY' 'SSH_EXPLORER_REMOTE_TABLE_KEY'
+  assert_file_not_contains_many "${constants_file}" \
+    'SSH_EXPLORER_LOCAL_TABLE_KEY' 'SSH_EXPLORER_REMOTE_TABLE_KEY'
 
   assert_file_contains_many "${ui_file}" \
-'st.session_state.setdefault("ssh_view", "TUNNELS")' \
-    'st.session_state\["ssh_view"\] not in hhs_ui.SSH_VIEWS' \
+'("ssh_view", "TUNNELS")' \
+    '("ssh_view", hhs_ui.SSH_VIEWS, "TUNNELS")' \
     'if connected_ssh_host():' 'views = (\*views, hhs_ui.SSH_VIEW)' \
     'elif active_view == hhs_ui.SSH_VIEW:' 'render_ssh_view()'
   assert_file_not_contains "${ui_file}" 'format_func=str.upper'
@@ -328,6 +325,7 @@ PY
 @test "when SSH connects from Terminal view then Terminal should be restored" {
   run python3 - "${ui_file}" <<'PY'
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")

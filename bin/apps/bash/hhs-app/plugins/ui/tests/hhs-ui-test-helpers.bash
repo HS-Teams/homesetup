@@ -5,8 +5,11 @@ setup() {
   command_runtime_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/execution/command_runtime.py"
   command_catalog_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/execution/command_catalog.py"
   ai_ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/features/ai_ui.py"
+  hhs_app_ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/features/hhs_app_ui.py"
   footer_ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/widgets/footer_ui.py"
   monitor_ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/features/monitor_ui.py"
+  search_ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/features/search_ui.py"
+  dom_scripts_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/widgets/dom_scripts.py"
   ssh_explorer_ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/features/ssh_explorer_ui.py"
   dialog_ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/widgets/dialog_ui.py"
   feedback_ui_file="${HHS_REPO_DIR}/bin/apps/py/hhs_ui/widgets/feedback_ui.py"
@@ -137,6 +140,19 @@ assert_file_not_contains_many() {
   for needle in "$@"; do
     assert_file_not_contains "${file}" "${needle}" || return 1
   done
+}
+
+assert_hhs_ui_exports() {
+  run python3 - "${HHS_REPO_DIR}/bin/apps/py" "$@" <<'PY'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import hhs_ui
+
+missing = [name for name in sys.argv[2:] if not hasattr(hhs_ui, name)]
+assert not missing, f"hhs_ui is missing exports: {missing}"
+PY
+  assert_success
 }
 
 assert_python_syntax_valid() {

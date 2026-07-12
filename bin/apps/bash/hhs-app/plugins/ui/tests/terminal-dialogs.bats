@@ -223,8 +223,7 @@ PY
   assert_file_contains_many "${constants_file}" \
 'TTYD_INDEX_FILE = HHS_CACHE_DIR / "streamlit-ttyd-index.html"' \
     'APP_TERMINAL_BACKGROUND_FILE = APP_DIR / "assets/images/term-bg.png"'
-  assert_file_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'"APP_TERMINAL_BACKGROUND_FILE"' '"TTYD_INDEX_FILE"'
+  assert_hhs_ui_exports APP_TERMINAL_BACKGROUND_FILE TTYD_INDEX_FILE
   assert_file_contains_many "${terminal_ui_file}" \
 'return hhs_ui.APP_FONT_FAMILY' 'def build_ttyd_command' 'def ttyd_shell_hook_script' \
     'def build_ttyd_hooked_bash_command' '__hhs_ttyd_after_command()' \
@@ -314,7 +313,7 @@ PY
 
   assert_file_contains_many "${terminal_ui_file}" \
 'os.killpg(process_group, signal.SIGTERM)' 'os.killpg(process_group, signal.SIGKILL)' 'subprocess.Popen('
-  run python3 - "${status_ui_file}" "${command_runtime_file}" <<'PY'
+  run python3 - "${status_ui_file}" "${command_runtime_file}" "${footer_ui_file}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -322,6 +321,7 @@ ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 status_source = Path(sys.argv[1]).read_text()
 command_runtime_source = Path(sys.argv[2]).read_text()
 process_resources_source = Path("bin/apps/py/hhs_ui/core/process_resources.py").read_text()
+footer_source = Path(sys.argv[3]).read_text()
 main_body = ui_source.split("def main()", 1)[1].split('\nif __name__ == "__main__":', 1)[0]
 disconnect_index = main_body.index("execute_pending_ssh_disconnection()")
 connect_index = main_body.index("execute_pending_ssh_connection()")
@@ -351,8 +351,10 @@ assert ssh_dialog_index < ai_initialize_index < ai_refresh_index < footer_action
 assert footer_actions_index < updater_status_index < shell_dialog_index
 assert shell_dialog_index < sidebar_index < main_view_index
 assert footer_index < client_status_index < cleanup_index
-footer_status_body = ui_source.split("def render_footer_status_fragment", 1)[1].split("\ndef ", 1)[0]
-footer_status_decorator = ui_source[: ui_source.index("def render_footer_status_fragment")].rstrip().splitlines()[-1]
+footer_status_body = footer_source.split("def render_footer_status_fragment", 1)[1].split("\ndef ", 1)[0]
+footer_status_decorator = footer_source[
+    : footer_source.index("def render_footer_status_fragment")
+].rstrip().splitlines()[-1]
 background_poll_prefix = command_runtime_source[
     : command_runtime_source.index("def render_background_job_polling_fragment")
 ]
@@ -371,8 +373,8 @@ assert 'parallel=True' not in footer_status_body
 assert "class FooterStatusLogHandler(logging.Handler)" in process_resources_source
 assert "logging.captureWarnings(True)" in process_resources_source
 assert "def drain_footer_status_log_records(" in status_source
-assert "def render_footer_client_error_bridge_script(" in ui_source
-assert "Missing Submit Button" in ui_source or "missing submit button" in ui_source
+assert "def render_footer_client_error_bridge_script(" in footer_source
+assert "Missing Submit Button" in footer_source or "missing submit button" in footer_source
 PY
   assert_success
 

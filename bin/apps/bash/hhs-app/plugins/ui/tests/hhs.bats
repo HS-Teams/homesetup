@@ -188,10 +188,10 @@ assert "min-height: var(--hhs-markdown-table-height) !important" in css
 assert ".hhs-markdown-table-single-selection" in css
 assert "border-radius: 50% !important" in css
 assert "radial-gradient(" in css
-assert "overflow-y: auto" in css
+assert "overflow: visible" in css
 
 height_start = source.index("def markdown_table_editor_height(")
-height_end = source.index("def render_hhs_setup_settings_table", height_start)
+height_end = source.index("def resolve_css_custom_property", height_start)
 height_namespace = {"hhs_ui_constants": SimpleNamespace(MARKDOWN_TABLE_HEIGHT=360)}
 exec("from __future__ import annotations\n" + source[height_start:height_end], height_namespace)
 assert height_namespace["markdown_table_editor_height"](0) == 360
@@ -309,7 +309,8 @@ PY
 }
 
 @test "when rendering HHS Firebase then configurations form should load file values" {
-  run python3 - "${ui_file}" "${css_file}" "${table_ui_file}" "${cache_runtime_file}" <<'PY'
+  run python3 - "${hhs_app_ui_file}" "${ui_file}" "${search_ui_file}" "${constants_file}" \
+    "${css_file}" "${table_ui_file}" "${cache_runtime_file}" <<'PY'
 import json
 import os
 import posixpath
@@ -318,27 +319,36 @@ import shlex
 import sys
 from pathlib import Path
 
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-css = Path(sys.argv[2]).read_text(encoding="utf-8")
-table_source = Path(sys.argv[3]).read_text(encoding="utf-8")
-cache_runtime_source = Path(sys.argv[4]).read_text(encoding="utf-8")
+source = "\n".join(
+    Path(source_path).read_text(encoding="utf-8") for source_path in sys.argv[1:4]
+)
+source += "\n" + Path(
+    "bin/apps/py/hhs_ui/core/ui_definitions.py"
+).read_text(encoding="utf-8")
+constants_source = Path(sys.argv[4]).read_text(encoding="utf-8")
+css = Path(sys.argv[5]).read_text(encoding="utf-8")
+table_source = Path(sys.argv[6]).read_text(encoding="utf-8")
+cache_runtime_source = Path(sys.argv[7]).read_text(encoding="utf-8")
+command_source = Path(
+    "bin/apps/py/hhs_ui/execution/command_catalog.py"
+).read_text(encoding="utf-8")
 component_html = (
     Path(sys.argv[1])
-    .parent.joinpath("components", "firebase_config_form", "index.html")
+    .parents[1].joinpath("components", "firebase_config_form", "index.html")
     .read_text(encoding="utf-8")
 )
 assert 'elif hhs_view == "Firebase":' in source
 assert "render_hhs_firebase_panel()" in source
-assert 'HHS_FIREBASE_CONFIG_FILE:-${HHS_DIR}/firebase.properties' in source
+assert 'HHS_FIREBASE_CONFIG_FILE:-${HHS_DIR}/firebase.properties' in command_source
 assert 'with st.expander("Configurations", expanded=True):' in source
-assert "FIREBASE_CONFIG_COMPONENT_DIR" in Path(sys.argv[1]).with_name("constants.py").read_text(encoding="utf-8")
+assert "FIREBASE_CONFIG_COMPONENT_DIR" in constants_source
 assert ".st-key-hhs_firebase_configurations" in css
 assert "gap: var(--hhs-element-std-gap) !important" in css
-assert "HHS_FIREBASE_CONFIG_FILE\\\\t%s" in source
-assert "STARSHIP_CONFIG\\\\t%s" in source
-assert "def render_openable_config_path(" in source
+assert "HHS_FIREBASE_CONFIG_FILE\\\\t%s" in command_source
+assert "STARSHIP_CONFIG\\\\t%s" in command_source
+assert "def render_openable_file_pill(" in source
 assert "search_open_href(file_uri)" in source
-assert "hhs-view-subtitle-link" in source
+assert "hhs-config-file-pill" in source
 assert "data-hhs-open-path" in source
 assert "--hhs-theme-file-link-color: var(--hhs-theme-link-color, var(--hhs-theme-text-color))" in css
 assert ".hhs-view-subtitle-link:link" in css
@@ -399,8 +409,8 @@ assert "restoreButton.disabled = Boolean(args.disabled) || !hasRestorableChanges
 assert "updateRestoreButtonState()" in component_html
 assert 'button.type = "button"' in component_html
 assert "button.dataset.action = action" in component_html
-assert 'createButton(" Save", "save", "Save")' in component_html
-assert 'createButton("ﭯ Restore", "restore", "Restore original file values")' in component_html
+assert 'createButton(" Save", "save", "Save Firebase configuration")' in component_html
+assert '"Restore previous Firebase configuration"' in component_html
 assert 'if (action === "restore")' in component_html
 assert "values = fieldValues(args.fields)" in component_html
 assert "render()" in component_html
@@ -421,10 +431,11 @@ expander_index = starship_controls_body.index(
     'with st.expander("Configurations", expanded=True):'
 )
 columns_index = starship_controls_body.index(
-    "cache_col, config_col, preset_col, apply_col, edit_col = st.columns("
+    "cache_col, preset_col, apply_col, edit_col = st.columns("
 )
 assert expander_index < columns_index
-assert "value=config_path" in starship_controls_body
+assert "value=cache_path" in starship_controls_body
+assert "value=config_path" not in starship_controls_body
 assert ".st-key-hhs_starship_controls [data-testid=\"stExpanderDetails\"] > [data-testid=\"stVerticalBlock\"]" in css
 
 starship_editor_body = source.split("def render_hhs_starship_config_editor", 1)[1].split("\ndef ", 1)[0]
@@ -685,7 +696,6 @@ namespace = {
     "re": re,
     "strip_ansi": lambda value: value,
 }
-command_source = Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text(encoding="utf-8")
 parse_start = command_source.index("def parse_hhs_config_environment(")
 parse_end = command_source.index("def parse_hhs_services", parse_start)
 exec(

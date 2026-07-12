@@ -28,10 +28,12 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'SEARCH_TERM_HISTORY_LIMIT = 20' 'SEARCH_TERM_HISTORY_CACHE_KEY = "search_terms:history"' \
     'SEARCH_TERM_HISTORY_TTL_SECONDS = UI_CACHE_LOW_CHANGE_TTL_SECONDS'
   assert_file_not_contains "${constants_file}" 'SEARCH_SUBMIT_PRELOADER_DELAY_MS'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" 'SEARCH_FILTERS'
+  assert_hhs_ui_exports SEARCH_FILTERS
 
   assert_file_contains_many "${ui_file}" \
-'elif active_view == "Search":' 'render_search_view()' 'def build_hhs_search_command' \
+    'elif active_view == "Search":' 'render_search_view()'
+  assert_file_contains "${search_core_file}" 'def build_hhs_search_command'
+  assert_file_contains_many "${search_ui_file}" \
     'def parse_hhs_search_results' 'def render_search_controls' \
     'placeholder="Search for files, folders, or strings"' 'key="search_path"' \
     'key="search_path_folder_picker_button"' 'on_click=request_path_picker' \
@@ -40,7 +42,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'def render_search_panel' '@st.fragment()' 'st.container(key="search_results")' \
     'def render_search_filters' 'st.container(key="search_filter_controls")' 'hhs_ui.SEARCH_FILTERS'
 
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${search_ui_file}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -53,24 +55,21 @@ assert (
     '                key="search_type",'
 ) in body
 assert "on_change=apply_search_type_change" in body
-assert (
-    '"Search terms",\n'
-    '                options=search_term_options(),\n'
-    '                index=None,\n'
-    '                key="search_query",\n'
-    '                placeholder="Search for files, folders, or strings",\n'
-    '                accept_new_options=True,\n'
-    '                on_change=submit_search_query,\n'
-    '                width="stretch",'
-) in body
-assert (
-    '"Search directory",\n'
-    '                options=search_directory_options(),\n'
-    '                key="search_path",\n'
-    '                accept_new_options=True,\n'
-    '                on_change=apply_search_directory_change,\n'
-    '                width="stretch",'
-) in body
+for fragment in (
+    '"Search terms"',
+    "options=search_term_options()",
+    "index=None",
+    'key="search_query"',
+    'placeholder="Search for files, folders, or strings"',
+    "accept_new_options=True",
+    "on_change=submit_search_query",
+    'width="stretch"',
+    '"Search directory"',
+    "options=search_directory_options()",
+    'key="search_path"',
+    "on_change=apply_search_directory_change",
+):
+    assert fragment in body
 assert 'st.text_input(\n                "Search terms"' not in body
 assert 'st.text_input(\n                "Search directory"' not in body
 assert 'label_visibility="collapsed"' not in body
@@ -85,17 +84,17 @@ assert "render_search_submit_preloader_script()" not in body
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${search_ui_file}" \
 '"search_filter",' '"search_other_filter",' 'options=hhs_ui_constants.SEARCH_TYPES' \
     'st.columns(' '\[1.15, 3.0, 0.22, 3.0, 0.22\], vertical_alignment="bottom"'
-  assert_file_contains "${ui_file}" '""'
-  assert_file_not_contains_many "${ui_file}" \
+  assert_file_contains "${search_ui_file}" '""'
+  assert_file_not_contains_many "${search_ui_file}" \
 'if st.button("Search", key="search_submit_button"' 'def render_search_submit_preloader_script' \
     'parentWindow.__hhsSearchSubmitPreloaderCleanup' 'search-submit-'
 }
 
 @test "when rendering Search filters then replace and option toggles should use stable state" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${search_ui_file}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -136,20 +135,21 @@ assert "search_filter, search_text_filter" not in panel_body
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${search_ui_file}" \
 'def render_search_replace_controls' 'st.container(key="search_replace_controls")' \
     '<span class="hhs-search-replace-label">Replace by:</span>' 'key="search_replacement"' \
     'placeholder="Replacement string"' 'key="search_replace_submit_button"' '""' \
     'help="Search and Replace"' 'args=(True,)' '\[1.15, 6.22, 0.22\]'
-  assert_file_not_contains "${ui_file}" '\[5.0, 0.85\], vertical_alignment="center"'
+  assert_file_not_contains "${search_ui_file}" '\[5.0, 0.85\], vertical_alignment="center"'
 }
 
 @test "when rendering Search comboboxes then VT100 shortcuts should be scoped to search terms" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${dom_scripts_file}" "${ui_file}" <<'PY'
 from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
+ui_source = Path(sys.argv[2]).read_text(encoding="utf-8")
 body = source.split("def render_combobox_vt100_shortcuts_script", 1)[1].split("\ndef ", 1)[0]
 assert "parentWindow.__hhsComboboxVt100Cleanup" in body
 assert 'node.closest(\'[data-baseweb="select"]\')' in body
@@ -170,22 +170,24 @@ assert "setCaret(node, 0, state.value.length)" in body
 assert "setCaret(node, state.value.length, state.value.length)" in body
 assert 'replaceRange(node, state.start, state.value.length, "", "deleteContentForward")' in body
 assert 'doc.addEventListener("keydown", onKeydown, true)' in body
-assert "render_combobox_vt100_shortcuts_script()" in source
+assert "render_combobox_vt100_shortcuts_script()" in ui_source
 PY
   assert_success
 }
 
 @test "when running Search then loader, result paging, and replace status should be wired" {
-  assert_file_not_contains_many "${ui_file}" \
+  assert_file_not_contains_many "${search_ui_file}" \
 'event.target.closest(".st-key-search_path")' 'clearPendingSearchOverlay();' \
     'label.append("Searching for ", queryNode, " in ", pathNode)'
-  assert_file_contains_many "${ui_file}" \
-'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-search.bash";' 'def search_loader_message' \
+  assert_file_contains "${search_core_file}" \
+    'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-search.bash";'
+  assert_file_contains_many "${search_ui_file}" \
+    'def search_loader_message' \
     'search_loader_message(query, search_path)' 'Searching for %primary_color%{query}%primary_color%' \
     'in %secondary_color%{search_path}%secondary_color%' \
-    'timeout_seconds=hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS'
+    'hhs_ui_constants.UI_COMMAND_SEARCH_TIMEOUT_SECONDS'
 
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${search_ui_file}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -231,21 +233,23 @@ for expected_argument in (
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
-'clear_preloader()' 'def open_file' 'def open_search_result_path' \
-    '__hhs_open' 'hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM' 'search_result_path_link(row)'
-  assert_file_not_contains "${ui_file}" 'render_search_path_results(rows)'
-  assert_file_not_contains "${ui_file}" 'render_search_string_results(rows, query, text_filter)'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${search_ui_file}" \
+    'def open_search_result_path' 'hhs_ui.SEARCH_OPEN_RESULT_QUERY_PARAM' \
+    'search_result_path_link(row)'
+  assert_file_contains_many "${command_catalog_file}" 'def open_file' '__hhs_open'
+  assert_file_not_contains "${search_ui_file}" 'render_search_path_results(rows)'
+  assert_file_not_contains "${search_ui_file}" 'render_search_string_results(rows, query, text_filter)'
+  assert_file_contains_many "${search_ui_file}" \
 'render_search_path_results(visible_rows, search_type, total_count)' \
     'render_search_string_results(visible_rows, query, text_filter, total_count)' \
     '<th>Path</th><th>Line</th><th>Match</th></tr></thead>' \
-    'return \["Path", "Size", "Modified"\]' 'return \["Path", "Modified"\]' \
+    'return \["Path", "Size", "Modified"\]' 'return \["Path", "Modified"\]'
+  assert_file_contains_many "${search_core_file}" \
     '__hhs_search_file' '__hhs_search_dir' '__hhs_search_string'
 }
 
 @test "when rendering Search load-more controls then automatic paging should be viewport based" {
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${search_ui_file}" \
 'def visible_search_rows' 'def render_search_load_more' 'if visible_count >= total_count:' \
     'def render_search_auto_load_more' 'def render_search_auto_load_more_cleanup' \
     'render_search_auto_load_more_cleanup()' 'key="search_load_more_button"' \
@@ -254,9 +258,9 @@ PY
     'const loadingMarkup = `' 'hhs-search-load-more-preloader-spinner" aria-hidden="true"><' \
     'Loading more results...' 'button.innerHTML = loadingMarkup' 'let requested = false;' \
     'let userReachedBottom = false;' 'activeController.displayedCount > displayedCount'
-  assert_file_not_contains "${ui_file}" 'button.dataset.hhsAutoLoadRequested'
+  assert_file_not_contains "${search_ui_file}" 'button.dataset.hhsAutoLoadRequested'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${search_ui_file}" \
 'const componentFrame = window.frameElement' \
     'const loadMoreContainer = doc.querySelector(".st-key-search_load_more")' \
     'const sentinel = loadMoreContainer || componentFrame' 'const bottomThreshold = 12;' \
@@ -265,9 +269,9 @@ PY
     'rootMargin: "0px", threshold: 0.25' 'scrollTargets.forEach((target)' \
     'button.click()' 'userReachedBottom = nearBottom()' \
     'parentWindow.__hhsSearchAutoLoadController' 'delete parentWindow.__hhsSearchAutoLoadController'
-  assert_file_not_contains "${ui_file}" 'pageHeight - 120'
+  assert_file_not_contains "${search_ui_file}" 'pageHeight - 120'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${search_ui_file}" \
 'f"Load more results ({displayed_count}/{total_count}) ..."' \
     'hhs_ui_constants.SEARCH_PAGE_SIZE' 'cache_delete_tag("search")' \
     '"ttl_seconds": hhs_ui.UI_CACHE_NORMAL_TTL_SECONDS'

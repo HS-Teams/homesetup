@@ -31,7 +31,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'hhs_ui_constants.PERSISTED_UI_KEYS'
   assert_file_not_contains "${ui_file}" 'UI_STATE_KEYS'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${command_catalog_file}" \
 'def build_hhs_process_list_command' 'def build_hhs_process_kill_command' '__hhs_process_list'
   run python3 - "${HHS_REPO_DIR}/bin/hhs-functions/bash/hhs-sys-utils.bash" <<'PY'
 from pathlib import Path
@@ -53,7 +53,7 @@ PY
     'def render_chart_controls' 'def plot_chart' 'Literal\["HBars", "VBars", "Pie"\]' \
     'with st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True):' \
     'top_n_label: str = "Top N:"'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${monitor_ui_file}" \
     'def render_monitor_processes_panel' '"monitor_disk_controls"' 'f"monitor_{metric.lower()}_controls"' \
     '"history_stats_controls"' 'input_label="Directory:"' 'refresh_key="monitor_disk_apply_button"' \
     'refresh_key=f"monitor_{metric.lower()}_refresh_button"' 'refresh_key="history_stats_refresh_button"' \
@@ -67,7 +67,7 @@ PY
     'display: grid !important' ':has(.st-key-monitor_disk_apply_button)' \
     'grid-template-columns: max-content 150px minmax(0, 1fr) 2rem' \
     'grid-template-columns: max-content 150px max-content minmax(0, 1fr) 2rem' 'justify-self: end'
-  run python3 - "${table_ui_file}" "${ui_file}" <<'PY'
+  run python3 - "${table_ui_file}" "${monitor_ui_file}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -113,11 +113,12 @@ assert process_panel_body.index("render_background_job_status(MONITOR_PROCESS_LI
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${monitor_ui_file}" \
 '"monitor_process_filter"' '"monitor_process_other_filter"' 'hhs_ui.PROCESS_FILTERS' \
-    'hhs_ui.PROCESS_FILTER_COLUMNS' 'def filter_process_rows' 'filter_process_rows(' \
+    'hhs_ui.PROCESS_FILTER_COLUMNS' 'filter_process_rows(' \
     'render_table_controls_panel(render_process_controls)'
-  assert_file_not_contains_many "${ui_file}" \
+  assert_file_contains "${command_catalog_file}" 'def filter_process_rows'
+  assert_file_not_contains_many "${monitor_ui_file}" \
 'monitor_process_filter_apply_button' 'apply_monitor_process_filter'
   assert_file_contains "${css_file}" '.st-key-monitor_process_other_filter'
 }
@@ -190,8 +191,7 @@ PY
 'LOG_TAILOR_RULES' 'LOG_LEVELS = (' 'DEFAULT_LOG_TAIL_LINES = 50' 'LEGACY_DEFAULT_LOG_TAIL_LINES = 10' \
     'MIN_LOG_TAIL_LINES = 5' 'MAX_LOG_TAIL_LINES = 5000' 'LOG_TAIL_LINES_STEP = 5' \
     'LOG_FILTERS = ("All", "Containing")'
-  assert_file_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'LOG_LEVELS' 'LOG_FILTERS'
+  assert_hhs_ui_exports LOG_LEVELS LOG_FILTERS
   assert_file_contains_many "${constants_file}" \
 '"monitor_log_filter"' '"monitor_log_other_filter"' '"monitor_log_level"' '"monitor_log_tail_lines"' \
     '"monitor_log_tail_lines_default_migrated"'
@@ -202,32 +202,36 @@ PY
 'def selected_monitor_log_level' 'def monitor_log_level_label' \
     'def normalize_monitor_log_tail_lines_state' 'def handle_monitor_log_tail_lines_change' \
     'def clear_monitor_log_file' 'def toggle_monitor_logs_tail'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${monitor_ui_file}" \
     'def render_monitor_logs_panel' 'def render_log_controls' \
     'tail_lines,' 'render_log_controls' 'render_table_filter_controls(' \
     'hhs_ui.LOG_FILTERS'
-  assert_file_not_contains "${ui_file}" 'other_options=("Containing",)'
+  assert_file_not_contains "${monitor_ui_file}" 'other_options=("Containing",)'
 
   assert_file_contains "${table_ui_file}" \
 'other_options: tuple\[str, ...\] = ("Other", "Others", "Containing")'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains "${ui_file}" 'def render_persisted_expander_state_script'
+  assert_file_contains_many "${monitor_ui_file}" \
     '"monitor_log_filter"' '"monitor_log_other_filter"' 'st.container(key="monitor_log_controls")' \
-    'def render_persisted_expander_state_script' 'render_persisted_expander_state_script(' \
+    'render_persisted_expander_state_script(' \
     '".st-key-monitor_log_controls"' '"hhs.monitor.logs.controls.expanded"' \
+    '\[0.32, 1.0, 0.36, 0.85, 0.46, 0.34, 0.16, 0.16\]' 'File:'
+  assert_file_contains_many "${ui_file}" \
     'parentWindow.localStorage.getItem(storageKey)' 'marker?.closest("details")' \
-    'expander.addEventListener("toggle"' '\[0.32, 1.0, 0.36, 0.85, 0.46, 0.34, 0.16, 0.16\]' 'File:'
-  assert_file_not_contains "${ui_file}" 'Log file:'
+    'expander.addEventListener("toggle"'
+  assert_file_not_contains "${monitor_ui_file}" 'Log file:'
 
-  assert_file_contains "${ui_file}" 'Level:'
+  assert_file_contains "${monitor_ui_file}" 'Level:'
 
-  assert_file_not_contains "${ui_file}" 'Log level:'
+  assert_file_not_contains "${monitor_ui_file}" 'Log level:'
 
   assert_file_contains_many "${monitor_ui_file}" \
-'Bot N:' 'st.number_input(' 'render_standard_number_spinner("Top N"' \
-    'render_standard_number_spinner(' 'key="monitor_log_tail_lines"' \
+'Bot N:' 'render_standard_number_spinner(' 'key="monitor_log_tail_lines"' \
     'min_value=hhs_ui_constants.MIN_LOG_TAIL_LINES' 'max_value=hhs_ui_constants.MAX_LOG_TAIL_LINES' \
     'step=hhs_ui_constants.LOG_TAIL_LINES_STEP' 'width=150'
-  assert_file_contains "${table_ui_file}" 'def render_standard_number_spinner'
+  assert_file_contains_many "${table_ui_file}" \
+    'def render_standard_number_spinner' 'st.number_input(' \
+    'render_standard_number_spinner("Top N"'
   assert_file_not_contains_many "${monitor_ui_file}" \
 'monitor_log_tail_lines_decrement_button' 'monitor_log_tail_lines_increment_button'
   assert_file_contains_many "${monitor_ui_file}" \
@@ -247,19 +251,18 @@ PY
   assert_file_contains_many "${paths_file}" \
 'def hhs_log_file_info(log_file: str)' '"HHS_LOG_DIR": str(hhs_log_dir())'
   assert_file_contains_many "${monitor_ui_file}" \
-    'log_file_path, log_environment = hhs_log_file_info(selected_log)' \
-    'log_display_path = display_path_value(log_file_path, log_environment)' \
-    'render_openable_config_path(log_display_path, log_file_path)'
-  run python3 - "${ui_file}" <<'PY'
+    'log_file_path = hhs_log_file_info(selected_log)\[0\]' \
+    'render_openable_file_pill("Selected log file:", log_file_path)'
+  run python3 - "${monitor_ui_file}" <<'PY'
 import sys
 from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 monitor_logs_body = source.split("def render_monitor_logs_panel", 1)[1].split("\ndef ", 1)[0]
-assert "render_openable_config_path(log_display_path, log_file_path)" in monitor_logs_body
+assert 'render_openable_file_pill("Selected log file:", log_file_path)' in monitor_logs_body
 assert "render_view_subtitle(" not in monitor_logs_body
 assert monitor_logs_body.index("render_log_controls)") < monitor_logs_body.index(
-    "log_file_path, log_environment = hhs_log_file_info(selected_log)"
+    "log_file_path = hhs_log_file_info(selected_log)[0]"
 )
 PY
   assert_success
@@ -399,7 +402,7 @@ LOGS
   assert_file_contains_many "${css_file}" \
 'height: var(--hhs-log-height)' 'max-height: min(var(--hhs-log-height), var(--hhs-log-max-height))' \
     'min-height: 280px'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${monitor_ui_file}" \
 '@st.fragment(run_every="5s")' 'if not bool(st.session_state.get("monitor_logs_tail", True)):'
   assert_file_contains_many "${css_file}" \
 'white-space: pre' '.hhs-view-subtitle' '\[data-testid="stMain"\] \[data-testid="stVegaLiteChart"\]' \

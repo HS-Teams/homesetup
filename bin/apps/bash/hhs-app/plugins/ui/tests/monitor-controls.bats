@@ -110,13 +110,17 @@ PY
 'def monitor_disk_directory_for_host' 'def synchronize_monitor_disk_directory_with_host' \
     'def monitor_process_top_n_state_key' 'def handle_monitor_process_top_n_change' \
     'def monitor_metric_command' 'normalized_monitor_process_top_n(metric)'
-  assert_file_contains_many "${ui_file}" \
-    '"ssh_files"' 'key="monitor_disk_top_n_input"' \
+  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/core/ui_definitions.py" '"ssh_files"'
+  assert_file_contains_many "${monitor_ui_file}" \
+    'key="monitor_disk_top_n_input"' \
     'on_change=handle_monitor_disk_top_n_change' 'on_change=handle_monitor_process_top_n_change' \
-    'on_click=apply_monitor_process_controls' 'for metric in ("CPU", "MEM"):' \
+    'on_click=apply_monitor_process_controls' \
     'process_monitor_chart_rows(result.stdout, metric, applied_top_n)' \
-    'Top {applied_top_n} {title} processes' 'def process_monitor_chart_rows' \
-    'top -b -n 2 -d 1 -o {linux_sort} -w 512' 'No CPU usage above 0.0% found.'
+    'Top {applied_top_n} {title} processes' 'No CPU usage above 0.0% found.'
+  assert_file_contains_many "${ui_file}" \
+    'for metric in ("CPU", "MEM"):' 'def process_monitor_chart_rows'
+  assert_file_contains "${command_catalog_file}" \
+    'top -b -n 2 -d 1 -o {linux_sort} -w 512'
   assert_file_contains "${command_catalog_file}" 'return hhs_ui_constants.DEFAULT_TOP_N'
 
   run python3 - <<'PY'
@@ -210,7 +214,11 @@ source = (
     + "\n"
     + Path("bin/apps/py/hhs_ui/features/monitor_runtime.py").read_text()
     + "\n"
+    + Path("bin/apps/py/hhs_ui/features/monitor_ui.py").read_text()
+    + "\n"
     + Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/features/monitor_ui.py").read_text()
     + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )
@@ -310,6 +318,8 @@ source = (
     + "\n"
     + Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
     + "\n"
+    + Path("bin/apps/py/hhs_ui/features/monitor_ui.py").read_text()
+    + "\n"
     + Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 )
 tree = ast.parse(source)
@@ -352,10 +362,12 @@ assert namespace["normalized_monitor_disk_top_n"](False) == 10
 assert namespace["normalized_history_stats_top_n"](True) == 10
 assert namespace["normalized_history_stats_top_n"]("25") == 25
 
-main_body = source.split("def main()", 1)[1].split('if __name__ == "__main__"', 1)[0]
-assert 'st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(' in main_body
-assert 'st.session_state[top_n_key] = normalized_monitor_top_n(' in main_body
-assert 'st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(' in main_body
+feature_state_body = source.split("def initialize_feature_session_state()", 1)[1].split(
+    "\ndef ", 1
+)[0]
+assert 'st.session_state["monitor_disk_top_n"] = normalized_monitor_disk_top_n(' in feature_state_body
+assert 'st.session_state[top_n_key] = normalized_monitor_top_n(' in feature_state_body
+assert 'st.session_state["history_stats_top_n"] = normalized_history_stats_top_n(' in feature_state_body
 
 history_body = source.split("def render_history_stats_chart()", 1)[1].split("\ndef ", 1)[0]
 assert history_body.index(

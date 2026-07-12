@@ -39,12 +39,13 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 }
 
 @test "when formatting navigation labels then formatter functions should use centralized maps" {
-  run python3 - <<'PY'
+  run python3 - "${ui_file}" "${hhs_app_ui_file}" "${ssh_explorer_ui_file}" \
+    "${ai_ui_file}" "${search_core_file}" <<'PY'
 import ast
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 
-ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
 constants_path = Path("bin/apps/py/hhs_ui/core/constants.py")
 constants_namespace = {"__file__": str(constants_path)}
 exec(
@@ -57,13 +58,12 @@ constant_values = {
 hhs_ui = SimpleNamespace(**constant_values)
 hhs_ui_constants = SimpleNamespace(**constant_values)
 
-tree = ast.parse(ui_source)
-source_lines = ui_source.splitlines()
-functions = {
-    node.name: "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
-    for node in tree.body
-    if isinstance(node, ast.FunctionDef)
-}
+functions = {}
+for source_path in sys.argv[1:]:
+    module_source = Path(source_path).read_text(encoding="utf-8")
+    for node in ast.parse(module_source).body:
+        if isinstance(node, ast.FunctionDef):
+            functions[node.name] = ast.get_source_segment(module_source, node)
 label_functions = (
     "main_view_label",
     "home_view_label",
@@ -120,13 +120,22 @@ PY
 }
 
 @test "when rendering navigation controls then exported options and formatters should be wired" {
-  run python3 - <<'PY'
+  run python3 - "${ui_file}" "${hhs_app_ui_file}" "${ssh_explorer_ui_file}" \
+    "${ai_ui_file}" <<'PY'
 import ast
 from pathlib import Path
+import sys
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
-tree = ast.parse(source)
-functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+functions = {}
+for source_path in sys.argv[1:]:
+    source = Path(source_path).read_text(encoding="utf-8")
+    functions.update(
+        {
+            node.name: node
+            for node in ast.parse(source).body
+            if isinstance(node, ast.FunctionDef)
+        }
+    )
 
 
 def expression_name(node):

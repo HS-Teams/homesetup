@@ -50,7 +50,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_contains_many "${css_file}" \
 'color: var(--hhs-danger) !important' '\[data-testid="stTextInput"\]' \
     'grid-template-columns: max-content minmax(0, 1fr)' 'white-space: nowrap'
-  assert_file_contains "${ui_file}" 'hhs-selected-item-line'
+  assert_file_contains "${table_ui_file}" 'hhs-selected-item-line'
   assert_file_contains "${css_file}" 'display: inline-flex'
   assert_file_not_contains "${css_file}" 'margin-top: 1.55rem'
 

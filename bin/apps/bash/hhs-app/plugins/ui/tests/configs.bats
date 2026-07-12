@@ -98,7 +98,8 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'def render_path_picker_body' 'def folder_picker_owner_context_for_target' \
     'def folder_picker_owner_matches'
   assert_file_contains_many "${ui_file}" \
-    'render_folder_picker_dialog("path")' 'render_folder_picker_dialog("dir")' 'render_folder_picker_dialog("search")'
+    'render_folder_picker_dialog("path")' 'render_folder_picker_dialog("dir")'
+  assert_file_contains "${search_ui_file}" 'render_folder_picker_dialog("search")'
   assert_file_not_contains_many "${ui_file}" \
 'rerun_streamlit_app' 'st.rerun(scope="app")'
   assert_file_contains "${path_picker_file}" 'key="folder_picker_header_close_button"'
@@ -133,8 +134,9 @@ PY
 
   assert_file_contains_many "${css_file}" \
 'nth-child(5)' 'min-width: 2rem' 'justify-content: center'
-  assert_file_contains_many "${path_picker_file}" \
-'"Include .dot-folders"' '"Loading directories and files..."'
+  assert_file_contains "${path_picker_file}" '"Include .dot-folders"'
+  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/core/ui_definitions.py" \
+    'PATH_PICKER_LISTING_LOADER_MESSAGE = "Loading directories and files..."'
   run python3 - "${path_picker_file}" <<'PY'
 from pathlib import Path
 import sys
@@ -201,7 +203,15 @@ PY
   run python3 - <<'PY'
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = (
+    Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/features/ai_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
+)
 table_functions = (
     "render_envs_table",
     "render_paths_table",
@@ -272,13 +282,22 @@ PY
 
   assert_file_contains_many "${ui_file}" \
 'on_click": apply_dir_delete' 'on_click": apply_cmd_delete' 'on_click": apply_alias_delete' \
-    'selected_value: Callable\[\[dict\[str, str\], int\], str\] | None = None' \
     'selected_value=lambda row, _index: row.get("Value", "")'
+  assert_file_contains "${table_ui_file}" \
+    'selected_value: Callable\[\[dict\[str, str\], int\], str\] | None = None'
   run python3 - <<'PY'
 import ast
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = (
+    Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/features/ai_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
+)
 tree = ast.parse(source)
 functions = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
 

@@ -23,12 +23,11 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
 @test "when rendering table controls then shared filters should use exported layout constants" {
   assert_file_contains "${constants_file}" 'TABLE_CONTROLS_PANEL_TITLE = "Filters & Controls"'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'TABLE_CONTROLS_PANEL_TITLE'
+  assert_hhs_ui_exports TABLE_CONTROLS_PANEL_TITLE
   assert_file_contains_many "${table_ui_file}" \
-'def render_table_controls_panel' 'st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True)' \
+    'def render_table_controls_panel' 'st.expander(hhs_ui.TABLE_CONTROLS_PANEL_TITLE, expanded=True)' \
     'def render_table_filter_controls' 'def clear_table_other_filter' \
-    'key=f"{other_key}_clear"' '""' 'on_click=clear_table_other_filter' \
+    'key=f"{other_key}_clear"' '""' 'on_click=clear_table_other_filter'
   assert_file_contains "${ui_file}" 'def render_config_add_controls'
   assert_file_contains_many "${constants_file}" \
 'TWO_OPTION_FILTER_COLUMNS = \[0.75, 3.25\]' \
@@ -36,8 +35,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'FOUR_OPTION_FILTER_COLUMNS = \[1.75, 2.25\]' \
     'FIVE_OPTION_FILTER_COLUMNS = \[2.75, 1.25\]' \
     'PATH_FILTER_COLUMNS = \[2.25, 1.75\]'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'FIVE_OPTION_FILTER_COLUMNS'
+  assert_hhs_ui_exports FIVE_OPTION_FILTER_COLUMNS
   assert_file_contains "${table_ui_file}" 'hhs_ui.THREE_OPTION_FILTER_COLUMNS'
 
   assert_file_contains_many "${constants_file}" \
@@ -100,7 +98,11 @@ PY
   run python3 - <<'PY'
 from pathlib import Path
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+source = (
+    Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
+)
 old_labels = (
     "Tools filter",
     "Tools filter text",

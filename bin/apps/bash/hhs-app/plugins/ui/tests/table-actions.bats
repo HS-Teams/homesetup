@@ -24,20 +24,21 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 @test "when rendering selected table rows then shared action and edit controls should be wired" {
   assert_file_contains_many "${ui_file}" \
 'checkbox=True' 'selected_label=lambda row, _index: f"Selected: {row.get('"'"'Tool'"'"', '"'"''"'"')}"' \
+    'reset_selection=reset_env_table_selection' 'reset_selection=reset_path_table_selection' \
+    'reset_selection=reset_dir_table_selection' 'reset_selection=reset_cmd_table_selection' \
+    'reset_selection=reset_alias_table_selection' 'reset_selection=reset_ai_model_table_selection'
+  assert_file_contains_many "${table_ui_file}" \
     'def render_selected_table_item' 'def table_component_key' 'table_empty_hint' \
     'table_selected_panel_' 'table_actions_' 'def scroll_to_table_selection_content' \
     'table_selected_bottom_' 'scroll_to_table_selection_content(anchor_key)' \
     'target.scrollIntoView' 'selected_editable: bool | Callable' '""' '"ﰸ"' \
-    '""' 'help="Edit"' 'args=(editing_key, edit_key, edit_value)' \
+    'help="Edit"' 'args=(editing_key, edit_key, edit_value)' \
     'gap="small"' 'st.text_input(' 'f"{value}:"' \
     'def render_selected_table_actions' 'selected_action_buttons: list' \
     'selected_actions=visible_selected_actions' 'help="Cancel edit"' \
     'def cancel_selected_item_edit' 'reset_selection: Callable\[\[\], None\] | None = None' \
     'args=(editing_key, edit_key, reset_selection)' 'def execute_selected_table_action' \
-    'callback(\*callback_args)' 'reset_selection=reset_env_table_selection' \
-    'reset_selection=reset_path_table_selection' 'reset_selection=reset_dir_table_selection' \
-    'reset_selection=reset_cmd_table_selection' 'reset_selection=reset_alias_table_selection' \
-    'reset_selection=reset_ai_model_table_selection'
+    'callback(\*callback_args)'
 
   run python3 - <<'PY'
 import ast

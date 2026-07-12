@@ -22,7 +22,7 @@ load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
 @test "when building Search commands then query type should choose the matching hhs helper" {
-  run python3 - "${ui_file}" <<'PY'
+  run python3 - "${search_ui_file}" <<'PY'
 from pathlib import Path
 import hashlib
 import html
@@ -34,11 +34,16 @@ import subprocess
 import types
 import urllib.parse
 
-source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+source = Path("bin/apps/py/hhs_ui/features/search_ui.py").read_text(encoding="utf-8")
 search_core_source = Path("bin/apps/py/hhs_ui/features/search_core.py").read_text(encoding="utf-8")
+ui_definitions_source = Path("bin/apps/py/hhs_ui/core/ui_definitions.py").read_text(encoding="utf-8")
+ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+command_source = Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text(encoding="utf-8")
 search_core_start = search_core_source.index("def search_type_label(")
+open_file_start = command_source.index("def open_file(")
+open_file_end = command_source.index("def build_footer_working_directory_command", open_file_start)
 start = source.index("def search_command_cache_key(")
-end = source.index("def render_ai_models_result(")
+end = len(source)
 
 def fragment(*args, **kwargs):
     if args and callable(args[0]) and len(args) == 1 and not kwargs:
@@ -73,6 +78,12 @@ namespace = {
             "Folders": "Folders",
             "Strings": "Strings",
         },
+        ANSI_ESCAPE_PATTERN=re.compile(
+            r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[()][A-Za-z0-9])"
+        ),
+        ESCAPED_ANSI_ESCAPE_PATTERN=re.compile(
+            r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
+        ),
     ),
     "st": types.SimpleNamespace(session_state={}, fragment=fragment),
     "Path": Path,
@@ -133,19 +144,22 @@ exec(
     "from __future__ import annotations\n"
     + search_core_source[search_core_start:]
     + "\n"
+    + command_source[open_file_start:open_file_end]
+    + "\n"
     + source[start:end],
     namespace,
 )
 
 controls_body = source.split("def render_search_controls", 1)[1].split("\ndef ", 1)[0]
-assert (
-    '"Search directory",\n'
-    '                options=search_directory_options(),\n'
-    '                key="search_path",\n'
-    '                accept_new_options=True,\n'
-    '                on_change=apply_search_directory_change,\n'
-    '                width="stretch",'
-) in controls_body
+for fragment in (
+    '"Search directory"',
+    "options=search_directory_options()",
+    'key="search_path"',
+    "accept_new_options=True",
+    "on_change=apply_search_directory_change",
+    'width="stretch"',
+):
+    assert fragment in controls_body
 submit_body = source.split("def submit_search_query", 1)[1].split("\ndef ", 1)[0]
 type_change_body = source.split("def apply_search_type_change", 1)[1].split("\ndef ", 1)[0]
 assert 'st.session_state["search_replace"] = False' in type_change_body
@@ -165,10 +179,14 @@ assert "start_search_command(command, cache_key, loader_message)" in render_resu
 assert "render_background_job_status(SEARCH_COMMAND_JOB, loader_message)" in render_results_body
 assert "complete_search_command_result(cache_key)" in render_results_body
 assert "cached_search_command_result(command, cache_key)" in render_results_body
-assert 'SEARCH_COMMAND_JOB = "search_command"' in source
-assert 'SEARCH_OPEN_JOB = "search_open"' in source
-assert "SEARCH_OPEN_JOB" in source.split("HOST_SWITCH_BACKGROUND_JOBS = (", 1)[1].split(")", 1)[0]
-assert "SEARCH_OPEN_JOB" in source.split("CACHE_CLEAR_BACKGROUND_JOBS = (", 1)[1].split(")", 1)[0]
+assert 'SEARCH_COMMAND_JOB = "search_command"' in ui_definitions_source
+assert 'SEARCH_OPEN_JOB = "search_open"' in ui_definitions_source
+assert "SEARCH_OPEN_JOB" in ui_definitions_source.split(
+    "HOST_SWITCH_BACKGROUND_JOBS = (", 1
+)[1].split(")", 1)[0]
+assert "SEARCH_OPEN_JOB" in ui_definitions_source.split(
+    "CACHE_CLEAR_BACKGROUND_JOBS = (", 1
+)[1].split(")", 1)[0]
 start_search_body = source.split("def start_search_command", 1)[1].split("\ndef ", 1)[0]
 assert "hhs_ui_constants.UI_COMMAND_SEARCH_TIMEOUT_SECONDS" in start_search_body
 assert "show_preloader_event=True" in start_search_body
@@ -176,9 +194,9 @@ open_local_body = source.split("def open_local_search_result_path", 1)[1].split(
 open_remote_body = source.split("def open_remote_search_result_path", 1)[1].split("\ndef ", 1)[0]
 start_open_body = source.split("def start_pending_search_open_action", 1)[1].split("\ndef ", 1)[0]
 complete_open_body = source.split("def complete_search_open_action_job", 1)[1].split("\ndef ", 1)[0]
-global_actions_body = source.split("def complete_background_action_jobs", 1)[1].split("\ndef ", 1)[0]
+global_actions_body = ui_source.split("def complete_background_action_jobs", 1)[1].split("\ndef ", 1)[0]
 render_panel_body = source.split("def render_search_panel", 1)[1].split("\ndef ", 1)[0]
-main_body = source.split("def main", 1)[1].split("\n\nif __name__", 1)[0]
+main_body = ui_source.split("def main", 1)[1].split("\n\nif __name__", 1)[0]
 assert "queue_search_open_action(" in open_local_body
 assert "run_bash_command(" not in open_local_body
 assert "queue_search_open_action(" in open_remote_body
@@ -190,7 +208,7 @@ assert "force_local=True" in start_open_body
 assert "background_job_result(SEARCH_OPEN_JOB)" in complete_open_body
 assert "execute_pending_search_open_action()" in global_actions_body
 assert "render_background_job_status(SEARCH_OPEN_JOB)" in render_panel_body
-assert 'st.session_state.setdefault("search_open_execute_pending", None)' in main_body
+assert '("search_open_execute_pending", None)' in ui_source
 assert namespace["normalized_search_type"]("Folders") == "Folders"
 assert namespace["normalized_search_type"]("Unknown") == "Files"
 namespace["st"].session_state["search_type"] = "Files"
@@ -700,9 +718,13 @@ PY
 
   assert_file_contains_many "${updater_file}" \
 'HHS_VERSION="$(grep -m 1 . "${version_file}")"' 'export HHS_VERSION' 'cmd="$1"' 'refresh_hhs_version'
-  assert_file_contains_many "${ui_file}" \
-'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")";' \
-    'build_homesetup_version_command()' 'FOOTER_VERSION_CACHE_TAG = "footer_version"' \
+  assert_file_contains_many "${command_catalog_file}" \
+    'export HHS_VERSION="$(grep -m 1 . "${HHS_HOME}/.VERSION" 2>/dev/null || printf "%s" "${HHS_VERSION}")";' \
+    'def build_homesetup_version_command'
+  assert_file_contains "${footer_ui_file}" 'build_homesetup_version_command()'
+  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/core/ui_definitions.py" \
+    'FOOTER_VERSION_CACHE_TAG = "footer_version"'
+  assert_file_contains "${ui_file}" \
     'st.session_state.setdefault("footer_hhs_version_cache_loaded", False)'
 }
 
@@ -840,12 +862,13 @@ PY
 from pathlib import Path
 
 source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+search_source = Path("bin/apps/py/hhs_ui/features/search_ui.py").read_text()
 table_source = Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
 body = table_source.split("def render_table_filter_controls", 1)[1].split("\ndef ", 1)[0]
 assert "st.session_state[key] = options[safe_index]" in body
 assert "index=None" in body
 assert "index=index" not in body
-search_filter_body = source.split("def render_search_filters", 1)[1].split("\ndef ", 1)[0]
+search_filter_body = search_source.split("def render_search_filters", 1)[1].split("\ndef ", 1)[0]
 assert "key=\"search_filter\"" in search_filter_body
 assert "index=None" in search_filter_body
 main_view_body = source.split("def render_main_view", 1)[1].split("\ndef ", 1)[0]

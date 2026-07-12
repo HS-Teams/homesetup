@@ -55,7 +55,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   run grep -F -q '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}' "${command_catalog_file}"
   assert_success
 
-  assert_file_contains "${ui_file}" 'return "docker ps -q >/dev/null 2>&1"'
+  assert_file_contains "${command_catalog_file}" 'return "docker ps -q >/dev/null 2>&1"'
 
   run python3 - <<'PY'
 from pathlib import Path
@@ -86,9 +86,7 @@ PY
     'HOME_TOOLS_FILTERS = ("All", "Installed", "Not Installed", "Aliased", "Containing")' \
     'SHOPTS_FILTERS = ("All", "ON", "OFF", "Containing")' \
     '"home_shopts_filter"' '"home_shopts_other_filter"'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" 'HOME_TOOLS_FILTERS'
-  assert_file_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'SHOPTS_FILTERS' 'SHOPT_LINE_PATTERN'
+  assert_hhs_ui_exports HOME_TOOLS_FILTERS SHOPTS_FILTERS SHOPT_LINE_PATTERN
 
   assert_file_contains_many "${ui_file}" \
 'def filter_tool_rows' '"home_tools_filter"' 'hhs_ui.HOME_TOOLS_FILTERS' \
@@ -103,9 +101,7 @@ PY
     'HOME_TOOLS_TABLE_RESET_COUNTER_KEY = "home_tools_table_reset_counter"' \
     'HOME_SHOPTS_TABLE_KEY = "home_shopts_table"' \
     'HOME_SHOPTS_TABLE_RESET_COUNTER_KEY = "home_shopts_table_reset_counter"'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" 'HOME_TOOLS_TABLE_KEY'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'HOME_TOOLS_TABLE_RESET_COUNTER_KEY'
+  assert_hhs_ui_exports HOME_TOOLS_TABLE_KEY HOME_TOOLS_TABLE_RESET_COUNTER_KEY
   assert_file_contains_many "${ui_file}" \
 'def home_tools_table_key' 'def reset_home_tools_table_selection' \
     'key=home_tools_table_key()' 'reset_home_tools_table_selection()' \
@@ -130,6 +126,8 @@ PY
     'title = f"{home_tool_action_noun(operation)} of {tool_name} {status}"' \
     'def apply_selected_tool_tldr' 'def render_home_tool_tldr_dialog' \
     'label": "Install"' 'label": "Uninstall"' 'label": "Reinstall"' \
-    'label": "TLDR"' 'empty_hint: str = "Select a row to interact"' \
+    'label": "TLDR"'
+  assert_file_contains_many "${table_ui_file}" \
+    'empty_hint: str = "Select a row to interact"' \
     'empty_caption: str = "Select a row to interact"'
 }

@@ -52,9 +52,28 @@ PY
 import re
 from pathlib import Path
 
-ui_source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+ui_source = (
+    Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/widgets/footer_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/execution/command_catalog.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/core/ui_definitions.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/core/runtime.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/features/ai_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/features/hhs_app_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/features/search_ui.py").read_text()
+    + "\n"
+    + Path("bin/apps/py/hhs_ui/features/ssh_explorer_ui.py").read_text()
+)
 cache_runtime_source = Path("bin/apps/py/hhs_ui/execution/cache_runtime.py").read_text()
 status_source = Path("bin/apps/py/hhs_ui/widgets/status_ui.py").read_text()
+table_ui_source = Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs_ui/static/css/streamlit_ui.css").read_text()
 dracula_css = Path("bin/apps/py/hhs_ui/static/themes/dracula.css").read_text()
 homesetup_css = Path("bin/apps/py/hhs_ui/static/themes/homesetup.css").read_text()
@@ -118,16 +137,11 @@ assert 'COMMAND_PRELOADER_CANCEL_QUERY_PARAM = "hhs_cancel_preloader"' in consta
 assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 1.0' in constants_source
 assert 'AI_TERMINAL_CONTEXT_MAX_CHARS = 12000' in constants_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in constants_source
-assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS' in init_source
-assert 'FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM' in init_source
-assert 'COMMAND_PRELOADER_CANCEL_QUERY_PARAM' in init_source
+assert '__all__ = tuple(name for name in dir(_constants) if name.isupper())' in init_source
+assert 'globals().update({name: getattr(_constants, name) for name in __all__})' in init_source
 assert 'FOOTER_ASK_TERMINAL_QUERY_PARAM' not in init_source
 assert 'FOOTER_ASK_TERMINAL_PROMPT_QUERY_PARAM' not in init_source
 assert 'FOOTER_ASK_TERMINAL_REQUEST_QUERY_PARAM' not in init_source
-assert 'FOOTER_CLEAR_CACHE_QUERY_PARAM' in init_source
-assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM' in init_source
-assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM' in init_source
-assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM' in init_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in init_source
 assert '"updater_last_check_epoch"' not in constants_source
 assert '"updater_last_check_output"' in constants_source
@@ -136,7 +150,7 @@ assert 'class="hhs-footer-link hhs-footer-repository-link"' in ui_source
 assert 'class="hhs-footer-link hhs-footer-working-dir-link"' in ui_source
 assert 'class="hhs-footer-working-dir-value"' in ui_source
 assert 'href="{working_dir_url}"' in ui_source
-assert 'target="_self"{working_dir_attrs}>Working dir: <span class="hhs-footer-working-dir-value">' in ui_source
+assert 'target="_self" title="Open the working directory"{working_dir_attrs}>Working dir: <span class="hhs-footer-working-dir-value">' in ui_source
 render_footer_body = ui_source.split("def render_footer()", 1)[1].split("\ndef ", 1)[0]
 cache_clear_script_body = ui_source.split("def render_footer_cache_clear_menu_script", 1)[1].split("\ndef ", 1)[0]
 assert 'working_dir = html.escape(footer_working_directory())' in render_footer_body
@@ -174,13 +188,12 @@ assert 'class="hhs-footer-terminal-ai-context-input"' in ui_source
 assert 'placeholder="Terminal text"' in ui_source
 assert 'aria-label="Captured terminal text"' in ui_source
 assert 'readonly' in ui_source
-assert '<button type="button">OK</button>' in ui_source
-assert 'panel.querySelectorAll(\'input[type="checkbox"][data-param]:checked\')' in ui_source
+assert 'class="hhs-footer-cache-clear-submit" type="button"' in ui_source
+assert '.hhs-footer-cache-clear-option[role="checkbox"][aria-checked="true"]' in ui_source
 assert 'params.set(panel.dataset.clearParam, "1")' in ui_source
 assert 'window.parent.__hhsFooterCacheClearOutsideHandler' in ui_source
-assert 'window.parent.__hhsFooterCacheClearOutsideFocusHandler' in cache_clear_script_body
-assert 'doc.addEventListener("focusin", outsidePointerHandler, true)' in cache_clear_script_body
-assert 'window.parent.addEventListener("blur", outsideFocusHandler, true)' in cache_clear_script_body
+assert 'doc.addEventListener("pointerdown", outsideHandler, true)' in cache_clear_script_body
+assert 'window.parent.addEventListener("blur", outsideFocusHandler, true)' in ui_source
 assert 'doc.querySelectorAll(".hhs-footer-terminal-ai-menu[open]")' in ui_source
 assert 'doc.addEventListener("pointerdown", outsidePointerHandler, true)' in ui_source
 assert 'terminal_ai_ask_command_prefix = build_hhs_ask_plugin_command(' not in ui_source
@@ -260,9 +273,9 @@ assert '<span class="hhs-footer-glyph"></span><span class="hhs-footer-cache-r
 assert 'def render_footer_cache_clear_menu(' not in ui_source
 assert 'st.container(key="footer_cache_clear_menu")' not in ui_source
 assert 'f"{shell_status_markup}{cache_clear_markup}{terminal_ai_markup}</span>"' in ui_source
-assert '>Clear application cache</span>' in ui_source
-assert '>Clear application states</span>' in ui_source
-assert '>Clear AI history</span>' in ui_source
+assert '"Clear application cache"' in ui_source
+assert '"Clear application states"' in ui_source
+assert '"Clear AI history"' in ui_source
 assert '>OK</button>' in ui_source
 assert 'def open_file' in ui_source
 assert 'def open_working_directory_endpoint_url' in ui_source
@@ -346,7 +359,6 @@ assert 'apply_footer_cache_clear_options(' in footer_actions_body
 assert 'open_footer_cache_clear_menu()' not in footer_actions_body
 assert 'clear_cached_ui_data_preserving_state()' not in footer_actions_body
 assert 'def cache_delete_command' in cache_runtime_source
-assert 'cache_delete_command(command, "env")' in ui_source
 clear_cache_body = cache_runtime_source.split("def clear_cached_ui_data_preserving_state", 1)[1].split("\ndef ", 1)[0]
 assert "cache_clear()" in clear_cache_body
 assert "st.session_state.clear()" not in clear_cache_body
@@ -441,7 +453,6 @@ assert 'status.dataset.hhsFloatingStatusId = statusId' in status_source
 assert 'querySelectorAll(".hhs-floating-status[data-hhs-floating-status-id]")' in status_source
 assert "parentDocument.body.append(status)" in status_source
 assert 'button.className = "hhs-floating-status-dismiss"' in status_source
-assert 'dismiss.className = "hhs-floating-status-dismiss"' in status_source
 assert '__hhsDisposedFloatingStatuses' in status_source
 assert '__hhsRenderedFloatingStatuses' not in status_source
 assert '__hhsFloatingStatusTimer' in status_source
@@ -497,9 +508,9 @@ sidebar_title_separator_block = re.search(r"\.hhs-sidebar-title::after\s*\{([^}]
 cache_menu_block = re.search(r"\.hhs-footer-cache-clear-menu\s*\{([^}]*)\}", base_css).group(1)
 cache_trigger_block = re.search(r"\.hhs-footer-cache-clear-trigger\s*\{([^}]*)\}", base_css).group(1)
 cache_panel_block = re.search(r"^\.hhs-footer-cache-clear-panel\s*\{([^}]*)\}", base_css, re.M).group(1)
-cache_panel_label_block = re.search(r"\.hhs-footer-cache-clear-panel label\s*\{([^}]*)\}", base_css).group(1)
-cache_panel_checkbox_block = re.search(r"\.hhs-footer-cache-clear-panel input\[type=\"checkbox\"\]\s*\{([^}]*)\}", base_css).group(1)
-cache_panel_button_block = re.search(r"\.hhs-footer-cache-clear-panel button\s*\{([^}]*)\}", base_css).group(1)
+cache_option_block = re.search(r"\.hhs-footer-cache-clear-option\s*\{([^}]*)\}", base_css).group(1)
+cache_option_mark_block = re.search(r"\.hhs-footer-cache-clear-option-mark\s*\{([^}]*)\}", base_css).group(1)
+cache_submit_block = re.search(r"\.hhs-footer-cache-clear-submit\s*\{([^}]*)\}", base_css).group(1)
 footer_glyph_button_block = re.search(r"\.hhs-footer-glyph-button\s*\{([^}]*)\}", base_css).group(1)
 terminal_ai_menu_block = re.search(r"\.hhs-footer-terminal-ai-menu\s*\{([^}]*)\}", base_css).group(1)
 terminal_ai_trigger_block = re.search(r"\.hhs-footer-terminal-ai-trigger\s*\{([^}]*)\}", base_css).group(1)
@@ -640,13 +651,13 @@ assert "box-shadow: 0 1rem 2rem" in cache_panel_block
 assert "gap: var(--hhs-element-std-gap)" in cache_panel_block
 assert "position: fixed" in cache_panel_block
 assert "width: min(22rem, calc(100vw - 2rem)) !important" in cache_panel_block
-assert "width: 100%" in cache_panel_label_block
-assert "min-height: 2.25rem" in cache_panel_label_block
-assert "accent-color: var(--hhs-theme-primary-color)" in cache_panel_checkbox_block
-assert "height: 1rem" in cache_panel_checkbox_block
-assert "background: transparent" in cache_panel_button_block
-assert "height: 2.25rem" in cache_panel_button_block
-assert "width: 100%" in cache_panel_button_block
+assert "width: 100%" in cache_option_block
+assert "min-height: 2.25rem" in cache_option_block
+assert "border: 1px solid var(--hhs-theme-border-color)" in cache_option_mark_block
+assert "height: 1rem" in cache_option_mark_block
+assert "background: transparent" in cache_submit_block
+assert "min-height: 2.25rem" in cache_submit_block
+assert "width: 100%" in cache_submit_block
 assert "background: var(--hhs-theme-secondary-background-color)" in terminal_ai_panel_block
 assert "box-shadow: 0 1rem 2rem" in terminal_ai_panel_block
 assert "gap: var(--hhs-element-std-gap)" in terminal_ai_panel_block
@@ -662,8 +673,8 @@ assert "cursor: default" in terminal_ai_context_input_block
 assert "background: transparent" in terminal_ai_panel_button_block
 assert "height: 2.25rem" in terminal_ai_panel_button_block
 assert "width: 100%" in terminal_ai_panel_button_block
-assert ".hhs-footer-cache-clear-panel label:hover" in base_css
-assert ".hhs-footer-cache-clear-panel button:hover" in base_css
+assert ".hhs-footer-cache-clear-option:hover" in base_css
+assert ".hhs-footer-cache-clear-submit:hover" in base_css
 assert ".hhs-footer-terminal-ai-panel button:hover" in base_css
 assert 'div[role="dialog"]:has(.hhs-shell-version-output)' in base_css
 assert ".hhs-shell-version-output" in base_css

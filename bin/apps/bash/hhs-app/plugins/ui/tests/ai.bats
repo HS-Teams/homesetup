@@ -29,7 +29,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"' \
     'APP_AI_HOMESETUP_AVATAR_FILE = APP_DIR / "assets/images/homesetup.png"' \
     'APP_FAVICON_FILE = APP_DIR / "assets/images/favicon.png"'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" 'APP_FAVICON_FILE'
+  assert_hhs_ui_exports APP_FAVICON_FILE
 
   run test -s "${ask_prompt_file}"
   assert_success
@@ -148,15 +148,15 @@ assert 'st.session_state["ai_chat_messages"] = []' in complete_context_body
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ai_ui_file}" \
 'key="ai_refresh_context_button"' 'key="ai_clear_context_button"' 'on_click=clear_ai_context_history'
-  assert_file_not_contains "${ui_file}" 'key="ai_prompt_context_button"'
+  assert_file_not_contains "${ai_ui_file}" 'key="ai_prompt_context_button"'
 
-  assert_file_contains "${ui_file}" '" Refresh"'
+  assert_file_contains "${ai_ui_file}" '" Refresh"'
 
-  assert_file_not_contains "${ui_file}" '" Prompt"'
+  assert_file_not_contains "${ai_ui_file}" '" Prompt"'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ai_ui_file}" \
 'with st.expander("Prompt", expanded=False):' 'with st.expander("History", expanded=True):' \
     'key="ai_prompt_editor"' 'key="ai_prompt_save_button"' 'key="ai_prompt_revert_button"' \
     'on_click=save_ai_prompt_file' 'on_click=revert_ai_prompt_file' \
@@ -166,19 +166,20 @@ PY
   assert_file_contains_many "${constants_file}" \
 '"ai_context_output"' '"ai_context_error"' '"ai_prompt_editor"' '"ai_prompt_error"' '"ai_prompt_loaded"'
   assert_file_contains_many "${ui_file}" \
-'st.session_state.setdefault("ai_context_output", "")' 'st.session_state.setdefault("ai_context_error", "")' \
-    'st.session_state.setdefault("ai_prompt_editor", "")' 'st.session_state.setdefault("ai_prompt_error", "")' \
-    'st.session_state.setdefault("ai_prompt_loaded", False)' 'render_view_subtitle("AI context is clear")'
-  assert_file_not_contains "${ui_file}" 'st.markdown("### AI context is clear")'
+'("ai_context_output", "")' '("ai_context_error", "")' \
+    '("ai_prompt_editor", "")' '("ai_prompt_error", "")' \
+    '("ai_prompt_loaded", False)' 'st.session_state.setdefault(state_key, default_value)'
+  assert_file_contains "${ai_ui_file}" 'render_view_subtitle("AI context is clear")'
+  assert_file_not_contains "${ai_ui_file}" 'st.markdown("### AI context is clear")'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ai_ui_file}" \
 'elif ai_view == "CONTEXT"' 'render_ai_context_panel()' 'render_terminal_output(context_output)'
-  assert_file_not_contains_many "${ui_file}" \
+  assert_file_not_contains_many "${ai_ui_file}" \
 'key="ai_show_context_button"' 'show_ai_chat_context'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ai_ui_file}" \
 '" Clear"' 'build_hhs_ask_reset_command()'
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ai_ui_file}" \
 'st.session_state\["ai_context_output"\] = ""' 'st.session_state\["ai_context_error"\] = ""'
   run grep -q -- '-i|--ingest' "${ask_file}"
   assert_success
@@ -255,23 +256,25 @@ PY
   run grep -q -- '-r|--reset) clear_context' "${ask_file}"
   assert_success
 
-  assert_file_not_contains "${ui_file}" 'disabled=not st.session_state\["ai_chat_messages"\]'
+  assert_file_not_contains "${ai_ui_file}" 'disabled=not st.session_state\["ai_chat_messages"\]'
 
-  assert_file_contains "${ui_file}" 'render_view_subtitle("There is no chat history")'
+  assert_file_contains "${ai_ui_file}" 'render_view_subtitle("There is no chat history")'
 
-  assert_file_not_contains "${ui_file}" 'st.markdown("### There is no chat history")'
+  assert_file_not_contains "${ai_ui_file}" 'st.markdown("### There is no chat history")'
 
-  assert_file_contains "${ui_file}" 'meta_col, clear_col = st.columns(\[3.6, 0.4\], vertical_alignment="center")'
+  assert_file_contains "${ai_ui_file}" 'meta_col, clear_col = st.columns(\[3.6, 0.4\], vertical_alignment="center")'
 
   assert_file_not_contains_many "${css_file}" \
 '.st-key-ai_show_context_button button' '.st-key-ai_clear_chat_button button'
-  assert_file_contains_many "${ui_file}" \
-'build_hhs_ask_execute_command(\["-s", model_name\])' 'def hhs_ask_timeout_seconds' \
-    'return 180 if connected_ssh_host() else 90' 'timeout_seconds=hhs_ask_timeout_seconds()'
+  assert_file_contains "${command_catalog_file}" \
+    'build_hhs_ask_execute_command(\["-s", model_name\])'
+  assert_file_contains_many "${ai_ui_file}" \
+    'def hhs_ask_timeout_seconds' 'return 180 if connected_ssh_host() else 90' \
+    'timeout_seconds=hhs_ask_timeout_seconds()'
   assert_file_contains_many "${constants_file}" \
 'AI_PERFORMANCE_MIN_SAMPLES = 3' 'AI_PERFORMANCE_TIMING_LIMIT = 100'
-  assert_file_contains_many "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/__init__.py" \
-'AI_PERFORMANCE_MIN_SAMPLES' 'AI_PERFORMANCE_RECALC_INTERVAL' 'AI_PERFORMANCE_TIMING_LIMIT'
+  assert_hhs_ui_exports \
+    AI_PERFORMANCE_MIN_SAMPLES AI_PERFORMANCE_RECALC_INTERVAL AI_PERFORMANCE_TIMING_LIMIT
   assert_file_contains_many "${constants_file}" \
 '"ai_model_performance_timings"' '"ai_model_performance_averages"' '"ai_model_performance_sample_counts"'
   assert_file_contains_many "${command_catalog_file}" \
@@ -279,26 +282,30 @@ PY
     'def ai_context_used_meta_html' 'def html_tooltip_chip' 'def ai_context_used_tooltip_html' \
     'def file_size_bytes' 'prompt_size = file_size_bytes(ollama_prompt_file())' \
     'history_size = file_size_bytes(ollama_history_file())' \
-    'percent_of_context(prompt_size + history_size' '"Ctx Used"' 'Current logged user' \
+    'percent_of_context(prompt_size + history_size' '"Ctx Used"' \
     'Prompt: ' 'Context: ' 'def parse_ollama_model_rows' 'def first_downloaded_ollama_model'
-  assert_file_contains_many "${ui_file}" \
-'def record_ai_model_request_duration' 'def ai_chat_meta_html' \
+  assert_file_contains_many "${ai_ui_file}" \
+'Current logged user' 'def record_ai_model_request_duration' 'def ai_chat_meta_html' \
     'def model_characteristics_tooltip_html' 'def ai_model_recent_duration_tooltip_html' \
-    'def ollama_history_file' 'def ollama_prompt_file' 'HHS_OLLAMA_HISTORY_FILE' \
-    'HHS_OLLAMA_PROMPT_FILE' '".ollama_history"' '"hhs-ask-ollama.md"' 'parse_rows_cached(' \
+    'parse_rows_cached(' \
     'parse_ollama_model_rows(output, ollama_model)' 'timing_durations_for_model(model_name)\[-5:\]'
+  assert_file_contains_many "${paths_file}" \
+    'def ollama_history_file' 'def ollama_prompt_file' 'HHS_OLLAMA_HISTORY_FILE' \
+    'HHS_OLLAMA_PROMPT_FILE' '".ollama_history"' '"hhs-ask-ollama.md"'
   assert_file_contains_many "${css_file}" \
 'hhs-tooltip-content' '.hhs-ai-chat-meta .hhs-tooltip:hover .hhs-tooltip-content'
-  assert_file_contains_many "${ui_file}" \
-'hhs-ai-chat-model hhs-ai-chat-user' 'hhs-ai-chat-model hhs-ai-context-used' 'var(--hhs-danger)' \
-    'var(--hhs-warning)' 'var(--hhs-success)' 'hhs-ai-chat-model hhs-ai-chat-duration' \
+  assert_file_contains_many "${ai_ui_file}" \
+'hhs-ai-chat-model hhs-ai-chat-user' 'hhs-ai-chat-model hhs-ai-chat-duration' \
     'meta_placeholder = st.empty()' 'meta_placeholder.markdown(' \
     'model_sample_count == hhs_ui.AI_PERFORMANCE_MIN_SAMPLES' 'def ai_model_performance_timings'
-  run grep -q -- '-hhs_ui.AI_PERFORMANCE_TIMING_LIMIT' "${ui_file}"
+  assert_file_contains_many "${command_catalog_file}" \
+    'hhs-ai-chat-model hhs-ai-context-used' 'var(--hhs-danger)' \
+    'var(--hhs-warning)' 'var(--hhs-success)'
+  run grep -q -- '-hhs_ui.AI_PERFORMANCE_TIMING_LIMIT' "${ai_ui_file}"
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
-'use_cache=False' 'ask_started_at = time.perf_counter()' \
+  assert_file_contains_many "${ai_ui_file}" \
+'ask_started_at = time.perf_counter()' \
     'record_ai_model_request_duration(ollama_model, request_duration)' '"Latency"' \
     'Delete Model' 'Select Model'
 }
@@ -308,7 +315,7 @@ PY
 @test "when selecting missing Ask model then ask plugin should download it instead of the UI" {
   assert_file_contains_many "${ask_file}" \
 'ollama pull "${model_name}"' '__hhs_toml_set "${HHS_SETUP_FILE}" "hhs_ollama_model=${model_name}" "ollama"'
-  assert_file_not_contains_many "${ui_file}" \
+  assert_file_not_contains_many "${ai_ui_file}" \
 'ollama pull' 'build_ollama_download_and_select_model_command'
 }
 
@@ -392,7 +399,7 @@ PY
 @test "when rendering AI model settings then status, scrolling, and footer guard should be present" {
   assert_file_contains_many "${constants_file}" \
 'AI_MODEL_TABLE_KEY = "ai_model_table"' 'AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT = 0'
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ai_ui_file}" \
 'def scroll_to_ai_model_actions' 'hhs-ai-model-action-footer-guard'
   assert_file_contains "${css_file}" 'hhs-ai-model-action-footer-guard'
 
@@ -409,7 +416,7 @@ assert "min-height: 8rem" in css[
 PY
   assert_success
 
-  assert_file_contains_many "${ui_file}" \
+  assert_file_contains_many "${ai_ui_file}" \
 'status == "Downloaded"' 'color: #4da3ff'
   run grep -q -- '--hhs-model-accent: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
   assert_success
