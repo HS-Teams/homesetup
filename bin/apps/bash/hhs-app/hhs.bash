@@ -12,6 +12,37 @@
 
 APP_NAME="hhs"
 
+# Resolve the application from the sourced file instead of the caller's $0.
+HHS_APP_SOURCE="${BASH_SOURCE[0]:-${0}}"
+if [[ -z "${HHS_HOME:-}" && -L "${HHS_APP_SOURCE}" ]]; then
+  HHS_APP_LINK_TARGET="$(readlink "${HHS_APP_SOURCE}" 2>/dev/null || true)"
+  if [[ -n "${HHS_APP_LINK_TARGET}" ]]; then
+    if [[ "${HHS_APP_LINK_TARGET}" == /* ]]; then
+      HHS_APP_SOURCE="${HHS_APP_LINK_TARGET}"
+    else
+      HHS_APP_SOURCE="${HHS_APP_SOURCE%/*}/${HHS_APP_LINK_TARGET}"
+    fi
+  fi
+fi
+HHS_APP_SOURCE_DIR="${HHS_APP_SOURCE%/*}"
+[[ "${HHS_APP_SOURCE_DIR}" == "${HHS_APP_SOURCE}" ]] && HHS_APP_SOURCE_DIR="."
+
+if [[ -z "${HHS_HOME:-}" ]]; then
+  case "${HHS_APP_SOURCE}" in
+    */bin/apps/bash/hhs-app/hhs.bash)
+      HHS_HOME="${HHS_APP_SOURCE%/bin/apps/bash/hhs-app/hhs.bash}"
+      ;;
+    bin/apps/bash/hhs-app/hhs.bash | ./bin/apps/bash/hhs-app/hhs.bash)
+      HHS_HOME="${PWD}"
+      ;;
+  esac
+fi
+HHS_DIR="${HHS_DIR:-${HOME}/.config/hhs}"
+if [[ -z "${HHS_VERSION:-}" && -r "${HHS_HOME:-}/.VERSION" ]]; then
+  IFS= read -r HHS_VERSION < "${HHS_HOME}/.VERSION"
+fi
+HHS_VERSION="${HHS_VERSION:-unknown}"
+
 # Functions to be unset after quit.
 UNSETS+=(
   'main' 'cleanup_plugins' 'parse_args' 'list' 'has_function' 'has_plugin' 'has_command'
@@ -21,7 +52,7 @@ UNSETS+=(
 )
 
 # Program version.
-VERSION="1.1.0 built on HomeSetup v${HHS_VERSION}"
+VERSION="1.1.1 built on HomeSetup v${HHS_VERSION}"
 
 # Help message to be displayed by the application.
 read -r -d '' USAGE <<EOF
@@ -66,11 +97,48 @@ usage: ${APP_NAME} {function | plugin {task} <command>} [args...] [options]
 
 EOF
 
+# Root metadata options do not require runtime, function, or plugin discovery.
+case "${1:-}" in
+  -h | --help)
+    printf '%s\n' "${USAGE}"
+    [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
+    exit 0
+    ;;
+  -v | --version)
+    printf '%s v%s \n\n' "${APP_NAME}" "${VERSION}" >&2
+    [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
+    exit 0
+    ;;
+  -p | --prefix)
+    printf '\n'
+    printf '%b  HomeSetup Version: %b%s%b\n' \
+      "${HHS_HIGHLIGHT_COLOR:-}" "${WHITE:-}" "${HHS_VERSION}" "${NC:-}"
+    printf '%bInstallation Prefix: %b%s%b\n' \
+      "${HHS_HIGHLIGHT_COLOR:-}" "${WHITE:-}" "${HHS_HOME}" "${NC:-}"
+    printf '%b    HomeSetup Files: %b%s%b\n\n' \
+      "${HHS_HIGHLIGHT_COLOR:-}" "${WHITE:-}" "${HHS_DIR}" "${NC:-}"
+    [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
+    exit 0
+    ;;
+esac
+
+HHS_APP_SHELL="${HHS_MY_SHELL:-bash}"
+HHS_APP_SHELL="${HHS_APP_SHELL//zsh/bash}"
+if [[ -d "${HHS_APP_SOURCE_DIR}/plugins" && -d "${HHS_APP_SOURCE_DIR}/functions" ]]; then
+  HHS_APP_DIR="${HHS_APP_SOURCE_DIR}"
+else
+  HHS_APP_BIN_DIR="${HHS_APP_SOURCE_DIR}"
+  if [[ -n "${HHS_HOME:-}" && -n "${HHS_DIR:-}" ]]; then
+    HHS_APP_BIN_DIR="${HHS_APP_BIN_DIR//${HHS_DIR}/${HHS_HOME}}"
+  fi
+  HHS_APP_DIR="${HHS_APP_BIN_DIR}/apps/${HHS_APP_SHELL}/hhs-app"
+fi
+
 # Directory containing all HHS plug-ins.
-PLUGINS_DIR="$(dirname "${0//${HHS_DIR}/$HHS_HOME}")/apps/${HHS_MY_SHELL//zsh/bash}/hhs-app/plugins"
+PLUGINS_DIR="${HHS_APP_DIR}/plugins"
 
 # Directory containing all local HHS functions.
-FUNCTIONS_DIR="$(dirname "${0//${HHS_DIR}/$HHS_HOME}")/apps/${HHS_MY_SHELL//zsh/bash}/hhs-app/functions"
+FUNCTIONS_DIR="${HHS_APP_DIR}/functions"
 
 # List of local hhs functions that can be executed.
 HHS_APP_FUNCTIONS=()
@@ -92,6 +160,9 @@ PLUGINS_LIST=()
 
 # List plugin commands.
 PLUGINS=()
+
+# Invalid plugin files discovered during registration.
+INVALID=()
 
 # When set to non-zero indicates input is being piped.
 IS_PIPED=
@@ -132,21 +203,17 @@ function has_command() {
 # @purpose: Checks whether the command matches a __hhs function or not and invoke it.
 # @param $1..$N [Req] : The command line arguments.
 function invoke_hhs_function() {
-  local args=("$@") max_words=5 joined
-
-  search_hhs_commands
+  local args=("$@") max_words=5 joined command_name command_type i
 
   # Loop to form combinations starting from max_words down to 1
   for ((i = (max_words < ${#args[@]}) ? max_words : ${#args[@]}; i > 0; i--)); do
-      # Wrap to a probable '__hhs' command
-      joined="__hhs_$(printf "%s_" "${args[@]:0:i}" | sed 's/_$//')"
-      if [[ " ${HHS_COMMANDS[*]} " =~ (^|[[:space:]])${joined}([[:space:]]|$) ]]; then
-         # Invoke the matched command with remaining arguments
-        if __hhs_has "${joined}"; then
-          "${joined}" "${args[@]:i}"
-          exit $?
-        fi
-      fi
+    printf -v command_name '%s_' "${args[@]:0:i}"
+    joined="__hhs_${command_name%_}"
+    command_type="$(type -t "${joined}" 2>/dev/null || true)"
+    if [[ -n "${command_type}" && "${command_type}" != "alias" ]]; then
+      "${joined}" "${args[@]:i}"
+      exit $?
+    fi
   done
 
   return 1
@@ -175,26 +242,29 @@ function validate_plugin() {
 # @purpose: Search and register all hhs application plugins
 function register_plugins() {
 
-  local fn_line plg_funcs=() plg_name
+  local fn_line line plugin plugin_dir plg_name
+  local plg_funcs=()
 
-  IFS=$'\n'
-  while read -r plugin; do
-    plugin="${plugin}/$(basename "${plugin}").${HHS_MY_SHELL//zsh/bash}"
+  for plugin_dir in "${PLUGINS_DIR}"/*/; do
+    [[ -d "${plugin_dir}" ]] || continue
+    plg_name="${plugin_dir%/}"
+    plg_name="${plg_name##*/}"
+    plugin="${plugin_dir}${plg_name}.${HHS_APP_SHELL}"
     [[ -s "${plugin}" ]] || continue
-    while read -r fnc; do
-      fn_line="${fnc##function }"
-      fn_line="${fn_line%\(\) \{}"
+    plg_funcs=()
+    while IFS= read -r line; do
+      [[ "${line}" == function\ *"()"* ]] || continue
+      fn_line="${line#function }"
+      fn_line="${fn_line%%\(\)*}"
       plg_funcs+=("${fn_line}")
-    done < <(grep '^function .*()' <"${plugin}")
+    done < "${plugin}"
     if ! validate_plugin "${plg_funcs[@]}"; then
-      INVALID+=("$(basename "${plugin}")")
+      INVALID+=("${plugin##*/}")
     else
-      plg_name=$(basename "${plugin%.*}")
       PLUGINS+=("${plg_name}")
       PLUGINS_LIST+=("${plugin}")
     fi
-  done < <(find "${PLUGINS_DIR}" -maxdepth 1 -type d)
-  IFS="${OLDIFS}"
+  done
 
   return 0
 }
@@ -202,20 +272,22 @@ function register_plugins() {
 # @purpose: Read all internal functions and make them available to use
 function register_functions() {
 
-  local fn_line fnc_file
+  local fn_line fnc_file line
+  local file_functions=()
 
-  IFS=$'\n'
-  while read -r fnc_file; do
+  for fnc_file in "${FUNCTIONS_DIR}"/*.bash; do
+    [[ -f "${fnc_file}" ]] || continue
+    file_functions=()
+    while IFS= read -r line; do
+      [[ "${line}" == function\ *"()"* ]] || continue
+      fn_line="${line#function }"
+      fn_line="${fn_line%%\(\)*}"
+      file_functions+=("${fn_line}")
+    done < "${fnc_file}"
     source "${fnc_file}"
-    while read -r fnc; do
-      fn_line="${fnc##function }"
-      fn_line="${fn_line%\(\) \{}"
-      HHS_APP_FUNCTIONS+=("${fn_line}")
-    done < <(grep '^function .*()' <"${fnc_file}")
-    # Register the functions to be unset when program quits
-    UNSETS+=("${HHS_APP_FUNCTIONS[@]}")
-  done < <(find "${FUNCTIONS_DIR}" -maxdepth 1 -type f -name '*.bash')
-  IFS="${OLDIFS}"
+    HHS_APP_FUNCTIONS+=("${file_functions[@]}")
+    UNSETS+=("${file_functions[@]}")
+  done
 
   return 0
 }
@@ -282,23 +354,27 @@ function get_desc() {
 
 # @purpose: Search for all hhs-commands from compgen. Remove the aliases from the list.
 function search_hhs_commands() {
-  local commands aliases
+  local alias_line alias_name command_name command_type
 
-  IFS=$'\n' read -r -d '' -a aliases < <(alias -p | grep '^alias __hhs' | sed -E 's/^alias ([^=]+)=.*/\1/')
-  aliases+=('__hhs')
+  HHS_COMMANDS=()
+  HHS_ALIASES=('__hhs')
+  while IFS= read -r alias_line; do
+    alias_name="${alias_line#alias }"
+    alias_name="${alias_name%%=*}"
+    [[ "${alias_name}" == __hhs* ]] || continue
+    list_contains "${HHS_ALIASES[*]}" "${alias_name}" || HHS_ALIASES+=("${alias_name}")
+  done < <(alias -p)
 
-  # Use `compgen` to get all `__hhs` commands, excluding those in `aliases`
-  IFS=$'\n' read -r -d '' -a commands < <(compgen -c __hhs | awk -v aliases="${aliases[*]}" '
-    BEGIN {
-      # Split aliases into an array for exclusion
-      split(aliases, alias_array)
-      for (i in alias_array) alias_map[alias_array[i]] = 1
-    }
-    !($0 in alias_map)  # Only include commands not in alias_map
-  ')
-
-  HHS_COMMANDS+=("${commands[@]}")
-  HHS_ALIASES+=("${aliases[@]}")
+  while IFS= read -r command_name; do
+    [[ "${command_name}" == "__hhs" ]] && continue
+    command_type="$(type -t "${command_name}" 2>/dev/null || true)"
+    if [[ "${command_type}" == "alias" ]]; then
+      list_contains "${HHS_ALIASES[*]}" "${command_name}" || HHS_ALIASES+=("${command_name}")
+      continue
+    fi
+    [[ -n "${command_type}" ]] || continue
+    list_contains "${HHS_COMMANDS[*]}" "${command_name}" || HHS_COMMANDS+=("${command_name}")
+  done < <(compgen -c __hhs)
 }
 
 # @purpose: Search for all hhs-functions and make them available to use.
@@ -372,6 +448,7 @@ function command_hint() {
     local error_message="$1" user_input commands matches=() search_string index=1
     shift
 
+    [[ ${#HHS_COMMANDS[@]} -gt 0 ]] || search_hhs_commands
     user_input=("$@")
     commands=("${PLUGINS[@]}" "${HHS_APP_FUNCTIONS[@]}" "${HHS_COMMANDS[@]}")
 
@@ -458,8 +535,8 @@ function main() {
 
   local fn_name="${1}"
 
-  # enable history in a non-interactive shell.
-  history -r "${HISTFILE}"
+  # Standalone execution needs history; a sourced Bash subshell inherits it.
+  [[ "${HHS_APP_RUNTIME_REUSE:-0}" == "1" ]] || history -r "${HISTFILE}"
 
   # Lazy load application commons.
   source "${HHS_DIR}/bin/app-commons.bash"

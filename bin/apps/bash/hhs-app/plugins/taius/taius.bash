@@ -13,12 +13,12 @@
 # Current plugin name
 PLUGIN_NAME="taius"
 
-# Current script version.
-VERSION="$(pip show hspylib-askai | grep Version)"
+# Current script version is resolved only for metadata commands.
+VERSION="__TAIUS_VERSION__"
 
 # Namespace cleanup
 UNSETS=(
-  help version cleanup execute
+  help version cleanup execute load_taius_version
 )
 
 # Usage message
@@ -31,7 +31,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <question> [options]
   | | (_| | | |_| \\__ \\
   |_|\\__,_|_|\\__,_|___/...AskAI
 
-  HomeSetup AskAI integration v${VERSION}.
+  HomeSetup AskAI integration v__TAIUS_VERSION__.
 
     options:
       -h | --help              : Display this help message.
@@ -54,15 +54,36 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <question> [options]
 
 EOF
 
+# @purpose: Load the installed AskAI package version on demand.
+function load_taius_version() {
+  local line
+
+  [[ "${VERSION}" != "__TAIUS_VERSION__" ]] && return 0
+  while IFS= read -r line; do
+    if [[ "${line}" == Version:* ]]; then
+      VERSION="${line}"
+      break
+    fi
+  done < <(pip show hspylib-askai 2>/dev/null)
+  [[ "${VERSION}" == "__TAIUS_VERSION__" ]] && VERSION="Version: unavailable"
+  USAGE="${USAGE//__TAIUS_VERSION__/${VERSION}}"
+}
+
+case "${1:-}" in
+  -h | --help | -v | --version) load_taius_version ;;
+esac
+
 [[ -s "${HHS_DIR}/bin/app-commons.bash" ]] && source "${HHS_DIR}/bin/app-commons.bash"
 
 # @purpose: HHS plugin required function
 function help() {
+  load_taius_version
   usage 0
 }
 
 # @purpose: HHS plugin required function
 function version() {
+  load_taius_version
   echo "HomeSetup ${PLUGIN_NAME} plugin ${VERSION}"
   quit 0
 }

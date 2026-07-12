@@ -19,7 +19,8 @@ VERSION="1.2.0"
 # Namespace cleanup
 UNSETS=(
   help version cleanup execute render_ollama_prompt_template render_ollama_response
-  load_ollama_prompt show_context show_prompt clear_context is_text_context_file
+  load_ollama_model load_ollama_context load_ollama_prompt show_context show_prompt
+  clear_context is_text_context_file
   ingest_context show_models start_ollama select_ollama_model ensure_ollama
 )
 
@@ -69,14 +70,6 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <question> [options]
 
 EOF
 
-# Read context from ollama history file if not piped
-[[ "${IS_PIPED}" -ne 1 && -s "${HHS_OLLAMA_HISTORY_FILE}" ]] && \
-  CONTEXT="$(grep . "${HHS_OLLAMA_HISTORY_FILE}")"
-
-# Read context from stdin if piped
-[[ "${IS_PIPED}" -eq 1 ]] &&
-  read -t 0 < /dev/stdin && CONTEXT="$(cat -)"
-
 # Ollama prompt files.
 HHS_OLLAMA_PROMPT_SOURCE="${HHS_OLLAMA_PROMPT_SOURCE:-${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/hhs-ask-ollama.md}"
 HHS_OLLAMA_PROMPT_FILE="${HHS_OLLAMA_PROMPT_FILE:-${HHS_DIR}/hhs-ask-ollama.md}"
@@ -84,13 +77,35 @@ HHS_OLLAMA_PROMPT_FILE="${HHS_OLLAMA_PROMPT_FILE:-${HHS_DIR}/hhs-ask-ollama.md}"
 # Keep response file after execution flag
 KEEP=
 
-# Ollama model to use
-OLLAMA_MODEL="$(__hhs_toml_get "${HHS_SETUP_FILE}" "hhs_ollama_model" "ollama")"
-OLLAMA_MODEL="${OLLAMA_MODEL#*=}"
-OLLAMA_MODEL="${OLLAMA_MODEL//\"/}"
-OLLAMA_MODEL="${OLLAMA_MODEL//\'/}"
+# Runtime values are loaded only by commands that need them.
+CONTEXT=""
+OLLAMA_MODEL=""
 
 [[ -s "${HHS_DIR}/bin/app-commons.bash" ]] && source "${HHS_DIR}/bin/app-commons.bash"
+
+# @purpose: Load the selected Ollama model when a model-aware command runs.
+function load_ollama_model() {
+  [[ -n "${OLLAMA_MODEL}" ]] && return 0
+  OLLAMA_MODEL="$(__hhs_toml_get "${HHS_SETUP_FILE}" "hhs_ollama_model" "ollama")"
+  OLLAMA_MODEL="${OLLAMA_MODEL#*=}"
+  OLLAMA_MODEL="${OLLAMA_MODEL//\"/}"
+  OLLAMA_MODEL="${OLLAMA_MODEL//\'/}"
+}
+
+# @purpose: Load Ask context from history or piped input for an actual request.
+function load_ollama_context() {
+  local line
+
+  CONTEXT=""
+  if [[ "${IS_PIPED}" -ne 1 && -s "${HHS_OLLAMA_HISTORY_FILE}" ]]; then
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] && CONTEXT+="${line}"$'\n'
+    done < "${HHS_OLLAMA_HISTORY_FILE}"
+    CONTEXT="${CONTEXT%$'\n'}"
+  elif [[ "${IS_PIPED}" -eq 1 ]] && read -t 0 < /dev/stdin; then
+    CONTEXT="$(</dev/stdin)"
+  fi
+}
 
 # @purpose: Render supported HomeSetup placeholders in an ollama prompt template.
 function render_ollama_prompt_template() {
@@ -485,13 +500,6 @@ function execute() {
   local args ans query resp rendered_resp ret_val ctx kb_size ctx_window model hint
   declare -a args=()
 
-  ctx_window=$(get_context_window)
-  ctx=${ctx_window%%:*}
-  kb_size=${ctx_window#*:}
-
-  ensure_context_size "${kb_size}"
-  load_ollama_prompt
-
   [[ "$#" -eq 0 ]] && usage 1 "No question provided."
 
   case "$1" in
@@ -499,12 +507,26 @@ function execute() {
     -v|--version) version ;;
     -c|--context) show_context ;;
     -p|--prompt) show_prompt ;;
-    -i|--ingest) shift; ingest_context "$1" ;;
+    -i|--ingest)
+      shift
+      load_ollama_model
+      ctx_window=$(get_context_window)
+      kb_size=${ctx_window#*:}
+      ingest_context "$1"
+      ;;
     -r|--reset) clear_context ;;
-    -m|--models) show_models ;;
-    -s|--select-model) shift; select_ollama_model "$@";;
+    -m|--models) load_ollama_model; show_models ;;
+    -s|--select-model) shift; load_ollama_model; select_ollama_model "$@";;
     -k|--keep) KEEP=1 ;;
   esac
+
+  load_ollama_model
+  load_ollama_context
+  ctx_window=$(get_context_window)
+  ctx=${ctx_window%%:*}
+  kb_size=${ctx_window#*:}
+  ensure_context_size "${kb_size}"
+  load_ollama_prompt
 
   ensure_ollama
 

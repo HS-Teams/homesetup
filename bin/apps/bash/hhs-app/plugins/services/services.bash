@@ -27,7 +27,8 @@ UNSETS=(
 HHS_STREAMLIT_UI_PORT="${HHS_STREAMLIT_UI_PORT:-18501}"
 
 # OS label used by the usage banner when the shell environment has not loaded yet.
-HHS_MY_OS_RELEASE="${HHS_MY_OS_RELEASE:-$(uname -s)}"
+# Actual service-manager detection remains inside execute-time functions.
+HHS_MY_OS_RELEASE="${HHS_MY_OS_RELEASE:-${OSTYPE:-unknown}}"
 
 # Usage message
 read -r -d '' USAGE <<EOF

@@ -18,7 +18,11 @@ function list() {
 
   if [[ "$1" == "help" ]]; then
     echo "usage: __hhs ${FUNCNAME[0]} [-flat] [-plugins] [-funcs] [-commands] [-aliases]" && quit 0
-  elif [[ "${args[*]}" =~ -flat ]]; then
+  fi
+
+  # The complete command catalog is only needed for explicit discovery output.
+  search_hhs_commands
+  if [[ "${args[*]}" =~ -flat ]]; then
     args=("${args[@]/'-flat'/}")
     [[ ${#args[@]} -eq 1 || "${args[*]}" =~ -plugins ]] \
       && { for next in "${PLUGINS[@]}"; do echo -n "${next} "; done }
@@ -71,7 +75,10 @@ function funcs() {
 
   if [[ ! -s "${cache_file}" ]]; then
     echo -en "${ORNGE}Please wait until we cache all HomeSetup v${HHS_VERSION} functions ...${NC}"
-    search_hhs_functions "${HHS_HOME}/dotfiles/bash" "${HHS_HOME}/bin/hhs-functions/bash" "${HHS_HOME}/bin/dev-tools/bash"
+    search_hhs_functions \
+      "${HHS_HOME}/dotfiles/bash" \
+      "${HHS_HOME}/bin/hhs-functions/bash" \
+      "${HHS_HOME}/bin/dev-tools/bash"
     printf "%s\n" "${HHS_FUNCTIONS[@]}" > "${cache_file}"
     echo -en '\033[2K'
     echo ''

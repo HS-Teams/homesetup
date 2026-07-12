@@ -11,6 +11,13 @@
 #
 # Copyright (c) 2025, HomeSetup team
 
+# Avoid rebuilding the application runtime when this file is sourced repeatedly by
+# hhs.bash and its selected plugin inside the same Bash process.
+HHS_APP_COMMONS_PROCESS_ID="${BASHPID:-$$:${BASH_SUBSHELL:-0}}"
+if [[ "${HHS_APP_COMMONS_LOADED_PROCESS_ID:-}" == "${HHS_APP_COMMONS_PROCESS_ID}" ]]; then
+  return 0 2>/dev/null || exit 0
+fi
+
 # Current application version.
 VERSION=${VERSION:-1.0.0}
 
@@ -50,8 +57,8 @@ usage: ${APP_NAME} <arguments> [options]
 EOF
 fi
 
-# Default identifiers to be unset
-UNSETS=('quit' 'usage' 'version' 'trim')
+# Default identifiers to be unset.
+UNSETS+=('quit' 'usage' 'version' 'trim')
 
 # @purpose: Source a HomeSetup dotfile from the checkout or installed home.
 # @param $1 [Req] : The dotfile basename without leading dot or .bash suffix.
@@ -67,21 +74,28 @@ function source_hhs_dotfile() {
   fi
 }
 
-# Save currently active dotfiles.
-OLD_DOTFILES=("${HHS_ACTIVE_DOTFILES:-}")
-# Unset to allow sourcing them again
-unset HHS_ACTIVE_DOTFILES
+# A Bash wrapper invocation inherits the initialized interactive runtime by copy.
+# Standalone application execution still loads the complete non-interactive runtime.
+if [[ "${HHS_APP_RUNTIME_REUSE:-0}" != "1" ]] ||
+   ! declare -F __hhs_errcho >/dev/null ||
+   ! declare -F __hhs_log >/dev/null ||
+   ! declare -F list_contains >/dev/null; then
+  # Save currently active dotfiles.
+  OLD_DOTFILES=("${HHS_ACTIVE_DOTFILES:-}")
+  # Unset to allow sourcing them again.
+  unset HHS_ACTIVE_DOTFILES
 
-# We need to load the dotfiles below due to non-interactive shell.
-source_hhs_dotfile bash_commons
-source_hhs_dotfile bash_env
-source_hhs_dotfile bash_aliases
-source_hhs_dotfile bash_colors
-source_hhs_dotfile bash_functions
-source_hhs_dotfile bash_icons
+  source_hhs_dotfile bash_commons
+  source_hhs_dotfile bash_env
+  source_hhs_dotfile bash_aliases
+  source_hhs_dotfile bash_colors
+  source_hhs_dotfile bash_functions
+  source_hhs_dotfile bash_icons
 
-# Re-export active dotfiles.
-export HHS_ACTIVE_DOTFILES="${OLD_DOTFILES[*]}"
+  # Re-export active dotfiles.
+  export HHS_ACTIVE_DOTFILES="${OLD_DOTFILES[*]}"
+fi
+HHS_APP_COMMONS_LOADED_PROCESS_ID="${HHS_APP_COMMONS_PROCESS_ID}"
 
 # Execute a cleanup after the application has exited.
 trap _app_cleanups_ EXIT

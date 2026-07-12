@@ -22,7 +22,9 @@ else
 
   # Load all function files.
   all=()
-  while IFS= read -r line; do all+=("$line"); done < <(find "${HHS_HOME}/bin/hhs-functions/bash" -type f -name "*.bash" | sort | uniq)
+  while IFS= read -r line; do
+    all+=("$line")
+  done < <(find "${HHS_HOME}/bin/hhs-functions/bash" -type f -name "*.bash" | sort | uniq)
   __hhs_log "DEBUG" "Loading (${#all[@]}) hhs-function files"
   for file in "${all[@]}"; do
     __hhs_log "DEBUG" "Loading ${file}"
@@ -31,7 +33,9 @@ else
 
   # Load all dev tools files.
   all=()
-  while IFS= read -r line; do all+=("$line"); done < <(find "${HHS_HOME}/bin/dev-tools/bash" -type f -name "*.bash" | sort | uniq)
+  while IFS= read -r line; do
+    all+=("$line")
+  done < <(find "${HHS_HOME}/bin/dev-tools/bash" -type f -name "*.bash" | sort | uniq)
   __hhs_log "DEBUG" "Loading (${#all[@]}) dev-tools files"
   for file in "${all[@]}"; do
     __hhs_log "DEBUG" "Loading ${file}"
@@ -51,7 +55,14 @@ else
     elif [[ "${1}" == 'dir' ]]; then
       __hhs_change_dir "${HHS_DIR}" || return 1
     else
-      hhs.bash "${@}" || return 1
+      if [[ -r "${HHS_HOME}/bin/apps/bash/hhs-app/hhs.bash" ]]; then
+        (
+          HHS_APP_RUNTIME_REUSE=1
+          source "${HHS_HOME}/bin/apps/bash/hhs-app/hhs.bash" "${@}"
+        ) || return 1
+      else
+        hhs.bash "${@}" || return 1
+      fi
     fi
 
     return 0
