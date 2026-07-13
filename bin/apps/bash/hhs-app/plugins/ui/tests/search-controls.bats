@@ -117,8 +117,8 @@ for expected_toggle in (
     '"search_ignore_case", "Aa", "Ignore case (-i)"',
     '"search_words"',
     '""',
-    '"Match words (-w)"',
-    '"search_binary", "", "Search binary files (-b)"',
+    '"Match whole words only (-w)"',
+    '"search_binary", "", "Include binary files (-b)"',
 ):
     assert expected_toggle in body
 assert 'disabled=bool(st.session_state.get("search_replace", False))' in body
@@ -139,7 +139,7 @@ PY
 'def render_search_replace_controls' 'st.container(key="search_replace_controls")' \
     '<span class="hhs-search-replace-label">Replace by:</span>' 'key="search_replacement"' \
     'placeholder="Replacement string"' 'key="search_replace_submit_button"' '""' \
-    'help="Search and Replace"' 'args=(True,)' '\[1.15, 6.22, 0.22\]'
+    'help="Run search and replace"' 'args=(True,)' '\[1.15, 6.22, 0.22\]'
   assert_file_not_contains "${search_ui_file}" '\[5.0, 0.85\], vertical_alignment="center"'
 }
 

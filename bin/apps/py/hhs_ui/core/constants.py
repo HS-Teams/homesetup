@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.121"
+VERSION = "0.1.137"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parents[1]
 APP_STATIC_DIR = APP_DIR / "static"
@@ -66,7 +66,7 @@ LOG_TAIL_LINES_STEP = 5
 FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
 FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
 FLOATING_STATUS_QUEUE_LIMIT = 20
-FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 1.0
+FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 3.0
 FOOTER_REMOTE_WORKING_DIR_KEY = "_hhs_footer_remote_working_dir"
 FOOTER_LOCAL_WORKING_DIR_KEY = "_hhs_footer_local_working_dir"
 TABLE_SELECTION_SNAPSHOT_KEY = "_hhs_table_selection_snapshots"
@@ -150,9 +150,10 @@ HOME_VIEW_LABELS = {
     "Tools": " Tools",
     "SHOPTS": " Shell Options",
 }
-HHS_VIEWS = ("SETUP", "STARSHIP", "SETTINGS", "HSPM", "Firebase")
+HHS_VIEWS = ("SETUP", "RESET", "STARSHIP", "SETTINGS", "HSPM", "Firebase")
 HHS_VIEW_LABELS = {
     "SETUP": " Setup",
+    "RESET": " Reset",
     "STARSHIP": "留 Starship",
     "SETTINGS": "שּׂ Settings",
     "HSPM": " HSPM",
@@ -377,13 +378,13 @@ ALIAS_TABLE_KEY = "alias_vars_table"
 ALIAS_TABLE_RESET_COUNTER_KEY = "alias_vars_table_reset_counter"
 ALIAS_VALUE_EDITOR_KEY_PREFIX = "alias_selected_value"
 HHS_SETTINGS_TABLE_KEY = "hhs_settings_table"
+HHS_RESET_TABLE_KEY = "hhs_reset_targets"
 HHS_SETTINGS_TABLE_RESET_COUNTER_KEY = "hhs_settings_table_reset_counter"
 MARKDOWN_TABLE_HEIGHT = 360
 MARKDOWN_TABLE_MARK_COLUMN_WIDTH = 80
-MARKDOWN_TABLE_LAYOUT_VERSION = 3
+MARKDOWN_TABLE_LAYOUT_VERSION = 4
 CMD_TABLE_KEY = "cmd_vars_table"
 CMD_TABLE_RESET_COUNTER_KEY = "cmd_vars_table_reset_counter"
-CMD_INDEX_COLUMN_WIDTH = 80
 CMD_VALUE_EDITOR_KEY_PREFIX = "cmd_selected_value"
 DIR_TABLE_KEY = "dir_vars_table"
 DIR_TABLE_RESET_COUNTER_KEY = "dir_vars_table_reset_counter"
@@ -413,11 +414,8 @@ HISTORY_INDEX_COLUMN_PADDING = 24
 HISTORY_DIRECTORY_TYPE_COLUMN_WIDTH = HISTORY_INDEX_COLUMN_DIGIT_WIDTH * 3
 HISTORY_DIRECTORY_TABLE_KEY = "history_directory_vars_table"
 HISTORY_DIRECTORY_TABLE_RESET_COUNTER_KEY = "history_directory_vars_table_reset_counter"
-PATH_TABLE_HEIGHT = ENV_TABLE_HEIGHT
 PATH_TABLE_KEY = "path_vars_table"
 PATH_TABLE_RESET_COUNTER_KEY = "path_vars_table_reset_counter"
-PATH_TYPE_COLUMN_WIDTH = 80
-PATH_TABLE_WIDTH = ENV_TABLE_WIDTH
 SERVICE_TABLE_KEY = "service_vars_table"
 SERVICE_TABLE_RESET_COUNTER_KEY = "service_vars_table_reset_counter"
 SSH_TUNNEL_TABLE_KEY = "ssh_tunnel_table"

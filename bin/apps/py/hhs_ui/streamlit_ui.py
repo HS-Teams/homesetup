@@ -171,6 +171,7 @@ from hhs_ui.widgets.footer_ui import (
 from hhs_ui.features.hhs_app_ui import (
     clear_firebase_aliases_cache,
     execute_pending_hhs_firebase_action,
+    execute_pending_hhs_reset_action,
     execute_pending_hhs_settings_action,
     execute_pending_hhs_setup_action,
     execute_pending_hhs_starship_action,
@@ -262,7 +263,6 @@ from hhs_ui.widgets.status_ui import (
 )
 from hhs_ui.widgets.table_ui import (
     clean_table_text_filter_value,
-    cmd_column_config,
     config_filter_columns,
     config_filter_display_label,
     config_filter_return_value,
@@ -277,12 +277,10 @@ from hhs_ui.widgets.table_ui import (
     history_directory_table_data,
     normalize_persisted_table_text_filter_states,
     normalized_table_filter_selection,
-    path_column_config,
     render_read_only_rows,
     render_table,
     render_table_controls_panel,
     render_table_filter_controls,
-    styled_path_rows,
     styled_service_rows,
     styled_shopt_rows,
     styled_tool_rows,
@@ -686,7 +684,10 @@ def render_sidebar() -> None:
                 index=0,
                 key=f"ssh_host_connected_display_{connected_host_key}",
                 label_visibility="collapsed",
-                help="Shows the active connected host.",
+                help=(
+                    "The SSH host currently used for commands and data shown in the UI. "
+                    "Disconnect before selecting a different host."
+                ),
                 disabled=True,
                 width="stretch",
             )
@@ -698,7 +699,10 @@ def render_sidebar() -> None:
                 options=host_options,
                 key="ssh_host_selector",
                 label_visibility="collapsed",
-                help="Choose the local machine or an SSH host.",
+                help=(
+                    "Choose where HomeSetup commands run. Local uses this machine; an "
+                    "SSH entry requires Connect before remote data becomes available."
+                ),
                 on_change=select_ssh_host_from_widget,
                 width="stretch",
             )
@@ -727,7 +731,10 @@ def render_sidebar() -> None:
             placeholder="",
             disabled=False,
             label_visibility="collapsed",
-            help="Choose the HomeSetup color theme.",
+            help=(
+                "Choose the color palette used by the entire HomeSetup interface. The "
+                "selection is saved and restored in future sessions."
+            ),
             on_change=request_theme_reload,
             width="stretch",
         )
@@ -862,7 +869,10 @@ def render_active_view_control(visible_views: tuple[str, ...]) -> str:
         index=None,
         key=widget_key,
         label_visibility="collapsed",
-        help="Choose the HomeSetup section to display.",
+        help=(
+            "Switch the main HomeSetup workspace. The selected section is remembered "
+            "for the next session."
+        ),
         format_func=main_view_label,
         on_change=save_active_view_state,
         args=(widget_key, visible_views),
@@ -924,7 +934,10 @@ def render_view_segmented_control(
         format_func=format_func,
         key=widget_key,
         label_visibility="collapsed",
-        help=f"Choose the {label.lower()} to display.",
+        help=(
+            f"Switch the active {label.lower()} within this page. "
+            "The selection is remembered when you return."
+        ),
         on_change=save_view_segmented_control_state,
         args=(state_key, widget_key, options),
         width="stretch",
@@ -1065,7 +1078,7 @@ def render_docker_container_table(result: subprocess.CompletedProcess[str]) -> N
             {
                 "label": "Start",
                 "key_prefix": "docker_container_start_button",
-                "help": "Start",
+                "help": "Start the selected container",
                 "on_click": apply_docker_container_action,
                 "args": lambda row, _index: ("start", row.get("CONTAINER ID", "")),
                 "disabled": lambda row, _index: docker_container_is_up(row),
@@ -1073,7 +1086,7 @@ def render_docker_container_table(result: subprocess.CompletedProcess[str]) -> N
             {
                 "label": "Stop",
                 "key_prefix": "docker_container_stop_button",
-                "help": "Stop",
+                "help": "Stop the selected container",
                 "on_click": apply_docker_container_action,
                 "args": lambda row, _index: ("stop", row.get("CONTAINER ID", "")),
                 "disabled": lambda row, _index: not docker_container_is_up(row),
@@ -1081,7 +1094,7 @@ def render_docker_container_table(result: subprocess.CompletedProcess[str]) -> N
             {
                 "label": "Remove",
                 "key_prefix": "docker_container_remove_button",
-                "help": "Remove",
+                "help": "Remove the selected container",
                 "on_click": apply_docker_container_action,
                 "args": lambda row, _index: ("rm", row.get("CONTAINER ID", "")),
                 "disabled": lambda row, _index: docker_container_is_up(row),
@@ -1104,7 +1117,7 @@ def render_docker_image_table(result: subprocess.CompletedProcess[str]) -> None:
             {
                 "label": "Delete",
                 "key_prefix": "docker_image_delete_button",
-                "help": "Delete",
+                "help": "Delete the selected image",
                 "on_click": apply_docker_image_action,
                 "args": lambda row, _index: (row.get("IMAGE ID", ""),),
             },
@@ -1291,6 +1304,57 @@ def config_add_columns(weights: list[float]) -> list:
     )
 
 
+CONFIG_ADD_FIELD_HELP = {
+    "env": {
+        "name": (
+            "Shell variable name to export, such as EDITOR or JAVA_HOME. Use a "
+            "unique POSIX-compatible identifier containing letters, numbers, and "
+            "underscores."
+        ),
+        "value": (
+            "Value exported for this environment variable when HomeSetup loads the "
+            "custom environment configuration. Shell variable references are preserved."
+        ),
+    },
+    "path": {
+        "value": (
+            "Directory to add to PATH. HomeSetup expands ~ and environment variables, "
+            "then makes commands in this directory discoverable by the shell."
+        ),
+    },
+    "dir": {
+        "name": (
+            "Short, unique name displayed for this saved directory and used to "
+            "identify it when navigating to, updating, or removing the entry."
+        ),
+        "value": (
+            "Directory associated with the name. HomeSetup expands ~ and environment "
+            "variables when opening or navigating to it."
+        ),
+    },
+    "cmd": {
+        "name": (
+            "Short, unique name used to invoke this reusable HomeSetup command and "
+            "identify it when updating or removing the saved entry."
+        ),
+        "value": (
+            "Shell command executed when the saved name is invoked. Include arguments "
+            "and quoting exactly as they should be passed to the shell."
+        ),
+    },
+    "alias": {
+        "name": (
+            "Shell alias name to define. Use a unique command-like identifier without "
+            "spaces; entering this name in the shell expands the saved expression."
+        ),
+        "value": (
+            "Shell expression expanded when the alias is invoked. Include the complete "
+            "command, arguments, pipelines, and required quoting."
+        ),
+    },
+}
+
+
 def render_config_add_controls(
     key_prefix: str,
     name_label: str | None,
@@ -1305,6 +1369,7 @@ def render_config_add_controls(
     """Render the Config add-row inputs and action buttons."""
     if value_label is None:
         return
+    field_help = CONFIG_ADD_FIELD_HELP.get(key_prefix, {})
 
     action_weights = []
     if has_plus_btn:
@@ -1330,7 +1395,13 @@ def render_config_add_controls(
                 name_label,
                 key=f"{key_prefix}_add_name",
                 placeholder=name_placeholder,
-                help=f"Enter the {name_label.lower()}.",
+                help=field_help.get(
+                    "name",
+                    (
+                        f"Unique {name_label.lower()} used to identify this new "
+                        "configuration entry."
+                    ),
+                ),
             )
     value_input_args: dict[str, object] = {
         "key": f"{key_prefix}_add_value",
@@ -1341,7 +1412,13 @@ def render_config_add_controls(
     with value_col:
         st.text_input(
             value_label,
-            help=f"Enter the {value_label.lower()}.",
+            help=field_help.get(
+                "value",
+                (
+                    f"{value_label} stored for this new configuration entry and "
+                    "loaded by HomeSetup after it is added."
+                ),
+            ),
             **value_input_args,
         )
 
@@ -1351,7 +1428,7 @@ def render_config_add_controls(
             st.button(
                 "",
                 key=f"{key_prefix}_add_submit",
-                help="Add",
+                help="Add this configuration entry",
                 on_click=on_submit,
                 width="stretch",
             )
@@ -1361,7 +1438,7 @@ def render_config_add_controls(
             st.button(
                 "",
                 key=f"{key_prefix}_folder_picker_button",
-                help="Select folder",
+                help="Choose the entry folder",
                 on_click=request_folder_picker,
                 args=(f"{key_prefix}_add_value", value_placeholder),
                 width="stretch",
@@ -2755,6 +2832,7 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
             {
                 "label": "Delete",
                 "glyph": "",
+                "help": "Delete the selected environment variable",
                 "key_prefix": "env_delete_button",
                 "on_click": apply_env_delete,
                 "args": lambda row, _index: (row["Name"],),
@@ -2763,22 +2841,37 @@ def render_env_rows(rows: list[dict[str, str]]) -> None:
     )
 
 
-def render_path_rows(rows: list[dict[str, str]]) -> None:
-    """Render selectable read-only PATH rows."""
+def render_config_rows_table(
+    rows: list[dict[str, str]],
+    table_key: str,
+    headers: list[str],
+    **table_options: object,
+) -> None:
+    """Render a Config listing with the normalized Aliases table component."""
     render_table(
         rows,
-        key=path_table_key(),
-        headers=["Type", "Origin", "Path Value"],
-        table_data=styled_path_rows(rows),
-        column_config=path_column_config(),
-        height=hhs_ui.PATH_TABLE_HEIGHT,
-        width=hhs_ui.PATH_TABLE_WIDTH,
+        key=table_key,
+        headers=headers,
+        empty_hint="Select a row to interact",
+        height=hhs_ui.ENV_TABLE_HEIGHT,
+        width=hhs_ui.ENV_TABLE_WIDTH,
+        **table_options,
+    )
+
+
+def render_path_rows(rows: list[dict[str, str]]) -> None:
+    """Render PATH rows with the normalized Config table component."""
+    render_config_rows_table(
+        rows,
+        path_table_key(),
+        ["Type", "Origin", "Path Value"],
         selected_label=lambda row, _index: f"Selected: {row['Path Value']}",
         reset_selection=reset_path_table_selection,
         selected_action_buttons=[
             {
                 "label": "Delete",
                 "glyph": "",
+                "help": "Delete the selected PATH entry",
                 "key_prefix": "path_delete_button",
                 "on_click": apply_path_delete,
                 "args": lambda row, _index: (row["Path Value"],),
@@ -2788,13 +2881,11 @@ def render_path_rows(rows: list[dict[str, str]]) -> None:
 
 
 def render_dir_rows(rows: list[dict[str, str]]) -> None:
-    """Render selectable editable saved directory rows."""
-    render_table(
+    """Render saved directories with the normalized Config table component."""
+    render_config_rows_table(
         rows,
-        key=dir_table_key(),
-        empty_hint="Select a row to interact",
-        height=hhs_ui.ENV_TABLE_HEIGHT,
-        width=hhs_ui.ENV_TABLE_WIDTH,
+        dir_table_key(),
+        ["Name", "Value"],
         selected_label=lambda row, _index: f"Selected: {row['Name']}",
         selected_editable=True,
         selected_edit_key=lambda _row, index: dir_value_editor_key(index),
@@ -2813,6 +2904,7 @@ def render_dir_rows(rows: list[dict[str, str]]) -> None:
             {
                 "label": "Delete",
                 "glyph": "",
+                "help": "Delete the selected saved directory",
                 "key_prefix": "dir_delete_button",
                 "on_click": apply_dir_delete,
                 "args": lambda row, _index: (row["Name"],),
@@ -2822,14 +2914,11 @@ def render_dir_rows(rows: list[dict[str, str]]) -> None:
 
 
 def render_cmd_rows(rows: list[dict[str, str]]) -> None:
-    """Render selectable editable saved command rows."""
-    render_table(
+    """Render saved commands with the normalized Config table component."""
+    render_config_rows_table(
         rows,
-        key=cmd_table_key(),
-        empty_hint="Select a row to interact",
-        height=hhs_ui.ENV_TABLE_HEIGHT,
-        width=hhs_ui.ENV_TABLE_WIDTH,
-        column_config=cmd_column_config(),
+        cmd_table_key(),
+        ["Index", "Name", "Value"],
         selected_label=lambda row, _index: f"Selected: {row['Name']}",
         selected_editable=True,
         selected_edit_key=lambda _row, index: cmd_value_editor_key(index),
@@ -2846,6 +2935,7 @@ def render_cmd_rows(rows: list[dict[str, str]]) -> None:
             {
                 "label": "Delete",
                 "glyph": "",
+                "help": "Delete the selected saved command",
                 "key_prefix": "cmd_delete_button",
                 "on_click": apply_cmd_delete,
                 "args": lambda row, _index: (row.get("Index") or row["Name"],),
@@ -2855,13 +2945,11 @@ def render_cmd_rows(rows: list[dict[str, str]]) -> None:
 
 
 def render_alias_rows(rows: list[dict[str, str]]) -> None:
-    """Render selectable editable alias rows."""
-    render_table(
+    """Render aliases with the normalized Config table component."""
+    render_config_rows_table(
         rows,
-        key=alias_table_key(),
-        empty_hint="Select a row to interact",
-        height=hhs_ui.ENV_TABLE_HEIGHT,
-        width=hhs_ui.ENV_TABLE_WIDTH,
+        alias_table_key(),
+        ["Name", "Value"],
         selected_label=lambda row, _index: f"Selected: {row['Name']}",
         selected_editable=True,
         selected_edit_key=lambda _row, index: alias_value_editor_key(index),
@@ -2878,6 +2966,7 @@ def render_alias_rows(rows: list[dict[str, str]]) -> None:
             {
                 "label": "Delete",
                 "glyph": "",
+                "help": "Delete the selected shell alias",
                 "key_prefix": "alias_delete_button",
                 "on_click": apply_alias_delete,
                 "args": lambda row, _index: (row["Name"],),
@@ -3318,6 +3407,7 @@ def complete_background_action_jobs() -> None:
     execute_pending_home_tool_tldr()
     execute_pending_config_action()
     execute_pending_hhs_setup_action()
+    execute_pending_hhs_reset_action()
     execute_pending_hhs_settings_action()
     execute_pending_hhs_starship_action()
     execute_pending_hhs_firebase_action()
@@ -4148,6 +4238,7 @@ def initialize_feature_session_state() -> None:
         ("home_tool_tldr_execute_pending", None),
         ("config_action_execute_pending", None),
         ("hhs_setup_action_execute_pending", None),
+        ("hhs_reset_action_execute_pending", None),
         ("hhs_settings_action_execute_pending", None),
         ("hhs_starship_action_execute_pending", None),
         ("docker_action_execute_pending", None),

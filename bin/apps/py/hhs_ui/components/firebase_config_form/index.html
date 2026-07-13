@@ -369,13 +369,15 @@
           revealButton.className = "reveal-button";
           revealButton.disabled = Boolean(args.disabled);
           revealButton.textContent = "﯎";
-          revealButton.title = "Reveal";
+          revealButton.title = "Reveal Firebase UID";
           revealButton.setAttribute("aria-label", "Reveal UID");
           revealButton.addEventListener("click", () => {
             const revealed = input.type === "text";
             input.type = revealed ? "password" : "text";
             revealButton.textContent = revealed ? "﯎" : "﯏";
-            revealButton.title = revealed ? "Reveal" : "Hide";
+            revealButton.title = revealed
+              ? "Reveal Firebase UID"
+              : "Hide Firebase UID";
             revealButton.classList.toggle("is-selected", !revealed);
             revealButton.setAttribute(
               "aria-label",

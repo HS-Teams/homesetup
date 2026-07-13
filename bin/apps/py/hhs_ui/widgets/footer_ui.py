@@ -255,7 +255,30 @@ def render_footer_client_error_bridge_script() -> None:
           (() => {
             const parentWindow = window.parent;
             const doc = parentWindow.document;
-            if (!doc?.body || parentWindow.__hhsFooterErrorBridgeInstalled) {
+            if (!doc?.body) {
+              return;
+            }
+            if (typeof parentWindow.__hhsCopyFooterStatusText !== "function") {
+              parentWindow.__hhsCopyFooterStatusText = async (value) => {
+                const copyValue = String(value ?? "");
+                try {
+                  await parentWindow.navigator.clipboard.writeText(copyValue);
+                  return true;
+                } catch (_clipboardError) {
+                  const textarea = doc.createElement("textarea");
+                  textarea.value = copyValue;
+                  textarea.setAttribute("readonly", "");
+                  textarea.style.position = "fixed";
+                  textarea.style.opacity = "0";
+                  doc.body.append(textarea);
+                  textarea.select();
+                  const copied = doc.execCommand("copy");
+                  textarea.remove();
+                  return copied;
+                }
+              };
+            }
+            if (parentWindow.__hhsFooterErrorBridgeInstalled) {
               return;
             }
             parentWindow.__hhsFooterErrorBridgeInstalled = true;
@@ -286,7 +309,7 @@ def render_footer_client_error_bridge_script() -> None:
               const status = doc.createElement("div");
               status.id = "hhs-client-floating-status";
               status.className = `hhs-floating-status hhs-floating-status-kind-${kind} hhs-floating-status--stable`;
-              status.style.setProperty("--hhs-floating-status-timeout", "8s");
+              status.style.setProperty("--hhs-floating-status-timeout", "10s");
 
               const glyph = doc.createElement("span");
               glyph.className = "hhs-floating-status-glyph";
@@ -299,8 +322,8 @@ def render_footer_client_error_bridge_script() -> None:
               const dismiss = doc.createElement("button");
               dismiss.className = "hhs-floating-status-dismiss";
               dismiss.type = "button";
-              dismiss.setAttribute("aria-label", "Dispose footer status");
-              dismiss.title = "Dispose footer status";
+              dismiss.setAttribute("aria-label", "Dismiss status message");
+              dismiss.title = "Dismiss status message";
               dismiss.textContent = "x";
               dismiss.addEventListener("click", (event) => {
                 event.preventDefault();
@@ -310,12 +333,27 @@ def render_footer_client_error_bridge_script() -> None:
                 parentWindow.setTimeout(() => status.remove(), 240);
               });
 
-              status.append(glyph, text, dismiss);
+              status.append(glyph, text);
+              if (kind === "error") {
+                const copy = doc.createElement("button");
+                copy.className = "hhs-floating-status-copy";
+                copy.type = "button";
+                copy.setAttribute("aria-label", "Copy error details");
+                copy.title = "Copy error details";
+                copy.textContent = "";
+                copy.addEventListener("click", async (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  await parentWindow.__hhsCopyFooterStatusText(cleanMessage);
+                });
+                status.append(copy);
+              }
+              status.append(dismiss);
               doc.body.append(status);
               parentWindow.clearTimeout(parentWindow.__hhsFooterErrorBridgeTimer);
               parentWindow.__hhsFooterErrorBridgeTimer = parentWindow.setTimeout(() => {
                 status.remove();
-              }, 9000);
+              }, 11000);
             };
 
             const scanAlerts = () => {
@@ -403,7 +441,7 @@ def footer_cache_clear_menu_markup() -> str:
     return (
         '<details class="hhs-footer-cache-clear-menu">'
         '<summary class="hhs-footer-cache-clear-trigger" '
-        'title="Clear application cache" aria-label="Clear application cache">'
+        'title="Open cleanup options" aria-label="Open cleanup options">'
         '<span class="hhs-footer-glyph-button">♻</span></summary>'
         f'<div class="hhs-footer-cache-clear-panel" data-clear-param="{clear_param}">'
         f'{option_markup}'
@@ -898,7 +936,7 @@ def render_footer() -> None:
     if shell_name:
         shell_status_markup = (
             f'<a class="hhs-footer-shell-status" href="{shell_version_url}" '
-            f'target="_self" title="Show bash version" aria-label="Show bash version">'
+            f'target="_self" title="Show shell version" aria-label="Show shell version">'
             f'<span class="hhs-footer-glyph"></span>'
             f'<span class="hhs-footer-shell-name">{shell_name}</span></a>'
         )

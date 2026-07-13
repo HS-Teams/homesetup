@@ -123,6 +123,25 @@ def command_env() -> dict[str, str]:
     }
 
 
+def background_job_command_env(
+    stdout_path: str,
+    stderr_path: str,
+    remote_host: str,
+) -> dict[str, str]:
+    """Return command environment with local job output paths protected."""
+    environment = command_env()
+    environment.pop("HHS_BACKGROUND_JOB_STDOUT_PATH", None)
+    environment.pop("HHS_BACKGROUND_JOB_STDERR_PATH", None)
+    if not remote_host:
+        environment.update(
+            {
+                "HHS_BACKGROUND_JOB_STDOUT_PATH": stdout_path,
+                "HHS_BACKGROUND_JOB_STDERR_PATH": stderr_path,
+            }
+        )
+    return environment
+
+
 def run_bash_command(
     command: str,
     loader_message: str,
@@ -466,7 +485,7 @@ def start_background_bash_command(
             stdin=subprocess.DEVNULL,
             stdout=stdout_handle,
             stderr=stderr_handle,
-            env=command_env(),
+            env=background_job_command_env(stdout_path, stderr_path, remote_host),
             text=True,
             start_new_session=True,
         )

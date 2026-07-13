@@ -1215,7 +1215,10 @@ def render_ai_prompt_file_panel() -> None:
         "Prompt",
         key="ai_prompt_editor",
         height=max(280, min(620, prompt_line_count * 22)),
-        help="Edit the prompt HomeSetup sends to Ollama.",
+        help=(
+            "Edit the runtime instruction template prepended to HomeSetup requests "
+            "sent to Ollama. Saving changes affects subsequent AI conversations."
+        ),
         label_visibility="collapsed",
     )
 
@@ -1232,7 +1235,10 @@ def render_ai_context_output_panel() -> None:
             "Ingest context",
             type=hhs_ui_constants.AI_CONTEXT_UPLOAD_TYPES,
             key="ai_context_upload",
-            help="Choose a supported text file to add to the Ollama context.",
+            help=(
+                "Upload a supported text-based file whose complete contents will be "
+                "appended to the HomeSetup context used by subsequent Ollama requests."
+            ),
             label_visibility="collapsed",
         )
     with ingest_col:
@@ -1380,6 +1386,7 @@ def render_ai_settings_panel() -> None:
             {
                 "label": "Delete Model",
                 "glyph": "",
+                "help": "Delete the selected Ollama model",
                 "key_prefix": "ai_delete_model_button",
                 "on_click": request_ai_model_deletion,
                 "visible": lambda row, _index: str(row.get("Status", ""))

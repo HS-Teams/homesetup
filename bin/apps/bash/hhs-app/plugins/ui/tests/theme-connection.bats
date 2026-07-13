@@ -87,7 +87,7 @@ assert 'hhs-footer-link' in ui_source
 assert 'class="hhs-footer-shell-status"' in ui_source
 assert 'class="hhs-footer-shell-name">{shell_name}</span>' in ui_source
 assert 'href="{shell_version_url}"' in ui_source
-assert 'target="_self" title="Show bash version" aria-label="Show bash version"' in ui_source
+assert 'target="_self" title="Show shell version" aria-label="Show shell version"' in ui_source
 assert 'os.environ.get("HHS_MY_SHELL", "").strip().upper()' in ui_source
 assert 'class="hhs-footer-remote-status"' in ui_source
 footer_template = ui_source.split('<footer class="hhs-app-footer">', 1)[1].split('</footer>', 1)[0]
@@ -134,7 +134,7 @@ assert 'FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cach
 assert 'FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"' in constants_source
 assert 'FOOTER_CLEAR_AI_HISTORY_QUERY_PARAM = "hhs_clear_ai_history"' in constants_source
 assert 'COMMAND_PRELOADER_CANCEL_QUERY_PARAM = "hhs_cancel_preloader"' in constants_source
-assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 1.0' in constants_source
+assert 'FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 3.0' in constants_source
 assert 'AI_TERMINAL_CONTEXT_MAX_CHARS = 12000' in constants_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in constants_source
 assert '__all__ = tuple(name for name in dir(_constants) if name.isupper())' in init_source
@@ -458,7 +458,7 @@ assert '__hhsRenderedFloatingStatuses' not in status_source
 assert '__hhsFloatingStatusTimer' in status_source
 assert 'hhs-floating-status--stable' in status_source
 assert 'hhs-floating-status--disposing' in status_source
-assert 'setAttribute("aria-label", "Dispose footer status")' in status_source
+assert 'setAttribute("aria-label", "Dismiss status message")' in status_source
 assert 'FOOTER_DISMISS_STATUS_QUERY_PARAM' not in ui_source
 assert 'f"__hhs_open {safe_filepath}"' in ui_source
 assert 'use_cache=False' in ui_source
@@ -870,7 +870,7 @@ assert "background: rgba(20, 17, 31, 0.82)" in pastel_powerline_css
 assert "left: 0" in base_css
 assert "right: 0" in base_css
 assert "min-height: var(--hhs-floating-status-height)" in base_css
-assert "padding: 0.32em 2.5rem 0.32em var(--hhs-sidebar-inline-inset)" in base_css
+assert "padding: 0.32em 4.35rem 0.32em var(--hhs-sidebar-inline-inset)" in base_css
 assert "--hhs-sidebar-title-separator-left: 0px" in base_css
 assert "--hhs-sidebar-title-separator-width: 100%" in base_css
 assert "border-bottom: 0" in sidebar_title_block

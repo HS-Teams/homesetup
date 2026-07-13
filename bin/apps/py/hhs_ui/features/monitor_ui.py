@@ -182,6 +182,10 @@ def render_monitor_disk_chart() -> None:
         has_input=True,
         input_key="monitor_disk_directory",
         input_label="Directory:",
+        input_help=(
+            "Directory scanned to calculate disk-usage totals. HomeSetup expands "
+            "~ and environment variables before refreshing the chart."
+        ),
         input_on_change=save_ui_state,
         refresh_key="monitor_disk_apply_button",
         refresh_on_click=apply_monitor_disk_controls,
@@ -458,7 +462,10 @@ def render_monitor_logs_panel() -> None:
             step=hhs_ui_constants.LOG_TAIL_LINES_STEP,
             key="monitor_log_tail_lines",
             label_visibility="collapsed",
-            help="Set how many recent log lines to display.",
+            help=(
+                "Number of newest lines to read from the selected log after applying "
+                "the severity and text filters. Increase it to inspect older events."
+            ),
             on_change=handle_monitor_log_tail_lines_change,
             width=150,
         )
@@ -491,7 +498,10 @@ def render_monitor_logs_panel() -> None:
                     options=log_files,
                     key="monitor_log_file",
                     label_visibility="collapsed",
-                    help="Choose the log file to display.",
+                    help=(
+                        "Select a HomeSetup log file from the configured log directory. "
+                        "The viewer reads this file without modifying it."
+                    ),
                     on_change=save_ui_state,
                 )
             with level_label_col:
@@ -506,7 +516,10 @@ def render_monitor_logs_panel() -> None:
                     key="monitor_log_level",
                     format_func=monitor_log_level_label,
                     label_visibility="collapsed",
-                    help="Filter entries by minimum log severity.",
+                    help=(
+                        "Minimum severity included in the viewer. For example, Warning "
+                        "shows warning and error entries while hiding informational logs."
+                    ),
                     on_change=save_ui_state,
                 )
             with tail_lines_label_col:
@@ -525,9 +538,9 @@ def render_monitor_logs_panel() -> None:
                     "",
                     key=f"monitor_logs_tail_button_{tail_button_state}",
                     help=(
-                        "Disable tail refresh"
+                        "Pause live log updates"
                         if tail_enabled_value
-                        else "Enable tail refresh"
+                        else "Resume live log updates"
                     ),
                     on_click=toggle_monitor_logs_tail,
                     width="stretch",
@@ -536,7 +549,7 @@ def render_monitor_logs_panel() -> None:
                 st.button(
                     "",
                     key="monitor_log_clear_button",
-                    help="Clear selected log file",
+                    help="Empty the selected log file",
                     on_click=clear_monitor_log_file,
                     width="stretch",
                 )

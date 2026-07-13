@@ -21,6 +21,43 @@ load "${HHS_REPO_DIR}/tests/test_helper"
 load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
+@test "when a local background job runs then its output files should be protected" {
+  run python3 - "${command_runtime_file}" <<'PY'
+import os
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def command_env()")
+end = source.index("def run_bash_command(", start)
+namespace = {
+    "hhs_ui": SimpleNamespace(COMMAND_COLUMNS="120"),
+    "hhs_ui_constants": SimpleNamespace(RUN_SHELL_ENV_KEY="HHS_RUN_SHELL"),
+    "os": os,
+    "RUN_SHELL": "/bin/bash",
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+local_env = namespace["background_job_command_env"](
+    "/tmp/reset-stdout.log",
+    "/tmp/reset-stderr.log",
+    "",
+)
+assert local_env["HHS_BACKGROUND_JOB_STDOUT_PATH"] == "/tmp/reset-stdout.log"
+assert local_env["HHS_BACKGROUND_JOB_STDERR_PATH"] == "/tmp/reset-stderr.log"
+
+remote_env = namespace["background_job_command_env"](
+    "/tmp/reset-stdout.log",
+    "/tmp/reset-stderr.log",
+    "remote-host",
+)
+assert "HHS_BACKGROUND_JOB_STDOUT_PATH" not in remote_env
+assert "HHS_BACKGROUND_JOB_STDERR_PATH" not in remote_env
+PY
+  assert_success
+}
+
 @test "when showing command progress then command runner should paint overlay before subprocess" {
   assert_file_contains "${feedback_ui_file}" 'def set_overlay('
 

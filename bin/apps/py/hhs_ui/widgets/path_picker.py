@@ -978,7 +978,7 @@ def render_path_picker_dialog(owner_context: str = "") -> bool:
                     st.button(
                         "×",
                         key="folder_picker_header_close_button",
-                        help="Close",
+                        help="Close the path picker",
                         on_click=close_folder_picker,
                         width="content",
                     )
@@ -1067,7 +1067,10 @@ def render_path_picker_body(
         key="_hhs_folder_picker_include_dot_folders",
         value=False,
         disabled=loading_children,
-        help="Include folders whose names begin with a dot.",
+        help=(
+            "Show hidden directories whose names begin with a dot, such as .config, "
+            "in this picker. It does not change their visibility on disk."
+        ),
         on_change=refresh_folder_picker_current_children,
     )
     with st.container(key="folder_picker_action_grid"):
@@ -1087,7 +1090,7 @@ def render_path_picker_body(
             st.button(
                 "",
                 key="folder_picker_parent_button",
-                help="Parent",
+                help="Go to the parent directory",
                 on_click=open_folder_picker_parent,
                 width="content",
             )
@@ -1095,7 +1098,7 @@ def render_path_picker_body(
             st.button(
                 "",
                 key="folder_picker_open_button",
-                help="Open",
+                help="Open the selected entry",
                 disabled=loading_children or not bool(child_directories),
                 on_click=open_folder_picker_selected_directory,
                 width="content",
@@ -1104,7 +1107,7 @@ def render_path_picker_body(
             st.button(
                 "﬌",
                 key="folder_picker_select_button",
-                help="Select",
+                help="Use the selected path",
                 disabled=loading_children,
                 on_click=apply_folder_picker_selection_and_dismiss,
                 width="content",
@@ -1113,7 +1116,7 @@ def render_path_picker_body(
             st.button(
                 "ﰸ",
                 key="folder_picker_cancel_button",
-                help="Cancel",
+                help="Close without selecting",
                 on_click=cancel_folder_picker_and_dismiss,
                 width="content",
             )

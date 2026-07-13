@@ -80,7 +80,9 @@ def footer_status_file_logger() -> logging.Logger | None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     handler = registry.get("handler")
-    if isinstance(handler, logging.FileHandler) and handler.baseFilename != str(log_path):
+    if isinstance(handler, logging.FileHandler) and (
+        handler.baseFilename != str(log_path) or not log_path.exists()
+    ):
         logger.removeHandler(handler)
         handler.close()
         handler = None
@@ -222,7 +224,9 @@ def render_floating_status_dispose_script(
                 node.remove();
               }}
             }});
-          const statusClass = `hhs-floating-status hhs-floating-status-kind-${{kind}} hhs-floating-status--stable`;
+          const statusClass =
+            `hhs-floating-status hhs-floating-status-kind-${{kind}} ` +
+            "hhs-floating-status--stable";
           if (!status) {{
             status = parentDocument.createElement("div");
             status.dataset.hhsFloatingStatusId = statusId;
@@ -239,10 +243,20 @@ def render_floating_status_dispose_script(
             const button = parentDocument.createElement("button");
             button.className = "hhs-floating-status-dismiss";
             button.type = "button";
-            button.setAttribute("aria-label", "Dispose footer status");
-            button.title = "Dispose footer status";
+            button.setAttribute("aria-label", "Dismiss status message");
+            button.title = "Dismiss status message";
             button.textContent = "x";
-            status.append(glyph, text, button);
+            status.append(glyph, text);
+            if (kind === "error") {{
+              const copyButton = parentDocument.createElement("button");
+              copyButton.className = "hhs-floating-status-copy";
+              copyButton.type = "button";
+              copyButton.setAttribute("aria-label", "Copy error details");
+              copyButton.title = "Copy error details";
+              copyButton.textContent = "";
+              status.append(copyButton);
+            }}
+            status.append(button);
             parentDocument.body.append(status);
           }} else if (status.className !== statusClass) {{
             status.className = statusClass;
@@ -254,6 +268,23 @@ def render_floating_status_dispose_script(
           const text = status.querySelector(".hhs-floating-status-message");
           if (text && text.textContent !== message) {{
             text.textContent = message;
+          }}
+          const copyButton = status.querySelector(".hhs-floating-status-copy");
+          if (
+            copyButton
+            && copyButton.dataset.hhsCopyAttached !== "true"
+          ) {{
+            copyButton.dataset.hhsCopyAttached = "true";
+            copyButton.addEventListener("click", async (event) => {{
+              event.preventDefault();
+              event.stopPropagation();
+              const copyStatusText = parentWindow.__hhsCopyFooterStatusText;
+              if (typeof copyStatusText === "function") {{
+                await copyStatusText(message);
+                return;
+              }}
+              await parentWindow.navigator.clipboard.writeText(message);
+            }});
           }}
           const button = status.querySelector(".hhs-floating-status-dismiss");
           const dispose = () => {{

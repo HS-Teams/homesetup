@@ -15,7 +15,7 @@
 PLUGIN_NAME="ui"
 
 # Current HomeSetup UI plugin version.
-VERSION="0.0.34"
+VERSION="0.0.50"
 
 # Namespace cleanup.
 UNSETS=(

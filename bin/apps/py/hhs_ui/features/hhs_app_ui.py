@@ -13,7 +13,7 @@ import shutil
 import sys
 import warnings
 from collections.abc import Callable
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 
 import pandas as pd
@@ -31,6 +31,8 @@ from hhs_ui.execution.command_catalog import (
     build_hhs_firebase_alias_action_command,
     build_hhs_firebase_info_command,
     build_hhs_hspm_command,
+    build_hhs_reset_apply_command,
+    build_hhs_reset_options_command,
     build_hhs_save_firebase_config_command,
     build_hhs_save_starship_config_command,
     build_hhs_settings_add_command,
@@ -48,6 +50,7 @@ from hhs_ui.execution.command_catalog import (
     load_hhs_settings_defaults,
     normalize_hhs_firebase_value,
     parse_hhs_firebase_info,
+    parse_hhs_reset_options,
     parse_hhs_settings_list,
     parse_hhs_setup_settings,
     parse_hhs_starship_info,
@@ -65,7 +68,9 @@ from hhs_ui.core.paths import homesetup_config_dir
 from hhs_ui.features.search_ui import expand_path_with_environment
 from hhs_ui.widgets.status_ui import push_floating_status
 from hhs_ui.widgets.table_ui import (
+    markdown_table_panel,
     render_markdown_table,
+    reset_markdown_table_selection,
     resolve_css_custom_property,
 )
 from hhs_ui.core.theme_assets import theme_custom_properties
@@ -75,6 +80,7 @@ from hhs_ui.core.ui_definitions import (
     HHS_HSPM_CATALOG_CACHE_TAG,
     HHS_HSPM_ENV_OUTPUT_MARKER,
     HHS_HSPM_ACTION_JOB,
+    HHS_RESET_ACTION_JOB,
     HHS_SETTINGS_ACTION_JOB,
     HHS_SETUP_ACTION_JOB,
     HHS_SETUP_SETTINGS,
@@ -84,6 +90,7 @@ from hhs_ui.core.ui_state import save_ui_state
 
 
 HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH = 165
+HHS_HSPM_TABLE_HEIGHT = 264
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:
@@ -140,13 +147,14 @@ def configure_hhs_app_ui(
     )
 
 
-def queue_hhs_setup_action(
+def queue_hhs_action(
+    pending_key: str,
     command: str,
     description: str,
     metadata: dict[str, object],
 ) -> bool:
-    """Queue a HomeSetup setup plug-in mutation for background execution."""
-    st.session_state["hhs_setup_action_execute_pending"] = {
+    """Queue a HomeSetup application mutation for background execution."""
+    st.session_state[pending_key] = {
         **metadata,
         "command": command,
         "description": description,
@@ -155,9 +163,13 @@ def queue_hhs_setup_action(
     return True
 
 
-def start_pending_hhs_setup_action() -> None:
-    """Start a queued HomeSetup setup action background job, when present."""
-    pending = st.session_state.pop("hhs_setup_action_execute_pending", None) or {}
+def start_pending_hhs_action(
+    pending_key: str,
+    job_name: str,
+    busy_message: str,
+) -> None:
+    """Start a queued HomeSetup application action, when present."""
+    pending = st.session_state.pop(pending_key, None) or {}
     if not isinstance(pending, dict):
         return
     command = str(pending.get("command", "")).strip()
@@ -165,15 +177,38 @@ def start_pending_hhs_setup_action() -> None:
     if not command or not description:
         return
     started = start_background_action_job(
-        HHS_SETUP_ACTION_JOB,
+        job_name,
         command,
         description,
         hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
         pending,
-        "Another setup action is already running.",
+        busy_message,
     )
     if not started:
-        st.session_state["hhs_setup_action_execute_pending"] = pending
+        st.session_state[pending_key] = pending
+
+
+def queue_hhs_setup_action(
+    command: str,
+    description: str,
+    metadata: dict[str, object],
+) -> bool:
+    """Queue a HomeSetup setup plug-in mutation for background execution."""
+    return queue_hhs_action(
+        "hhs_setup_action_execute_pending",
+        command,
+        description,
+        metadata,
+    )
+
+
+def start_pending_hhs_setup_action() -> None:
+    """Start a queued HomeSetup setup action background job, when present."""
+    start_pending_hhs_action(
+        "hhs_setup_action_execute_pending",
+        HHS_SETUP_ACTION_JOB,
+        "Another setup action is already running.",
+    )
 
 
 def complete_hhs_setup_action_job() -> None:
@@ -201,40 +236,82 @@ def execute_pending_hhs_setup_action() -> None:
     complete_hhs_setup_action_job()
 
 
+def queue_hhs_reset_action(
+    command: str,
+    description: str,
+    metadata: dict[str, object],
+) -> bool:
+    """Queue a HomeSetup reset mutation for background execution."""
+    return queue_hhs_action(
+        "hhs_reset_action_execute_pending",
+        command,
+        description,
+        metadata,
+    )
+
+
+def start_pending_hhs_reset_action() -> None:
+    """Start a queued HomeSetup reset action background job, when present."""
+    start_pending_hhs_action(
+        "hhs_reset_action_execute_pending",
+        HHS_RESET_ACTION_JOB,
+        "Another reset action is already running.",
+    )
+
+
+def complete_hhs_reset_action_job() -> None:
+    """Complete a HomeSetup reset action and clear submitted selections."""
+    completed = background_job_result(HHS_RESET_ACTION_JOB)
+    if completed is None:
+        return
+    result, metadata = completed
+    if result.returncode == 0:
+        status_message = clean_command_status_message(
+            result.stdout or result.stderr or ""
+        )
+        cache_delete_tag("hhs_reset")
+        reset_markdown_table_selection(hhs_ui.HHS_RESET_TABLE_KEY)
+        option_count = int(metadata.get("option_count", 0) or 0)
+        for option_index in range(option_count):
+            st.session_state[hhs_reset_option_key(option_index)] = False
+        fallback = str(metadata.get("success_fallback", "Reset cleanup completed."))
+        push_floating_status(status_message or fallback, "info", 8.0)
+    else:
+        status_message = clean_command_status_message(
+            result.stderr or result.stdout or ""
+        )
+        fallback = str(metadata.get("error_fallback", "Reset cleanup failed."))
+        push_floating_status(status_message or fallback, "error")
+    save_ui_state()
+
+
+def execute_pending_hhs_reset_action() -> None:
+    """Start or complete the current HomeSetup reset action."""
+    start_pending_hhs_reset_action()
+    complete_hhs_reset_action_job()
+
+
 def queue_hhs_settings_action(
     command: str,
     description: str,
     metadata: dict[str, object],
 ) -> bool:
     """Queue a HomeSetup Settings plug-in mutation for background execution."""
-    st.session_state["hhs_settings_action_execute_pending"] = {
-        **metadata,
-        "command": command,
-        "description": description,
-    }
-    save_ui_state()
-    return True
+    return queue_hhs_action(
+        "hhs_settings_action_execute_pending",
+        command,
+        description,
+        metadata,
+    )
 
 
 def start_pending_hhs_settings_action() -> None:
     """Start a queued HomeSetup Settings action background job, when present."""
-    pending = st.session_state.pop("hhs_settings_action_execute_pending", None) or {}
-    if not isinstance(pending, dict):
-        return
-    command = str(pending.get("command", "")).strip()
-    description = str(pending.get("description", "")).strip()
-    if not command or not description:
-        return
-    started = start_background_action_job(
+    start_pending_hhs_action(
+        "hhs_settings_action_execute_pending",
         HHS_SETTINGS_ACTION_JOB,
-        command,
-        description,
-        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        pending,
         "Another Settings action is already running.",
     )
-    if not started:
-        st.session_state["hhs_settings_action_execute_pending"] = pending
 
 
 def complete_hhs_settings_action_job() -> None:
@@ -268,34 +345,21 @@ def queue_hhs_starship_action(
     metadata: dict[str, object],
 ) -> bool:
     """Queue a HomeSetup Starship plug-in mutation for background execution."""
-    st.session_state["hhs_starship_action_execute_pending"] = {
-        **metadata,
-        "command": command,
-        "description": description,
-    }
-    save_ui_state()
-    return True
+    return queue_hhs_action(
+        "hhs_starship_action_execute_pending",
+        command,
+        description,
+        metadata,
+    )
 
 
 def start_pending_hhs_starship_action() -> None:
     """Start a queued HomeSetup Starship action background job, when present."""
-    pending = st.session_state.pop("hhs_starship_action_execute_pending", None) or {}
-    if not isinstance(pending, dict):
-        return
-    command = str(pending.get("command", "")).strip()
-    description = str(pending.get("description", "")).strip()
-    if not command or not description:
-        return
-    started = start_background_action_job(
+    start_pending_hhs_action(
+        "hhs_starship_action_execute_pending",
         HHS_STARSHIP_ACTION_JOB,
-        command,
-        description,
-        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        pending,
         "Another Starship action is already running.",
     )
-    if not started:
-        st.session_state["hhs_starship_action_execute_pending"] = pending
 
 
 def complete_hhs_starship_action_job() -> None:
@@ -336,34 +400,21 @@ def queue_hhs_firebase_action(
     metadata: dict[str, object],
 ) -> bool:
     """Queue a HomeSetup Firebase config mutation for background execution."""
-    st.session_state["hhs_firebase_action_execute_pending"] = {
-        **metadata,
-        "command": command,
-        "description": description,
-    }
-    save_ui_state()
-    return True
+    return queue_hhs_action(
+        "hhs_firebase_action_execute_pending",
+        command,
+        description,
+        metadata,
+    )
 
 
 def start_pending_hhs_firebase_action() -> None:
     """Start a queued HomeSetup Firebase action background job, when present."""
-    pending = st.session_state.pop("hhs_firebase_action_execute_pending", None) or {}
-    if not isinstance(pending, dict):
-        return
-    command = str(pending.get("command", "")).strip()
-    description = str(pending.get("description", "")).strip()
-    if not command or not description:
-        return
-    started = start_background_action_job(
+    start_pending_hhs_action(
+        "hhs_firebase_action_execute_pending",
         HHS_FIREBASE_ACTION_JOB,
-        command,
-        description,
-        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
-        pending,
         "Another Firebase action is already running.",
     )
-    if not started:
-        st.session_state["hhs_firebase_action_execute_pending"] = pending
 
 
 def complete_hhs_firebase_action_job() -> None:
@@ -872,7 +923,7 @@ def render_slider_pane(
                 st.button(
                     "",
                     key=f"{safe_key}_previous_button",
-                    help="Slide left",
+                    help="Show previous carousel page",
                     on_click=move_slider_pane,
                     args=(safe_key, page_count, -1),
                     width=32,
@@ -891,7 +942,7 @@ def render_slider_pane(
                 st.button(
                     "",
                     key=f"{safe_key}_next_button",
-                    help="Slide right",
+                    help="Show next carousel page",
                     on_click=move_slider_pane,
                     args=(safe_key, page_count, 1),
                     width=32,
@@ -1036,6 +1087,8 @@ def render_hhs_setup_settings_table(action_running: bool) -> None:
         "hhs_setup_settings",
         [hhs_setup_setting_key(name) for name in HHS_SETUP_SETTINGS],
         disabled=action_running,
+        row_selection=True,
+        show_value_column=False,
     )
 
 
@@ -1084,7 +1137,7 @@ def render_hhs_setup_panel() -> None:
         ok_clicked = st.button(
             " Apply",
             key="hhs_setup_apply_button",
-            help="Apply changes",
+            help="Apply selected setup settings",
             disabled=action_running,
             width="stretch",
         )
@@ -1092,7 +1145,7 @@ def render_hhs_setup_panel() -> None:
         revert_clicked = st.button(
             " Cancel",
             key="hhs_setup_cancel_button",
-            help="Cancel modifications",
+            help="Discard unsaved setup changes",
             disabled=action_running,
             width="stretch",
         )
@@ -1100,7 +1153,7 @@ def render_hhs_setup_panel() -> None:
         restore_clicked = st.button(
             " Restore",
             key="hhs_setup_restore_button",
-            help="Restore settings from disk",
+            help="Reload setup settings from disk",
             disabled=action_running,
             width="stretch",
         )
@@ -1115,6 +1168,135 @@ def render_hhs_setup_panel() -> None:
         st.rerun()
     elif restore_clicked:
         request_hhs_setup_restore()
+        st.rerun()
+
+
+def hhs_reset_option_key(option_index: int) -> str:
+    """Return the Session State key for one ordered reset target."""
+    return f"hhs_reset_option_{option_index}"
+
+
+def hhs_reset_options_token(options: list[str]) -> str:
+    """Return a stable token for the currently available reset targets."""
+    return json.dumps(options, separators=(",", ":"))
+
+
+def sync_hhs_reset_form_state(options: list[str]) -> None:
+    """Initialize reset selection state when the target list changes."""
+    token = hhs_reset_options_token(options)
+    if st.session_state.get("_hhs_reset_loaded_token") == token:
+        return
+    st.session_state["_hhs_reset_loaded_token"] = token
+    for option_index in range(len(options)):
+        st.session_state[hhs_reset_option_key(option_index)] = False
+
+
+def selected_hhs_reset_options(options: list[str]) -> list[bool]:
+    """Return ordered reset selections for the displayed target list."""
+    return [
+        bool(st.session_state.get(hhs_reset_option_key(option_index), False))
+        for option_index in range(len(options))
+    ]
+
+
+def request_hhs_reset(options: list[str]) -> None:
+    """Queue deletion of the selected HomeSetup reset targets."""
+    selections = selected_hhs_reset_options(options)
+    if not any(selections):
+        push_floating_status("Select at least one reset target to delete.", "warn")
+        return
+    queue_hhs_reset_action(
+        build_hhs_reset_apply_command(selections),
+        "Deleting HomeSetup cache and log files",
+        {
+            "operation": "delete",
+            "option_count": len(options),
+            "success_fallback": "Selected cache and log files deleted.",
+            "error_fallback": "Unable to delete selected cache and log files.",
+        },
+    )
+
+
+def render_hhs_reset_title() -> None:
+    """Render the HomeSetup reset page title."""
+    st.markdown(
+        """
+        <section class="hhs-view-heading hhs-view-heading--direct-content">
+          <h2><strong></strong> Cache &amp; Logs Cleanup</h2>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_hhs_reset_targets_table(options: list[str], action_running: bool) -> None:
+    """Render the reset target selection table."""
+    selections = selected_hhs_reset_options(options)
+    render_markdown_table(
+        "Mark what you want to delete",
+        options,
+        options,
+        selections,
+        hhs_ui.HHS_RESET_TABLE_KEY,
+        [hhs_reset_option_key(index) for index in range(len(options))],
+        disabled=action_running,
+        row_selection=True,
+        show_value_column=False,
+        show_variable_column=False,
+    )
+
+
+def render_hhs_reset_panel() -> None:
+    """Render the HomeSetup cache and logs reset panel."""
+    execute_pending_hhs_reset_action()
+    render_background_job_status(HHS_RESET_ACTION_JOB)
+    render_hhs_reset_title()
+    result = render_cached_command_result(
+        build_hhs_reset_options_command(),
+        "Loading reset targets",
+        "hhs_reset",
+        hhs_ui.UI_CACHE_DEFAULT_TTL_SECONDS,
+        hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        "Unable to load reset targets.",
+    )
+    if result is None:
+        return
+    if result.returncode != 0:
+        st.error(
+            clean_command_status_message(
+                result.stderr or result.stdout or "Unable to load reset targets."
+            )
+        )
+        return
+
+    options = parse_hhs_reset_options(result.stdout)
+    if not options:
+        st.info("No reset targets are available.")
+        return
+    sync_hhs_reset_form_state(options)
+    action_running = background_job_is_running(HHS_RESET_ACTION_JOB)
+    render_hhs_reset_targets_table(options, action_running)
+    selections = selected_hhs_reset_options(options)
+    left_column, delete_column, right_column = st.columns(
+        [1.0, 0.48, 1.0],
+        gap="small",
+        vertical_alignment="center",
+    )
+    with left_column:
+        st.empty()
+    with delete_column:
+        delete_clicked = st.button(
+            "ﮊ Delete",
+            key="hhs_reset_delete_button",
+            help="Delete selected cache and log files",
+            disabled=action_running or not any(selections),
+            width="stretch",
+        )
+    with right_column:
+        st.empty()
+
+    if delete_clicked:
+        request_hhs_reset(options)
         st.rerun()
 
 
@@ -1225,14 +1407,22 @@ def render_hhs_settings_controls(action_running: bool) -> None:
                     key="hhs_settings_add_name",
                     placeholder="setting.name",
                     accept_new_options=True,
-                    help="Choose or enter the HomeSetup setting to override.",
+                    help=(
+                        "Select a registered HomeSetup setting key or enter a custom "
+                        "dot-delimited key. The saved override takes precedence over "
+                        "that setting's default value."
+                    ),
                     disabled=action_running,
                 )
             with variable_col:
                 st.text_input(
                     "Variable",
                     key="hhs_settings_add_variable",
-                    help="Generated environment variable for the selected setting.",
+                    help=(
+                        "Read-only shell environment variable generated from the "
+                        "selected setting key. Shell integrations use this name to "
+                        "expose the effective override."
+                    ),
                     disabled=True,
                 )
             with value_col:
@@ -1240,7 +1430,11 @@ def render_hhs_settings_controls(action_running: bool) -> None:
                     "Value",
                     key="hhs_settings_add_value",
                     placeholder="value",
-                    help="Set the override value for the selected setting.",
+                    help=(
+                        "Value persisted for the selected setting. Shell expressions "
+                        "such as ${HHS_DIR} are preserved and expanded when HomeSetup "
+                        "loads the setting."
+                    ),
                     disabled=action_running,
                 )
             with add_col:
@@ -1269,6 +1463,8 @@ def render_hhs_settings_table(
         disabled=action_running,
         variable_values=[row.get("Variable", "") for row in rows],
         extra_columns={"Value": [row.get("Value", "") for row in rows]},
+        row_selection=True,
+        show_value_column=False,
     )
     return [
         setting
@@ -1453,7 +1649,11 @@ def render_hhs_starship_controls(
                 st.text_input(
                     "Cache",
                     value=cache_path,
-                    help="Location of the generated Starship cache file.",
+                    help=(
+                        "Read-only path to the generated Starship initialization cache "
+                        "loaded during shell startup. It is regenerated when the "
+                        "Starship configuration changes."
+                    ),
                     disabled=True,
                 )
             with preset_col:
@@ -1461,7 +1661,10 @@ def render_hhs_starship_controls(
                     "Preset",
                     preset_options,
                     key="hhs_starship_preset",
-                    help="Choose the Starship prompt preset to apply.",
+                    help=(
+                        "Select a bundled Starship preset. Applying it replaces the "
+                        "active prompt configuration with that preset's configuration."
+                    ),
                     disabled=action_running or not presets,
                 )
             with apply_col:
@@ -1477,7 +1680,7 @@ def render_hhs_starship_controls(
                 st.button(
                     "",
                     key=edit_button_key,
-                    help="Toggle Starship config editing",
+                    help="Enable or disable config editing",
                     on_click=toggle_hhs_starship_config_editing,
                     disabled=action_running or not config_path,
                     width="stretch",
@@ -1513,13 +1716,16 @@ def render_hhs_starship_config_editor(
             height=360,
             disabled=not editing or action_running,
             label_visibility="collapsed",
-            help="Review or edit the active Starship configuration.",
+            help=(
+                "Review the active Starship TOML configuration. Enable editing to "
+                "change the file used to render future shell prompts."
+            ),
         )
         if editing:
             st.button(
                 "",
                 key="hhs_starship_save_config_button",
-                help="Save Starship config",
+                help="Save the Starship config file",
                 on_click=request_hhs_starship_config_save,
                 disabled=action_running or not config_path,
             )
@@ -1986,7 +2192,7 @@ def render_hhs_firebase_aliases_actions(
             st.button(
                 " Download",
                 key="hhs_firebase_alias_download_button",
-                help="Download aliased dotfiles From Firebase",
+                help="Download aliased dotfiles from Firebase",
                 on_click=request_hhs_firebase_alias_action,
                 args=("download", clean_alias),
                 disabled=action_disabled,
@@ -2200,28 +2406,16 @@ def parse_hhs_hspm_catalog(output: str) -> list[dict[str, str]]:
     return rows
 
 
-def hhs_hspm_catalog_table_data(
+def style_hhs_hspm_catalog_table_data(
+    table_data: pd.DataFrame,
     rows: list[dict[str, str]],
 ) -> pd.io.formats.style.Styler:
-    """Return styled HSPM catalog rows with the editable Mark column."""
-    dataframe = pd.DataFrame(
-        {
-            "Mark": pd.Series([False] * len(rows), dtype="bool"),
-            "Command": pd.Series(
-                [row.get("Command", "") for row in rows],
-                dtype="string",
-            ),
-            "Description": pd.Series(
-                [row.get("Description", "") for row in rows],
-                dtype="string",
-            ),
-        }
-    )
+    """Apply the HSPM catalog recipe styling to shared table data."""
     custom_commands = {
         row.get("Command", "") for row in rows if row.get("CustomRecipe") == "+"
     }
     accent_color = slider_pane_theme()["accent"]
-    return dataframe.style.map(
+    return table_data.style.map(
         lambda value: (
             "font-size: 0.5rem; "
             + (
@@ -2234,15 +2428,15 @@ def hhs_hspm_catalog_table_data(
     )
 
 
-def selected_hhs_hspm_catalog_packages(edited_data: pd.DataFrame) -> list[str]:
-    """Return package names marked in the HSPM catalog table."""
-    if "Mark" not in edited_data or "Command" not in edited_data:
-        return []
-    selected_rows = edited_data[edited_data["Mark"].astype(bool)]
+def selected_hhs_hspm_catalog_packages(
+    rows: list[dict[str, str]],
+    selected_values: list[bool],
+) -> list[str]:
+    """Return package names selected in the HSPM catalog table."""
     return [
-        str(command).strip()
-        for command in selected_rows["Command"].tolist()
-        if str(command).strip()
+        str(row.get("Command", "")).strip()
+        for row, selected in zip(rows, selected_values, strict=True)
+        if selected and str(row.get("Command", "")).strip()
     ]
 
 
@@ -2433,36 +2627,30 @@ def render_hhs_hspm_catalog_slide() -> None:
                 expanded=False,
             )
             action_status.write("The Catalog is locked until the operation completes.")
-        edited_data = st.data_editor(
-            hhs_hspm_catalog_table_data(rows),
-            key=hhs_hspm_catalog_table_key(),
-            hide_index=True,
-            column_order=["Mark", "Command", "Description"],
-            height=304,
-            disabled=["Command", "Description"] if not action_running else True,
-            column_config={
-                "Mark": st.column_config.CheckboxColumn(
-                    "Mark",
-                    disabled=action_running,
-                    help="Select recipes to install or uninstall.",
-                    width=80,
-                ),
-                "Command": st.column_config.TextColumn(
-                    "Command",
-                    disabled=True,
-                    help="HSPM recipe command.",
-                ),
-                "Description": st.column_config.TextColumn(
-                    "Description",
-                    disabled=True,
-                    help="Package or application description.",
-                ),
+        commands = [row.get("Command", "") for row in rows]
+        selected_values = render_markdown_table(
+            "Package Catalog",
+            commands,
+            commands,
+            [False for _row in rows],
+            hhs_hspm_catalog_table_key(),
+            disabled=action_running,
+            item_column_label="Command",
+            extra_columns={
+                "Description": [row.get("Description", "") for row in rows]
             },
-            width="stretch",
+            row_selection=True,
+            show_value_column=False,
+            show_variable_column=False,
+            table_data_styler=partial(
+                style_hhs_hspm_catalog_table_data,
+                rows=rows,
+            ),
+            table_height=HHS_HSPM_TABLE_HEIGHT,
         )
     render_slider_pane_bullets("hhs_hspm_slider", ["Catalog", "Recovery"])
     render_hhs_hspm_catalog_action_buttons(
-        selected_hhs_hspm_catalog_packages(edited_data),
+        selected_hhs_hspm_catalog_packages(rows, selected_values),
         action_running,
     )
 
@@ -2502,27 +2690,27 @@ def render_hhs_hspm_recovery_slide() -> None:
     )
     action_running = background_job_is_running(HHS_HSPM_ACTION_JOB)
     with st.container(key="hhs_hspm_slider_recovery_table_layout"):
-        st.data_editor(
-            hhs_hspm_recovery_table_data(rows),
-            key="hhs_hspm_recovery_table",
-            hide_index=True,
-            column_order=["Command", "Status"],
-            height=304,
-            disabled=True,
-            column_config={
-                "Command": st.column_config.TextColumn(
-                    "Command",
-                    disabled=True,
-                    help="HSPM recipe command eligible for recovery.",
-                ),
-                "Status": st.column_config.TextColumn(
-                    "Status",
-                    disabled=True,
-                    help="Installation status reported by the package manager.",
-                ),
-            },
-            width="stretch",
-        )
+        with markdown_table_panel("Recovery Commands", "hhs_hspm_recovery"):
+            st.dataframe(
+                hhs_hspm_recovery_table_data(rows),
+                key="hhs_hspm_recovery_table",
+                hide_index=True,
+                column_order=["Command", "Status"],
+                height=HHS_HSPM_TABLE_HEIGHT,
+                column_config={
+                    "Command": st.column_config.TextColumn(
+                        "Command",
+                        disabled=True,
+                        help="HSPM recipe command eligible for recovery.",
+                    ),
+                    "Status": st.column_config.TextColumn(
+                        "Status",
+                        disabled=True,
+                        help="Installation status reported by the package manager.",
+                    ),
+                },
+                width="stretch",
+            )
     render_slider_pane_bullets("hhs_hspm_slider", ["Catalog", "Recovery"])
     render_hhs_hspm_recovery_action_buttons(action_running)
 
@@ -2577,6 +2765,8 @@ def render_hhs_view() -> None:
     )
     if hhs_view == "SETUP":
         render_hhs_setup_panel()
+    elif hhs_view == "RESET":
+        render_hhs_reset_panel()
     elif hhs_view == "STARSHIP":
         render_hhs_starship_panel()
     elif hhs_view == "SETTINGS":

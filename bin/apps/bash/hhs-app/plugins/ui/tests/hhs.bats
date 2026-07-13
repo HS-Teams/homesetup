@@ -44,7 +44,7 @@ namespace = {
         FLOATING_STATUS_QUEUE_KEY="_hhs_floating_status_queue",
         FLOATING_STATUS_LEGACY_KEY="_hhs_floating_status",
         FLOATING_STATUS_QUEUE_LIMIT=20,
-        FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS=1.0,
+        FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS=3.0,
     ),
     "clean_command_status_message": lambda value: str(value).strip(),
     "st": SimpleNamespace(session_state=session_state),
@@ -64,13 +64,13 @@ status = namespace["current_floating_status"]()
 assert status["message"] == "First"
 assert status["kind"] == "info"
 assert status["displayed_at"] == 150.0
-assert namespace["effective_floating_status_timeout"](status) == 6.0
+assert namespace["effective_floating_status_timeout"](status) == 8.0
 
 clock.now = 155.5
 assert namespace["current_floating_status"]()["message"] == "First"
-clock.now = 157.5
+clock.now = 159.5
 assert namespace["current_floating_status"]()["message"] == "Second"
-assert session_state["_hhs_floating_status_queue"][0]["displayed_at"] == 157.5
+assert session_state["_hhs_floating_status_queue"][0]["displayed_at"] == 159.5
 assert namespace["pop_floating_status"]()["message"] == "Second"
 assert namespace["pop_floating_status"]() is None
 PY
@@ -85,6 +85,7 @@ from pathlib import Path
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 assert "%(asctime)s.%(msecs)03d %(levelname)s %(message)s" in source
+assert "handler.baseFilename != str(log_path) or not log_path.exists()" in source
 start = source.index("def log_footer_status_message(")
 end = source.index("def footer_status_file_logger(", start)
 namespace = {"logging": logging}
@@ -102,12 +103,50 @@ namespace["footer_status_file_logger"] = lambda: logger
 namespace["log_footer_status_message"]("Synced packages.", "info")
 namespace["log_footer_status_message"]("Remote connection failed.", "error")
 namespace["log_footer_status_message"]("Retrying connection.", "warn")
+namespace["log_footer_status_message"]("First line\nSecond line", "info")
 
 assert logger.records == [
     (logging.INFO, "Synced packages."),
     (logging.ERROR, "Remote connection failed."),
     (logging.WARNING, "Retrying connection."),
+    (logging.INFO, "First line\nSecond line"),
 ]
+PY
+  assert_success
+}
+
+@test "when rendering multiline footer status then generated JavaScript should preserve the full message" {
+  run python3 - "${status_ui_file}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def render_floating_status_dispose_script(")
+end = source.index("\ndef render_floating_status(", start)
+rendered_scripts = []
+namespace = {
+    "json": json,
+    "render_script_html": rendered_scripts.append,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+namespace["render_floating_status_dispose_script"](
+    "status-id",
+    "First line\nSecond line",
+    "info",
+    "i",
+    8.0,
+    7.5,
+)
+assert len(rendered_scripts) == 1
+rendered_script = rendered_scripts[0]
+assert r'const message = "First line\nSecond line";' in rendered_script
+assert "hhs-floating-status--multiline" not in rendered_script
+assert 'if (kind === "error")' in rendered_script
+assert 'copyButton.className = "hhs-floating-status-copy"' in rendered_script
+assert 'copyButton.textContent = ""' in rendered_script
+assert "writeText(message)" in rendered_script
 PY
   assert_success
 }
@@ -135,6 +174,11 @@ assert 'class="hhs-footer-cache-clear-submit"' in menu_markup
 assert 'option.setAttribute("aria-checked"' in menu_script
 assert '[role="checkbox"][aria-checked="true"]' in menu_script
 assert "window.parent.location.search = params.toString()" in menu_script
+assert "__hhsCopyFooterStatusText" in source
+assert 'copy.className = "hhs-floating-status-copy"' in source
+assert 'copy.textContent = ""' in source
+assert '"--hhs-floating-status-timeout", "10s"' in source
+assert "}, 11000);" in source
 assert "components.declare_component" not in source
 assert '.hhs-footer-cache-clear-option[aria-checked="true"]' in css
 assert ".hhs-footer-cache-clear-panel" in css
@@ -159,18 +203,28 @@ assert "min_row_count: int = 0" in render_body
 assert "multi_selection: bool = True" in render_body
 assert "column_text_colors: dict[str, str] | None = None" in render_body
 assert "show_value_column: bool = True" in render_body
-assert "if multi_selection and not show_value_column:" in render_body
-assert "height=markdown_table_editor_height(max(len(items), min_row_count))" in render_body
+assert "show_variable_column: bool = True" in render_body
+assert "row_selection: bool = False" in render_body
+assert "table_data_styler: Callable[[pd.DataFrame], object] | None = None" in render_body
+assert "table_height: int | None = None" in render_body
+assert "if multi_selection and not show_value_column and not row_selection:" in render_body
+assert "table_data_styler and column_text_colors cannot be combined" in render_body
+assert "resolved_table_height = (" in render_body
+assert "height=resolved_table_height" in render_body
+assert '"height": resolved_table_height' in render_body
 assert "return hhs_ui_constants.MARKDOWN_TABLE_HEIGHT" in source
-assert "if multi_selection:" in render_body
+assert "if multi_selection and not row_selection:" in render_body
 assert "st.data_editor(" in render_body
 assert "st.dataframe(" in render_body
 assert '"show_value_column": show_value_column' in render_body
+assert '"show_variable_column": show_variable_column' in render_body
+assert '"row_selection": row_selection' in render_body
 assert "selection_column_order = [" in render_body
 assert "selection_column_order.insert(0, value_column_label)" in render_body
 assert 'selection_args["on_select"] = "rerun"' in render_body
-assert 'selection_args["selection_mode"] = "single-row"' in render_body
-assert "markdown_table_single_selected_index(" in render_body
+assert '"multi-row" if multi_selection else "single-row"' in render_body
+assert "remember_table_selection(selection_key, selection)" in render_body
+assert 'selection_args["selection_default"]' in render_body
 assert "markdown_table_single_selection_marks(" in render_body
 assert "normalize_markdown_table_selection" not in render_body
 assert "def themed_markdown_table_data(" in source
@@ -198,16 +252,14 @@ assert height_namespace["markdown_table_editor_height"](0) == 360
 assert height_namespace["markdown_table_editor_height"](4) == 360
 assert height_namespace["markdown_table_editor_height"](12) == 360
 
-single_selection_start = source.index("def markdown_table_single_selected_index(")
-single_selection_end = source.index("def render_markdown_table", single_selection_start)
-single_selection_namespace = {"table_selection_rows": lambda selection: tuple(selection or ())}
+single_selection_start = source.index("def markdown_table_single_selection_marks(")
+single_selection_end = source.index("def markdown_table_editor_key", single_selection_start)
+single_selection_namespace = {}
 exec(
     "from __future__ import annotations\n"
     + source[single_selection_start:single_selection_end],
     single_selection_namespace,
 )
-assert single_selection_namespace["markdown_table_single_selected_index"]([2], 3) == 2
-assert single_selection_namespace["markdown_table_single_selected_index"]([3], 3) is None
 assert single_selection_namespace["markdown_table_single_selection_marks"](3, 1) == [
     "○",
     "◉",
@@ -419,9 +471,99 @@ assert '"buttonWidth": resolve_css_custom_property(' in source
 assert "window.sessionStorage" in component_html
 
 setup_body = source.split("def render_hhs_setup_panel", 1)[1].split("\ndef ", 1)[0]
+setup_table_body = source.split("def render_hhs_setup_settings_table", 1)[1].split(
+    "\ndef ", 1
+)[0]
 assert "setup_display_path = display_path_value" not in setup_body
 assert "render_openable_config_path(" not in setup_body
 assert "render_hhs_setup_settings_table(action_running)" in setup_body
+assert "row_selection=True" in setup_table_body
+assert "show_value_column=False" in setup_table_body
+
+settings_table_body = source.split("def render_hhs_settings_table", 1)[1].split(
+    "\ndef ", 1
+)[0]
+assert "row_selection=True" in settings_table_body
+assert "show_value_column=False" in settings_table_body
+
+reset_body = source.split("def render_hhs_reset_panel", 1)[1].split("\ndef ", 1)[0]
+reset_table_body = source.split("def render_hhs_reset_targets_table", 1)[1].split(
+    "\ndef ", 1
+)[0]
+assert "render_hhs_reset_title()" in reset_body
+assert "render_hhs_reset_targets_table(options, action_running)" in reset_body
+assert '"ﮊ Delete"' in reset_body
+assert "disabled=action_running or not any(selections)" in reset_body
+assert "show_variable_column=False" in reset_table_body
+assert "show_value_column=False" in reset_table_body
+assert "row_selection=True" in reset_table_body
+assert "hhs_ui.HHS_RESET_TABLE_KEY" in reset_table_body
+assert "st.columns(" in reset_body
+assert 'gap="small"' in reset_body
+assert 'elif hhs_view == "RESET":' in source
+assert "render_hhs_reset_panel()" in source
+assert '<h2><strong></strong> Cache &amp; Logs Cleanup</h2>' in source
+assert "def markdown_table_panel(" in table_source
+assert "hhs-markdown-table-row-selection" in table_source
+assert "--hhs-dataframe-selection-gutter-width: 32px" in css
+assert "--hhs-dataframe-header-height: 35px" in css
+assert "border-top: 1px solid var(--hhs-theme-dataframe-border-color)" in css
+assert 'div[class*="st-key-"][class*="_markdown_table"] .stDataFrameGlideDataEditor' in css
+assert "border-top-left-radius: 0 !important" in css
+assert "border-top-right-radius: 0 !important" in css
+assert 'div[class*="st-key-hhs_hspm_catalog_table_"][class*="_markdown_table"]' in css
+assert ".st-key-hhs_hspm_recovery_markdown_table" in css
+assert "--hhs-markdown-table-height: 264px" in css
+assert "--hhs-markdown-table-max-height: 264px" in css
+assert '"RESET": " Reset"' in constants_source
+assert "def build_hhs_reset_apply_command(" in command_source
+assert "def build_hhs_reset_options_command(" in command_source
+
+reset_complete_body = source.split("def complete_hhs_reset_action_job", 1)[1].split(
+    "\ndef ", 1
+)[0]
+status_source = Path(
+    "bin/apps/py/hhs_ui/widgets/status_ui.py"
+).read_text(encoding="utf-8")
+runtime_source = Path(
+    "bin/apps/py/hhs_ui/execution/command_runtime.py"
+).read_text(encoding="utf-8")
+assert "push_floating_status(status_message or fallback, \"info\", 8.0)" in reset_complete_body
+assert "HHS_BACKGROUND_JOB_STDOUT_PATH" in runtime_source
+assert "HHS_BACKGROUND_JOB_STDERR_PATH" in runtime_source
+assert "hhs-floating-status--multiline" not in status_source
+assert ".hhs-floating-status--multiline" not in css
+status_message_css = css.split(".hhs-floating-status-message {", 1)[1].split("}", 1)[0]
+assert "flex: 1 1 auto" in status_message_css
+assert "min-width: 0" in status_message_css
+assert "overflow: hidden" in status_message_css
+assert "text-overflow: ellipsis" in status_message_css
+assert "white-space: nowrap" in status_message_css
+assert ".hhs-floating-status-copy," in css
+assert "right: 2.49rem" in css
+assert "padding: 0.32em 4.35rem" in css
+
+hspm_catalog_body = source.split("def render_hhs_hspm_catalog_slide", 1)[1].split(
+    "\ndef ", 1
+)[0]
+hspm_recovery_body = source.split("def render_hhs_hspm_recovery_slide", 1)[1].split(
+    "\ndef ", 1
+)[0]
+assert "render_markdown_table(" in hspm_catalog_body
+assert 'item_column_label="Command"' in hspm_catalog_body
+assert '"Description": [row.get("Description", "") for row in rows]' in hspm_catalog_body
+assert "row_selection=True" in hspm_catalog_body
+assert "show_value_column=False" in hspm_catalog_body
+assert "show_variable_column=False" in hspm_catalog_body
+assert "table_height=HHS_HSPM_TABLE_HEIGHT" in hspm_catalog_body
+assert 'column_order=["Mark", "Command", "Description"]' not in hspm_catalog_body
+assert 'with markdown_table_panel("Recovery Commands", "hhs_hspm_recovery"):' in hspm_recovery_body
+assert "st.dataframe(" in hspm_recovery_body
+assert "st.data_editor(" not in hspm_recovery_body
+assert 'column_order=["Command", "Status"]' in hspm_recovery_body
+assert "height=HHS_HSPM_TABLE_HEIGHT" in hspm_recovery_body
+assert "HHS_HSPM_TABLE_HEIGHT = 264" in source
+assert "height=450" in source
 
 starship_controls_body = source.split("def render_hhs_starship_controls", 1)[1].split("\ndef ", 1)[0]
 assert "display_path_value(" not in starship_controls_body
@@ -918,16 +1060,18 @@ from pathlib import Path
 
 table_source = Path(sys.argv[1]).read_text(encoding="utf-8")
 css = Path(sys.argv[2]).read_text(encoding="utf-8")
+panel_body = table_source.split("def markdown_table_panel", 1)[1].split("\ndef ", 1)[0]
 render_body = table_source.split("def render_markdown_table", 1)[1].split("\ndef ", 1)[0]
 dataframe_css = css.split(
     'div[class*="st-key-"][class*="_markdown_table"] [data-testid="stDataFrame"] {',
     1,
 )[1].split("}", 1)[0]
 
-assert render_body.count('hhs-markdown-table-single-selection') == 1
-assert "selection_marker = (" in render_body
-assert 'f"{html.escape(caption)}{selection_marker}</div>"' in render_body
-assert "        else:\n            selected_index = markdown_table_single_selected_index(" in render_body
+assert panel_body.count('hhs-markdown-table-single-selection') == 1
+assert "selection_markers = []" in panel_body
+assert 'f"{html.escape(caption)}{\'\'.join(selection_markers)}</div>"' in panel_body
+assert "with markdown_table_panel(" in render_body
+assert "        else:\n            selected_indexes = table_selection_rows(" in render_body
 assert "overflow: visible" in dataframe_css
 assert "overflow-y: auto" not in dataframe_css
 assert ".st-key-hhs_firebase_aliases_table_panel" not in css

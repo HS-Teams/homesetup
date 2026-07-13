@@ -7,7 +7,8 @@ import html
 import json
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Literal, TypeVar
 
 import altair as alt
@@ -231,7 +232,10 @@ def render_selected_table_item(
                 f"{value}:",
                 key=edit_key,
                 max_chars=edit_max_chars,
-                help=f"Edit {edit_label.lower()}.",
+                help=(
+                    f"Change the {edit_label.lower()} for this selected row. "
+                    "Press Enter or leave the field to save the updated value."
+                ),
                 on_change=edit_on_change,
                 placeholder=edit_label,
                 args=edit_args,
@@ -242,7 +246,7 @@ def render_selected_table_item(
                 st.button(
                     "",
                     key=f"{editing_key}_folder_picker_button",
-                    help="Select folder",
+                    help="Choose a replacement folder",
                     on_click=folder_picker_callback,
                     args=(edit_key, edit_value),
                     width="stretch",
@@ -300,7 +304,7 @@ def render_selected_table_item(
             st.button(
                 "",
                 key=f"{editing_key}_button",
-                help="Edit",
+                help="Edit the selected value",
                 on_click=enable_selected_item_edit,
                 args=(editing_key, edit_key, edit_value),
                 width="stretch",
@@ -471,17 +475,6 @@ def history_directory_table_data(rows: list[dict[str, str]]) -> pd.DataFrame:
     return dataframe
 
 
-def cmd_column_config() -> dict[str, object]:
-    """Return column settings for the Configs Saved Cmds table."""
-    return {
-        "Index": st.column_config.TextColumn(
-            "Index",
-            disabled=True,
-            width=hhs_ui_constants.CMD_INDEX_COLUMN_WIDTH,
-        ),
-    }
-
-
 def table_selection_key_prefixes() -> tuple[str, ...]:
     """Return Streamlit dataframe key prefixes that represent selectable tables."""
     return (
@@ -496,6 +489,7 @@ def table_selection_key_prefixes() -> tuple[str, ...]:
         hhs_ui.HISTORY_DIRECTORY_TABLE_KEY,
         hhs_ui.HOME_SHOPTS_TABLE_KEY,
         hhs_ui.HOME_TOOLS_TABLE_KEY,
+        hhs_ui.HHS_RESET_TABLE_KEY,
         hhs_ui.PATH_TABLE_KEY,
         hhs_ui.PROCESS_TABLE_KEY,
         hhs_ui.SERVICE_TABLE_KEY,
@@ -811,7 +805,7 @@ def render_chart_refresh_button(
     """Render the standard chart refresh glyph button and return click state."""
     button_kwargs: dict[str, object] = {
         "key": key,
-        "help": "Refresh",
+        "help": "Refresh chart data",
         "width": "stretch",
     }
     if on_click is not None:
@@ -822,7 +816,15 @@ def render_chart_refresh_button(
 
 def render_standard_number_spinner(label: str, **input_kwargs: object) -> int:
     """Render the standard compact number spinner used by chart controls."""
-    help_text = str(input_kwargs.pop("help", f"Set {label.rstrip(':').lower()}."))
+    help_text = str(
+        input_kwargs.pop(
+            "help",
+            (
+                f"Numeric value used by the {label.rstrip(':').lower()} control. "
+                "The allowed minimum and maximum are enforced automatically."
+            ),
+        )
+    )
     return int(st.number_input(label, help=help_text, **input_kwargs))
 
 
@@ -838,7 +840,10 @@ def render_chart_top_n_input(
         "step": 1,
         "key": key,
         "label_visibility": "collapsed",
-        "help": "Set the number of items shown in the chart.",
+        "help": (
+            "Limit the chart to the highest-ranked N items after sorting by the "
+            "displayed metric."
+        ),
         "width": 150,
     }
     if on_change is not None:
@@ -850,6 +855,7 @@ def render_chart_top_n_input(
 def render_chart_text_input(
     key: str,
     label: str,
+    help_text: str,
     on_change: Callable[..., None] | None = None,
     args: tuple[object, ...] = (),
 ) -> None:
@@ -861,7 +867,6 @@ def render_chart_text_input(
     if on_change is not None:
         input_kwargs["on_change"] = on_change
         input_kwargs["args"] = args
-    help_text = str(input_kwargs.pop("help", f"Enter {label.rstrip(':').lower()}."))
     st.text_input(label, help=help_text, **input_kwargs)
 
 
@@ -876,6 +881,7 @@ def render_chart_controls(
     has_input: bool = False,
     input_key: str | None = None,
     input_label: str | None = None,
+    input_help: str = "Value used to rebuild this chart when Refresh is selected.",
     input_on_change: Callable[..., None] | None = None,
     input_args: tuple[object, ...] = (),
     has_refresh_btn: bool = True,
@@ -920,6 +926,7 @@ def render_chart_controls(
                     render_chart_text_input(
                         str(input_key),
                         str(input_label).rstrip(":"),
+                        input_help,
                         input_on_change,
                         input_args,
                     )
@@ -957,6 +964,7 @@ def render_chart_controls(
                     render_chart_text_input(
                         str(input_key),
                         str(input_label).rstrip(":"),
+                        input_help,
                         input_on_change,
                         input_args,
                     )
@@ -1105,7 +1113,10 @@ def render_table_filter_controls(
             index=None,
             key=key,
             label_visibility="collapsed",
-            help="Filter the table rows.",
+            help=(
+                "Choose a predefined rule for the current table. Selecting Other, "
+                "Others, or Containing reveals a text field for a custom match."
+            ),
             on_change=save_ui_state,
         )
 
@@ -1119,13 +1130,16 @@ def render_table_filter_controls(
                 label_visibility="collapsed",
                 on_change=save_ui_state,
                 placeholder=placeholder,
-                help="Filter the table rows by text.",
+                help=(
+                    "Show only rows whose searchable displayed values match this text. "
+                    "The filter changes the current table only; it does not modify data."
+                ),
             )
         with clear_filter_col:
             st.button(
                 "",
                 key=f"{other_key}_clear",
-                help="Clear filter text",
+                help="Clear the table filter",
                 on_click=clear_table_other_filter,
                 args=(other_key,),
                 disabled=not bool(clean_table_text_filter_value(other_filter)),
@@ -1198,68 +1212,6 @@ def render_view_subtitle(content: str, content_is_html: bool = False) -> None:
         f'<h3 class="hhs-view-subtitle">{safe_content}</h3>',
         unsafe_allow_html=True,
     )
-
-
-def path_origin_cell_style(value: object) -> str:
-    """Return the dataframe cell style for PATH origin labels."""
-    origin = str(value).strip().lower()
-    if origin.startswith("custom path"):
-        return "color: #8be9fd;"
-    if origin.startswith("private system path"):
-        return "color: #ff79c6;"
-    return ""
-
-
-def path_type_style_value(row: dict[str, str]) -> str:
-    """Return the PATH Type value with status metadata for styling."""
-    return f"{row.get('_Path Status', '')}{row.get('Type', '')}"
-
-
-def path_type_display_value(value: object) -> str:
-    """Return the visible PATH Type value without status metadata."""
-    return re.sub(r"^[]", "", str(value), count=1)
-
-
-def path_type_cell_style(value: object) -> str:
-    """Return the dataframe cell style for PATH type values."""
-    path_type = str(value)
-    if "" in path_type:
-        return "color: #ffb86c;"
-    if "" in path_type:
-        return "color: #50fa7b;"
-    return ""
-
-
-def path_column_config() -> dict[str, object]:
-    """Return column settings for the Configs Paths table."""
-    return {
-        "Type": st.column_config.TextColumn(
-            "Type",
-            disabled=True,
-            width=hhs_ui_constants.PATH_TYPE_COLUMN_WIDTH,
-        ),
-        "Origin": st.column_config.TextColumn("Origin", disabled=True),
-        "Path Value": st.column_config.TextColumn("Path Value", disabled=True),
-    }
-
-
-def styled_path_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
-    """Return PATH rows with styled Type and Origin cells."""
-    visible_rows = display_table_rows(rows)
-    for index, row in enumerate(visible_rows):
-        if index < len(rows):
-            row["Type"] = path_type_style_value(rows[index])
-    dataframe = pd.DataFrame(
-        visible_rows,
-        columns=["Type", "Origin", "Path Value"],
-    )
-    styler = dataframe.style
-    if "Type" in dataframe:
-        styler = styler.map(path_type_cell_style, subset=["Type"])
-        styler = styler.format(path_type_display_value, subset=["Type"])
-    if "Origin" in dataframe:
-        styler = styler.map(path_origin_cell_style, subset=["Origin"])
-    return styler
 
 
 def render_read_only_rows(
@@ -1357,23 +1309,63 @@ def themed_markdown_table_data(
     return styler
 
 
-def markdown_table_single_selected_index(
-    selection_state: object,
-    row_count: int,
-) -> int | None:
-    """Return the single selected markdown table row index."""
-    selected_rows = table_selection_rows(selection_state)
-    if selected_rows and 0 <= selected_rows[0] < row_count:
-        return selected_rows[0]
-    return None
-
-
 def markdown_table_single_selection_marks(
     row_count: int,
     selected_index: int | None,
 ) -> list[str]:
     """Return radio-style mark glyphs for a singular markdown table."""
     return ["◉" if index == selected_index else "○" for index in range(row_count)]
+
+
+def markdown_table_editor_key(key_prefix: str) -> str:
+    """Return the versioned Streamlit widget key for a markdown table."""
+    return (
+        f"{key_prefix}_markdown_table_editor_v"
+        f"{hhs_ui_constants.MARKDOWN_TABLE_LAYOUT_VERSION}"
+    )
+
+
+def markdown_table_selection_key(key_prefix: str) -> str:
+    """Return the row-selection state key for a markdown table."""
+    return f"{markdown_table_editor_key(key_prefix)}_row_selection"
+
+
+def reset_markdown_table_selection(key_prefix: str) -> None:
+    """Clear editable and native selection state for a markdown table."""
+    editor_key = markdown_table_editor_key(key_prefix)
+    selection_key = markdown_table_selection_key(key_prefix)
+    st.session_state.pop(editor_key, None)
+    st.session_state.pop(selection_key, None)
+    table_selection_snapshots().pop(selection_key, None)
+
+
+@contextmanager
+def markdown_table_panel(
+    caption: str,
+    key_prefix: str,
+    *,
+    multi_selection: bool = True,
+    row_selection: bool = False,
+) -> Iterator[None]:
+    """Render the shared captioned table panel around caller-owned content."""
+    selection_markers = []
+    if not multi_selection:
+        selection_markers.append(
+            '<span class="hhs-markdown-table-single-selection"></span>'
+        )
+    if row_selection or not multi_selection:
+        selection_markers.append(
+            '<span class="hhs-markdown-table-row-selection"></span>'
+        )
+    with st.container(key=f"{key_prefix}_markdown_table"):
+        st.markdown(
+            (
+                '<div class="hhs-markdown-table-caption">'
+                f"{html.escape(caption)}{''.join(selection_markers)}</div>"
+            ),
+            unsafe_allow_html=True,
+        )
+        yield
 
 
 def render_markdown_table(
@@ -1393,6 +1385,10 @@ def render_markdown_table(
     multi_selection: bool = True,
     column_text_colors: dict[str, str] | None = None,
     show_value_column: bool = True,
+    show_variable_column: bool = True,
+    row_selection: bool = False,
+    table_data_styler: Callable[[pd.DataFrame], object] | None = None,
+    table_height: int | None = None,
 ) -> list[bool]:
     """Render a reusable selectable markdown table and return selected values."""
     if len(items) != len(values) or len(items) != len(headers):
@@ -1401,16 +1397,24 @@ def render_markdown_table(
         raise ValueError("items and value_keys must have the same length")
     if variable_values is not None and len(items) != len(variable_values):
         raise ValueError("items and variable_values must have the same length")
-    if multi_selection and not show_value_column:
+    if multi_selection and not show_value_column and not row_selection:
         raise ValueError("multi-selection tables require a visible value column")
+    if table_data_styler is not None and column_text_colors:
+        raise ValueError("table_data_styler and column_text_colors cannot be combined")
+    resolved_table_height = (
+        table_height
+        if table_height is not None
+        else markdown_table_editor_height(max(len(items), min_row_count))
+    )
+    if resolved_table_height <= 0:
+        raise ValueError("table_height must be greater than zero")
 
     extra_columns = extra_columns or {}
-    base_column_labels = {
-        variable_column_label,
-        item_column_label,
-    }
+    base_column_labels = {item_column_label}
     if show_value_column:
         base_column_labels.add(value_column_label)
+    if show_variable_column:
+        base_column_labels.add(variable_column_label)
     duplicate_column_labels = base_column_labels.intersection(extra_columns)
     if duplicate_column_labels:
         duplicate_labels = ", ".join(sorted(duplicate_column_labels))
@@ -1421,11 +1425,8 @@ def render_markdown_table(
                 f"items and extra column {column_label!r} must have the same length"
             )
 
-    editor_key = (
-        f"{key_prefix}_markdown_table_editor_v"
-        f"{hhs_ui_constants.MARKDOWN_TABLE_LAYOUT_VERSION}"
-    )
-    selection_key = f"{editor_key}_single_selection"
+    editor_key = markdown_table_editor_key(key_prefix)
+    selection_key = markdown_table_selection_key(key_prefix)
     token_key = f"_{editor_key}_token"
     token = json.dumps(
         {
@@ -1433,8 +1434,10 @@ def render_markdown_table(
             "headers": headers,
             "items": items,
             "multi_selection": multi_selection,
+            "row_selection": row_selection,
             "show_value_column": show_value_column,
-            "values": values,
+            "show_variable_column": show_variable_column,
+            "values": None if row_selection else values,
             "variable_values": variable_values,
         },
         separators=(",", ":"),
@@ -1448,19 +1451,14 @@ def render_markdown_table(
     rendered_variable_values = (
         variable_values if variable_values is not None else [header.upper() for header in headers]
     )
-    table_columns = {
-        variable_column_label: rendered_variable_values,
-        item_column_label: headers,
-    }
+    table_columns = {item_column_label: headers}
     if show_value_column:
         table_columns[value_column_label] = [bool(value) for value in values]
+    if show_variable_column:
+        table_columns[variable_column_label] = rendered_variable_values
     table_columns.update(extra_columns)
     extra_column_labels = list(extra_columns)
     column_config: dict[str, object] = {
-        variable_column_label: st.column_config.TextColumn(
-            variable_column_label,
-            disabled=True,
-        ),
         item_column_label: st.column_config.TextColumn(
             item_column_label,
             disabled=True,
@@ -1473,55 +1471,55 @@ def render_markdown_table(
             help="Select rows for the available actions.",
             width=hhs_ui_constants.MARKDOWN_TABLE_MARK_COLUMN_WIDTH,
         )
+    if show_variable_column:
+        column_config[variable_column_label] = st.column_config.TextColumn(
+            variable_column_label,
+            disabled=True,
+        )
     for column_label in extra_column_labels:
         column_config[column_label] = st.column_config.TextColumn(
             column_label,
             disabled=True,
         )
 
-    selection_marker = (
-        '<span class="hhs-markdown-table-single-selection"></span>'
-        if not multi_selection
-        else ""
-    )
-    with st.container(key=f"{key_prefix}_markdown_table"):
-        st.markdown(
-            (
-                '<div class="hhs-markdown-table-caption">'
-                f"{html.escape(caption)}{selection_marker}</div>"
-            ),
-            unsafe_allow_html=True,
-        )
-        table_data_columns = {
-        }
+    with markdown_table_panel(
+        caption,
+        key_prefix,
+        multi_selection=multi_selection,
+        row_selection=row_selection,
+    ):
+        table_data_columns = {}
         if show_value_column:
             table_data_columns[value_column_label] = pd.Series(
                 table_columns[value_column_label], dtype="bool"
             )
-        for text_column_label in [
-            variable_column_label,
-            item_column_label,
-            *extra_column_labels,
-        ]:
+        text_column_labels = [item_column_label, *extra_column_labels]
+        if show_variable_column:
+            text_column_labels.insert(1, variable_column_label)
+        for text_column_label in text_column_labels:
             table_data_columns[text_column_label] = pd.Series(
                 table_columns[text_column_label], dtype="string"
             )
         table_data = pd.DataFrame(table_data_columns)
-        if multi_selection:
+        if multi_selection and not row_selection:
             edited_data = st.data_editor(
-                themed_markdown_table_data(table_data, column_text_colors),
+                (
+                    table_data_styler(table_data)
+                    if table_data_styler is not None
+                    else themed_markdown_table_data(table_data, column_text_colors)
+                ),
                 key=editor_key,
                 hide_index=True,
                 num_rows="fixed",
                 column_order=[
                     value_column_label,
                     item_column_label,
-                    variable_column_label,
+                    *([variable_column_label] if show_variable_column else []),
                     *extra_column_labels,
                 ],
-                height=markdown_table_editor_height(max(len(items), min_row_count)),
+                height=resolved_table_height,
                 disabled=(
-                    [variable_column_label, item_column_label, *extra_column_labels]
+                    text_column_labels
                     if not disabled
                     else True
                 ),
@@ -1531,19 +1529,29 @@ def render_markdown_table(
                 bool(value) for value in edited_data[value_column_label].tolist()
             ]
         else:
-            selected_index = markdown_table_single_selected_index(
-                st.session_state.get(selection_key),
-                len(items),
+            selected_indexes = table_selection_rows(
+                st.session_state.get(selection_key)
             )
+            selected_index = selected_indexes[0] if selected_indexes else None
             selection_table_data = table_data.copy()
             if show_value_column:
+                selection_marks = (
+                    [
+                        "✓" if index in selected_indexes else ""
+                        for index in range(len(items))
+                    ]
+                    if multi_selection
+                    else markdown_table_single_selection_marks(
+                        len(items), selected_index
+                    )
+                )
                 selection_table_data[value_column_label] = pd.Series(
-                    markdown_table_single_selection_marks(len(items), selected_index),
+                    selection_marks,
                     dtype="string",
                 )
             selection_column_order = [
                 item_column_label,
-                variable_column_label,
+                *([variable_column_label] if show_variable_column else []),
                 *extra_column_labels,
             ]
             if show_value_column:
@@ -1566,25 +1574,47 @@ def render_markdown_table(
                 "key": selection_key,
                 "hide_index": True,
                 "column_order": selection_column_order,
-                "height": markdown_table_editor_height(max(len(items), min_row_count)),
+                "height": resolved_table_height,
                 "width": "stretch",
                 "column_config": selection_column_config,
             }
             if not disabled:
                 selection_args["on_select"] = "rerun"
-                selection_args["selection_mode"] = "single-row"
+                selection_args["selection_mode"] = (
+                    "multi-row" if multi_selection else "single-row"
+                )
+                if row_selection:
+                    selection_args["selection_default"] = {
+                        "selection": {
+                            "rows": [
+                                index
+                                for index, selected in enumerate(values)
+                                if selected
+                            ]
+                        }
+                    }
             selection = st.dataframe(
-                themed_markdown_table_data(selection_table_data, column_text_colors),
+                (
+                    table_data_styler(selection_table_data)
+                    if table_data_styler is not None
+                    else themed_markdown_table_data(
+                        selection_table_data,
+                        column_text_colors,
+                    )
+                ),
                 **selection_args,
             )
+            remember_table_selection(selection_key, selection)
             edited_values = [False] * len(items)
             if not disabled:
-                selected_index = markdown_table_single_selected_index(
-                    selection,
-                    len(items),
-                )
-                if selected_index is not None:
-                    edited_values[selected_index] = True
+                selected_indexes = {
+                    index
+                    for index in table_selection_rows(selection)
+                    if 0 <= index < len(items)
+                }
+                edited_values = [
+                    index in selected_indexes for index in range(len(items))
+                ]
     if value_keys is not None:
         for value_key, value in zip(value_keys, edited_values, strict=True):
             st.session_state[value_key] = value

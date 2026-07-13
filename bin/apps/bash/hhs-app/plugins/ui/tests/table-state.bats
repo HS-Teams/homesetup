@@ -53,6 +53,7 @@ namespace = {
         HISTORY_DIRECTORY_TABLE_KEY="history_directory_vars_table",
         HOME_SHOPTS_TABLE_KEY="home_shopts_table",
         HOME_TOOLS_TABLE_KEY="home_tools_table",
+        HHS_RESET_TABLE_KEY="hhs_reset_targets",
         PATH_TABLE_KEY="path_vars_table",
         PROCESS_TABLE_KEY="monitor_process_table",
         SERVICE_TABLE_KEY="service_vars_table",
@@ -66,6 +67,9 @@ namespace = {
 exec("from __future__ import annotations\n" + table_source[start:end], namespace)
 
 assert namespace["table_selection_widget_key"]("env_vars_table_0") is True
+assert namespace["table_selection_widget_key"](
+    "hhs_reset_targets_markdown_table_editor_v4_row_selection"
+) is True
 assert namespace["table_selection_widget_key"]("unrelated") is False
 assert namespace["table_selection_rows"]({"selection": {"rows": [2]}}) == (2,)
 assert namespace["table_selection_rerun_in_progress"]() is True

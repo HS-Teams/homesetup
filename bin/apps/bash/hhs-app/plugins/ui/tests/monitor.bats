@@ -94,7 +94,7 @@ assert "render_chart_top_n_input" in chart_controls_body
 assert 'render_chart_control_label(top_n_label)' in chart_controls_body
 assert 'render_chart_control_label(str(input_label))' in chart_controls_body
 assert 'render_chart_refresh_button' in chart_controls_body
-assert 'help": "Refresh"' in table_source
+assert 'help": "Refresh chart data"' in table_source
 assert "width" in table_source.split("def render_chart_top_n_input", 1)[1].split("\ndef ", 1)[0]
 assert "150" in table_source.split("def render_chart_top_n_input", 1)[1].split("\ndef ", 1)[0]
 assert "render_chart_controls(" in disk_body

@@ -32,7 +32,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'table_selected_panel_' 'table_actions_' 'def scroll_to_table_selection_content' \
     'table_selected_bottom_' 'scroll_to_table_selection_content(anchor_key)' \
     'target.scrollIntoView' 'selected_editable: bool | Callable' '""' '"ﰸ"' \
-    'help="Edit"' 'args=(editing_key, edit_key, edit_value)' \
+    'help="Edit the selected value"' 'args=(editing_key, edit_key, edit_value)' \
     'gap="small"' 'st.text_input(' 'f"{value}:"' \
     'def render_selected_table_actions' 'selected_action_buttons: list' \
     'selected_actions=visible_selected_actions' 'help="Cancel edit"' \

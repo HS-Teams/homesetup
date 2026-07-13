@@ -9,6 +9,8 @@
   --hhs-floating-status-z-index: 999999;
   --hhs-markdown-table-height: 360px;
   --hhs-markdown-table-max-height: var(--hhs-markdown-table-height);
+  --hhs-dataframe-selection-gutter-width: 32px;
+  --hhs-dataframe-header-height: 35px;
   --hhs-footer-z-index: 1000000;
   --hhs-footer-panel-z-index: 1000001;
   --hhs-log-chrome-height: 8.5rem;
@@ -1300,6 +1302,31 @@ div[class*="st-key-"][class*="_markdown_table"] [data-testid="stDataFrame"] > di
   min-height: var(--hhs-markdown-table-height) !important;
 }
 
+div[class*="st-key-"][class*="_markdown_table"]:has(
+    .hhs-markdown-table-row-selection
+  ) [data-testid="stDataFrame"]
+  > div:last-child::after {
+  border-top: 1px solid var(--hhs-theme-dataframe-border-color);
+  content: "";
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: var(--hhs-dataframe-header-height);
+  width: var(--hhs-dataframe-selection-gutter-width);
+  z-index: 1;
+}
+
+div[class*="st-key-"][class*="_markdown_table"] .stDataFrameGlideDataEditor {
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+
+div[class*="st-key-hhs_hspm_catalog_table_"][class*="_markdown_table"],
+.st-key-hhs_hspm_recovery_markdown_table {
+  --hhs-markdown-table-height: 264px;
+  --hhs-markdown-table-max-height: 264px;
+}
+
 .hhs-markdown-table-single-selection {
   display: none !important;
 }
@@ -2364,13 +2391,15 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   font-size: var(--hhs-theme-footer-status-text-size);
   font-weight: 750;
   gap: 0.42rem;
+  height: var(--hhs-floating-status-height);
   justify-content: center;
   left: 0;
   line-height: 1;
+  max-height: var(--hhs-floating-status-height);
   min-height: var(--hhs-floating-status-height);
   opacity: 1;
   overflow: hidden;
-  padding: 0.32em 2.5rem 0.32em var(--hhs-sidebar-inline-inset);
+  padding: 0.32em 4.35rem 0.32em var(--hhs-sidebar-inline-inset);
   position: fixed;
   right: 0;
   text-align: center;
@@ -2404,15 +2433,20 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
 }
 
 .hhs-floating-status-message {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hhs-floating-status-glyph {
   display: inline-flex;
+  flex: 0 0 auto;
   line-height: 1;
 }
 
+.hhs-floating-status-copy,
 .hhs-floating-status-dismiss {
   align-items: center;
   appearance: none;
@@ -2427,6 +2461,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   color: var(--hhs-floating-status-color);
   cursor: pointer;
   display: inline-flex;
+  flex: 0 0 auto;
   font-size: 0.78rem;
   font-weight: 900;
   height: 1.35rem;
@@ -2434,11 +2469,20 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   line-height: 1;
   padding: 0;
   position: absolute;
-  right: 0.72rem;
   text-decoration: none !important;
   width: 1.35rem;
 }
 
+.hhs-floating-status-copy {
+  right: 2.49rem;
+}
+
+.hhs-floating-status-dismiss {
+  right: 0.72rem;
+}
+
+.hhs-floating-status-copy:hover,
+.hhs-floating-status-copy:focus-visible,
 .hhs-floating-status-dismiss:hover,
 .hhs-floating-status-dismiss:focus-visible {
   background: color-mix(

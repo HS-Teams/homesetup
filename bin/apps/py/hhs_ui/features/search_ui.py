@@ -1115,7 +1115,10 @@ def render_search_controls() -> None:
                 options=hhs_ui_constants.SEARCH_TYPES,
                 key="search_type",
                 format_func=search_type_label,
-                help="Choose whether to search files, folders, or text content.",
+                help=(
+                    "Choose what constitutes a match: file names, folder names, or "
+                    "text found inside files. Available search options change by kind."
+                ),
                 on_change=apply_search_type_change,
             )
         with path_column:
@@ -1124,7 +1127,11 @@ def render_search_controls() -> None:
                 options=search_directory_options(),
                 key="search_path",
                 accept_new_options=True,
-                help="Choose or enter the directory to search.",
+                help=(
+                    "Root directory for the search. Choose a remembered path or enter "
+                    "another local or connected-host directory; ~ and environment "
+                    "variables are expanded before searching."
+                ),
                 on_change=apply_search_directory_change,
                 width="stretch",
             )
@@ -1132,7 +1139,7 @@ def render_search_controls() -> None:
             st.button(
                 "",
                 key="search_path_folder_picker_button",
-                help="Select search path",
+                help="Choose the search directory",
                 on_click=request_path_picker,
                 args=("search_path", st.session_state.get("search_path", ""), "folder"),
                 width="stretch",
@@ -1145,7 +1152,11 @@ def render_search_controls() -> None:
                 key="search_query",
                 placeholder="Search for files, folders, or strings",
                 accept_new_options=True,
-                help="Enter or select the term to find.",
+                help=(
+                    "Pattern to find beneath the selected directory. Choose a recent "
+                    "term or enter a new one; case, whole-word, and binary-file options "
+                    "are controlled below."
+                ),
                 on_change=submit_search_query,
                 width="stretch",
             )
@@ -1153,7 +1164,7 @@ def render_search_controls() -> None:
             st.button(
                 "",
                 key="search_submit_button",
-                help="Search",
+                help="Run the current search",
                 on_click=submit_search_query,
                 width="stretch",
             )
@@ -1187,14 +1198,17 @@ def render_search_replace_controls() -> None:
                 label_visibility="collapsed",
                 on_change=save_ui_state,
                 placeholder="Replacement string",
-                help="Enter the text that replaces each match.",
+                help=(
+                    "Replacement text written for every matching string when Search and "
+                    "Replace runs. Review the result set before applying this change."
+                ),
                 width="stretch",
             )
         with replace_column:
             st.button(
                 "",
                 key="search_replace_submit_button",
-                help="Search and Replace",
+                help="Run search and replace",
                 on_click=submit_search_query,
                 args=(True,),
                 width="stretch",
@@ -1257,7 +1271,10 @@ def render_search_filters() -> None:
                 index=None,
                 key="search_filter",
                 label_visibility="collapsed",
-                help="Filter the displayed search results.",
+                help=(
+                    "Choose how to narrow the current result table without rerunning the "
+                    "filesystem search. Select Containing to enable the text filter."
+                ),
                 on_change=save_ui_state,
             )
         other_filter = ""
@@ -1270,7 +1287,10 @@ def render_search_filters() -> None:
                     label_visibility="collapsed",
                     on_change=save_ui_state,
                     placeholder="Type result filter text",
-                    help="Filter the displayed search results by text.",
+                    help=(
+                        "Show only current search results whose displayed path or match "
+                        "details contain this text. This does not rerun the search."
+                    ),
                     width="stretch",
                 )
         if strings_selected:
@@ -1286,18 +1306,18 @@ def render_search_filters() -> None:
             render_search_option_toggle(
                 "search_words",
                 "",
-                "Match words (-w)",
+                "Match whole words only (-w)",
                 disabled=bool(st.session_state.get("search_replace", False)),
             )
         with binary_column:
             render_search_option_toggle(
-                "search_binary", "", "Search binary files (-b)"
+                "search_binary", "", "Include binary files (-b)"
             )
         with clear_column:
             st.button(
                 "",
                 key="search_other_filter_clear",
-                help="Clear filter text",
+                help="Clear the result filter",
                 on_click=clear_table_other_filter,
                 args=("search_other_filter",),
                 disabled=not bool(clean_table_text_filter_value(other_filter)),

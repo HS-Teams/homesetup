@@ -111,6 +111,18 @@ def handle_dialog_dismiss(callback: Callable[[], None] | None = None) -> None:
         callback()
 
 
+def dialog_button_help(button: dict[str, object], label: str) -> str:
+    """Return a concise tooltip for one dialog action button."""
+    configured_help = str(button.get("help", "")).strip()
+    if configured_help:
+        return configured_help
+    if label.casefold() == "close":
+        return "Close this dialog"
+    if label.casefold() == "cancel":
+        return "Cancel the pending action"
+    return f"{label} the pending action"
+
+
 def pop_dialog(
     title: str,
     message: str = "",
@@ -168,7 +180,7 @@ def pop_dialog(
                 if st.button(
                     label,
                     key=key,
-                    help=str(button.get("help", label)),
+                    help=dialog_button_help(button, label),
                     width="stretch",
                 ):
                     handle_dialog_button_click(

@@ -244,14 +244,16 @@ source = Path(sys.argv[1]).read_text(encoding="utf-8")
 constants_source = Path(sys.argv[2]).read_text(encoding="utf-8")
 table_source = Path(sys.argv[3]).read_text(encoding="utf-8")
 path_body = source.split("def render_path_rows(", 1)[1].split("\ndef ", 1)[0]
-assert '"""Render selectable read-only PATH rows."""' in path_body
+assert '"""Render PATH rows with the normalized Config table component."""' in path_body
+assert "render_config_rows_table(" in path_body
+assert '["Type", "Origin", "Path Value"]' in path_body
 assert "selected_label=lambda row, _index: f\"Selected: {row['Path Value']}\"" in path_body
 assert "reset_selection=reset_path_table_selection" in path_body
 assert "selected_action_buttons=[" in path_body
 assert '"key_prefix": "path_delete_button"' in path_body
 assert '"on_click": apply_path_delete' in path_body
-assert "table_data=styled_path_rows(rows)" in path_body
-assert "column_config=path_column_config()" in path_body
+assert "table_data=" not in path_body
+assert "column_config=" not in path_body
 assert "rows = apply_path_value_overrides(rows)" not in path_body
 assert "selected_editable=True" not in path_body
 assert "path_value_editor_key" not in path_body
@@ -265,7 +267,8 @@ assert "def apply_selected_path_editor_value(" not in source
 assert "def path_value_overrides(" not in source
 assert "def apply_path_value_overrides(" not in source
 assert "def export_path_value_overrides(" not in source
-assert "def path_column_config(" in table_source
+assert "def path_column_config(" not in table_source
+assert "def styled_path_rows(" not in table_source
 assert "path_value_overrides()" not in source
 
 persisted_prefix_body = constants_source.split("PERSISTED_UI_KEY_PREFIXES = (", 1)[1].split(")", 1)[0]
@@ -274,7 +277,7 @@ assert '"path_selected_value_"' not in persisted_prefix_body
 assert "PATH_VALUE_EDITOR_KEY_PREFIX" not in constants_source
 assert '"path_value_overrides"' not in persisted_keys_body
 assert "PATH_VALUE_OVERRIDES_KEY" not in constants_source
-assert "PATH_TYPE_COLUMN_WIDTH" in constants_source
+assert "PATH_TYPE_COLUMN_WIDTH" not in constants_source
 assert "PATH_ORIGIN_COLUMN_WIDTH" not in constants_source
 assert "PATH_VALUE_COLUMN_WIDTH" not in constants_source
 PY

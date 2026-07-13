@@ -346,7 +346,6 @@ class FakeDataFrame:
 
 namespace = {
     "hhs_ui_constants": SimpleNamespace(
-        CMD_INDEX_COLUMN_WIDTH=80,
         HISTORY_DIRECTORY_TYPE_COLUMN_WIDTH=27,
         HISTORY_INDEX_COLUMN_DIGIT_WIDTH=9,
         HISTORY_INDEX_COLUMN_MIN_WIDTH=36,
@@ -390,11 +389,6 @@ assert list(directory_table_data.index) == ["", ""], directory_table_data
 assert directory_table_data.index.name == "", directory_table_data
 assert list(directory_table_data.columns) == ["Value"], directory_table_data
 
-cmd_config = namespace["cmd_column_config"]()
-assert cmd_config == {
-    "Index": {"disabled": True, "label": "Index", "width": 80}
-}, cmd_config
-
 parse_namespace = {
     "hhs_ui": SimpleNamespace(
         HISTORY_COMMAND_LINE_PATTERN=re.compile(
@@ -435,11 +429,22 @@ assert "table_data=history_directory_table_data(rows)" in history_directories_bo
 assert "column_config=history_directory_column_config()" in history_directories_body
 
 path_body = ui_source.split("def render_path_rows(", 1)[1].split("\ndef ", 1)[0]
-assert "column_config=path_column_config()" in path_body
-assert "path_column_config" in combined_source
+assert "render_config_rows_table(" in path_body
+assert '["Type", "Origin", "Path Value"]' in path_body
+assert "path_column_config" not in combined_source
+assert "styled_path_rows" not in combined_source
 
 cmd_body = ui_source.split("def render_cmd_rows(", 1)[1].split("\ndef ", 1)[0]
-assert "column_config=cmd_column_config()" in cmd_body
+assert "render_config_rows_table(" in cmd_body
+assert '["Index", "Name", "Value"]' in cmd_body
+assert "cmd_column_config" not in combined_source
+
+dir_body = ui_source.split("def render_dir_rows(", 1)[1].split("\ndef ", 1)[0]
+alias_body = ui_source.split("def render_alias_rows(", 1)[1].split("\ndef ", 1)[0]
+assert "render_config_rows_table(" in dir_body
+assert "render_config_rows_table(" in alias_body
+assert '["Name", "Value"]' in dir_body
+assert '["Name", "Value"]' in alias_body
 
 history_command_body = command_source.split("def build_hhs_history_command()", 1)[1].split("\ndef ", 1)[0]
 assert "HISTFILE" in history_command_body

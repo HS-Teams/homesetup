@@ -894,12 +894,12 @@
         const transfer = createElement("nav", "transfer");
         transfer.setAttribute("aria-label", "Transfer controls");
         transfer.appendChild(
-          createTransferButton("", "Refresh", disabled, () => {
+          createTransferButton("", "Refresh both file lists", disabled, () => {
             sendCommand("refresh", "all", "");
           }, "refresh")
         );
         transfer.appendChild(
-          createTransferButton("", "Create folder", disabled, () => {
+          createTransferButton("", "Create folder in active panel", disabled, () => {
             sendCommand("create_folder", activeExplorerPanel(), "");
           }, "create_folder")
         );
@@ -924,7 +924,7 @@
         transfer.appendChild(
           createTransferButton(
             "",
-            "Delete selected",
+            "Delete selected items from active panel",
             disabled || activeSelectionCount === 0,
             () => {
               sendCommand("delete", activeExplorerPanel(), "");

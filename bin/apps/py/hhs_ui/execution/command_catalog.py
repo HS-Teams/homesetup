@@ -1140,6 +1140,38 @@ def build_hhs_setup_restore_command() -> str:
     return build_hhs_setup_plugin_command(["-restore"])
 
 
+def build_hhs_reset_command(arguments: list[str]) -> str:
+    """Build a Bash command that invokes the HomeSetup reset function."""
+    safe_arguments = " ".join(shlex.quote(argument) for argument in arguments)
+    return (
+        build_hhs_env_environment_command()
+        + 'export HHS_BACKUP_DIR="${HHS_BACKUP_DIR:-${HHS_DIR}/backup}"; '
+        'export HHS_KEY_BINDINGS="${HHS_KEY_BINDINGS:-${HHS_DIR}/.hhs-bindings}"; '
+        'export HHS_SHOPTS_FILE="${HHS_SHOPTS_FILE:-${HHS_DIR}/shell-opts.toml}"; '
+        'export HHS_OLLAMA_HISTORY_FILE="${HHS_OLLAMA_HISTORY_FILE:-${HHS_DIR}/.ollama_history}"; '
+        'export HHS_OLLAMA_PROMPT_FILE="${HHS_OLLAMA_PROMPT_FILE:-${HHS_DIR}/hhs-ask-ollama.md}"; '
+        'export STARSHIP_CONFIG="${STARSHIP_CONFIG:-${HHS_DIR}/.starship.toml}"; '
+        'source "${HHS_HOME}/bin/apps/bash/hhs-app/functions/built-ins.bash"; '
+        f"reset {safe_arguments}"
+    )
+
+
+def build_hhs_reset_options_command() -> str:
+    """Build the command that lists reset targets in apply order."""
+    return build_hhs_reset_command(["-list"])
+
+
+def build_hhs_reset_apply_command(selections: list[bool]) -> str:
+    """Build the non-interactive reset command for ordered selections."""
+    values = ["1" if selected else "0" for selected in selections]
+    return build_hhs_reset_command(["-apply", *values])
+
+
+def parse_hhs_reset_options(output: str) -> list[str]:
+    """Parse ordered reset targets from command output."""
+    return [line.strip() for line in strip_ansi(output).splitlines() if line.strip()]
+
+
 def build_hhs_starship_info_command() -> str:
     """Build the Bash command used to read Starship paths, presets, and config."""
     return (
