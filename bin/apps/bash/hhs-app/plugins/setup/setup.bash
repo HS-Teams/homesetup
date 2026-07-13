@@ -14,12 +14,13 @@
 # Current plugin name
 PLUGIN_NAME="setup"
 
-# Current hhs setup version
-VERSION="1.0.13"
+# Current hhs setup plug-in and settings schema versions.
+VERSION="1.0.14"
+SETTINGS_VERSION="1.0.13"
 
 # Namespace cleanup
 UNSETS=(
-  help version cleanup execute DEFAULT_SETTINGS RE_PROPERTY
+  help version cleanup execute DEFAULT_SETTINGS RE_PROPERTY SETTINGS_VERSION
 )
 
 # Usage message
@@ -36,7 +37,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} [-restore | -apply <0|1>...] [options]
   HomeSetup initialization setup v${VERSION}.
 
     options:
-      -apply [<0|1>, ...]      : Apply setup values in file order without opening the menu.
+      -apply [<0|1>, ...]      : Apply setup values in file order; omitted values remain unchanged.
       -restore                 : Restore HomeSetup defaults.
       -h | --help              : Display this help message.
       -v | --version           : Display current plugin version.
@@ -88,7 +89,7 @@ function cleanup() {
 function execute() {
 
   local file_ver name title value minput_file sel_settings all_items=()
-  local apply_idx=0 apply_raw apply_value apply_values=() setting
+  local apply_idx=0 apply_raw apply_value apply_values=() normalized_values=() setting
 
   if list_contains "${*}" "-restore"; then
     \cp -f "${HHS_HOME}/dotfiles/homesetup.toml" "${HHS_SETUP_FILE}"
@@ -99,7 +100,7 @@ function execute() {
 
   # Read all settings, but first, check the file version.
   file_ver="$(grep -E '@version:' "${HHS_SETUP_FILE}")"
-  if [[ -z "${file_ver}" || "${file_ver#*: v}" != "${VERSION}" ]]; then
+  if [[ -z "${file_ver}" || "${file_ver#*: v}" != "${SETTINGS_VERSION}" ]]; then
     \cp -f "${HHS_HOME}/dotfiles/homesetup.toml" "${HHS_SETUP_FILE}"
     echo "${YELLOW}HomeSetup settings required updating and have been overwritten by the new one.${NC}"
     sleep 2
@@ -122,24 +123,27 @@ function execute() {
       [[ -n "${apply_raw}" ]] && apply_values+=("${apply_raw}")
     done
 
-    if [[ "${#apply_values[@]}" -ne "${#all_items[@]}" ]]; then
-      quit 1 "Expected ${#all_items[@]} setup values, received ${#apply_values[@]}."
+    if [[ "${#apply_values[@]}" -gt "${#all_items[@]}" ]]; then
+      quit 1 "Expected at most ${#all_items[@]} setup values, received ${#apply_values[@]}."
     fi
 
-    for setting in "${all_items[@]}"; do
-      name="${setting%%=*}"
-      apply_value="${apply_values[apply_idx]}"
+    for apply_value in "${apply_values[@]}"; do
       case "${apply_value}" in
-        1|true|True|TRUE) value='true' ;;
-        0|false|False|FALSE) value='false' ;;
+        1|true|True|TRUE) normalized_values+=('true') ;;
+        0|false|False|FALSE) normalized_values+=('false') ;;
         *) quit 1 "Invalid setup value: ${apply_value}. Use 0 or 1." ;;
       esac
+    done
+
+    for value in "${normalized_values[@]}"; do
+      setting="${all_items[apply_idx]}"
+      name="${setting%%=*}"
       if ! __hhs_toml_set "${HHS_SETUP_FILE}" "${name}=${value}" "setup"; then
         quit 2 "Unable to change setting: ${setting}!"
       fi
       ((apply_idx += 1))
     done
-    quit 0 "${GREEN}HomeSetup settings (${#all_items[@]}) applied!${NC}"
+    quit 0 "${GREEN}HomeSetup settings (${#normalized_values[@]}) applied!${NC}"
   fi
 
   if [[ ${#} -gt 0 ]]; then

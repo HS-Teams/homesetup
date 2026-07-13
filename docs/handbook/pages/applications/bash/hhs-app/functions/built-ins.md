@@ -190,7 +190,7 @@ Opening SS64 man page for grep: https://ss64.com/bash/grep.html
 ### "reset"
 
 ```bash
-usage: __hhs reset
+usage: __hhs reset [-apply <0|1>...] [options]
 ```
 
 #### **Purpose**
@@ -202,6 +202,14 @@ Clear all cache, log and backup files and HomeSetup config files. Force re-creat
 **0** if the command was successfully executed; **non-zero** otherwise.
 
 #### **Examples**
+
+Apply reset options without opening the interactive menu:
+
+`__hhs reset -apply 1 0 1`
+
+Omitted reset values default to `0`; excess values are rejected.
+
+Review reset options interactively:
 
 `__hhs reset`
 

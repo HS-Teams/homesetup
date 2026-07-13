@@ -241,8 +241,9 @@ function help() {
 # @purpose: Clear HomeSetup logs, backups and caches and restore original HomeSetup files.
 function reset() {
 
-  local all_files filtered_files file matched_file title mchoose_file colorls_dir was_set ret_val=0
-  local -a matched_files=()
+  local apply_idx=0 apply_raw apply_value colorls_dir file matched_file mchoose_file="" title
+  local was_set=0 ret_val=0
+  local -a all_files=() apply_values=() filtered_files=() matched_files=() selected_files=()
 
   all_files=(
     "${HHS_LOG_DIR}/*.log"
@@ -272,28 +273,99 @@ function reset() {
   done
   all_files=("${filtered_files[@]}")
 
-  title="${YELLOW}Attention! Mark what you want to delete  (${#all_files[@]})${NC}"
-  mchoose_file=$(mktemp)
-  if __hhs_mchoose "${mchoose_file}" "${title}" "${all_files[@]}"; then
-    [[ $(wc -c < "$mchoose_file") -le 1 ]] && return 1
-    clear
-    echo ' ' >> "${mchoose_file}"
+  case "${1:-}" in
+    -h|--help|help)
+      cat <<EOF
+usage: __hhs reset [-apply <0|1>...] [options]
+
+  Clear selected HomeSetup logs, backups, caches, and generated configuration files.
+
+    options:
+      -apply [<0|1>, ...]      : Apply reset selections in displayed order; omitted values default to 0.
+      -list                    : List reset targets in apply order without opening the menu.
+      -h | --help              : Display this help message.
+
+    examples:
+      Apply reset options from CLI:
+        => __hhs reset -apply 1 0 1
+      Review reset options interactively:
+        => __hhs reset
+EOF
+      return 0
+      ;;
+    -list)
+      [[ $# -eq 1 ]] || {
+        echo "Unexpected reset arguments: ${*:2}" >&2
+        return 1
+      }
+      printf '%s\n' "${all_files[@]}"
+      return 0
+      ;;
+    -apply)
+      shift
+      for apply_raw in "$@"; do
+        apply_raw="${apply_raw//[/}"
+        apply_raw="${apply_raw//]/}"
+        apply_raw="${apply_raw//,/}"
+        [[ -n "${apply_raw}" ]] && apply_values+=("${apply_raw}")
+      done
+
+      if [[ "${#apply_values[@]}" -gt "${#all_files[@]}" ]]; then
+        echo "Expected at most ${#all_files[@]} reset values, received ${#apply_values[@]}." >&2
+        return 1
+      fi
+
+      for file in "${all_files[@]}"; do
+        apply_value="${apply_values[apply_idx]:-0}"
+        case "${apply_value}" in
+          1|true|True|TRUE) selected_files+=("${file}") ;;
+          0|false|False|FALSE) ;;
+          *)
+            echo "Invalid reset value: ${apply_value}. Use 0 or 1." >&2
+            return 1
+            ;;
+        esac
+        ((apply_idx += 1))
+      done
+      ;;
+    "")
+      title="${YELLOW}Attention! Mark what you want to delete  (${#all_files[@]})${NC}"
+      mchoose_file=$(mktemp)
+      if __hhs_mchoose "${mchoose_file}" "${title}" "${all_files[@]}"; then
+        [[ $(wc -c < "${mchoose_file}") -le 1 ]] && return 1
+        echo ' ' >> "${mchoose_file}"
+        while read -r -d ' ' file; do
+          [[ -n "${file}" ]] && selected_files+=("${file}")
+        done < "${mchoose_file}"
+        clear
+      fi
+      ;;
+    *)
+      echo "Unexpected reset arguments: $*" >&2
+      return 1
+      ;;
+  esac
+
+  if [[ ${#selected_files[@]} -gt 0 ]]; then
     echo -e "${YELLOW}Deleting selected files...${NC}\n"
-    while read -r -d ' ' file; do
-      [[ -z "${file}" ]] && continue
+    \shopt -q nullglob
+    was_set=$?
+    \shopt -s nullglob
+    for file in "${selected_files[@]}"; do
       matched_files=()
       if [[ "${file}" == *[\*\?\[]* ]]; then
         while IFS= read -r matched_file; do
+          if [[ "${matched_file}" == "${HHS_BACKGROUND_JOB_STDOUT_PATH:-}" || \
+            "${matched_file}" == "${HHS_BACKGROUND_JOB_STDERR_PATH:-}" ]]; then
+            continue
+          fi
           matched_files+=("${matched_file}")
         done < <(compgen -G "${file}")
-      else
+      elif [[ -e "${file}" || -L "${file}" ]]; then
         matched_files+=("${file}")
       fi
       echo -en "${HHS_HIGHLIGHT_COLOR}Deleting file ${WHITE}"
       echo -n "${file} $(printf '\056%.0s' {1..60})" | head -c 60
-      shopt -q nullglob
-      was_set=$?
-      shopt -s nullglob
       if [[ ${#matched_files[@]} -gt 0 ]]; then
         if \rm -rfv -- "${matched_files[@]}" &> /dev/null; then
           echo -e "${GREEN} OK${NC}"
@@ -304,11 +376,11 @@ function reset() {
       else
         echo -e "${YELLOW} SKIPPED${NC}"
       fi
-    done < "${mchoose_file}"
+    done
     echo ''
   fi
   [[ -f "${mchoose_file}" ]] && \rm -fv "${mchoose_file}" &> /dev/null
-  (( was_set != 0 )) && shopt -u nullglob
+  (( was_set != 0 )) && \shopt -u nullglob
   echo -e "${YELLOW}Some changes will take effect after you 'reopen' your terminal!${NC}"
 
   return $ret_val

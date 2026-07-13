@@ -94,6 +94,195 @@ setup() {
   [[ ! -e "${state_file}" ]]
 }
 
+@test "when-listing-reset-options-then-order-should-match-non-interactive-apply" {
+  local expected_file
+
+  export HHS_BACKUP_DIR="${BATS_TEST_TMPDIR}/backup"
+  export HHS_CACHE_DIR="${BATS_TEST_TMPDIR}/cache"
+  export HHS_KEY_BINDINGS="${BATS_TEST_TMPDIR}/key-bindings"
+  export HHS_LOG_DIR="${BATS_TEST_TMPDIR}/log"
+  export HHS_OLLAMA_HISTORY_FILE="${BATS_TEST_TMPDIR}/ollama-history"
+  export HHS_OLLAMA_PROMPT_FILE="${BATS_TEST_TMPDIR}/ollama-prompt"
+  export HHS_SETUP_FILE="${BATS_TEST_TMPDIR}/setup"
+  export HHS_SHOPTS_FILE="${BATS_TEST_TMPDIR}/shopts"
+  expected_file="${BATS_TEST_TMPDIR}/expected-reset-options"
+  printf '%s\n' \
+    "${HHS_LOG_DIR}/*.log" \
+    "${HHS_BACKUP_DIR}/*.bak" \
+    "${HHS_CACHE_DIR}/*.*" \
+    "${HHS_DIR}/.aliasdef" \
+    "${HOME}/.inputrc" \
+    "${HHS_KEY_BINDINGS}" \
+    "${HHS_SETUP_FILE}" \
+    "${HHS_SHOPTS_FILE}" \
+    "${HHS_OLLAMA_HISTORY_FILE}" \
+    "${HHS_OLLAMA_PROMPT_FILE}" > "${expected_file}"
+
+  run bash --noprofile --norc -c '
+    source "${1}/bin/apps/bash/hhs-app/functions/built-ins.bash"
+    function __hhs_has() { return 1; }
+    reset -list
+  ' -- "${HHS_HOME}"
+  assert_success
+  run diff -u "${expected_file}" <(printf '%s\n' "${output}")
+  assert_success
+}
+
+@test "when-applying-partial-reset-options-then-omitted-targets-should-default-to-zero" {
+  export HHS_BACKUP_DIR="${BATS_TEST_TMPDIR}/backup"
+  export HHS_CACHE_DIR="${BATS_TEST_TMPDIR}/cache"
+  export HHS_KEY_BINDINGS="${BATS_TEST_TMPDIR}/key-bindings"
+  export HHS_LOG_DIR="${BATS_TEST_TMPDIR}/log"
+  export HHS_OLLAMA_HISTORY_FILE="${BATS_TEST_TMPDIR}/ollama-history"
+  export HHS_OLLAMA_PROMPT_FILE="${BATS_TEST_TMPDIR}/ollama-prompt"
+  export HHS_SETUP_FILE="${BATS_TEST_TMPDIR}/setup"
+  export HHS_SHOPTS_FILE="${BATS_TEST_TMPDIR}/shopts"
+  mkdir -p "${HHS_BACKUP_DIR}" "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
+  printf '%s\n' "delete" > "${HHS_LOG_DIR}/hhs.log"
+  printf '%s\n' "keep" > "${HHS_BACKUP_DIR}/hhs.bak"
+  printf '%s\n' "delete" > "${HHS_CACHE_DIR}/hhs.cache"
+  export HHS_BACKGROUND_JOB_STDOUT_PATH="${HHS_CACHE_DIR}/reset-stdout.log"
+  export HHS_BACKGROUND_JOB_STDERR_PATH="${HHS_CACHE_DIR}/reset-stderr.log"
+  printf '%s\n' "protected stdout" > "${HHS_BACKGROUND_JOB_STDOUT_PATH}"
+  printf '%s\n' "protected stderr" > "${HHS_BACKGROUND_JOB_STDERR_PATH}"
+
+  run bash --noprofile --norc -c '
+    source "${1}/bin/apps/bash/hhs-app/functions/built-ins.bash"
+    function __hhs_has() { return 1; }
+    reset -apply 1 0 1
+  ' -- "${HHS_HOME}"
+  assert_success
+  [[ ! -e "${HHS_LOG_DIR}/hhs.log" ]]
+  [[ -e "${HHS_BACKUP_DIR}/hhs.bak" ]]
+  [[ ! -e "${HHS_CACHE_DIR}/hhs.cache" ]]
+  [[ -e "${HHS_BACKGROUND_JOB_STDOUT_PATH}" ]]
+  [[ -e "${HHS_BACKGROUND_JOB_STDERR_PATH}" ]]
+}
+
+@test "when-applying-reset-options-with-wrong-values-then-reset-should-fail-safely" {
+  export HHS_BACKUP_DIR="${BATS_TEST_TMPDIR}/backup"
+  export HHS_CACHE_DIR="${BATS_TEST_TMPDIR}/cache"
+  export HHS_KEY_BINDINGS="${BATS_TEST_TMPDIR}/key-bindings"
+  export HHS_LOG_DIR="${BATS_TEST_TMPDIR}/log"
+  export HHS_OLLAMA_HISTORY_FILE="${BATS_TEST_TMPDIR}/ollama-history"
+  export HHS_OLLAMA_PROMPT_FILE="${BATS_TEST_TMPDIR}/ollama-prompt"
+  export HHS_SETUP_FILE="${BATS_TEST_TMPDIR}/setup"
+  export HHS_SHOPTS_FILE="${BATS_TEST_TMPDIR}/shopts"
+  mkdir -p "${HHS_LOG_DIR}"
+  printf '%s\n' "keep" > "${HHS_LOG_DIR}/hhs.log"
+
+  run bash --noprofile --norc -c '
+    source "${1}/bin/apps/bash/hhs-app/functions/built-ins.bash"
+    function __hhs_has() { return 1; }
+    reset -apply 0 0 0 0 0 0 0 0 0 0 0
+  ' -- "${HHS_HOME}"
+  assert_failure
+  assert_output --partial "Expected at most 10 reset values, received 11."
+
+  run bash --noprofile --norc -c '
+    source "${1}/bin/apps/bash/hhs-app/functions/built-ins.bash"
+    function __hhs_has() { return 1; }
+    reset -apply 1 invalid
+  ' -- "${HHS_HOME}"
+  assert_failure
+  assert_output --partial "Invalid reset value: invalid. Use 0 or 1."
+  [[ -e "${HHS_LOG_DIR}/hhs.log" ]]
+}
+
+@test "when-applying-partial-setup-options-then-omitted-settings-should-stay-unchanged" {
+  local changes_file setup_file
+
+  changes_file="${BATS_TEST_TMPDIR}/setup-changes"
+  setup_file="${BATS_TEST_TMPDIR}/homesetup.toml"
+  printf '%s\n' '# @version: v1.0.13' > "${setup_file}"
+
+  run bash --noprofile --norc -c '
+    export APP_NAME="__hhs"
+    export HHS_HOME="$1"
+    export HHS_DIR="$(dirname "$2")"
+    export HHS_SETUP_FILE="$2"
+    changes_file="$3"
+    source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/setup/setup.bash"
+    function list_contains() { return 1; }
+    function __hhs_toml_get_all() {
+      printf "%s\n" "first=true" "second=true" "third=false" "fourth=true"
+    }
+    function __hhs_toml_set() {
+      printf "%s\n" "$2" >> "${changes_file}"
+    }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift
+      [[ $# -gt 0 ]] && printf "%b\n" "$*"
+      exit "${exit_code}"
+    }
+    execute -apply 1 0
+  ' -- "${HHS_HOME}" "${setup_file}" "${changes_file}"
+  assert_success
+  assert_output --partial "HomeSetup settings (2) applied!"
+  run grep -Fx "first=true" "${changes_file}"
+  assert_success
+  run grep -Fx "second=false" "${changes_file}"
+  assert_success
+  run grep -E '^(third|fourth)=' "${changes_file}"
+  assert_failure
+}
+
+@test "when-applying-invalid-partial-setup-options-then-no-settings-should-change" {
+  local changes_file setup_file
+
+  changes_file="${BATS_TEST_TMPDIR}/setup-changes"
+  setup_file="${BATS_TEST_TMPDIR}/homesetup.toml"
+  printf '%s\n' '# @version: v1.0.13' > "${setup_file}"
+
+  run bash --noprofile --norc -c '
+    export APP_NAME="__hhs"
+    export HHS_HOME="$1"
+    export HHS_DIR="$(dirname "$2")"
+    export HHS_SETUP_FILE="$2"
+    changes_file="$3"
+    source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/setup/setup.bash"
+    function list_contains() { return 1; }
+    function __hhs_toml_get_all() {
+      printf "%s\n" "first=true" "second=true" "third=false" "fourth=true"
+    }
+    function __hhs_toml_set() {
+      printf "%s\n" "$2" >> "${changes_file}"
+    }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift
+      [[ $# -gt 0 ]] && printf "%b\n" "$*"
+      exit "${exit_code}"
+    }
+    execute -apply 1 invalid
+  ' -- "${HHS_HOME}" "${setup_file}" "${changes_file}"
+  assert_failure
+  assert_output --partial "Invalid setup value: invalid. Use 0 or 1."
+  [[ ! -e "${changes_file}" ]]
+
+  run bash --noprofile --norc -c '
+    export APP_NAME="__hhs"
+    export HHS_HOME="$1"
+    export HHS_DIR="$(dirname "$2")"
+    export HHS_SETUP_FILE="$2"
+    source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/setup/setup.bash"
+    function list_contains() { return 1; }
+    function __hhs_toml_get_all() {
+      printf "%s\n" "first=true" "second=true" "third=false" "fourth=true"
+    }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift
+      [[ $# -gt 0 ]] && printf "%b\n" "$*"
+      exit "${exit_code}"
+    }
+    execute -apply 1 0 1 0 1
+  ' -- "${HHS_HOME}" "${setup_file}"
+  assert_failure
+  assert_output --partial "Expected at most 4 setup values, received 5."
+}
+
 # TC - 1
 @test "when-showing-help-then-do-should-print-usage" {
   run __hhs_do --help

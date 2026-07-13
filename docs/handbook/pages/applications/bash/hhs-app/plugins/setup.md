@@ -54,7 +54,7 @@ HomeSetup initialization setup.
 **Output**
 
 ```bash
-usage: __hhs setup [-restore]
+usage: __hhs setup [-restore | -apply <0|1>...] [options]
 
  ____       _
 / ___|  ___| |_ _   _ _ __
@@ -66,7 +66,8 @@ usage: __hhs setup [-restore]
   HomeSetup initialization setup.
 
     options:
-      -restore    : Restore the HomeSetup defaults.
+      -apply [<0|1>, ...] : Apply setup values in file order; omitted values remain unchanged.
+      -restore            : Restore the HomeSetup defaults.
 ```
 
 `__hhs setup`
