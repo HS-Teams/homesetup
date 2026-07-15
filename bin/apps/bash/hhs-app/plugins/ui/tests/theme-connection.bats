@@ -243,6 +243,13 @@ assert 'resetTerminalInputs()' in ui_source
 assert 'closeMenu()' in ui_source
 assert 'const prompt = (input?.value || defaultPrompt).trim() || defaultPrompt' in ui_source
 terminal_ai_script_body = ui_source.split("def render_footer_terminal_ai_menu_script", 1)[1].split("\ndef ", 1)[0]
+assert '(async () => {{' in terminal_ai_script_body
+assert 'const waitForTerminalAiPanel = () =>' in terminal_ai_script_body
+assert 'const panel = await waitForTerminalAiPanel()' in terminal_ai_script_body
+assert 'new window.parent.MutationObserver' in terminal_ai_script_body
+assert 'observer.observe(doc.body, {{ childList: true, subtree: true }})' in terminal_ai_script_body
+assert 'const panelWaitTimeoutMs = 5000' in terminal_ai_script_body
+assert 'window.parent.setTimeout(() => finish(null), panelWaitTimeoutMs)' in terminal_ai_script_body
 assert "window.parent.location.search" not in terminal_ai_script_body
 assert "await fetch(terminalAiRequestUrl" not in terminal_ai_script_body
 assert "__hhs ask execute -k" not in terminal_ai_script_body

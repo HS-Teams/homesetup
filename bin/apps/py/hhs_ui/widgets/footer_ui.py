@@ -580,9 +580,32 @@ def render_footer_terminal_ai_menu_script() -> None:
     render_script_html(
         f"""
         <script>
-          (() => {{
+          (async () => {{
             const doc = window.parent.document;
-            const panel = doc.querySelector(".hhs-footer-terminal-ai-panel");
+            const panelWaitTimeoutMs = 5000;
+            const waitForTerminalAiPanel = () => {{
+              const currentPanel = doc.querySelector(".hhs-footer-terminal-ai-panel");
+              if (currentPanel) {{
+                return Promise.resolve(currentPanel);
+              }}
+              return new Promise((resolve) => {{
+                let timeoutId = 0;
+                const observer = new window.parent.MutationObserver(() => {{
+                  const panel = doc.querySelector(".hhs-footer-terminal-ai-panel");
+                  if (panel) {{
+                    finish(panel);
+                  }}
+                }});
+                const finish = (panel) => {{
+                  observer.disconnect();
+                  window.parent.clearTimeout(timeoutId);
+                  resolve(panel);
+                }};
+                timeoutId = window.parent.setTimeout(() => finish(null), panelWaitTimeoutMs);
+                observer.observe(doc.body, {{ childList: true, subtree: true }});
+              }});
+            }};
+            const panel = await waitForTerminalAiPanel();
             if (!panel || panel.dataset.clickHandlerInstalled === "true") {{
               return;
             }}
