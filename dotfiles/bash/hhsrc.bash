@@ -120,13 +120,14 @@ CUSTOM_DOTFILES=(
 )
 
 # Re-create the HomeSetup log file.
-started="$(${PYTHON3:-python3} -c 'import time; print(int(time.time() * 1000))')"
+HHS_INITIALIZATION_STARTED_MILLIS="$(
+  "${PYTHON3:-python3}" -c 'import time; print(int(time.time() * 1000))'
+)"
 echo -e "HomeSetup is starting: $(date)\n" >"${HHS_LOG_FILE}"
 
 # Source the bash common functions. Logs are available below here.
 source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"
 HHS_INITIALIZING=1
-HHS_INITIALIZATION_LOG_TIMESTAMP="$(date +'%m-%d-%y %H:%M:%S ')"
 
 # -----------------------------------------------------------------------------------
 # Initialization setup (homesetup.toml).
@@ -513,17 +514,29 @@ fi
 # -----------------------------------------------------------------------------------
 # Finalization
 
-finished="$(${PYTHON3:-python3} -c 'import time; print(int(time.time() * 1000))')"
-diff_time=$((finished - started))
-diff_time_sec=$((diff_time/1000))
-diff_time_ms=$((diff_time-(diff_time_sec*1000)))
+HHS_INITIALIZATION_FINISHED_MILLIS="$(__hhs_epoch_millis)"
+HHS_INITIALIZATION_ELAPSED_MILLIS=$((
+  HHS_INITIALIZATION_FINISHED_MILLIS - HHS_INITIALIZATION_STARTED_MILLIS
+))
+HHS_INITIALIZATION_ELAPSED_SECONDS=$((HHS_INITIALIZATION_ELAPSED_MILLIS / 1000))
+HHS_INITIALIZATION_REMAINDER_MILLIS=$((
+  HHS_INITIALIZATION_ELAPSED_MILLIS - (HHS_INITIALIZATION_ELAPSED_SECONDS * 1000)
+))
 
-__hhs_log "INFO" "HomeSetup initialization completed in ${diff_time_sec}s ${diff_time_ms}ms" >>"${HHS_LOG_FILE}"
+printf -v HHS_INITIALIZATION_DURATION_MESSAGE \
+  'HomeSetup initialization completed in %ds %03dms' \
+  "${HHS_INITIALIZATION_ELAPSED_SECONDS}" \
+  "${HHS_INITIALIZATION_REMAINDER_MILLIS}"
+__hhs_log "INFO" "${HHS_INITIALIZATION_DURATION_MESSAGE}"
 echo '' >>"${HHS_LOG_FILE}"
 
 unset HHS_ALIAS_COMMAND_CATALOG HHS_ALIAS_COMMAND_CATALOG_INITIALIZED HHS_INITIALIZING
-unset HHS_INITIALIZATION_LOG_TIMESTAMP
-unset started finished diff_time diff_time_sec diff_time_ms state option line file all
+unset HHS_INITIALIZATION_CURRENT_LOG_TIMESTAMP HHS_INITIALIZATION_FINISHED_MILLIS
+unset HHS_INITIALIZATION_LOG_EPOCH_SECOND HHS_INITIALIZATION_LOG_PREFIX
+unset HHS_INITIALIZATION_REMAINDER_MILLIS HHS_INITIALIZATION_STARTED_MILLIS
+unset HHS_INITIALIZATION_ELAPSED_MILLIS HHS_INITIALIZATION_ELAPSED_SECONDS
+unset HHS_INITIALIZATION_DURATION_MESSAGE
+unset state option line file all
 unset f_path tmp_file re_key_pair prefs cpl bnd pref re motd app_name last_dir key val
 unset setman_cache_file setman_cache_refresh_failed setman_candidate setman_config setman_current_config
 unset setman_module_file

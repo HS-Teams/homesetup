@@ -87,6 +87,40 @@ function __hhs_ensure_venv() {
   return 1
 }
 
+# @function: Return the current Unix time in milliseconds.
+function __hhs_epoch_millis() {
+
+  local current_time epoch_seconds fraction
+
+  if [[ -n "${EPOCHREALTIME:-}" ]]; then
+    current_time="${EPOCHREALTIME}"
+    epoch_seconds="${current_time%%.*}"
+    fraction="${current_time#*.}000"
+    printf '%s%s\n' "${epoch_seconds}" "${fraction:0:3}"
+    return 0
+  fi
+
+  "${PYTHON3:-python3}" -c 'import time; print(int(time.time() * 1000))'
+}
+
+# @function: Update the current initialization log timestamp with millisecond precision.
+function __hhs_update_initialization_log_timestamp() {
+
+  local epoch_millis epoch_seconds milliseconds
+
+  epoch_millis="$(__hhs_epoch_millis)" || return 1
+  epoch_seconds=$((epoch_millis / 1000))
+  milliseconds=$((epoch_millis - (epoch_seconds * 1000)))
+
+  if [[ "${HHS_INITIALIZATION_LOG_EPOCH_SECOND:-}" != "${epoch_seconds}" ]]; then
+    HHS_INITIALIZATION_LOG_EPOCH_SECOND="${epoch_seconds}"
+    HHS_INITIALIZATION_LOG_PREFIX="$(date +'%m-%d-%y %H:%M:%S')"
+  fi
+
+  printf -v HHS_INITIALIZATION_CURRENT_LOG_TIMESTAMP '%s.%03d ' \
+    "${HHS_INITIALIZATION_LOG_PREFIX}" "${milliseconds}"
+}
+
 # @function: Log a message to the HomeSetup log file.
 # @param $1 [Req] : The log level.
 # @param $* [Req] : The log level. One of ["WARN", "DEBUG", "INFO", "ERROR", "ALL"].
@@ -98,20 +132,24 @@ function __hhs_log() {
 
   case "${level}" in
   'INFO' | 'WARN' | 'ERROR' | 'ALL')
-    timestamp="${HHS_INITIALIZATION_LOG_TIMESTAMP:-$(date +'%m-%d-%y %H:%M:%S ')}"
-    printf "%s %5.5s  %s\n" "${timestamp}" "${level}" "${message}" >>"${HHS_LOG_FILE}"
     ;;
   'DEBUG')
-    if [[ "${HHS_VERBOSE_LOGS}" -eq 1 ]]; then
-      timestamp="${HHS_INITIALIZATION_LOG_TIMESTAMP:-$(date +'%m-%d-%y %H:%M:%S ')}"
-      printf "%s %5.5s  %s\n" "${timestamp}" "${level}" "${message}" >>"${HHS_LOG_FILE}"
-    fi
+    [[ "${HHS_VERBOSE_LOGS}" -eq 1 ]] || return 0
     ;;
   *)
     echo "${FUNCNAME[0]}: invalid log level \"${level}\" !" 2>&1
     return 1
     ;;
   esac
+
+  if [[ "${HHS_INITIALIZING:-0}" -eq 1 ]]; then
+    __hhs_update_initialization_log_timestamp || return 1
+    timestamp="${HHS_INITIALIZATION_CURRENT_LOG_TIMESTAMP}"
+  else
+    timestamp="$(date +'%m-%d-%y %H:%M:%S ')"
+  fi
+
+  printf "%s %5.5s  %s\n" "${timestamp}" "${level}" "${message}" >>"${HHS_LOG_FILE}"
 
   return 0
 }
