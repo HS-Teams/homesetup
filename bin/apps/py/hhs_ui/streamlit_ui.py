@@ -4168,12 +4168,10 @@ def initialize_core_session_state() -> None:
         ("ai_clear_chat_execute_pending", False),
         ("ai_context_action_execute_pending", None),
         ("ai_prompt_action_execute_pending", None),
-        ("ai_model_select_pending", None),
         ("ai_model_select_execute_pending", None),
         ("ai_model_select_error", ""),
         ("ai_model_update_execute_pending", None),
         ("ai_model_update_error", ""),
-        ("ai_model_delete_pending", None),
         ("ai_model_delete_execute_pending", None),
         ("ai_model_delete_error", ""),
         ("ai_context_output", ""),
@@ -4183,6 +4181,11 @@ def initialize_core_session_state() -> None:
         ("ai_prompt_loaded", False),
     ):
         st.session_state.setdefault(state_key, default_value)
+    for legacy_model_dialog_key in (
+        "ai_model_select_pending",
+        "ai_model_delete_pending",
+    ):
+        st.session_state.pop(legacy_model_dialog_key, None)
     for state_key in ("ai_model_performance_timings",):
         if not isinstance(st.session_state.setdefault(state_key, []), list):
             st.session_state[state_key] = []

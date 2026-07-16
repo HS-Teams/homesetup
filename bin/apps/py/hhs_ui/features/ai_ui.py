@@ -435,29 +435,13 @@ def ingest_ai_context_upload(uploaded_file: object) -> None:
     )
 
 
-def request_ai_model_selection(
-    old_model: str, new_model: str, model_status: str
-) -> None:
-    """Show the AI model selection confirmation prompt."""
+def request_ai_model_selection(new_model: str, model_status: str) -> None:
+    """Schedule an Ollama model selection without a confirmation dialog."""
     st.session_state["ai_model_select_error"] = ""
-    st.session_state["ai_model_select_pending"] = {
-        "old": old_model,
+    st.session_state["ai_model_select_execute_pending"] = {
         "new": new_model,
         "status": model_status,
     }
-
-
-def cancel_ai_model_selection() -> None:
-    """Hide the AI model selection confirmation prompt."""
-    st.session_state["ai_model_select_pending"] = None
-
-
-def confirm_ai_model_selection() -> None:
-    """Schedule the pending Ollama model selection after closing dialogs."""
-    pending = st.session_state.get("ai_model_select_pending") or {}
-    st.session_state["ai_model_select_execute_pending"] = pending
-    st.session_state["ai_model_select_pending"] = None
-    save_ui_state()
 
 
 def execute_pending_ai_model_selection() -> None:
@@ -573,9 +557,9 @@ def execute_pending_ai_model_update() -> None:
 
 
 def request_ai_model_deletion(model_name: str, model_status: str) -> None:
-    """Show the AI model deletion confirmation prompt."""
+    """Schedule an inactive Ollama model deletion without confirmation."""
     st.session_state["ai_model_delete_error"] = ""
-    st.session_state["ai_model_delete_pending"] = None
+    st.session_state["ai_model_delete_execute_pending"] = None
     if model_status == "Active":
         message = "Deleting the active model is not possible."
         st.session_state["ai_model_delete_error"] = message
@@ -586,23 +570,10 @@ def request_ai_model_deletion(model_name: str, model_status: str) -> None:
         st.session_state["ai_model_delete_error"] = message
         push_floating_status(message, "warn")
         return
-    st.session_state["ai_model_delete_pending"] = {
+    st.session_state["ai_model_delete_execute_pending"] = {
         "name": model_name,
         "status": model_status,
     }
-
-
-def cancel_ai_model_deletion() -> None:
-    """Hide the AI model deletion confirmation prompt."""
-    st.session_state["ai_model_delete_pending"] = None
-
-
-def confirm_ai_model_deletion() -> None:
-    """Schedule the pending Ollama model deletion after closing dialogs."""
-    pending = st.session_state.get("ai_model_delete_pending") or {}
-    st.session_state["ai_model_delete_execute_pending"] = pending
-    st.session_state["ai_model_delete_pending"] = None
-    save_ui_state()
 
 
 def execute_pending_ai_model_deletion() -> None:
@@ -1286,47 +1257,8 @@ def render_ai_context_panel() -> None:
         render_ai_context_output_panel()
 
 
-def render_ai_model_select_dialog(old_model: str, new_model: str) -> None:
-    """Render the AI model selection confirmation dialog."""
-    pop_dialog(
-        title="Confirm model change",
-        message=f"Change active model from '{old_model}' to '{new_model}'?",
-        confirm_key="ai_confirm_model_select_button",
-        cancel_key="ai_cancel_model_select_button",
-        on_confirm=confirm_ai_model_selection,
-        on_cancel=cancel_ai_model_selection,
-    )
-
-
-def render_ai_model_delete_dialog(model_name: str) -> None:
-    """Render the AI model deletion confirmation dialog."""
-    pop_dialog(
-        title="Confirm model deletion",
-        message=f"Delete Ollama model '{model_name}'?",
-        confirm_key="ai_confirm_model_delete_button",
-        cancel_key="ai_cancel_model_delete_button",
-        on_confirm=confirm_ai_model_deletion,
-        on_cancel=cancel_ai_model_deletion,
-    )
-
-
 def render_ai_settings_panel() -> None:
     """Render the HomeSetup Ollama settings panel."""
-    pending = st.session_state.get("ai_model_select_pending")
-    if pending:
-        old_model = str(pending.get("old", ""))
-        new_model = str(pending.get("new", ""))
-        render_ai_model_select_dialog(old_model, new_model)
-        return
-
-    pending_delete = st.session_state.get("ai_model_delete_pending")
-    if pending_delete:
-        if isinstance(pending_delete, dict):
-            pending_delete_name = str(pending_delete.get("name", ""))
-        else:
-            pending_delete_name = str(pending_delete)
-        render_ai_model_delete_dialog(pending_delete_name)
-        return
     if any(
         background_job_is_running(job_name)
         for job_name in (
@@ -1395,7 +1327,6 @@ def render_ai_settings_panel() -> None:
                 "on_click": request_ai_model_selection,
                 "disabled": lambda row, _index: row["Name"] == current_model,
                 "args": lambda row, _index: (
-                    current_model,
                     row["Name"],
                     str(row.get("Status", "")),
                 ),

@@ -41,8 +41,6 @@ def close_all_dialogs() -> None:
     st.session_state.pop("_hhs_dialog_button_dismissal", None)
     st.session_state.pop("_hhs_dialog_dismiss_requested", None)
     st.session_state["ai_clear_chat_pending"] = False
-    st.session_state["ai_model_select_pending"] = None
-    st.session_state["ai_model_delete_pending"] = None
     st.session_state["home_tool_action_execute_pending"] = None
     st.session_state["ssh_explorer_delete_pending"] = None
     st.session_state["ssh_connection_dialog_title"] = ""

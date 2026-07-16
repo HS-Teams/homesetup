@@ -418,18 +418,25 @@ namespace = {
 }
 exec(
     "from __future__ import annotations\n"
+    + functions["request_ai_model_selection"]
+    + "\n\n"
     + functions["request_ai_model_update"]
     + "\n\n"
     + functions["request_ai_model_deletion"],
     namespace,
 )
+namespace["request_ai_model_selection"]("local:latest", "Downloaded")
+assert namespace["st"].session_state["ai_model_select_execute_pending"] == {
+    "new": "local:latest",
+    "status": "Downloaded",
+}
 namespace["request_ai_model_deletion"]("active:latest", "Active")
 assert namespace["st"].session_state["ai_model_delete_error"] == (
     "Deleting the active model is not possible."
 )
-assert namespace["st"].session_state["ai_model_delete_pending"] is None
+assert namespace["st"].session_state["ai_model_delete_execute_pending"] is None
 namespace["request_ai_model_deletion"]("local:latest", "Downloaded")
-assert namespace["st"].session_state["ai_model_delete_pending"] == {
+assert namespace["st"].session_state["ai_model_delete_execute_pending"] == {
     "name": "local:latest",
     "status": "Downloaded",
 }
@@ -444,6 +451,12 @@ assert namespace["st"].session_state["ai_model_update_execute_pending"] == {
 }
 PY
   assert_success
+
+  assert_file_not_contains_many "${ai_ui_file}" \
+'def render_ai_model_select_dialog' 'def render_ai_model_delete_dialog' \
+    'def confirm_ai_model_selection' 'def confirm_ai_model_deletion' \
+    'def cancel_ai_model_selection' 'def cancel_ai_model_deletion' \
+    'title="Confirm model change"' 'title="Confirm model deletion"'
 }
 
 @test "when UI creates disposable files then cache paths should be deterministic" {
