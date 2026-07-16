@@ -343,6 +343,23 @@ def parse_ollama_model_rows(
     return rows
 
 
+def filter_ollama_model_rows(
+    rows: list[dict[str, str]],
+    model_filter: str,
+    text_filter: str = "",
+) -> list[dict[str, str]]:
+    """Return Ollama model rows matching the selected settings filter."""
+    if model_filter == "Other":
+        return [row for row in rows if row_matches_text_filter(row, text_filter)]
+    if model_filter == "All":
+        return rows
+    return [
+        row
+        for row in rows
+        if row.get("Status", "").strip().lower() == model_filter.strip().lower()
+    ]
+
+
 def parse_downloaded_ollama_models(output: str) -> set[str]:
     """Return downloaded Ollama model names from the ask -m local model section."""
     models: set[str] = set()

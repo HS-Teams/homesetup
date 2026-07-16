@@ -4265,6 +4265,8 @@ def initialize_feature_session_state() -> None:
         ("search_filter", "All"),
         ("search_other_filter", ""),
         ("search_visible_count", hhs_ui_constants.SEARCH_PAGE_SIZE),
+        ("ai_model_filter", "All"),
+        ("ai_model_other_filter", ""),
         ("ssh_view", "TUNNELS"),
         ("ssh_tunnel_filter", "All"),
         ("ssh_tunnel_other_filter", ""),
@@ -4305,6 +4307,7 @@ def initialize_feature_session_state() -> None:
     if st.session_state["home_tools_filter"] == "Not Found":
         st.session_state["home_tools_filter"] = "Not Installed"
     filter_options = (
+        ("ai_model_filter", hhs_ui.AI_MODEL_FILTERS),
         ("home_tools_filter", hhs_ui.HOME_TOOLS_FILTERS),
         ("home_shopts_filter", hhs_ui.SHOPTS_FILTERS),
         ("env_filter", hhs_ui.ENV_FILTERS),

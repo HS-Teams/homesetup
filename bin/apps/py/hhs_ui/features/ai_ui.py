@@ -36,6 +36,7 @@ from hhs_ui.execution.command_catalog import (
     clean_command_status_message,
     clean_hhs_ask_output,
     current_username,
+    filter_ollama_model_rows,
     first_downloaded_ollama_model,
     format_ai_chat_prefix,
     format_ai_request_duration,
@@ -57,7 +58,12 @@ from hhs_ui.widgets.dialog_ui import pop_dialog
 from hhs_ui.widgets.feedback_ui import render_terminal_output
 from hhs_ui.features.ssh_runtime import connected_ssh_host
 from hhs_ui.widgets.status_ui import push_floating_status
-from hhs_ui.widgets.table_ui import render_table, render_view_subtitle
+from hhs_ui.widgets.table_ui import (
+    render_table,
+    render_table_controls_panel,
+    render_table_filter_controls,
+    render_view_subtitle,
+)
 from hhs_ui.core.ui_definitions import (
     AI_ASK_JOB,
     AI_CONTEXT_ACTION_JOB,
@@ -1354,14 +1360,27 @@ def render_ai_settings_panel() -> None:
         """,
         unsafe_allow_html=True,
     )
+    model_filter, other_filter = render_table_controls_panel(
+        lambda: render_table_filter_controls(
+            hhs_ui.AI_MODEL_FILTERS,
+            "ai_model_filter",
+            "ai_model_other_filter",
+            hhs_ui.FOUR_OPTION_FILTER_COLUMNS,
+            placeholder="Type model filter",
+        )
+    )
     render_view_subtitle("Available Models")
-    rows = parse_rows_cached(
+    available_rows = parse_rows_cached(
         f"ollama_models_{current_model}",
         model_result.stdout,
         lambda output: parse_ollama_model_rows(output, current_model),
     )
-    if not rows:
+    if not available_rows:
         st.caption("No Ollama models found.")
+        return
+    rows = filter_ollama_model_rows(available_rows, model_filter, other_filter)
+    if not rows:
+        st.caption("No Ollama models match the selected filter.")
         return
 
     selected_index, selected_row = render_table(

@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.138"
+VERSION = "0.1.139"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parents[1]
 APP_STATIC_DIR = APP_DIR / "static"
@@ -188,6 +188,7 @@ SEARCH_TYPE_LABELS = {
     "Strings": "Strings",
 }
 SEARCH_FILTERS = ("All", "Containing")
+AI_MODEL_FILTERS = ("All", "Downloaded", "Active", "Other")
 SEARCH_PAGE_SIZE = 20
 SEARCH_DIRECTORY_HISTORY_LIMIT = 20
 SEARCH_TERM_HISTORY_LIMIT = 20
@@ -235,6 +236,8 @@ PERSISTED_UI_KEYS = (
     "ai_chat_messages",
     "ai_context_error",
     "ai_context_output",
+    "ai_model_filter",
+    "ai_model_other_filter",
     "ai_model_performance_averages",
     "ai_model_performance_sample_counts",
     "ai_model_performance_timings",

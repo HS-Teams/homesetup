@@ -396,11 +396,21 @@ PY
 
 # TC - 15
 
-@test "when rendering AI model settings then status, scrolling, and footer guard should be present" {
+@test "when rendering AI model settings then filters, status, scrolling, and footer guard should be present" {
   assert_file_contains_many "${constants_file}" \
-'AI_MODEL_TABLE_KEY = "ai_model_table"' 'AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT = 0'
+'AI_MODEL_FILTERS = ("All", "Downloaded", "Active", "Other")' \
+    'AI_MODEL_TABLE_KEY = "ai_model_table"' 'AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT = 0' \
+    '"ai_model_filter"' '"ai_model_other_filter"'
+  assert_hhs_ui_exports AI_MODEL_FILTERS
   assert_file_contains_many "${ai_ui_file}" \
-'def scroll_to_ai_model_actions' 'hhs-ai-model-action-footer-guard'
+'def scroll_to_ai_model_actions' 'hhs-ai-model-action-footer-guard' \
+    'render_table_controls_panel(' 'hhs_ui.AI_MODEL_FILTERS' \
+    '"ai_model_filter"' '"ai_model_other_filter"' \
+    'hhs_ui.FOUR_OPTION_FILTER_COLUMNS' 'placeholder="Type model filter"' \
+    'filter_ollama_model_rows(available_rows, model_filter, other_filter)'
+  assert_file_contains_many "${ui_file}" \
+'("ai_model_filter", "All")' '("ai_model_other_filter", "")' \
+    '("ai_model_filter", hhs_ui.AI_MODEL_FILTERS)'
   assert_file_contains "${css_file}" 'hhs-ai-model-action-footer-guard'
 
   run python3 - "${css_file}" <<'PY'
@@ -419,6 +429,49 @@ PY
   assert_file_contains_many "${ai_ui_file}" \
 'status == "Downloaded"' 'color: #4da3ff'
   run grep -q -- '--hhs-model-accent: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  assert_success
+
+  run python3 - "${ai_ui_file}" "${command_catalog_file}" <<'PY'
+import ast
+from pathlib import Path
+import sys
+
+ai_source = Path(sys.argv[1]).read_text(encoding="utf-8")
+settings_body = ai_source.split("def render_ai_settings_panel", 1)[1].split("\ndef ", 1)[0]
+selected_model_index = settings_body.index("Selected Model:")
+controls_index = settings_body.index("render_table_controls_panel(")
+subtitle_index = settings_body.index('render_view_subtitle("Available Models")')
+table_index = settings_body.index("render_table(")
+assert selected_model_index < controls_index < subtitle_index < table_index
+
+catalog_source = Path(sys.argv[2]).read_text(encoding="utf-8")
+tree = ast.parse(catalog_source)
+source_lines = catalog_source.splitlines()
+functions = {
+    node.name: "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
+}
+namespace = {}
+exec(
+    "from __future__ import annotations\n"
+    + functions["row_matches_text_filter"]
+    + "\n\n"
+    + functions["filter_ollama_model_rows"],
+    namespace,
+)
+rows = [
+    {"Name": "active:latest", "Status": "Active", "Capabilities": "tools"},
+    {"Name": "local:latest", "Status": "Downloaded", "Capabilities": "completion"},
+    {"Name": "remote:latest", "Status": "", "Capabilities": "vision"},
+]
+filter_rows = namespace["filter_ollama_model_rows"]
+assert filter_rows(rows, "All") == rows
+assert filter_rows(rows, "Active") == [rows[0]]
+assert filter_rows(rows, "Downloaded") == [rows[1]]
+assert filter_rows(rows, "Other", "VISION") == [rows[2]]
+assert filter_rows(rows, "Other", "") == rows
+PY
   assert_success
 }
 
