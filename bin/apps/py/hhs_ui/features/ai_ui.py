@@ -15,8 +15,6 @@ import streamlit as st
 import hhs_ui
 import hhs_ui.core.constants as hhs_ui_constants
 from hhs_ui.execution.cache_runtime import (
-    background_command_metadata,
-    cache_background_command_result,
     cache_delete_tag,
     parse_rows_cached,
     render_cached_command_result,
@@ -28,16 +26,16 @@ from hhs_ui.execution.command_catalog import (
     build_hhs_ask_ingest_command,
     build_hhs_ask_models_command,
     build_hhs_ask_prompt_file_command,
+    build_hhs_ask_remove_model_command,
     build_hhs_ask_reset_command,
     build_hhs_ask_select_model_command,
+    build_hhs_ask_update_model_command,
     build_hhs_revert_ask_prompt_file_command,
     build_hhs_save_ask_prompt_file_command,
-    build_ollama_delete_model_command,
     clean_command_status_message,
     clean_hhs_ask_output,
     current_username,
     filter_ollama_model_rows,
-    first_downloaded_ollama_model,
     format_ai_chat_prefix,
     format_ai_request_duration,
     html_tooltip_chip,
@@ -69,6 +67,7 @@ from hhs_ui.core.ui_definitions import (
     AI_CONTEXT_ACTION_JOB,
     AI_MODEL_DELETE_JOB,
     AI_MODEL_SELECT_JOB,
+    AI_MODEL_UPDATE_JOB,
     AI_PROMPT_ACTION_JOB,
 )
 from hhs_ui.core.ui_state import save_ui_state
@@ -510,9 +509,83 @@ def execute_pending_ai_model_selection() -> None:
     save_ui_state()
 
 
+def request_ai_model_update(model_name: str, model_status: str) -> None:
+    """Schedule an installed Ollama model update."""
+    st.session_state["ai_model_update_error"] = ""
+    st.session_state["ai_model_update_execute_pending"] = None
+    if model_status not in ("Active", "Downloaded"):
+        message = "Only installed Ollama models can be updated."
+        st.session_state["ai_model_update_error"] = message
+        push_floating_status(message, "warn")
+        return
+    st.session_state["ai_model_update_execute_pending"] = {
+        "name": model_name,
+        "status": model_status,
+    }
+
+
+def execute_pending_ai_model_update() -> None:
+    """Start or complete the pending Ollama model update."""
+    pending = st.session_state.pop("ai_model_update_execute_pending", None) or {}
+    model_name = str(pending.get("name", "")).strip()
+    model_status = str(pending.get("status", "")).strip()
+    if model_name:
+        if model_status not in ("Active", "Downloaded"):
+            message = "Only installed Ollama models can be updated."
+            st.session_state["ai_model_update_error"] = message
+            push_floating_status(message, "warn")
+            save_ui_state()
+            return
+        started = start_background_bash_command(
+            AI_MODEL_UPDATE_JOB,
+            build_hhs_ask_update_model_command(model_name),
+            "Updating Ollama model",
+            hhs_ui_constants.UI_COMMAND_MODEL_DOWNLOAD_TIMEOUT_SECONDS,
+            metadata={"model_name": model_name},
+            show_preloader_event=True,
+        )
+        if started:
+            push_floating_status(f"Updating AI model: {model_name}", "info")
+        else:
+            st.session_state["ai_model_update_execute_pending"] = pending
+            push_floating_status("Another AI model update is already running.", "warn")
+
+    completed = background_job_result(AI_MODEL_UPDATE_JOB)
+    if completed is None:
+        save_ui_state()
+        return
+
+    result, metadata = completed
+    model_name = str(metadata.get("model_name", model_name)).strip()
+    status_message = clean_command_status_message(result.stdout or result.stderr or "")
+    if result.returncode != 0:
+        st.session_state["ai_model_update_error"] = strip_ansi(
+            status_message or "Unable to update model."
+        )
+        push_floating_status(st.session_state["ai_model_update_error"], "error")
+    else:
+        st.session_state["ai_model_update_error"] = ""
+        refresh_ai_model_listing()
+        push_floating_status(
+            status_message or f"Updated AI model: {model_name}", "info"
+        )
+    save_ui_state()
+
+
 def request_ai_model_deletion(model_name: str, model_status: str) -> None:
     """Show the AI model deletion confirmation prompt."""
     st.session_state["ai_model_delete_error"] = ""
+    st.session_state["ai_model_delete_pending"] = None
+    if model_status == "Active":
+        message = "Deleting the active model is not possible."
+        st.session_state["ai_model_delete_error"] = message
+        push_floating_status(message, "warn")
+        return
+    if model_status != "Downloaded":
+        message = "Only installed, inactive Ollama models can be deleted."
+        st.session_state["ai_model_delete_error"] = message
+        push_floating_status(message, "warn")
+        return
     st.session_state["ai_model_delete_pending"] = {
         "name": model_name,
         "status": model_status,
@@ -533,22 +606,32 @@ def confirm_ai_model_deletion() -> None:
 
 
 def execute_pending_ai_model_deletion() -> None:
-    """Start or complete the pending Ollama model deletion flow."""
+    """Start or complete the pending Ollama model deletion."""
     pending = st.session_state.pop("ai_model_delete_execute_pending", None) or {}
     if isinstance(pending, str):
         pending = {"name": pending, "status": ""}
     model_name = str(pending.get("name", "")).strip()
     model_status = str(pending.get("status", "")).strip()
     if model_name:
+        if model_status == "Active":
+            message = "Deleting the active model is not possible."
+            st.session_state["ai_model_delete_error"] = message
+            push_floating_status(message, "warn")
+            save_ui_state()
+            return
+        if model_status != "Downloaded":
+            message = "Only installed, inactive Ollama models can be deleted."
+            st.session_state["ai_model_delete_error"] = message
+            push_floating_status(message, "warn")
+            save_ui_state()
+            return
         started = start_background_bash_command(
             AI_MODEL_DELETE_JOB,
-            build_ollama_delete_model_command(model_name),
+            build_hhs_ask_remove_model_command(model_name),
             "Deleting Ollama model",
             hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
             metadata={
-                "phase": "delete",
                 "model_name": model_name,
-                "model_status": model_status,
             },
             show_preloader_event=True,
         )
@@ -566,110 +649,20 @@ def execute_pending_ai_model_deletion() -> None:
         return
 
     result, metadata = completed
-    phase = str(metadata.get("phase", "delete"))
     model_name = str(metadata.get("model_name", model_name)).strip()
-    model_status = str(metadata.get("model_status", model_status)).strip()
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
-
-    if phase == "delete":
-        if result.returncode == 0:
-            refresh_ai_model_listing()
-        complete_ai_model_delete_phase(result, model_name, model_status, status_message)
-    elif phase == "fallback_list":
-        complete_ai_model_delete_fallback_list_phase(result, model_name)
-    elif phase == "fallback_select":
-        fallback_model = str(metadata.get("fallback_model", "")).strip()
-        complete_ai_model_delete_fallback_select_phase(
-            result, fallback_model, status_message
-        )
-    save_ui_state()
-
-
-def complete_ai_model_delete_phase(
-    result: subprocess.CompletedProcess[str],
-    model_name: str,
-    model_status: str,
-    status_message: str,
-) -> None:
-    """Complete the Ollama model deletion phase and start fallback discovery."""
     if result.returncode != 0:
         st.session_state["ai_model_delete_error"] = strip_ansi(
             status_message or "Unable to delete model."
         )
         push_floating_status(st.session_state["ai_model_delete_error"], "error")
-        return
-
-    st.session_state["ai_model_delete_error"] = ""
-    refresh_ai_model_listing()
-    push_floating_status(status_message or f"Deleted AI model: {model_name}", "info")
-    if model_status != "Active":
-        return
-
-    start_background_bash_command(
-        AI_MODEL_DELETE_JOB,
-        build_hhs_ask_models_command(),
-        "Loading fallback Ollama model",
-        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
-        metadata={"phase": "fallback_list", "model_name": model_name},
-        show_preloader_event=True,
-    )
-
-
-def complete_ai_model_delete_fallback_list_phase(
-    result: subprocess.CompletedProcess[str], model_name: str
-) -> None:
-    """Complete fallback model discovery after deleting an active model."""
-    if result.returncode != 0:
-        st.session_state["ai_model_delete_error"] = strip_ansi(
-            result.stderr or result.stdout or "Unable to list fallback Ollama models."
+    else:
+        st.session_state["ai_model_delete_error"] = ""
+        refresh_ai_model_listing()
+        push_floating_status(
+            status_message or f"Deleted AI model: {model_name}", "info"
         )
-        push_floating_status(st.session_state["ai_model_delete_error"], "error")
-        return
-
-    cache_background_command_result(
-        {
-            **background_command_metadata(build_hhs_ask_models_command(), "ai_models"),
-            "ttl_seconds": hhs_ui.UI_CACHE_LOW_CHANGE_TTL_SECONDS,
-        },
-        result,
-    )
-    fallback_model = first_downloaded_ollama_model(
-        result.stdout, excluded_model=model_name
-    )
-    if not fallback_model:
-        return
-    start_background_bash_command(
-        AI_MODEL_DELETE_JOB,
-        build_hhs_ask_select_model_command(fallback_model),
-        "Selecting fallback Ollama model",
-        hhs_ui_constants.UI_COMMAND_SLOW_READ_TIMEOUT_SECONDS,
-        metadata={
-            "phase": "fallback_select",
-            "model_name": model_name,
-            "fallback_model": fallback_model,
-        },
-        show_preloader_event=True,
-    )
-
-
-def complete_ai_model_delete_fallback_select_phase(
-    result: subprocess.CompletedProcess[str],
-    fallback_model: str,
-    status_message: str,
-) -> None:
-    """Complete fallback model selection after deleting the active model."""
-    if result.returncode != 0:
-        st.session_state["ai_model_delete_error"] = strip_ansi(
-            status_message or "Unable to select fallback model."
-        )
-        push_floating_status(st.session_state["ai_model_delete_error"], "error")
-        return
-
-    refresh_ai_model_listing()
-    push_floating_status(
-        status_message or f"Selected fallback AI model: {fallback_model}",
-        "info",
-    )
+    save_ui_state()
 
 
 def model_characteristics_tooltip_html(
@@ -1332,8 +1325,13 @@ def render_ai_settings_panel() -> None:
             pending_delete_name = str(pending_delete)
         render_ai_model_delete_dialog(pending_delete_name)
         return
-    if background_job_is_running(AI_MODEL_SELECT_JOB) or background_job_is_running(
-        AI_MODEL_DELETE_JOB
+    if any(
+        background_job_is_running(job_name)
+        for job_name in (
+            AI_MODEL_SELECT_JOB,
+            AI_MODEL_UPDATE_JOB,
+            AI_MODEL_DELETE_JOB,
+        )
     ):
         return
 
@@ -1400,20 +1398,28 @@ def render_ai_settings_panel() -> None:
                     str(row.get("Status", "")),
                 ),
             },
-        ],
-        selected_action_buttons=[
+            {
+                "label": "Update Model",
+                "key_prefix": "ai_update_model_button",
+                "on_click": request_ai_model_update,
+                "disabled": lambda row, _index: str(row.get("Status", ""))
+                not in ("Active", "Downloaded"),
+                "args": lambda row, _index: (
+                    row["Name"],
+                    str(row.get("Status", "")),
+                ),
+            },
             {
                 "label": "Delete Model",
-                "glyph": "",
-                "help": "Delete the selected Ollama model",
+                "help": "Delete an installed inactive model",
                 "key_prefix": "ai_delete_model_button",
                 "on_click": request_ai_model_deletion,
-                "visible": lambda row, _index: str(row.get("Status", ""))
-                in ("Active", "Downloaded"),
+                "disabled": lambda row, _index: str(row.get("Status", ""))
+                != "Downloaded",
                 "args": lambda row, _index: (row["Name"], str(row.get("Status", ""))),
             },
         ],
-        action_column_weights=[1],
+        action_column_weights=[1, 1, 1],
     )
     if selected_index is not None:
         actions_anchor_id = f"hhs-ai-model-actions-{selected_index}"
@@ -1428,6 +1434,8 @@ def render_ai_settings_panel() -> None:
 
     if st.session_state.get("ai_model_select_error"):
         st.error(st.session_state["ai_model_select_error"])
+    if st.session_state.get("ai_model_update_error"):
+        st.error(st.session_state["ai_model_update_error"])
     if st.session_state.get("ai_model_delete_error"):
         st.error(st.session_state["ai_model_delete_error"])
 
@@ -1445,6 +1453,10 @@ def render_ai_view() -> None:
         AI_MODEL_SELECT_JOB
     ):
         execute_pending_ai_model_selection()
+    if st.session_state.get("ai_model_update_execute_pending") or background_job_state(
+        AI_MODEL_UPDATE_JOB
+    ):
+        execute_pending_ai_model_update()
     if st.session_state.get("ai_model_delete_execute_pending") or background_job_state(
         AI_MODEL_DELETE_JOB
     ):
@@ -1471,5 +1483,6 @@ def render_ai_view() -> None:
         render_ai_context_panel()
     elif ai_view == "SETTINGS":
         render_background_job_status(AI_MODEL_SELECT_JOB)
+        render_background_job_status(AI_MODEL_UPDATE_JOB)
         render_background_job_status(AI_MODEL_DELETE_JOB)
         render_ai_settings_panel()

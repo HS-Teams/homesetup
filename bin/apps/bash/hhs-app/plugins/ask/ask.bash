@@ -14,14 +14,16 @@
 PLUGIN_NAME="ask"
 
 # Current script version.
-VERSION="1.2.0"
+VERSION="2.0.0"
 
 # Namespace cleanup
 UNSETS=(
   help version cleanup execute render_ollama_prompt_template render_ollama_response
   load_ollama_model load_ollama_context load_ollama_prompt show_context show_prompt
   clear_context is_text_context_file
-  ingest_context show_models start_ollama select_ollama_model ensure_ollama
+  ingest_context show_models start_ollama normalize_ollama_model_name
+  ollama_model_is_downloaded
+  select_ollama_model update_ollama_model remove_ollama_model ensure_ollama
 )
 
 # Usage message
@@ -42,9 +44,11 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <question> [options]
       -c | --context                   : Show current Ollama context (history) and exit.
       -p | --prompt                    : Show the main Ollama system prompt and exit.
       -i | --ingest [file]             : Set Ollama context from a text-based file and exit.
-      -r | --reset                     : Reset history before executing (fresh new session) and exit.
+           --reset                     : Reset history before executing (fresh new session) and exit.
       -m | --models                    : List available Ollama models and exit.
       -s | --select-model [model_name] : Select the Ollama model to use.
+      -u | --update-model [model_name] : Update an installed Ollama model.
+      -r | --remove-model [model_name] : Remove an installed Ollama model.
       -k | --keep                      : Keep the response file after execution.
 
     arguments:
@@ -59,6 +63,10 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <question> [options]
         => ${APP_NAME} ${PLUGIN_NAME} --ingest notes.md
       Reset history before asking:
         => ${APP_NAME} ${PLUGIN_NAME} --reset
+      Update an installed model:
+        => ${APP_NAME} ${PLUGIN_NAME} --update-model llama3.1:latest
+      Remove an installed model:
+        => ${APP_NAME} ${PLUGIN_NAME} --remove-model llama3.1:latest
 
     exit status:
       (0) Success
@@ -67,6 +75,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} <question> [options]
 
   Notes:
     - When piped input is provided, it is used as context for the question.
+    - Deleting the active model is not possible.
 
 EOF
 
@@ -422,6 +431,23 @@ function show_models() {
   quit 0
 }
 
+# @purpose: Return a canonical Ollama model name with an explicit default tag.
+function normalize_ollama_model_name() {
+  local model_name="${1}" model_leaf
+
+  model_leaf="${model_name##*/}"
+  [[ "${model_leaf}" == *:* ]] || model_name="${model_name}:latest"
+  printf "%s" "${model_name}"
+}
+
+# @purpose: Return whether an Ollama model is installed locally.
+function ollama_model_is_downloaded() {
+  local model_name="${1}"
+
+  model_name="$(normalize_ollama_model_name "${model_name}")"
+  ollama list | tail -n +2 | awk '{print $1}' | grep -Fxq -- "${model_name}"
+}
+
 # @purpose: Select ollama model to use
 # shellcheck disable=SC2120
 function select_ollama_model() {
@@ -452,7 +478,8 @@ function select_ollama_model() {
   fi
 
   if [[ -n "${model_name}" ]]; then
-    if ! ollama list | tail -n +2 | awk '{print $1}' | grep -Fxq "${model_name}"; then
+    model_name="$(normalize_ollama_model_name "${model_name}")"
+    if ! ollama_model_is_downloaded "${model_name}"; then
       if ! ollama pull "${model_name}"; then
         quit 2 "Unable to download ollama model: ${model_name}!"
       fi
@@ -464,6 +491,30 @@ function select_ollama_model() {
   fi
 
   quit 0 "${GREEN}✨ Ollama model set to '${model_name}'.${NC}"
+}
+
+# @purpose: Update an installed Ollama model.
+function update_ollama_model() {
+  local model_name="${1}"
+
+  [[ -n "${model_name}" ]] || usage 1 "Missing model name for --update-model."
+  model_name="$(normalize_ollama_model_name "${model_name}")"
+  ollama_model_is_downloaded "${model_name}" || quit 1 "Ollama model is not installed: ${model_name}"
+  ollama pull "${model_name}" || quit 2 "Unable to update Ollama model: ${model_name}"
+  quit 0 "${GREEN}✨ Ollama model updated: '${model_name}'.${NC}"
+}
+
+# @purpose: Remove an installed, inactive Ollama model.
+function remove_ollama_model() {
+  local model_name="${1}" active_model
+
+  [[ -n "${model_name}" ]] || usage 1 "Missing model name for --remove-model."
+  model_name="$(normalize_ollama_model_name "${model_name}")"
+  active_model="$(normalize_ollama_model_name "${OLLAMA_MODEL}")"
+  [[ "${model_name}" != "${active_model}" ]] || quit 1 "Deleting the active model is not possible."
+  ollama_model_is_downloaded "${model_name}" || quit 1 "Ollama model is not installed: ${model_name}"
+  ollama rm "${model_name}" || quit 2 "Unable to remove Ollama model: ${model_name}"
+  quit 0 "${GREEN}✨ Ollama model removed: '${model_name}'.${NC}"
 }
 
 # @purpose: Get context window size for the selected ollama model
@@ -514,9 +565,11 @@ function execute() {
       kb_size=${ctx_window#*:}
       ingest_context "$1"
       ;;
-    -r|--reset) clear_context ;;
+    --reset) clear_context ;;
     -m|--models) load_ollama_model; show_models ;;
     -s|--select-model) shift; load_ollama_model; select_ollama_model "$@";;
+    -u|--update-model) shift; update_ollama_model "$@" ;;
+    -r|--remove-model) shift; load_ollama_model; remove_ollama_model "$@" ;;
     -k|--keep) KEEP=1 ;;
   esac
 

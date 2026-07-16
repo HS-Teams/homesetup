@@ -4171,6 +4171,8 @@ def initialize_core_session_state() -> None:
         ("ai_model_select_pending", None),
         ("ai_model_select_execute_pending", None),
         ("ai_model_select_error", ""),
+        ("ai_model_update_execute_pending", None),
+        ("ai_model_update_error", ""),
         ("ai_model_delete_pending", None),
         ("ai_model_delete_execute_pending", None),
         ("ai_model_delete_error", ""),

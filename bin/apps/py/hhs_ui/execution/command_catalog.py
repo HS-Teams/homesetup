@@ -375,16 +375,6 @@ def parse_downloaded_ollama_models(output: str) -> set[str]:
     return models
 
 
-def first_downloaded_ollama_model(output: str, excluded_model: str = "") -> str:
-    """Return the first downloaded Ollama model listed in the available models table."""
-    downloaded_models = parse_downloaded_ollama_models(output)
-    for row in parse_ollama_model_rows(output):
-        model_name = row["Name"]
-        if model_name != excluded_model and model_name in downloaded_models:
-            return model_name
-    return ""
-
-
 def ollama_model_status(
     model_name: str, current_model: str, downloaded_models: set[str]
 ) -> str:
@@ -1814,7 +1804,7 @@ def build_hhs_revert_ask_prompt_file_command() -> str:
 
 def build_hhs_ask_reset_command() -> str:
     """Build the Bash command used to reset the current Ollama ask context."""
-    return build_hhs_ask_execute_command(["-r"])
+    return build_hhs_ask_execute_command(["--reset"])
 
 
 def build_hhs_ask_ingest_command(file_path: str) -> str:
@@ -1832,9 +1822,14 @@ def build_hhs_ask_select_model_command(model_name: str) -> str:
     return build_hhs_ask_execute_command(["-s", model_name])
 
 
-def build_ollama_delete_model_command(model_name: str) -> str:
-    """Build the Bash command used to delete an Ollama model."""
-    return f"ollama rm {shlex.quote(model_name)}"
+def build_hhs_ask_update_model_command(model_name: str) -> str:
+    """Build the Bash command used to update an installed Ollama ask model."""
+    return build_hhs_ask_execute_command(["-u", model_name])
+
+
+def build_hhs_ask_remove_model_command(model_name: str) -> str:
+    """Build the Bash command used to remove an installed Ollama ask model."""
+    return build_hhs_ask_execute_command(["-r", model_name])
 
 
 def build_hhs_path_environment_command() -> str:

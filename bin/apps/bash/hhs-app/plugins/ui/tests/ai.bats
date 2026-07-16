@@ -23,7 +23,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
 # TC - 13
 
-@test "when using Ask AI then chat and model settings should support context, reset, select, and delete" {
+@test "when using Ask AI then chat and model settings should support context and model management" {
   assert_file_contains_many "${constants_file}" \
 'APP_AI_USER_AVATAR_FILE = APP_DIR / "assets/images/user.png"' \
     'APP_AI_OLLAMA_AVATAR_FILE = APP_DIR / "assets/images/ollama.png"' \
@@ -48,8 +48,11 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
   assert_file_contains_many "${command_catalog_file}" \
 'build_hhs_ask_execute_command(\["-k", message\])' 'build_hhs_ask_execute_command(\["-c"\])' \
-    'build_hhs_ask_execute_command(\["-r"\])' \
+    'build_hhs_ask_execute_command(\["--reset"\])' \
     'build_hhs_ask_execute_command(\["-i", file_path\])' 'build_hhs_ask_execute_command(\["-m"\])' \
+    'build_hhs_ask_execute_command(\["-s", model_name\])' \
+    'build_hhs_ask_execute_command(\["-u", model_name\])' \
+    'build_hhs_ask_execute_command(\["-r", model_name\])' \
     'def build_hhs_ask_prompt_file_command' 'def build_hhs_save_ask_prompt_file_command' \
     'def build_hhs_revert_ask_prompt_file_command' 'cat "${HHS_OLLAMA_PROMPT_FILE}"' \
     'prompt_file="${HHS_OLLAMA_PROMPT_FILE}"' \
@@ -253,7 +256,7 @@ PY
 'function ingest_context' 'is_text_context_file'
   run grep -Fq -- 'printf "%s" "(${ctx} * 0.7)/1" | bc' "${ask_file}"
   assert_success
-  run grep -q -- '-r|--reset) clear_context' "${ask_file}"
+  run grep -q -- '--reset) clear_context' "${ask_file}"
   assert_success
 
   assert_file_not_contains "${ai_ui_file}" 'disabled=not st.session_state\["ai_chat_messages"\]'
@@ -283,7 +286,7 @@ PY
     'def file_size_bytes' 'prompt_size = file_size_bytes(ollama_prompt_file())' \
     'history_size = file_size_bytes(ollama_history_file())' \
     'percent_of_context(prompt_size + history_size' '"Ctx Used"' \
-    'Prompt: ' 'Context: ' 'def parse_ollama_model_rows' 'def first_downloaded_ollama_model'
+    'Prompt: ' 'Context: ' 'def parse_ollama_model_rows'
   assert_file_contains_many "${ai_ui_file}" \
 'Current logged user' 'def record_ai_model_request_duration' 'def ai_chat_meta_html' \
     'def model_characteristics_tooltip_html' 'def ai_model_recent_duration_tooltip_html' \
@@ -307,7 +310,7 @@ PY
   assert_file_contains_many "${ai_ui_file}" \
 'ask_started_at = time.perf_counter()' \
     'record_ai_model_request_duration(ollama_model, request_duration)' '"Latency"' \
-    'Delete Model' 'Select Model'
+    'Delete Model' 'Update Model' 'Select Model'
 }
 
 # TC - 14
@@ -317,6 +320,130 @@ PY
 'ollama pull "${model_name}"' '__hhs_toml_set "${HHS_SETUP_FILE}" "hhs_ollama_model=${model_name}" "ollama"'
   assert_file_not_contains_many "${ai_ui_file}" \
 'ollama pull' 'build_ollama_download_and_select_model_command'
+}
+
+@test "when managing Ask models then update and remove should protect the active model" {
+  assert_file_contains_many "${ask_file}" \
+'VERSION="2.0.0"' '--reset' '-u | --update-model [model_name]' \
+    '-r | --remove-model [model_name]' 'function update_ollama_model' \
+    'function remove_ollama_model' 'function normalize_ollama_model_name' \
+    'ollama pull "${model_name}"' \
+    'ollama rm "${model_name}"' 'Deleting the active model is not possible.' \
+    '-u|--update-model) shift; update_ollama_model "$@"' \
+    '-r|--remove-model) shift; load_ollama_model; remove_ollama_model "$@"'
+  assert_file_not_contains "${ask_file}" '-r|--reset)'
+
+  run bash --noprofile --norc -c '
+    export APP_NAME="hhs"
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_SETUP_FILE="${2}/setup.toml"
+    export HHS_OLLAMA_HISTORY_FILE="${2}/history.md"
+    export HHS_MY_OS="Darwin"
+    export HHS_MY_OS_RELEASE="test"
+    export HHS_MY_SHELL="bash"
+    export HHS_GITHUB_URL="https://example.invalid/hhs"
+    export IS_PIPED=0
+    export MODEL_COMMAND_LOG="${2}/model-commands.log"
+    mkdir -p "${HHS_DIR}"
+
+    function __hhs_toml_get() {
+      printf "hhs_ollama_model=active:latest\n"
+    }
+    function ollama() {
+      printf "%s\n" "$*" >> "${MODEL_COMMAND_LOG}"
+      case "${1}" in
+        list)
+          printf "NAME ID SIZE MODIFIED\nactive:latest id 1GB now\nlocal:latest id 1GB now\n"
+        ;;
+        pull|rm) return 0 ;;
+      esac
+    }
+    function usage() {
+      exit "${1:-1}"
+    }
+    function quit() {
+      local exit_code="${1:-0}"
+      shift
+      [[ "$#" -eq 0 ]] || printf "%s\n" "$*"
+      exit "${exit_code}"
+    }
+    function run_model_operation() (
+      source "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/ask.bash"
+      execute "$@"
+    )
+
+    run_model_operation --update-model local:latest || exit 10
+    run_model_operation --remove-model local:latest || exit 11
+    active_output="$(run_model_operation -r active 2>&1)"
+    active_status=$?
+    [[ "${active_status}" -eq 1 ]] || exit 12
+    [[ "${active_output}" == *"Deleting the active model is not possible."* ]] || exit 13
+    grep -Fxq "pull local:latest" "${MODEL_COMMAND_LOG}" || exit 14
+    grep -Fxq "rm local:latest" "${MODEL_COMMAND_LOG}" || exit 15
+    ! grep -Fq "rm active" "${MODEL_COMMAND_LOG}" || exit 16
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}"
+  assert_success
+
+  assert_file_contains_many "${ai_ui_file}" \
+'build_hhs_ask_update_model_command(model_name)' \
+    'build_hhs_ask_remove_model_command(model_name)' \
+    '"disabled": lambda row, _index: str(row.get("Status", ""))' \
+    '!= "Downloaded"' 'action_column_weights=\[1, 1, 1\]' \
+    'message = "Deleting the active model is not possible."'
+  assert_file_not_contains_many "${ai_ui_file}" \
+'build_ollama_delete_model_command' 'fallback_model' 'selected_action_buttons='
+  assert_file_not_contains "${command_catalog_file}" 'def build_ollama_delete_model_command'
+  assert_file_contains_many "${ui_file}" \
+'("ai_model_update_execute_pending", None)' '("ai_model_update_error", "")'
+
+  run python3 - "${ai_ui_file}" <<'PY'
+import ast
+from pathlib import Path
+from types import SimpleNamespace
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+tree = ast.parse(source)
+source_lines = source.splitlines()
+functions = {
+    node.name: "\n".join(source_lines[node.lineno - 1 : node.end_lineno])
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef)
+}
+messages = []
+namespace = {
+    "st": SimpleNamespace(session_state={}),
+    "push_floating_status": lambda message, level: messages.append((message, level)),
+}
+exec(
+    "from __future__ import annotations\n"
+    + functions["request_ai_model_update"]
+    + "\n\n"
+    + functions["request_ai_model_deletion"],
+    namespace,
+)
+namespace["request_ai_model_deletion"]("active:latest", "Active")
+assert namespace["st"].session_state["ai_model_delete_error"] == (
+    "Deleting the active model is not possible."
+)
+assert namespace["st"].session_state["ai_model_delete_pending"] is None
+namespace["request_ai_model_deletion"]("local:latest", "Downloaded")
+assert namespace["st"].session_state["ai_model_delete_pending"] == {
+    "name": "local:latest",
+    "status": "Downloaded",
+}
+namespace["request_ai_model_update"]("remote:latest", "")
+assert namespace["st"].session_state["ai_model_update_error"] == (
+    "Only installed Ollama models can be updated."
+)
+namespace["request_ai_model_update"]("active:latest", "Active")
+assert namespace["st"].session_state["ai_model_update_execute_pending"] == {
+    "name": "active:latest",
+    "status": "Active",
+}
+PY
+  assert_success
 }
 
 @test "when UI creates disposable files then cache paths should be deterministic" {
