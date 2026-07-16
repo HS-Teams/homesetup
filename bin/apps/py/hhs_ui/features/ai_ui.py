@@ -924,39 +924,41 @@ def scroll_to_ai_model_actions(anchor_id: str) -> None:
     render_script_html(
         f"""
         <script>
-          const anchor_id = {anchor_id!r};
-          const scroll_to_actions = () => {{
-            const doc = window.parent.document;
-            const target = doc.getElementById(anchor_id);
-            const scrollables = () => [
-              doc.scrollingElement,
-              doc.documentElement,
-              doc.body,
-              ...Array.from(doc.querySelectorAll("*")).filter((element) => {{
-                const style = window.parent.getComputedStyle(element);
-                const can_scroll = /(auto|scroll)/.test(style.overflowY + style.overflow);
-                return can_scroll && element.scrollHeight > element.clientHeight;
-              }})
-            ].filter(Boolean);
-            const scroll_bottom = () => {{
-              const scroll_height = Math.max(
-                doc.body.scrollHeight,
-                doc.documentElement.scrollHeight
-              );
-              window.parent.scrollTo({{ top: scroll_height, behavior: "auto" }});
-              for (const item of scrollables()) {{
-                item.scrollTop = item.scrollHeight;
-              }}
-              if (target) {{
-                target.scrollIntoView({{ behavior: "auto", block: "end", inline: "nearest" }});
-              }}
+          (() => {{
+            const anchor_id = {anchor_id!r};
+            const scroll_to_actions = () => {{
+              const doc = window.parent.document;
+              const target = doc.getElementById(anchor_id);
+              const scrollables = () => [
+                doc.scrollingElement,
+                doc.documentElement,
+                doc.body,
+                ...Array.from(doc.querySelectorAll("*")).filter((element) => {{
+                  const style = window.parent.getComputedStyle(element);
+                  const can_scroll = /(auto|scroll)/.test(style.overflowY + style.overflow);
+                  return can_scroll && element.scrollHeight > element.clientHeight;
+                }})
+              ].filter(Boolean);
+              const scroll_bottom = () => {{
+                const scroll_height = Math.max(
+                  doc.body.scrollHeight,
+                  doc.documentElement.scrollHeight
+                );
+                window.parent.scrollTo({{ top: scroll_height, behavior: "auto" }});
+                for (const item of scrollables()) {{
+                  item.scrollTop = item.scrollHeight;
+                }}
+                if (target) {{
+                  target.scrollIntoView({{ behavior: "auto", block: "end", inline: "nearest" }});
+                }}
+              }};
+              [0, 50, 150, 300, 600, 1000].forEach((delay) => {{
+                window.setTimeout(scroll_bottom, delay);
+              }});
+              window.requestAnimationFrame(scroll_bottom);
             }};
-            [0, 50, 150, 300, 600, 1000].forEach((delay) => {{
-              window.setTimeout(scroll_bottom, delay);
-            }});
-            window.requestAnimationFrame(scroll_bottom);
-          }};
-          window.setTimeout(scroll_to_actions, 50);
+            window.setTimeout(scroll_to_actions, 50);
+          }})();
         </script>
         """,
         height=hhs_ui.AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT,

@@ -535,6 +535,7 @@ PY
     '"ai_model_filter"' '"ai_model_other_filter"' \
     'hhs_ui.FOUR_OPTION_FILTER_COLUMNS' 'placeholder="Type model filter"' \
     'filter_ollama_model_rows(available_rows, model_filter, other_filter)'
+  assert_file_contains "${ai_ui_file}" '(() => {{'
   assert_file_contains_many "${ui_file}" \
 '("ai_model_filter", "All")' '("ai_model_other_filter", "")' \
     '("ai_model_filter", hhs_ui.AI_MODEL_FILTERS)'
@@ -556,6 +557,41 @@ PY
   assert_file_contains_many "${ai_ui_file}" \
 'status == "Downloaded"' 'color: #4da3ff'
   run grep -q -- '--hhs-model-accent: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  assert_success
+
+  run python3 - "${ai_ui_file}" <<'PY'
+import ast
+from pathlib import Path
+from types import SimpleNamespace
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+tree = ast.parse(source)
+source_lines = source.splitlines()
+function = next(
+    node
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef) and node.name == "scroll_to_ai_model_actions"
+)
+rendered_scripts = []
+namespace = {
+    "hhs_ui": SimpleNamespace(AI_MODEL_ACTION_SCROLL_HELPER_HEIGHT=0),
+    "render_script_html": lambda body, **_kwargs: rendered_scripts.append(body),
+}
+exec(
+    "from __future__ import annotations\n"
+    + "\n".join(source_lines[function.lineno - 1 : function.end_lineno]),
+    namespace,
+)
+namespace["scroll_to_ai_model_actions"]("hhs-ai-model-actions-1")
+namespace["scroll_to_ai_model_actions"]("hhs-ai-model-actions-2")
+assert len(rendered_scripts) == 2
+for script in rendered_scripts:
+    assert "(() => {" in script
+    assert "})();" in script
+    assert script.index("(() => {") < script.index("const anchor_id")
+    assert script.index("const anchor_id") < script.index("})();")
+PY
   assert_success
 
   run python3 - "${ai_ui_file}" "${command_catalog_file}" <<'PY'
