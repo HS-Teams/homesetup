@@ -865,12 +865,12 @@ source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text()
 search_source = Path("bin/apps/py/hhs_ui/features/search_ui.py").read_text()
 table_source = Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
 body = table_source.split("def render_table_filter_controls", 1)[1].split("\ndef ", 1)[0]
-assert "st.session_state[key] = options[safe_index]" in body
-assert "index=None" in body
+assert "table_filter_radio_index(options, key, index)" in body
+assert "index=radio_index" in body
 assert "index=index" not in body
 search_filter_body = search_source.split("def render_search_filters", 1)[1].split("\ndef ", 1)[0]
 assert "key=\"search_filter\"" in search_filter_body
-assert "index=None" in search_filter_body
+assert 'table_filter_radio_index(\n                    hhs_ui.SEARCH_FILTERS, "search_filter"' in search_filter_body
 main_view_body = source.split("def render_main_view", 1)[1].split("\ndef ", 1)[0]
 active_control_body = source.split("def render_active_view_control", 1)[1].split("\ndef ", 1)[0]
 assert "render_active_view_control(visible_views)" in main_view_body

@@ -32,6 +32,7 @@ functions = {
     node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)
 }
 filter_controls = functions["render_table_filter_controls"]
+radio_index_resolver = functions["table_filter_radio_index"]
 normalizer = functions["normalized_table_filter_selection"]
 text_filter_cleaner = functions["clean_table_text_filter_value"]
 text_filter_state_normalizer = functions["normalize_table_text_filter_state"]
@@ -49,17 +50,92 @@ keywords = {keyword.arg: keyword.value for keyword in radio_calls[0].keywords}
 on_change = keywords["on_change"]
 assert isinstance(on_change, ast.Name)
 assert on_change.id == "save_ui_state"
+radio_index = keywords["index"]
+assert isinstance(radio_index, ast.Name)
+assert radio_index.id == "radio_index"
 assert "handle_monitor_disk_top_n_change" not in ast.unparse(filter_controls)
 assert "Containing" in ast.unparse(filter_controls)
 assert "Containing" in ast.unparse(normalizer)
 assert 'normalize_table_text_filter_state(other_key)' in ast.unparse(filter_controls)
 assert 'clean_table_text_filter_value(other_filter)' in ast.unparse(filter_controls)
+assert 'table_filter_radio_index(options, key, index)' in ast.unparse(filter_controls)
+assert 'st.session_state.pop(key, None)' in ast.unparse(radio_index_resolver)
+assert 'return max(0, min(index, len(options) - 1))' in ast.unparse(
+    radio_index_resolver
+)
 assert "clean_value == 'None'" in ast.unparse(persisted_text_filter_normalizer)
 assert any(
     isinstance(node, ast.Constant) and node.value == ""
     for node in ast.walk(text_filter_cleaner)
 )
 assert 'st.session_state[other_key] = clean_value' in ast.unparse(text_filter_state_normalizer)
+PY
+  assert_success
+
+  run python3 - "${table_ui_file}" <<'PY'
+from pathlib import Path
+import sys
+
+
+class Column:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+
+class StreamlitStub:
+    def __init__(self, session_state):
+        self.session_state = session_state
+        self.radio_indexes = []
+
+    def columns(self, *_args, **_kwargs):
+        return Column(), Column(), Column()
+
+    def radio(self, _label, options, *, index, key, **_kwargs):
+        self.radio_indexes.append(index)
+        if key not in self.session_state:
+            self.session_state[key] = options[index] if index is not None else None
+        return self.session_state[key]
+
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def table_filter_radio_index(")
+end = source.index("def normalized_table_filter_selection(")
+namespace = {
+    "clean_table_text_filter_value": lambda value: "" if value is None else str(value),
+    "save_ui_state": lambda: None,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+render_controls = namespace["render_table_filter_controls"]
+options = ("All", "Downloaded", "Active", "Other")
+
+for invalid_state in ({}, {"ai_model_filter": None}, {"ai_model_filter": "Invalid"}):
+    st = StreamlitStub(invalid_state)
+    namespace["st"] = st
+    selected_filter, other_filter = render_controls(
+        options,
+        "ai_model_filter",
+        "ai_model_other_filter",
+        [1.75, 2.25],
+    )
+    assert selected_filter == "All"
+    assert other_filter == ""
+    assert st.session_state["ai_model_filter"] == "All"
+    assert st.radio_indexes == [0]
+
+valid_state = {"ai_model_filter": "Active"}
+st = StreamlitStub(valid_state)
+namespace["st"] = st
+selected_filter, _ = render_controls(
+    options,
+    "ai_model_filter",
+    "ai_model_other_filter",
+    [1.75, 2.25],
+)
+assert selected_filter == "Active"
+assert st.radio_indexes == [None]
 PY
   assert_success
 

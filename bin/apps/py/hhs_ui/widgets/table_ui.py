@@ -1089,6 +1089,16 @@ def normalize_persisted_table_text_filter_states(*other_keys: str) -> None:
         st.session_state[other_key] = clean_value
 
 
+def table_filter_radio_index(
+    options: tuple[str, ...], key: str, index: int = 0
+) -> int | None:
+    """Return a concrete default index only when a filter has no valid state."""
+    if key in st.session_state and st.session_state.get(key) in options:
+        return None
+    st.session_state.pop(key, None)
+    return max(0, min(index, len(options) - 1))
+
+
 def render_table_filter_controls(
     options: tuple[str, ...],
     key: str,
@@ -1099,9 +1109,7 @@ def render_table_filter_controls(
     placeholder: str = "Type filter text",
 ) -> tuple[str, str]:
     """Render normalized table filter controls and return the selected filter text."""
-    if key not in st.session_state or st.session_state.get(key) not in options:
-        safe_index = max(0, min(index, len(options) - 1))
-        st.session_state[key] = options[safe_index] if options else ""
+    radio_index = table_filter_radio_index(options, key, index)
     filter_col, other_filter_col, clear_filter_col = st.columns(
         [*columns, 0.18], vertical_alignment="center", gap="small"
     )
@@ -1110,7 +1118,7 @@ def render_table_filter_controls(
             "Table filter",
             options,
             horizontal=True,
-            index=None,
+            index=radio_index,
             key=key,
             label_visibility="collapsed",
             help=(

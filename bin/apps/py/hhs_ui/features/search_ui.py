@@ -73,6 +73,7 @@ from hhs_ui.widgets.table_ui import (
     clear_table_other_filter,
     display_path_value,
     normalize_table_text_filter_state,
+    table_filter_radio_index,
 )
 from hhs_ui.core.ui_definitions import SEARCH_COMMAND_JOB, SEARCH_OPEN_JOB
 from hhs_ui.core.ui_state import save_ui_state
@@ -1268,7 +1269,9 @@ def render_search_filters() -> None:
                 "Table filter",
                 hhs_ui.SEARCH_FILTERS,
                 horizontal=True,
-                index=None,
+                index=table_filter_radio_index(
+                    hhs_ui.SEARCH_FILTERS, "search_filter"
+                ),
                 key="search_filter",
                 label_visibility="collapsed",
                 help=(
