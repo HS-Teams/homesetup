@@ -176,7 +176,10 @@ assert '<summary class="hhs-footer-terminal-ai-trigger"' in ui_source
 assert 'hhs-footer-terminal-ai-menu--disabled' in ui_source
 assert 'hhs-footer-terminal-ai-trigger--disabled' in ui_source
 assert 'aria-disabled="true"' in ui_source
-assert 'Open Terminal to ask AI about terminal output' in ui_source
+assert 'Open Terminal to ask AI about any terminal content' in ui_source
+assert 'title="Ask AI about any terminal content"' in ui_source
+assert 'aria-label="Ask AI about any terminal content"' in ui_source
+assert 'Ask AI about terminal' not in ui_source
 assert '<form class="hhs-footer-cache-clear-form" method="get">' not in ui_source
 assert '<div class="hhs-footer-cache-clear-panel" data-clear-param="{clear_param}">' in ui_source
 assert '<div class="hhs-footer-terminal-ai-panel" data-default-prompt="{default_prompt}">' in ui_source

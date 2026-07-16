@@ -529,11 +529,11 @@ def footer_terminal_ai_menu_markup(enabled: bool) -> str:
     if not enabled:
         return """
       <span class="hhs-footer-terminal-ai-menu hhs-footer-terminal-ai-menu--disabled"
-            title="Open Terminal to ask AI about terminal output"
+            title="Open Terminal to ask AI about any terminal content"
             aria-disabled="true">
         <span class="hhs-footer-terminal-ai-trigger hhs-footer-terminal-ai-trigger--disabled"
-              aria-label="Ask AI about terminal disabled"
-              title="Open Terminal to ask AI about terminal output">
+              aria-label="Ask AI about any terminal content disabled"
+              title="Open Terminal to ask AI about any terminal content">
           <span class="hhs-footer-glyph-button"></span>
         </span>
       </span>
@@ -541,8 +541,8 @@ def footer_terminal_ai_menu_markup(enabled: bool) -> str:
     return f"""
       <details class="hhs-footer-terminal-ai-menu">
         <summary class="hhs-footer-terminal-ai-trigger"
-                 title="Ask AI about terminal"
-                 aria-label="Ask AI about terminal">
+                 title="Ask AI about any terminal content"
+                 aria-label="Ask AI about any terminal content">
           <span class="hhs-footer-glyph-button"></span>
         </summary>
         <div class="hhs-footer-terminal-ai-panel" data-default-prompt="{default_prompt}">
