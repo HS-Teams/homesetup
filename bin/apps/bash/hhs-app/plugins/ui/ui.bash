@@ -15,7 +15,7 @@
 PLUGIN_NAME="ui"
 
 # Current HomeSetup UI plugin version.
-VERSION="0.0.50"
+VERSION="0.0.51"
 
 # Namespace cleanup.
 UNSETS=(
@@ -352,7 +352,7 @@ function record_ui_process() {
 
   tmp_file="${process_file}.$$"
   awk '$1 ~ /^[0-9]+$/ && $2 ~ /^[A-Za-z0-9_.-]+$/ && !seen[$1]++ { print $1, $2 }' "${process_file}" > "${tmp_file}" \
-    && mv "${tmp_file}" "${process_file}"
+    && command mv -f "${tmp_file}" "${process_file}"
 }
 
 # @purpose: Remove HomeSetup Streamlit UI process tracking files.

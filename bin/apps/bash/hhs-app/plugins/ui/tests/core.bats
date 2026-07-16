@@ -186,6 +186,25 @@ PY
 'known_pids="$(ui_known_pids)"' '\[\[ "$1" == "execute" \]\] && shift'
 }
 
+@test "when recording UI processes then file aliases should not request confirmation" {
+  run bash --noprofile --norc -c '
+    export HHS_HOME="${1}"
+    export HHS_DIR="${2}/hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
+    export HHS_LOG_DIR="${2}/log"
+    mkdir -p "${HHS_CACHE_DIR}" "${HHS_LOG_DIR}"
+    shopt -s expand_aliases
+    alias mv="\\mv -iv"
+    source "${3}"
+    record_ui_process 12345 hhs-ui.first
+    record_ui_process 23456 hhs-ui.second
+    cat "${HHS_CACHE_DIR}/.streamlit-ui.processes"
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_output $'12345 hhs-ui.first\n23456 hhs-ui.second'
+  refute_output --partial 'overwrite'
+}
+
 @test "when starting HomeSetup UI then persisted theme is passed to Streamlit startup" {
   run bash --noprofile --norc -c '
     export HHS_HOME="${1}"
