@@ -604,6 +604,7 @@ assert ".hhs-footer-remote-status" in base_css
 assert ".hhs-footer-status-group" in base_css
 assert ".hhs-footer-repository-link:hover" in base_css
 assert ".hhs-footer-working-dir-link:hover" in base_css
+assert "padding: 0 var(--hhs-element-std-gap) 0 var(--hhs-sidebar-inline-inset)" in app_footer_block
 assert ".hhs-footer-shell-status:hover" in base_css
 assert ".hhs-footer-shell-name" in base_css
 assert "text-decoration: none !important" in shell_name_block

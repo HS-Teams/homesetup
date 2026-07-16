@@ -1834,7 +1834,6 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
   border: 1px solid var(--hhs-theme-heading-border-color);
   border-radius: 0.4rem;
   box-sizing: border-box;
-  height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem);
   height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - var(--hhs-ttyd-shell-gap));
   margin: var(--hhs-ttyd-shell-gap) 0 0;
   max-height: var(--hhs-ttyd-max-height, 760px);
@@ -2511,7 +2510,7 @@ div[class*="_table_actions_"] [data-testid="stHorizontalBlock"] {
   gap: 0.8rem;
   left: 0;
   min-height: 3.25rem;
-  padding: 0 2rem 0 var(--hhs-sidebar-inline-inset);
+  padding: 0 var(--hhs-element-std-gap) 0 var(--hhs-sidebar-inline-inset);
   position: fixed;
   right: 0;
   z-index: var(--hhs-footer-z-index);
