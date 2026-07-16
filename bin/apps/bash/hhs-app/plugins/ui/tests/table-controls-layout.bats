@@ -58,6 +58,7 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
   assert_file_contains_many "${css_file}" \
 'gap: var(--hhs-element-std-gap)' 'gap: var(--hhs-element-std-gap) !important' \
+    'div\[data-testid="stHorizontalBlock"\]:has(.st-key-ai_model_other_filter)' \
     'div\[data-testid="stHorizontalBlock"\]:has(.st-key-env_other_filter)' \
     'div\[data-testid="stHorizontalBlock"\]:has(.st-key-home_shopts_other_filter)' \
     'div\[data-testid="stHorizontalBlock"\]:has(.st-key-home_tools_filter)' \
@@ -86,7 +87,8 @@ PY
   assert_success
 
   assert_file_contains_many "${css_file}" \
-'.st-key-home_shopts_other_filter input' 'div\[data-testid="stColumn"\]:first-child' \
+'.st-key-ai_model_other_filter input' '.st-key-home_shopts_other_filter input' \
+    'div\[data-testid="stColumn"\]:first-child' \
     'div\[data-testid="stColumn"\]:last-child' 'flex: 0 0 auto !important' \
     'div\[data-testid="stColumn"\]:nth-child(2)' 'flex: 1 1 auto !important' \
     'flex: 0 0 2.1rem !important' 'align-self: center !important' \

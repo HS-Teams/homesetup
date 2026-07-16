@@ -1903,6 +1903,7 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
 }
 
 .st-key-alias_other_filter,
+.st-key-ai_model_other_filter,
 .st-key-cmds_other_filter,
 .st-key-dirs_other_filter,
 .st-key-env_other_filter,
@@ -1919,6 +1920,7 @@ div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter),
+div[data-testid="stHorizontalBlock"]:has(.st-key-ai_model_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter),
 div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter),
@@ -1942,6 +1944,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_filter) {
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-testid="stColumn"]:first-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-ai_model_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter) > div[data-testid="stColumn"]:first-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter) > div[data-testid="stColumn"]:first-child,
@@ -1971,6 +1974,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_filter) > div[data-t
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-testid="stColumn"]:nth-child(2),
+div[data-testid="stHorizontalBlock"]:has(.st-key-ai_model_other_filter) > div[data-testid="stColumn"]:nth-child(2),
 div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter) > div[data-testid="stColumn"]:nth-child(2),
 div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter) > div[data-testid="stColumn"]:nth-child(2),
 div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter) > div[data-testid="stColumn"]:nth-child(2),
@@ -2000,6 +2004,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_filter) > div[data-t
 }
 
 div[data-testid="stHorizontalBlock"]:has(.st-key-alias_other_filter) > div[data-testid="stColumn"]:last-child,
+div[data-testid="stHorizontalBlock"]:has(.st-key-ai_model_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-cmds_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-dirs_other_filter) > div[data-testid="stColumn"]:last-child,
 div[data-testid="stHorizontalBlock"]:has(.st-key-env_other_filter) > div[data-testid="stColumn"]:last-child,
@@ -2032,6 +2037,7 @@ div[data-testid="stHorizontalBlock"]:has(.st-key-ssh_tunnel_filter) > div[data-t
 }
 
 .st-key-alias_other_filter input,
+.st-key-ai_model_other_filter input,
 .st-key-cmds_other_filter input,
 .st-key-dirs_other_filter input,
 .st-key-env_other_filter input,
