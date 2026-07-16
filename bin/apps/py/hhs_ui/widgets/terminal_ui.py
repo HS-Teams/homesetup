@@ -28,9 +28,10 @@ import streamlit as st
 
 import hhs_ui
 import hhs_ui.core.constants as hhs_ui_constants
-from hhs_ui.execution.command_catalog import open_file
+from hhs_ui.core.alert_history import append_footer_alert
 from hhs_ui.core.process_resources import process_resource_registry, process_resource_state
 from hhs_ui.core.runtime import RUN_SHELL
+from hhs_ui.execution.command_catalog import open_file
 from hhs_ui.features.ssh_core import (
     build_ssh_disconnect_command,
     ssh_config_option_args,
@@ -1170,6 +1171,9 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         """Handle navigator.sendBeacon cleanup requests."""
         request_path = urllib.parse.urlparse(self.path).path
+        if request_path == "/footer-alert":
+            self.handle_footer_alert_request()
+            return
         if request_path == "/ttyd-event":
             self.handle_ttyd_event_request()
             return
@@ -1202,6 +1206,34 @@ class TtydCleanupRequestHandler(BaseHTTPRequestHandler):
             event = {}
         if token and event:
             store_ttyd_event(token, event)
+        self.send_response(204)
+        self.end_headers()
+
+    def handle_footer_alert_request(self) -> None:
+        """Persist one client-side warning or error displayed by the footer bridge."""
+        parsed_url = urllib.parse.urlparse(self.path)
+        token = urllib.parse.parse_qs(parsed_url.query).get("token", [""])[0]
+        if not token or token not in TTYD_CLEANUP_REGISTRY:
+            self.send_response(403)
+            self.end_headers()
+            return
+        try:
+            content_length = max(
+                0,
+                min(int(self.headers.get("Content-Length", "0") or 0), 65_536),
+            )
+        except ValueError:
+            content_length = 0
+        try:
+            payload = json.loads(
+                self.rfile.read(content_length).decode("utf-8") or "{}"
+            )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            payload = {}
+        if isinstance(payload, dict):
+            append_footer_alert(
+                str(payload.get("message", "")), str(payload.get("kind", ""))
+            )
         self.send_response(204)
         self.end_headers()
 

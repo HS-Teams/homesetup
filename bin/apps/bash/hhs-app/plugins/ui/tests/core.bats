@@ -52,6 +52,7 @@ from pathlib import Path
 package_dir = Path(sys.argv[1])
 expected_groups = {
     "core": {
+        "alert_history.py",
         "constants.py",
         "paths.py",
         "performance.py",

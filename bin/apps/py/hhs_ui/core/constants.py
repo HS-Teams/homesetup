@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.146"
+VERSION = "0.1.154"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parents[1]
 APP_STATIC_DIR = APP_DIR / "static"
@@ -37,6 +37,7 @@ HHS_DIR = Path(os.environ.get("HHS_DIR", str(APP_DIR)))
 HHS_CACHE_DIR = Path(os.environ.get("HHS_CACHE_DIR", str(HHS_DIR / "cache")))
 UI_STATE_FILE = HHS_CACHE_DIR / "streamlit-ui-state.json"
 UI_CACHE_FILE = HHS_CACHE_DIR / "streamlit-ui-cache.json"
+FOOTER_ALERTS_FILE = HHS_CACHE_DIR / "streamlit-alerts.txt"
 UI_CACHE_SSH_CONNECTION_KEY = "ui:ssh_connection"
 SSH_RECONNECT_HOST_KEY = "ssh_reconnect_host"
 TTYD_INDEX_FILE = HHS_CACHE_DIR / "streamlit-ttyd-index.html"
@@ -67,6 +68,7 @@ FLOATING_STATUS_QUEUE_KEY = "_hhs_floating_status_queue"
 FLOATING_STATUS_LEGACY_KEY = "_hhs_floating_status"
 FLOATING_STATUS_QUEUE_LIMIT = 20
 FLOATING_STATUS_AUTO_DISPOSE_EXTENSION_SECONDS = 3.0
+FOOTER_ALERT_DEDUPLICATION_SECONDS = 10.0
 FOOTER_REMOTE_WORKING_DIR_KEY = "_hhs_footer_remote_working_dir"
 FOOTER_LOCAL_WORKING_DIR_KEY = "_hhs_footer_local_working_dir"
 TABLE_SELECTION_SNAPSHOT_KEY = "_hhs_table_selection_snapshots"
@@ -440,6 +442,8 @@ DOCUMENTS = {
 FOOTER_OPEN_WORKING_DIR_QUERY_PARAM = "hhs_open_working_dir"
 FOOTER_RUN_UPDATER_QUERY_PARAM = "hhs_run_updater_update"
 FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM = "hhs_show_shell_version"
+FOOTER_VIEW_ALERTS_QUERY_PARAM = "hhs_view_alerts"
+FOOTER_CLEAR_ALERTS_QUERY_PARAM = "hhs_clear_alerts"
 FOOTER_CLEAR_CACHE_QUERY_PARAM = "hhs_clear_cache"
 FOOTER_CLEAR_APPLICATION_CACHE_QUERY_PARAM = "hhs_clear_application_cache"
 FOOTER_CLEAR_APPLICATION_STATES_QUERY_PARAM = "hhs_clear_application_states"

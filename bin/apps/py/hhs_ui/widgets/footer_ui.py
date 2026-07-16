@@ -15,6 +15,13 @@ import streamlit as st
 
 import hhs_ui
 import hhs_ui.core.constants as hhs_ui_constants
+from hhs_ui.core.alert_history import (
+    clear_footer_alerts,
+    footer_alert_glyph,
+    footer_alert_priority,
+    footer_alerts_file,
+    today_footer_alerts,
+)
 from hhs_ui.execution.cache_runtime import (
     background_command_metadata,
     cache_background_command_result,
@@ -250,7 +257,8 @@ def homesetup_version(refresh_cache: bool = False) -> str:
 
 def render_footer_client_error_bridge_script() -> None:
     """Mirror client-side Streamlit errors and alerts into the footer status UI."""
-    render_script_html("""
+    alert_endpoint = footer_alert_endpoint_url()
+    script = """
         <script>
           (() => {
             const parentWindow = window.parent;
@@ -258,6 +266,20 @@ def render_footer_client_error_bridge_script() -> None:
             if (!doc?.body) {
               return;
             }
+            const alertEndpoint = __HHS_FOOTER_ALERT_ENDPOINT__;
+            parentWindow.__hhsRecordFooterAlert = (message, kind) => {
+              const payload = JSON.stringify({ message, kind });
+              const blob = new Blob([payload], { type: "text/plain;charset=UTF-8" });
+              if (parentWindow.navigator.sendBeacon(alertEndpoint, blob)) {
+                return;
+              }
+              void parentWindow.fetch(alertEndpoint, {
+                method: "POST",
+                body: payload,
+                headers: { "Content-Type": "text/plain;charset=UTF-8" },
+                keepalive: true,
+              }).catch(() => undefined);
+            };
             if (typeof parentWindow.__hhsCopyFooterStatusText !== "function") {
               parentWindow.__hhsCopyFooterStatusText = async (value) => {
                 const copyValue = String(value ?? "");
@@ -300,11 +322,70 @@ def render_footer_client_error_bridge_script() -> None:
               return true;
             };
 
+            const updateAlertsControl = (message, kind, glyphText) => {
+              const control = doc.querySelector(".hhs-footer-alerts-control");
+              const menu = control?.querySelector(".hhs-footer-alerts-menu");
+              const list = control?.querySelector(".hhs-footer-alerts-list");
+              if (!control || !menu || !list) {
+                return;
+              }
+              control.hidden = false;
+              if (kind === "error") {
+                menu.classList.remove("hhs-footer-alerts-menu--warn");
+                menu.classList.add("hhs-footer-alerts-menu--error");
+              }
+              const triggerGlyph = menu.querySelector(".hhs-footer-glyph-button");
+              if (triggerGlyph && (
+                kind === "error"
+                || !menu.classList.contains("hhs-footer-alerts-menu--error")
+              )) {
+                triggerGlyph.textContent = glyphText;
+              }
+              const timestamp = new Date();
+              const lastItem = list.lastElementChild;
+              const lastTimestamp = new Date(
+                lastItem?.dataset.alertTimestamp || ""
+              );
+              if (
+                lastItem?.dataset.alertKind === kind
+                && lastItem.dataset.alertMessage === message
+                && timestamp - lastTimestamp <= 10000
+              ) {
+                return;
+              }
+              const item = doc.createElement("li");
+              item.className =
+                `hhs-footer-alerts-item hhs-footer-alerts-item--${kind}`;
+              item.title = message;
+              item.dataset.alertKind = kind;
+              item.dataset.alertMessage = message;
+              item.dataset.alertTimestamp = timestamp.toISOString();
+
+              const date = doc.createElement("time");
+              date.dateTime = timestamp.toISOString();
+              date.dataset.hhsLocalDate = timestamp.toISOString();
+              date.textContent = new Intl.DateTimeFormat(undefined, {
+                dateStyle: "short",
+              }).format(timestamp);
+              const itemGlyph = doc.createElement("span");
+              itemGlyph.className = "hhs-footer-alerts-item-glyph";
+              itemGlyph.setAttribute("aria-hidden", "true");
+              itemGlyph.textContent = glyphText;
+              const itemMessage = doc.createElement("span");
+              itemMessage.className = "hhs-footer-alerts-item-message";
+              itemMessage.textContent = message;
+              item.append(date, itemGlyph, itemMessage);
+              list.append(item);
+            };
+
             const showStatus = (message, kind = "error") => {
               const cleanMessage = normalize(message);
               if (!cleanMessage || !remember(cleanMessage)) {
                 return;
               }
+              const glyphText = kind === "error" ? "" : "";
+              parentWindow.__hhsRecordFooterAlert(cleanMessage, kind);
+              updateAlertsControl(cleanMessage, kind, glyphText);
               doc.getElementById("hhs-client-floating-status")?.remove();
               const status = doc.createElement("div");
               status.id = "hhs-client-floating-status";
@@ -313,7 +394,7 @@ def render_footer_client_error_bridge_script() -> None:
 
               const glyph = doc.createElement("span");
               glyph.className = "hhs-floating-status-glyph";
-              glyph.textContent = kind === "error" ? "" : "";
+              glyph.textContent = glyphText;
 
               const text = doc.createElement("span");
               text.className = "hhs-floating-status-message";
@@ -404,7 +485,10 @@ def render_footer_client_error_bridge_script() -> None:
             });
           })();
         </script>
-        """)
+        """
+    render_script_html(
+        script.replace("__HHS_FOOTER_ALERT_ENDPOINT__", json.dumps(alert_endpoint))
+    )
 
 
 def footer_cache_clear_menu_markup() -> str:
@@ -497,8 +581,10 @@ def render_footer_cache_clear_menu_script() -> None:
                 }
                 panel.querySelectorAll('.hhs-footer-cache-clear-option[role="checkbox"]')
                   .forEach((option) => option.setAttribute("aria-checked", "false"));
-                doc.querySelectorAll(".hhs-footer-terminal-ai-menu[open]")
-                  .forEach((otherMenu) => otherMenu.removeAttribute("open"));
+                doc.querySelectorAll(
+                  ".hhs-footer-terminal-ai-menu[open], "
+                  + ".hhs-footer-alerts-menu[open]"
+                ).forEach((otherMenu) => otherMenu.removeAttribute("open"));
               });
             }
             if (window.parent.__hhsFooterCacheClearOutsideHandler) {
@@ -825,6 +911,9 @@ def render_footer_terminal_ai_menu_script() -> None:
                   doc.querySelectorAll(".hhs-footer-cache-clear-menu[open]").forEach((otherMenu) => {{
                     otherMenu.removeAttribute("open");
                   }});
+                  doc.querySelectorAll(".hhs-footer-alerts-menu[open]").forEach((otherMenu) => {{
+                    otherMenu.removeAttribute("open");
+                  }});
                   requestTerminalContext(false);
                   window.setTimeout(() => {{
                     void waitForTerminalContextEvent(contextDelayMs);
@@ -868,12 +957,23 @@ def render_footer_terminal_ai_menu_script() -> None:
     )
 
 
-def open_working_directory_endpoint_url() -> str:
-    """Return the local browser-to-UI endpoint URL for opening the working directory."""
+def browser_ui_endpoint_url(endpoint: str) -> str:
+    """Return one authenticated local browser-to-UI endpoint URL."""
     update_browser_cleanup_registration()
     token = browser_cleanup_token()
     port = ensure_ttyd_cleanup_server()
-    return f"http://{hhs_ui.TTYD_HOST}:{port}/open-working-directory?token={token}"
+    clean_endpoint = endpoint.strip("/")
+    return f"http://{hhs_ui.TTYD_HOST}:{port}/{clean_endpoint}?token={token}"
+
+
+def open_working_directory_endpoint_url() -> str:
+    """Return the local browser-to-UI endpoint URL for opening the working directory."""
+    return browser_ui_endpoint_url("open-working-directory")
+
+
+def footer_alert_endpoint_url() -> str:
+    """Return the local browser-to-UI endpoint URL for persisting client alerts."""
+    return browser_ui_endpoint_url("footer-alert")
 
 
 def render_footer_working_directory_open_script() -> None:
@@ -928,6 +1028,154 @@ def render_footer_working_directory_open_script() -> None:
     )
 
 
+def footer_alert_items_markup(alerts: list[dict[str, object]]) -> str:
+    """Return today's footer alerts as localized-date popover rows."""
+    items = []
+    for alert in alerts:
+        kind = str(alert.get("kind", "warn"))
+        message = str(alert.get("message", ""))
+        timestamp_iso = str(alert.get("timestamp_iso", ""))
+        fallback_date = timestamp_iso.partition("T")[0]
+        items.append(
+            f'<li class="hhs-footer-alerts-item hhs-footer-alerts-item--{kind}" '
+            f'title="{html.escape(message, quote=True)}" '
+            f'data-alert-kind="{html.escape(kind, quote=True)}" '
+            f'data-alert-message="{html.escape(message, quote=True)}" '
+            f'data-alert-timestamp="{html.escape(timestamp_iso, quote=True)}">'
+            f'<time datetime="{html.escape(timestamp_iso, quote=True)}" '
+            f'data-hhs-local-date="{html.escape(timestamp_iso, quote=True)}">'
+            f"{html.escape(fallback_date)}</time>"
+            f'<span class="hhs-footer-alerts-item-glyph" aria-hidden="true">'
+            f"{footer_alert_glyph(kind)}</span>"
+            f'<span class="hhs-footer-alerts-item-message">'
+            f"{html.escape(message)}</span></li>"
+        )
+    return f'<ol class="hhs-footer-alerts-list">{"".join(items)}</ol>'
+
+
+def footer_alerts_menu_markup(alerts: list[dict[str, object]]) -> str:
+    """Return the footer alert list using the native footer popover pattern."""
+    alerts_kind = footer_alert_priority(alerts)
+    hidden_attribute = "" if alerts else " hidden"
+    view_param = html.escape(hhs_ui.FOOTER_VIEW_ALERTS_QUERY_PARAM, quote=True)
+    clear_param = html.escape(hhs_ui.FOOTER_CLEAR_ALERTS_QUERY_PARAM, quote=True)
+    return (
+        f'<span class="hhs-footer-alerts-control"{hidden_attribute}>'
+        '<span class="hhs-footer-glyph"></span>'
+        f'<details class="hhs-footer-alerts-menu hhs-footer-alerts-menu--{alerts_kind}">'
+        '<summary class="hhs-footer-alerts-trigger" '
+        'title="Show today\'s alerts" aria-label="Show today\'s warnings and errors">'
+        f'<span class="hhs-footer-glyph-button">'
+        f"{footer_alert_glyph(alerts_kind)}</span></summary>"
+        '<div class="hhs-footer-alerts-panel">'
+        f"{footer_alert_items_markup(alerts)}"
+        '<div class="hhs-footer-alerts-actions">'
+        f'<button type="button" data-param="{view_param}" '
+        'title="Open the complete alerts file">View</button>'
+        f'<button type="button" data-param="{clear_param}" '
+        'title="Clear the alerts file">Clear</button>'
+        '</div></div></details></span>'
+    )
+
+
+def render_footer_alerts_menu_script() -> None:
+    """Manage the native footer alert list and its View and Clear actions."""
+    render_script_html(
+        """
+        <script>
+          (() => {
+            const doc = window.parent.document;
+            const panel = doc.querySelector(".hhs-footer-alerts-panel");
+            if (!panel) {
+              return;
+            }
+            const menu = panel.closest(".hhs-footer-alerts-menu");
+            const closeMenu = () => menu?.removeAttribute("open");
+            const formatter = new Intl.DateTimeFormat(undefined, {
+              dateStyle: "short",
+            });
+            doc.querySelectorAll("[data-hhs-local-date]").forEach((element) => {
+              const timestamp = new Date(element.dataset.hhsLocalDate || "");
+              if (!Number.isNaN(timestamp.getTime())) {
+                element.textContent = formatter.format(timestamp);
+              }
+            });
+            if (panel.dataset.handlersInstalled !== "true") {
+              panel.dataset.handlersInstalled = "true";
+              panel.querySelectorAll(".hhs-footer-alerts-actions button")
+                .forEach((button) => {
+                  button.addEventListener("click", () => {
+                    const params = new URLSearchParams(
+                      window.parent.location.search
+                    );
+                    params.set(button.dataset.param, "1");
+                    window.parent.location.search = params.toString();
+                  });
+                });
+              menu?.addEventListener("toggle", () => {
+                if (!menu.open) {
+                  return;
+                }
+                doc.querySelectorAll(
+                  ".hhs-footer-cache-clear-menu[open], "
+                  + ".hhs-footer-terminal-ai-menu[open]"
+                ).forEach((otherMenu) => otherMenu.removeAttribute("open"));
+              });
+            }
+            if (window.parent.__hhsFooterAlertsOutsideHandler) {
+              doc.removeEventListener(
+                "pointerdown",
+                window.parent.__hhsFooterAlertsOutsideHandler,
+                true
+              );
+            }
+            const outsideHandler = (event) => {
+              if (menu?.open && !menu.contains(event.target)) {
+                closeMenu();
+              }
+            };
+            window.parent.__hhsFooterAlertsOutsideHandler = outsideHandler;
+            doc.addEventListener("pointerdown", outsideHandler, true);
+          })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def open_footer_alerts_file() -> None:
+    """Open the local footer alerts cache file with the configured system opener."""
+    alert_path = footer_alerts_file()
+    try:
+        alert_path.parent.mkdir(parents=True, exist_ok=True)
+        alert_path.touch(exist_ok=True)
+    except OSError as error:
+        push_floating_status(f"Unable to open alerts file: {error}", "error")
+        return
+    result = run_bash_command(
+        open_file(str(alert_path)),
+        "Opening alerts file...",
+        ttl_seconds=0,
+        use_cache=False,
+        force_local=True,
+        cache_tag="system",
+        show_overlay=False,
+    )
+    if result.returncode != 0:
+        push_floating_status(
+            result.stderr or "Unable to open alerts file.", "error"
+        )
+
+
+def clear_footer_alerts_file() -> None:
+    """Wipe the footer alerts cache file while preserving the file itself."""
+    if clear_footer_alerts():
+        push_floating_status("Cleared footer alerts.", "info")
+        return
+    push_floating_status("Unable to clear footer alerts.", "error")
+
+
 def render_footer() -> None:
     """Render the HomeSetup UI footer."""
     version = homesetup_version()
@@ -945,6 +1193,8 @@ def render_footer() -> None:
         )
     update_url = f"?{hhs_ui.FOOTER_RUN_UPDATER_QUERY_PARAM}=1"
     shell_version_url = f"?{hhs_ui.FOOTER_SHOW_SHELL_VERSION_QUERY_PARAM}=1"
+    alerts = today_footer_alerts()
+    alerts_markup = footer_alerts_menu_markup(alerts)
     updater_markup = ""
     if bool(st.session_state.get("updater_update_available", False)):
         updater_markup = (
@@ -983,12 +1233,11 @@ def render_footer() -> None:
             f'<span class="hhs-footer-glyph"></span>'
             f"<span>Connected to remote  {connected_host_display}</span></span>"
         )
-    shell_controls_markup = ""
-    if shell_status_markup:
-        shell_controls_markup = (
-            f'<span class="hhs-footer-shell-group">'
-            f"{shell_status_markup}{cache_clear_markup}{terminal_ai_markup}</span>"
-        )
+    shell_controls_markup = (
+        f'<span class="hhs-footer-shell-group">'
+        f"{shell_status_markup}{cache_clear_markup}{terminal_ai_markup}"
+        f"{alerts_markup}</span>"
+    )
     status_group_markup = (
         f'<span class="hhs-footer-status-group">'
         f"{remote_status_markup}{shell_controls_markup}"
@@ -1014,6 +1263,7 @@ def render_footer() -> None:
         """)
     if not connected_to_ssh:
         render_footer_working_directory_open_script()
+    render_footer_alerts_menu_script()
     if shell_name:
         render_footer_cache_clear_menu_script()
         if terminal_ai_enabled:
@@ -1217,6 +1467,14 @@ def handle_footer_actions() -> None:
             output or "bash --version returned no output."
         )
         st.session_state["footer_shell_version_dialog_title"] = "Shell version"
+
+    if query_param_requested(hhs_ui.FOOTER_VIEW_ALERTS_QUERY_PARAM):
+        remove_query_param(hhs_ui.FOOTER_VIEW_ALERTS_QUERY_PARAM)
+        open_footer_alerts_file()
+
+    if query_param_requested(hhs_ui.FOOTER_CLEAR_ALERTS_QUERY_PARAM):
+        remove_query_param(hhs_ui.FOOTER_CLEAR_ALERTS_QUERY_PARAM)
+        clear_footer_alerts_file()
 
     if query_param_requested(hhs_ui.FOOTER_CLEAR_CACHE_QUERY_PARAM):
         clear_application_cache = query_param_requested(

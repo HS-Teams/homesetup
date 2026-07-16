@@ -40,6 +40,7 @@ end = source.index("def floating_status_glyph(")
 clock = Clock()
 session_state = {}
 namespace = {
+    "append_footer_alert": lambda _message, _kind: True,
     "hhs_ui_constants": SimpleNamespace(
         FLOATING_STATUS_QUEUE_KEY="_hhs_floating_status_queue",
         FLOATING_STATUS_LEGACY_KEY="_hhs_floating_status",

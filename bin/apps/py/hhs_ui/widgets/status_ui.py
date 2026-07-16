@@ -12,9 +12,10 @@ from collections.abc import Callable
 import streamlit as st
 
 import hhs_ui.core.constants as hhs_ui_constants
-from hhs_ui.execution.command_catalog import clean_command_status_message
+from hhs_ui.core.alert_history import append_footer_alert, footer_alert_glyph
 from hhs_ui.core.paths import hhs_log_dir
 from hhs_ui.core.process_resources import process_resource_registry
+from hhs_ui.execution.command_catalog import clean_command_status_message
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:
@@ -42,6 +43,8 @@ def push_floating_status(
     if not clean_message:
         return
     normalized_kind = normalize_floating_status_kind(kind)
+    if normalized_kind in {"warn", "error"}:
+        append_footer_alert(clean_message, normalized_kind)
     log_footer_status_message(clean_message, normalized_kind)
     status_queue = floating_status_queue()
     status_queue.append(
@@ -166,11 +169,7 @@ def effective_floating_status_timeout(status: dict[str, object]) -> float:
 
 def floating_status_glyph(kind: str) -> str:
     """Return the glyph used by the floating status component."""
-    return {
-        "info": "",
-        "error": "",
-        "warn": "",
-    }.get(kind, "")
+    return "" if kind == "info" else footer_alert_glyph(kind)
 
 
 def floating_status_dom_id(status: dict[str, object], message: str, kind: str) -> str:

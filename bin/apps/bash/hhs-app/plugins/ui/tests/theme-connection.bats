@@ -197,7 +197,8 @@ assert 'params.set(panel.dataset.clearParam, "1")' in ui_source
 assert 'window.parent.__hhsFooterCacheClearOutsideHandler' in ui_source
 assert 'doc.addEventListener("pointerdown", outsideHandler, true)' in cache_clear_script_body
 assert 'window.parent.addEventListener("blur", outsideFocusHandler, true)' in ui_source
-assert 'doc.querySelectorAll(".hhs-footer-terminal-ai-menu[open]")' in ui_source
+assert '.hhs-footer-terminal-ai-menu[open]' in ui_source
+assert '.hhs-footer-alerts-menu[open]' in ui_source
 assert 'doc.addEventListener("pointerdown", outsidePointerHandler, true)' in ui_source
 assert 'terminal_ai_ask_command_prefix = build_hhs_ask_plugin_command(' not in ui_source
 assert 'const terminalAskCommandPrefix' not in ui_source
@@ -282,18 +283,28 @@ assert '<a class="hhs-footer-cache-clear-button" href="{cache_clear_url}"' not i
 assert '<span class="hhs-footer-glyph"></span><span class="hhs-footer-cache-refresh-glyph">♻</span></a>' not in ui_source
 assert 'def render_footer_cache_clear_menu(' not in ui_source
 assert 'st.container(key="footer_cache_clear_menu")' not in ui_source
-assert 'f"{shell_status_markup}{cache_clear_markup}{terminal_ai_markup}</span>"' in ui_source
+assert 'f"{shell_status_markup}{cache_clear_markup}{terminal_ai_markup}"' in ui_source
+assert 'f"{alerts_markup}</span>"' in ui_source
 assert '"Clear application cache"' in ui_source
 assert '"Clear application states"' in ui_source
 assert '"Clear AI history"' in ui_source
 assert '>OK</button>' in ui_source
 assert 'def open_file' in ui_source
+assert 'def browser_ui_endpoint_url' in ui_source
+browser_ui_endpoint_body = (
+    ui_source.split("def browser_ui_endpoint_url", 1)[1].split("\ndef ", 1)[0]
+)
 assert 'def open_working_directory_endpoint_url' in ui_source
-open_working_directory_endpoint_body = ui_source.split("def open_working_directory_endpoint_url", 1)[1].split("\ndef ", 1)[0]
-assert 'update_browser_cleanup_registration()' in open_working_directory_endpoint_body
+open_working_directory_endpoint_body = (
+    ui_source.split("def open_working_directory_endpoint_url", 1)[1].split("\ndef ", 1)[0]
+)
+assert 'update_browser_cleanup_registration()' in browser_ui_endpoint_body
+assert 'return browser_ui_endpoint_url("open-working-directory")' in open_working_directory_endpoint_body
 assert 'def render_footer_working_directory_open_script' in ui_source
-working_dir_open_script_body = ui_source.split("def render_footer_working_directory_open_script", 1)[1].split("\ndef ", 1)[0]
-assert 'open-working-directory?token={token}' in ui_source
+working_dir_open_script_body = (
+    ui_source.split("def render_footer_working_directory_open_script", 1)[1].split("\ndef ", 1)[0]
+)
+assert '/{clean_endpoint}?token={token}' in browser_ui_endpoint_body
 assert 'window.parent.__hhsFooterWorkingDirOpenHandler' in working_dir_open_script_body
 assert 'const selector = ".hhs-footer-working-dir-link[data-open-working-dir-url]"' in working_dir_open_script_body
 assert 'const fallback = () =>' in working_dir_open_script_body
@@ -521,7 +532,9 @@ cache_panel_block = re.search(r"^\.hhs-footer-cache-clear-panel\s*\{([^}]*)\}", 
 cache_option_block = re.search(r"\.hhs-footer-cache-clear-option\s*\{([^}]*)\}", base_css).group(1)
 cache_option_mark_block = re.search(r"\.hhs-footer-cache-clear-option-mark\s*\{([^}]*)\}", base_css).group(1)
 cache_submit_block = re.search(r"\.hhs-footer-cache-clear-submit\s*\{([^}]*)\}", base_css).group(1)
-footer_glyph_button_block = re.search(r"\.hhs-footer-glyph-button\s*\{([^}]*)\}", base_css).group(1)
+footer_glyph_button_block = re.search(
+    r"(?m)^\.hhs-footer-glyph-button\s*\{([^}]*)\}", base_css
+).group(1)
 terminal_ai_menu_block = re.search(r"\.hhs-footer-terminal-ai-menu\s*\{([^}]*)\}", base_css).group(1)
 terminal_ai_trigger_block = re.search(r"\.hhs-footer-terminal-ai-trigger\s*\{([^}]*)\}", base_css).group(1)
 terminal_ai_disabled_menu_block = re.search(
