@@ -75,7 +75,8 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_success
 
   assert_file_contains_many "${css_file}" \
-'padding: 0 2rem 0 var(--hhs-sidebar-inline-inset)' '.hhs-sidebar-title::after'
+    'padding: 0 var(--hhs-element-std-gap) 0 var(--hhs-sidebar-inline-inset)' \
+    '.hhs-sidebar-title::after'
   assert_file_contains "${ui_file}" 'def render_sidebar_title_separator_alignment_script'
 
   assert_file_contains_many "${css_file}" \

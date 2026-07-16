@@ -395,7 +395,6 @@ PY
 
   assert_file_contains_many "${css_file}" \
 '.hhs-ttyd-terminal-frame' '.hhs-ttyd-terminal-placeholder' 'padding: 10px' \
-    'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem)' \
     'height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem - var(--hhs-ttyd-shell-gap))' \
     'margin: var(--hhs-ttyd-shell-gap) 0 0'
   terminal_double_gap_height='height: calc(100dvh - var(--hhs-footer-guard-height) - 4.75rem'
