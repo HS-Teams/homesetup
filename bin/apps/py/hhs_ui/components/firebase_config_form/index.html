@@ -236,6 +236,7 @@
         token: "default",
       };
       let values = {};
+      const protectedFieldNames = new Set(["PROJECT_ID", "UID"]);
 
       function stringValue(value, fallback = "") {
         if (value === null || value === undefined) {
@@ -334,7 +335,7 @@
       function createField(field) {
         const name = stringValue(field.name);
         const labelText = displayLabel(field.label || name);
-        const isPassword = name === "UID";
+        const isProtectedField = protectedFieldNames.has(name);
         const wrapper = document.createElement("div");
         const control = document.createElement("div");
         const label = document.createElement("label");
@@ -347,7 +348,7 @@
         input.name = name;
         input.placeholder = stringValue(field.placeholder);
         input.title = stringValue(field.placeholder || `Enter ${labelText}`);
-        input.type = isPassword ? "password" : "text";
+        input.type = isProtectedField ? "password" : "text";
         input.value = stringValue(values[name]);
         input.disabled = Boolean(args.disabled);
         input.autocomplete = "off";
@@ -363,26 +364,26 @@
           updateRestoreButtonState();
         });
         control.append(input);
-        if (isPassword) {
+        if (isProtectedField) {
           const revealButton = document.createElement("button");
           revealButton.type = "button";
           revealButton.className = "reveal-button";
           revealButton.disabled = Boolean(args.disabled);
-          revealButton.textContent = "﯎";
-          revealButton.title = "Reveal Firebase UID";
-          revealButton.setAttribute("aria-label", "Reveal UID");
-          revealButton.addEventListener("click", () => {
+          const updateRevealButton = () => {
             const revealed = input.type === "text";
-            input.type = revealed ? "password" : "text";
-            revealButton.textContent = revealed ? "﯎" : "﯏";
-            revealButton.title = revealed
-              ? "Reveal Firebase UID"
-              : "Hide Firebase UID";
-            revealButton.classList.toggle("is-selected", !revealed);
+            const action = revealed ? "Hide" : "Reveal";
+            revealButton.textContent = revealed ? "﯏" : "﯎";
+            revealButton.title = `${action} Firebase ${labelText}`;
+            revealButton.classList.toggle("is-selected", revealed);
             revealButton.setAttribute(
               "aria-label",
-              revealed ? "Reveal UID" : "Hide UID"
+              `${action} ${labelText}`
             );
+          };
+          updateRevealButton();
+          revealButton.addEventListener("click", () => {
+            input.type = input.type === "password" ? "text" : "password";
+            updateRevealButton();
           });
           control.append(revealButton);
         }

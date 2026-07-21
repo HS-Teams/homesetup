@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        --hhs-bg: #282a36;
+        --hhs-field: #44475a;
+        --hhs-text: #f8f8f2;
+        --hhs-muted: rgba(248, 248, 242, 0.68);
+        --hhs-border: #6272a4;
+        --hhs-primary: #bd93f9;
+        color-scheme: dark;
+        font-family: "Droid Sans Mono for Powerline Nerd Font Complete", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        background: var(--hhs-bg);
+        color: var(--hhs-text);
+        margin: 0;
+        min-width: 0;
+        overflow: hidden;
+        padding: 0;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .aliases-table {
+        background: var(--hhs-bg);
+        border: 1px solid var(--hhs-border);
+        border-radius: 6px;
+        display: grid;
+        grid-template-rows: 36px 35px minmax(0, 1fr);
+        height: var(--hhs-table-height, 360px);
+        min-width: 0;
+        overflow: hidden;
+        width: 100%;
+      }
+
+      .caption {
+        align-items: center;
+        background: var(--hhs-field);
+        border-bottom: 1px solid var(--hhs-border);
+        display: flex;
+        font-size: 0.9rem;
+        font-weight: 800;
+        justify-content: center;
+      }
+
+      .table-header,
+      .table-row {
+        display: grid;
+        grid-template-columns:
+          32px minmax(120px, 1.35fr) minmax(100px, 1fr)
+          minmax(120px, 1.35fr) minmax(90px, 0.6fr) minmax(110px, 0.8fr);
+        min-width: 680px;
+      }
+
+      .table-header {
+        background: var(--hhs-field);
+        border-bottom: 1px solid var(--hhs-border);
+        color: var(--hhs-muted);
+        font-size: 0.82rem;
+        font-weight: 800;
+      }
+
+      .table-body {
+        min-height: 0;
+        overflow: auto;
+      }
+
+      .table-row {
+        background: var(--hhs-bg);
+        border-bottom: 1px solid var(--hhs-border);
+        color: var(--hhs-text);
+        cursor: pointer;
+        min-height: 43px;
+      }
+
+      .table-row:hover:not(.is-disabled),
+      .table-row.is-selected {
+        background: color-mix(in srgb, var(--hhs-primary) 14%, var(--hhs-bg));
+      }
+
+      .table-row.is-selected {
+        box-shadow: inset 3px 0 0 var(--hhs-primary);
+      }
+
+      .table-row.is-disabled {
+        cursor: not-allowed;
+        opacity: 0.62;
+      }
+
+      .cell {
+        align-items: center;
+        border-right: 1px solid var(--hhs-border);
+        display: flex;
+        min-width: 0;
+        overflow: hidden;
+        padding: 0 0.75rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .cell:last-child {
+        border-right: 0;
+      }
+
+      .selection-cell {
+        justify-content: center;
+        padding: 0;
+      }
+
+      .selection-marker {
+        border: 1px solid var(--hhs-muted);
+        border-radius: 50%;
+        display: block;
+        height: 12px;
+        width: 12px;
+      }
+
+      .is-selected .selection-marker {
+        background: var(--hhs-primary);
+        border-color: var(--hhs-primary);
+        box-shadow: inset 0 0 0 2px var(--hhs-bg);
+      }
+
+      .group-cell {
+        color: var(--hhs-muted);
+      }
+
+      .alias-cell {
+        color: var(--hhs-primary);
+      }
+
+      .dotfile-count {
+        background: transparent;
+        border: 0;
+        border-radius: 3px;
+        color: var(--hhs-primary);
+        cursor: pointer;
+        font-weight: 800;
+        margin: -0.25rem;
+        min-width: 2rem;
+        padding: 0.25rem;
+        text-align: left;
+        text-decoration: underline;
+        text-decoration-style: dotted;
+        text-underline-offset: 0.2rem;
+      }
+
+      .dotfile-count:hover:not(:disabled),
+      .dotfile-count:focus-visible,
+      .dotfile-count[aria-expanded="true"] {
+        background: color-mix(in srgb, var(--hhs-primary) 20%, transparent);
+        outline: 1px solid var(--hhs-primary);
+      }
+
+      .dotfile-count:disabled {
+        cursor: not-allowed;
+      }
+
+      .dotfile-popover {
+        background: var(--hhs-field);
+        border: 1px solid var(--hhs-primary);
+        border-radius: 4px;
+        box-shadow: 0 0.45rem 1.1rem rgba(0, 0, 0, 0.38);
+        color: var(--hhs-text);
+        max-height: 250px;
+        max-width: 200px;
+        overflow: auto;
+        position: fixed;
+        width: max-content;
+        z-index: 1000;
+      }
+
+      .dotfile-list {
+        list-style: none;
+        margin: 0;
+        padding: 0.35rem 0;
+      }
+
+      .dotfile-item,
+      .dotfile-empty {
+        font-size: 0.8rem;
+        line-height: 1.35;
+        min-width: max-content;
+        padding: 0.35rem 0.6rem;
+        white-space: nowrap;
+      }
+
+      .dotfile-item + .dotfile-item {
+        border-top: 1px solid color-mix(in srgb, var(--hhs-border) 55%, transparent);
+      }
+
+      .dotfile-empty {
+        color: var(--hhs-muted);
+        min-width: 130px;
+      }
+
+      .empty-table {
+        align-items: center;
+        color: var(--hhs-muted);
+        display: flex;
+        justify-content: center;
+        min-height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app" aria-label="Firebase aliases"></main>
+    <script>
+      const Streamlit = {
+        sendMessage(type, data = {}) {
+          window.parent.postMessage(
+            {
+              isStreamlitMessage: true,
+              type,
+              ...data,
+            },
+            "*"
+          );
+        },
+        setComponentReady() {
+          this.sendMessage("streamlit:componentReady", { apiVersion: 1 });
+        },
+        setFrameHeight(height) {
+          this.sendMessage("streamlit:setFrameHeight", { height });
+        },
+        setComponentValue(value) {
+          this.sendMessage("streamlit:setComponentValue", {
+            dataType: "json",
+            value,
+          });
+        },
+      };
+
+      const app = document.getElementById("app");
+      let args = {
+        disabled: false,
+        height: 360,
+        rows: [],
+        selectedKey: "",
+        theme: {},
+      };
+      let activePopover = null;
+      let activeButton = null;
+
+      function stringValue(value, fallback = "") {
+        if (value === null || value === undefined) {
+          return fallback;
+        }
+        return String(value);
+      }
+
+      function normalizeRows(rows) {
+        if (!Array.isArray(rows)) {
+          return [];
+        }
+        return rows.map((row) => ({
+          Key: stringValue(row.Key),
+          Database: stringValue(row.Database),
+          Group: stringValue(row.Group),
+          Alias: stringValue(row.Alias),
+          Count: stringValue(row.Count, "0"),
+          Modified: stringValue(row.Modified),
+          Files: Array.isArray(row.Files)
+            ? row.Files.map((filename) => stringValue(filename)).filter(Boolean)
+            : [],
+        }));
+      }
+
+      function applyTheme(theme) {
+        const values = theme && typeof theme === "object" ? theme : {};
+        const properties = {
+          background: "--hhs-bg",
+          field: "--hhs-field",
+          text: "--hhs-text",
+          muted: "--hhs-muted",
+          border: "--hhs-border",
+          primary: "--hhs-primary",
+        };
+        Object.entries(properties).forEach(([name, property]) => {
+          const value = stringValue(values[name]).trim();
+          if (value) {
+            document.documentElement.style.setProperty(property, value);
+          }
+        });
+      }
+
+      function closeDotfilePopover() {
+        if (activePopover) {
+          activePopover.remove();
+        }
+        if (activeButton) {
+          activeButton.setAttribute("aria-expanded", "false");
+          activeButton.focus({ preventScroll: true });
+        }
+        activePopover = null;
+        activeButton = null;
+      }
+
+      function positionDotfilePopover(popover, button) {
+        const buttonRect = button.getBoundingClientRect();
+        const popoverRect = popover.getBoundingClientRect();
+        const margin = 4;
+        const maximumLeft = Math.max(margin, window.innerWidth - popoverRect.width - margin);
+        const left = Math.min(Math.max(buttonRect.left, margin), maximumLeft);
+        const availableBelow = window.innerHeight - buttonRect.bottom - margin;
+        const top =
+          availableBelow >= Math.min(popoverRect.height, 250)
+            ? buttonRect.bottom + margin
+            : Math.max(margin, buttonRect.top - popoverRect.height - margin);
+        popover.style.left = left + "px";
+        popover.style.top = top + "px";
+      }
+
+      function showDotfilePopover(button, row) {
+        if (activeButton === button) {
+          closeDotfilePopover();
+          return;
+        }
+        closeDotfilePopover();
+        const popover = document.createElement("div");
+        popover.className = "dotfile-popover";
+        popover.setAttribute("role", "dialog");
+        popover.setAttribute("aria-label", "Dotfiles for " + row.Alias);
+
+        const list = document.createElement("ul");
+        list.className = "dotfile-list";
+        list.setAttribute("role", "list");
+        if (row.Files.length) {
+          row.Files.forEach((filename) => {
+            const item = document.createElement("li");
+            item.className = "dotfile-item";
+            item.setAttribute("role", "listitem");
+            item.textContent = filename;
+            list.append(item);
+          });
+        } else {
+          const empty = document.createElement("li");
+          empty.className = "dotfile-empty";
+          empty.textContent = "No filenames available";
+          list.append(empty);
+        }
+        popover.append(list);
+        document.body.append(popover);
+        activePopover = popover;
+        activeButton = button;
+        button.setAttribute("aria-expanded", "true");
+        positionDotfilePopover(popover, button);
+      }
+
+      function createCell(className, value) {
+        const cell = document.createElement("div");
+        cell.className = "cell " + className;
+        cell.setAttribute("role", "gridcell");
+        cell.textContent = value;
+        cell.title = value;
+        return cell;
+      }
+
+      function selectRow(row) {
+        if (args.disabled || row.Key === stringValue(args.selectedKey)) {
+          return;
+        }
+        args.selectedKey = row.Key;
+        Streamlit.setComponentValue({
+          selectedAlias: row.Alias,
+          selectedKey: row.Key,
+        });
+        render();
+      }
+
+      function createHeader() {
+        const header = document.createElement("div");
+        header.className = "table-header";
+        header.setAttribute("role", "row");
+        ["", "Database", "Group", "Alias", "# Dotfiles", "Modified"].forEach((label) => {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          cell.setAttribute("role", "columnheader");
+          cell.textContent = label;
+          header.append(cell);
+        });
+        return header;
+      }
+
+      function createRow(row) {
+        const selected = row.Key === stringValue(args.selectedKey);
+        const tableRow = document.createElement("div");
+        tableRow.className = "table-row";
+        tableRow.classList.toggle("is-selected", selected);
+        tableRow.classList.toggle("is-disabled", Boolean(args.disabled));
+        tableRow.setAttribute("role", "row");
+        tableRow.setAttribute("aria-selected", String(selected));
+        tableRow.tabIndex = args.disabled ? -1 : 0;
+        tableRow.addEventListener("click", () => selectRow(row));
+        tableRow.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectRow(row);
+          }
+        });
+
+        const selectionCell = document.createElement("div");
+        selectionCell.className = "cell selection-cell";
+        selectionCell.setAttribute("role", "gridcell");
+        const marker = document.createElement("span");
+        marker.className = "selection-marker";
+        marker.setAttribute("aria-hidden", "true");
+        selectionCell.append(marker);
+        tableRow.append(selectionCell);
+        tableRow.append(createCell("database-cell", row.Database));
+        tableRow.append(createCell("group-cell", row.Group));
+        tableRow.append(createCell("alias-cell", row.Alias));
+
+        const countCell = document.createElement("div");
+        countCell.className = "cell dotfile-cell";
+        countCell.setAttribute("role", "gridcell");
+        const button = document.createElement("button");
+        button.className = "dotfile-count";
+        button.type = "button";
+        button.disabled = Boolean(args.disabled);
+        button.textContent = row.Count;
+        button.title = "Show dotfile filenames";
+        button.setAttribute("aria-haspopup", "list");
+        button.setAttribute("aria-expanded", "false");
+        button.setAttribute(
+          "aria-label",
+          row.Count + " dotfiles for " + row.Alias + ". Show filenames"
+        );
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          showDotfilePopover(button, row);
+        });
+        countCell.append(button);
+        tableRow.append(countCell);
+        tableRow.append(createCell("modified-cell", row.Modified));
+        return tableRow;
+      }
+
+      function render() {
+        closeDotfilePopover();
+        const rows = normalizeRows(args.rows);
+        const height = Math.max(120, Number(args.height) || 360);
+        applyTheme(args.theme);
+        document.documentElement.style.setProperty("--hhs-table-height", height + "px");
+        app.replaceChildren();
+
+        const table = document.createElement("section");
+        table.className = "aliases-table";
+        table.setAttribute("role", "grid");
+        table.setAttribute("aria-label", "Firebase Aliases");
+        const caption = document.createElement("div");
+        caption.className = "caption";
+        caption.textContent = "Firebase Aliases";
+        table.append(caption, createHeader());
+
+        const body = document.createElement("div");
+        body.className = "table-body";
+        body.setAttribute("role", "rowgroup");
+        if (rows.length) {
+          rows.forEach((row) => body.append(createRow(row)));
+        } else {
+          const empty = document.createElement("div");
+          empty.className = "empty-table";
+          empty.textContent = "No Firebase aliases found";
+          body.append(empty);
+        }
+        table.append(body);
+        app.append(table);
+        Streamlit.setFrameHeight(height);
+      }
+
+      document.addEventListener("click", (event) => {
+        if (
+          activePopover &&
+          !activePopover.contains(event.target) &&
+          event.target !== activeButton
+        ) {
+          closeDotfilePopover();
+        }
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && activePopover) {
+          closeDotfilePopover();
+        }
+      });
+      window.addEventListener("resize", () => closeDotfilePopover());
+      document.body.addEventListener(
+        "scroll",
+        (event) => {
+          if (!activePopover || activePopover.contains(event.target)) {
+            return;
+          }
+          closeDotfilePopover();
+        },
+        true
+      );
+      window.addEventListener("message", (event) => {
+        const data = event.data || {};
+        if (data.type !== "streamlit:render") {
+          return;
+        }
+        args = { ...args, ...(data.args || {}) };
+        render();
+      });
+
+      Streamlit.setComponentReady();
+    </script>
+  </body>
+</html>

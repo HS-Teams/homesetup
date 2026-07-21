@@ -68,7 +68,6 @@ from hhs_ui.core.paths import homesetup_config_dir
 from hhs_ui.features.search_ui import expand_path_with_environment
 from hhs_ui.widgets.status_ui import push_floating_status
 from hhs_ui.widgets.table_ui import (
-    markdown_table_panel,
     render_markdown_table,
     reset_markdown_table_selection,
     resolve_css_custom_property,
@@ -462,7 +461,12 @@ def hhs_hspm_package_summary(package_names: list[str]) -> str:
     return f"{shown_names}, +{len(clean_names) - 3} more"
 
 
-def queue_hhs_hspm_catalog_action(operation: str, package_names: list[str]) -> bool:
+def queue_hhs_hspm_catalog_action(
+    operation: str,
+    package_names: list[str],
+    *,
+    refresh_recovery: bool = False,
+) -> bool:
     """Queue an HSPM catalog install or uninstall action."""
     clean_operation = operation if operation in {"install", "uninstall"} else ""
     clean_package_names = list(dict.fromkeys(name.strip() for name in package_names))
@@ -474,6 +478,7 @@ def queue_hhs_hspm_catalog_action(operation: str, package_names: list[str]) -> b
     st.session_state["hhs_hspm_action_execute_pending"] = {
         "operation": clean_operation,
         "package_names": clean_package_names,
+        "refresh_recovery": refresh_recovery,
         "command": build_hhs_hspm_command(clean_operation, clean_package_names),
         "description": f"{hhs_hspm_action_noun(clean_operation)} of {package_summary}",
     }
@@ -502,6 +507,20 @@ def queue_hhs_hspm_recovery_action(action: str) -> bool:
     }
     save_ui_state()
     return True
+
+
+def queue_hhs_hspm_recovery_packages(
+    package_names: list[str],
+    all_packages_selected: bool,
+) -> bool:
+    """Queue recovery for every package or installation for the selected subset."""
+    if all_packages_selected and any(name.strip() for name in package_names):
+        return queue_hhs_hspm_recovery_action("packages")
+    return queue_hhs_hspm_catalog_action(
+        "install",
+        package_names,
+        refresh_recovery=True,
+    )
 
 
 def start_pending_hhs_hspm_action() -> None:
@@ -541,9 +560,9 @@ def complete_hhs_hspm_action_job() -> None:
     operation = str(metadata.get("operation", "")).strip()
     package_summary = hhs_hspm_package_summary(package_names)
     if result.returncode == 0:
-        if operation in {"recover", "sync"}:
+        if operation in {"recover", "sync"} or metadata.get("refresh_recovery"):
             cache_delete_tag("hhs_hspm_recovery")
-        else:
+        if operation not in {"recover", "sync"}:
             refresh_hhs_hspm_catalog_listing()
     status_message = clean_command_status_message(result.stdout or result.stderr or "")
     if result.returncode == 0:
@@ -2110,9 +2129,48 @@ def fetch_firebase_aliases_with_preloader() -> dict[str, object]:
         loader_placeholder.empty()
 
 
-def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, str]]:
+def firebase_alias_dotfile_names(alias_value: object) -> list[str]:
+    """Return available dotfile names from one Firebase alias value."""
+    if not isinstance(alias_value, list):
+        return []
+    filenames: list[str] = []
+    for dotfile in alias_value:
+        if isinstance(dotfile, str):
+            filename = dotfile.strip()
+        elif isinstance(dotfile, dict):
+            filename = next(
+                (
+                    str(dotfile.get(field_name, "")).strip()
+                    for field_name in ("path", "filename", "name")
+                    if str(dotfile.get(field_name, "")).strip()
+                ),
+                "",
+            )
+        else:
+            filename = ""
+        basename = Path(filename).name
+        if basename:
+            filenames.append(basename)
+    return filenames
+
+
+def firebase_alias_modified_date(alias_value: object) -> str:
+    """Return the latest available modification date for one Firebase alias."""
+    if not isinstance(alias_value, list):
+        return ""
+    modified_dates = [
+        str(dotfile.get("modified", "")).strip().split("T", maxsplit=1)[0].split(
+            " ", maxsplit=1
+        )[0]
+        for dotfile in alias_value
+        if isinstance(dotfile, dict) and str(dotfile.get("modified", "")).strip()
+    ]
+    return max(modified_dates, default="")
+
+
+def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, object]]:
     """Return Firebase alias rows from the fetched alias payload."""
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, object]] = []
     for database_name, groups in alias_data.items():
         if not isinstance(groups, dict):
             continue
@@ -2121,47 +2179,60 @@ def firebase_alias_table_rows(alias_data: dict[str, object]) -> list[dict[str, s
                 continue
             for alias_name, alias_value in aliases.items():
                 count = len(alias_value) if isinstance(alias_value, list) else 0
+                row_key = json.dumps(
+                    [str(database_name), str(group_name), str(alias_name)],
+                    separators=(",", ":"),
+                )
                 rows.append(
                     {
+                        "Key": row_key,
                         "Database": str(database_name),
                         "Group": str(group_name),
                         "Alias": str(alias_name),
                         "Count": str(count),
+                        "Modified": firebase_alias_modified_date(alias_value),
+                        "Files": firebase_alias_dotfile_names(alias_value),
                     }
                 )
     return rows
 
 
+@lru_cache(maxsize=1)
+def firebase_aliases_table_component() -> Callable[..., dict[str, object] | None]:
+    """Return the registered Firebase aliases table Streamlit component."""
+    return components.declare_component(
+        "hhs_firebase_aliases_table",
+        path=str(hhs_ui.FIREBASE_ALIASES_COMPONENT_DIR),
+    )
+
+
 def render_hhs_firebase_aliases_table(action_running: bool) -> str:
     """Render the Firebase aliases table and return the selected alias."""
     alias_rows = firebase_alias_table_rows(fetch_firebase_aliases_with_preloader())
-    selected_rows = render_markdown_table(
-        "Firebase Aliases",
-        [row["Database"] for row in alias_rows],
-        [row["Database"] for row in alias_rows],
-        [False for _row in alias_rows],
-        "hhs_firebase_aliases_table",
+    rows_by_key = {str(row["Key"]): row for row in alias_rows}
+    selected_key = str(
+        st.session_state.get("_hhs_firebase_alias_selected_key", "")
+    ).strip()
+    if selected_key not in rows_by_key:
+        selected_key = ""
+        st.session_state["_hhs_firebase_alias_selected_key"] = ""
+
+    event = firebase_aliases_table_component()(
+        rows=alias_rows,
+        selectedKey=selected_key,
         disabled=action_running,
-        variable_column_label="Group",
-        item_column_label="Database",
-        variable_values=[row["Group"] for row in alias_rows],
-        extra_columns={
-            "Alias": [row["Alias"] for row in alias_rows],
-            "# Dotfiles": [row["Count"] for row in alias_rows],
-        },
-        multi_selection=False,
-        column_text_colors={
-            "Group": "var(--hhs-secondary)",
-            "Alias": "var(--hhs-theme-primary-color)",
-        },
-        show_value_column=False,
+        height=hhs_ui_constants.MARKDOWN_TABLE_HEIGHT,
+        theme=firebase_component_theme(),
+        key="hhs_firebase_aliases_table_component",
+        default=None,
     )
-    selected_aliases = [
-        row["Alias"]
-        for row, selected in zip(alias_rows, selected_rows, strict=True)
-        if selected
-    ]
-    return selected_aliases[0] if selected_aliases else ""
+    if isinstance(event, dict):
+        candidate_key = str(event.get("selectedKey", "")).strip()
+        if candidate_key in rows_by_key:
+            selected_key = candidate_key
+            st.session_state["_hhs_firebase_alias_selected_key"] = selected_key
+    selected_row = rows_by_key.get(selected_key, {})
+    return str(selected_row.get("Alias", ""))
 
 
 def render_hhs_firebase_aliases_actions(
@@ -2209,8 +2280,8 @@ def firebase_config_component() -> Callable[..., dict[str, object] | None]:
     )
 
 
-def firebase_config_component_theme() -> dict[str, str]:
-    """Return CSS tokens for the Firebase configuration component iframe."""
+def firebase_component_theme() -> dict[str, str]:
+    """Return CSS tokens for Firebase component iframes."""
     theme_name = st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
     properties = theme_custom_properties(theme_name)
     return {
@@ -2261,7 +2332,7 @@ def render_hhs_firebase_config_component(
     return component(
         disabled=action_running,
         fields=hhs_firebase_component_fields(),
-        theme=firebase_config_component_theme(),
+        theme=firebase_component_theme(),
         token=str(st.session_state.get("_hhs_firebase_loaded_token", "default")),
         key="hhs_firebase_config_component",
         default=None,
@@ -2428,11 +2499,11 @@ def style_hhs_hspm_catalog_table_data(
     )
 
 
-def selected_hhs_hspm_catalog_packages(
+def selected_hhs_hspm_packages(
     rows: list[dict[str, str]],
     selected_values: list[bool],
 ) -> list[str]:
-    """Return package names selected in the HSPM catalog table."""
+    """Return package names selected in an HSPM table."""
     return [
         str(row.get("Command", "")).strip()
         for row, selected in zip(rows, selected_values, strict=True)
@@ -2460,24 +2531,12 @@ def parse_hhs_hspm_recovery(output: str) -> list[dict[str, str]]:
     return rows
 
 
-def hhs_hspm_recovery_table_data(
-    rows: list[dict[str, str]],
+def style_hhs_hspm_recovery_table_data(
+    table_data: pd.DataFrame,
 ) -> pd.io.formats.style.Styler:
-    """Return recovery rows with theme-aware status colors."""
-    dataframe = pd.DataFrame(
-        {
-            "Command": pd.Series(
-                [row.get("Command", "") for row in rows],
-                dtype="string",
-            ),
-            "Status": pd.Series(
-                [row.get("Status", "") for row in rows],
-                dtype="string",
-            ),
-        }
-    )
+    """Apply theme-aware status colors to HSPM recovery table data."""
     theme = slider_pane_theme()
-    return dataframe.style.map(
+    return table_data.style.map(
         lambda value: (
             f"color: {theme['success']}; font-weight: 800;"
             if str(value) == "INSTALLED"
@@ -2525,7 +2584,11 @@ def render_hhs_hspm_catalog_action_buttons(
             st.rerun()
 
 
-def render_hhs_hspm_recovery_action_buttons(action_running: bool) -> None:
+def render_hhs_hspm_recovery_action_buttons(
+    selected_package_names: list[str],
+    all_packages_selected: bool,
+    action_running: bool,
+) -> None:
     """Render the predefined HSPM recovery action buttons."""
     with st.container(
         key="hhs_hspm_recovery_actions",
@@ -2536,8 +2599,8 @@ def render_hhs_hspm_recovery_action_buttons(action_running: bool) -> None:
         packages_clicked = st.button(
             " Install Pkgs.",
             key="hhs_hspm_recovery_packages_button",
-            help="Recover packages listed in the recovery file.",
-            disabled=action_running,
+            help="Install the selected packages from the recovery file.",
+            disabled=action_running or not selected_package_names,
             width=HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH,
         )
         tools_clicked = st.button(
@@ -2561,8 +2624,12 @@ def render_hhs_hspm_recovery_action_buttons(action_running: bool) -> None:
             disabled=action_running,
             width=HHS_HSPM_SLIDER_ACTION_BUTTON_WIDTH,
         )
+    if packages_clicked and queue_hhs_hspm_recovery_packages(
+        selected_package_names,
+        all_packages_selected,
+    ):
+        st.rerun()
     for action, clicked in (
-        ("packages", packages_clicked),
         ("tools", tools_clicked),
         ("sync", sync_clicked),
         ("edit", edit_clicked),
@@ -2650,7 +2717,7 @@ def render_hhs_hspm_catalog_slide() -> None:
         )
     render_slider_pane_bullets("hhs_hspm_slider", ["Catalog", "Recovery"])
     render_hhs_hspm_catalog_action_buttons(
-        selected_hhs_hspm_catalog_packages(rows, selected_values),
+        selected_hhs_hspm_packages(rows, selected_values),
         action_running,
     )
 
@@ -2690,29 +2757,29 @@ def render_hhs_hspm_recovery_slide() -> None:
     )
     action_running = background_job_is_running(HHS_HSPM_ACTION_JOB)
     with st.container(key="hhs_hspm_slider_recovery_table_layout"):
-        with markdown_table_panel("Recovery Commands", "hhs_hspm_recovery"):
-            st.dataframe(
-                hhs_hspm_recovery_table_data(rows),
-                key="hhs_hspm_recovery_table",
-                hide_index=True,
-                column_order=["Command", "Status"],
-                height=HHS_HSPM_TABLE_HEIGHT,
-                column_config={
-                    "Command": st.column_config.TextColumn(
-                        "Command",
-                        disabled=True,
-                        help="HSPM recipe command eligible for recovery.",
-                    ),
-                    "Status": st.column_config.TextColumn(
-                        "Status",
-                        disabled=True,
-                        help="Installation status reported by the package manager.",
-                    ),
-                },
-                width="stretch",
-            )
+        commands = [row.get("Command", "") for row in rows]
+        selected_values = render_markdown_table(
+            "Recovery Commands",
+            commands,
+            commands,
+            [True for _row in rows],
+            "hhs_hspm_recovery",
+            disabled=action_running,
+            item_column_label="Command",
+            extra_columns={"Status": [row.get("Status", "") for row in rows]},
+            row_selection=True,
+            show_value_column=False,
+            show_variable_column=False,
+            table_data_styler=style_hhs_hspm_recovery_table_data,
+            table_height=HHS_HSPM_TABLE_HEIGHT,
+        )
+    selected_package_names = selected_hhs_hspm_packages(rows, selected_values)
     render_slider_pane_bullets("hhs_hspm_slider", ["Catalog", "Recovery"])
-    render_hhs_hspm_recovery_action_buttons(action_running)
+    render_hhs_hspm_recovery_action_buttons(
+        selected_package_names,
+        bool(rows) and all(selected_values),
+        action_running,
+    )
 
 
 def render_hhs_hspm_panel() -> None:

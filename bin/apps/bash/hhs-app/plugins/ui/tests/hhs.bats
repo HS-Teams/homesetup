@@ -390,6 +390,11 @@ component_html = (
     .parents[1].joinpath("components", "firebase_config_form", "index.html")
     .read_text(encoding="utf-8")
 )
+aliases_component_html = (
+    Path(sys.argv[1])
+    .parents[1].joinpath("components", "firebase_aliases_table", "index.html")
+    .read_text(encoding="utf-8")
+)
 assert 'elif hhs_view == "Firebase":' in source
 assert "render_hhs_firebase_panel()" in source
 assert 'HHS_FIREBASE_CONFIG_FILE:-${HHS_DIR}/firebase.properties' in command_source
@@ -558,11 +563,16 @@ assert "show_value_column=False" in hspm_catalog_body
 assert "show_variable_column=False" in hspm_catalog_body
 assert "table_height=HHS_HSPM_TABLE_HEIGHT" in hspm_catalog_body
 assert 'column_order=["Mark", "Command", "Description"]' not in hspm_catalog_body
-assert 'with markdown_table_panel("Recovery Commands", "hhs_hspm_recovery"):' in hspm_recovery_body
-assert "st.dataframe(" in hspm_recovery_body
-assert "st.data_editor(" not in hspm_recovery_body
-assert 'column_order=["Command", "Status"]' in hspm_recovery_body
-assert "height=HHS_HSPM_TABLE_HEIGHT" in hspm_recovery_body
+assert "render_markdown_table(" in hspm_recovery_body
+assert 'item_column_label="Command"' in hspm_recovery_body
+assert '"Status": [row.get("Status", "") for row in rows]' in hspm_recovery_body
+assert "[True for _row in rows]" in hspm_recovery_body
+assert "row_selection=True" in hspm_recovery_body
+assert "show_value_column=False" in hspm_recovery_body
+assert "show_variable_column=False" in hspm_recovery_body
+assert "table_data_styler=style_hhs_hspm_recovery_table_data" in hspm_recovery_body
+assert "table_height=HHS_HSPM_TABLE_HEIGHT" in hspm_recovery_body
+assert "bool(rows) and all(selected_values)" in hspm_recovery_body
 assert "HHS_HSPM_TABLE_HEIGHT = 264" in source
 assert "height=450" in source
 
@@ -619,22 +629,26 @@ assert "warnings.catch_warnings()" in source
 assert "InsecureRequestWarning" in source
 assert "def firebase_aliases_export_file(" not in source
 assert '"homesetup-37970-export.json"' not in source
+assert "def firebase_alias_dotfile_names(" in source
+assert "def firebase_alias_modified_date(" in source
 assert "def firebase_alias_table_rows(" in source
-assert "render_markdown_table(" in aliases_table_body
-assert '"Firebase Aliases"' in aliases_table_body
-assert 'item_column_label="Database"' in aliases_table_body
-assert 'variable_column_label="Group"' in aliases_table_body
-assert '[row["Database"] for row in alias_rows]' in aliases_table_body
-assert '[row["Group"] for row in alias_rows]' in aliases_table_body
-assert '"Alias": [row["Alias"] for row in alias_rows]' in aliases_table_body
-assert '"# Dotfiles": [row["Count"] for row in alias_rows]' in aliases_table_body
-assert "min_row_count=4" not in aliases_table_body
-assert "multi_selection=False" in aliases_table_body
-assert "show_value_column=False" in aliases_table_body
-assert '"Database": "var(--hhs-secondary)"' not in aliases_table_body
-assert '"Group": "var(--hhs-secondary)"' in aliases_table_body
-assert '"Alias": "var(--hhs-theme-primary-color)"' in aliases_table_body
-assert "return selected_aliases[0] if selected_aliases else" in aliases_table_body
+assert "firebase_aliases_table_component()(" in aliases_table_body
+assert "rows=alias_rows" in aliases_table_body
+assert "selectedKey=selected_key" in aliases_table_body
+assert "height=hhs_ui_constants.MARKDOWN_TABLE_HEIGHT" in aliases_table_body
+assert 'key="hhs_firebase_aliases_table_component"' in aliases_table_body
+assert 'return str(selected_row.get("Alias", ""))' in aliases_table_body
+assert "FIREBASE_ALIASES_COMPONENT_DIR" in constants_source
+assert "max-width: 200px" in aliases_component_html
+assert "max-height: 250px" in aliases_component_html
+assert "overflow: auto" in aliases_component_html
+assert 'button.setAttribute("aria-haspopup", "list")' in aliases_component_html
+assert "row.Files" in aliases_component_html
+assert 'button.textContent = row.Count' in aliases_component_html
+assert '"# Dotfiles", "Modified"' in aliases_component_html
+assert 'createCell("modified-cell", row.Modified)' in aliases_component_html
+assert 'popover.setAttribute("role", "dialog")' in aliases_component_html
+assert "activePopover.contains(event.target)" in aliases_component_html
 
 aliases_start = source.index("def hhs_firebase_config_file(")
 aliases_end = source.index("def render_hhs_firebase_aliases_table", aliases_start)
@@ -679,7 +693,16 @@ class FirebaseResponse:
         {
             "homesetup": {
                 "dotfiles": {
-                    "demo": [{"path": ".a"}, {"path": ".b"}],
+                    "demo": [
+                        {
+                            "path": ".config/example/.a",
+                            "modified": "2026-07-20 10:11:12.000000",
+                        },
+                        {
+                            "path": ".b",
+                            "modified": "2026-07-21T12:13:14.000000",
+                        },
+                    ],
                     "home": [],
                 },
                 "hspylib-test": {
@@ -728,9 +751,33 @@ aliases_namespace["fetch_firebase_aliases"]()
 assert len(response_calls) == 2
 alias_rows = aliases_namespace["firebase_alias_table_rows"](firebase_aliases)
 assert alias_rows == [
-    {"Database": "homesetup", "Group": "dotfiles", "Alias": "demo", "Count": "2"},
-    {"Database": "homesetup", "Group": "dotfiles", "Alias": "home", "Count": "0"},
-    {"Database": "homesetup", "Group": "hspylib-test", "Alias": "0", "Count": "1"},
+    {
+        "Key": '["homesetup","dotfiles","demo"]',
+        "Database": "homesetup",
+        "Group": "dotfiles",
+        "Alias": "demo",
+        "Count": "2",
+        "Modified": "2026-07-21",
+        "Files": [".a", ".b"],
+    },
+    {
+        "Key": '["homesetup","dotfiles","home"]',
+        "Database": "homesetup",
+        "Group": "dotfiles",
+        "Alias": "home",
+        "Count": "0",
+        "Modified": "",
+        "Files": [],
+    },
+    {
+        "Key": '["homesetup","hspylib-test","0"]',
+        "Database": "homesetup",
+        "Group": "hspylib-test",
+        "Alias": "0",
+        "Count": "1",
+        "Modified": "",
+        "Files": [],
+    },
 ]
 assert aliases_namespace["firebase_response_json"](
     type("BadResponse", (), {"status_code": 500, "body": "{}"})()

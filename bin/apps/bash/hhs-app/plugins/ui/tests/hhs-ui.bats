@@ -403,6 +403,79 @@ PY
   assert_success
 }
 
+@test "when installing HSPM recovery packages then selection controls the command" {
+  run python3 - "${HHS_REPO_DIR}" <<'PY'
+import ast
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = (
+    Path(sys.argv[1])
+    / "bin/apps/py/hhs_ui/features/hhs_app_ui.py"
+).read_text(encoding="utf-8")
+tree = ast.parse(source)
+function_names = (
+    "hhs_hspm_action_noun",
+    "hhs_hspm_package_summary",
+    "queue_hhs_hspm_catalog_action",
+    "queue_hhs_hspm_recovery_action",
+    "queue_hhs_hspm_recovery_packages",
+)
+functions = {
+    node.name: node
+    for node in tree.body
+    if isinstance(node, ast.FunctionDef) and node.name in function_names
+}
+messages = []
+
+def build_command(operation, arguments=""):
+    if isinstance(arguments, list):
+        arguments = " ".join(arguments)
+    return f"{operation} {arguments}".strip()
+
+st = SimpleNamespace(session_state={})
+namespace = {
+    "build_hhs_hspm_command": build_command,
+    "push_floating_status": lambda message, level: messages.append((message, level)),
+    "save_ui_state": lambda: None,
+    "st": st,
+}
+exec(
+    compile(
+        ast.Module(
+            body=[functions[function_name] for function_name in function_names],
+            type_ignores=[],
+        ),
+        "hhs_app_ui.py",
+        "exec",
+    ),
+    namespace,
+)
+
+queue_packages = namespace["queue_hhs_hspm_recovery_packages"]
+
+assert queue_packages(["black", "docker-compose"], True)
+pending = st.session_state["hhs_hspm_action_execute_pending"]
+assert pending["operation"] == "recover"
+assert pending["command"] == "recover -i"
+
+st.session_state.clear()
+assert queue_packages(["black"], False)
+pending = st.session_state["hhs_hspm_action_execute_pending"]
+assert pending["operation"] == "install"
+assert pending["package_names"] == ["black"]
+assert pending["refresh_recovery"] is True
+assert pending["command"] == "install black"
+
+st.session_state.clear()
+assert not queue_packages([], False)
+assert "hhs_hspm_action_execute_pending" not in st.session_state
+assert messages[-1] == ("Mark at least one package first.", "warn")
+PY
+  assert_success
+}
+
 # TC - 4
 
 @test "when loading Streamlit UI source then Python syntax should be valid" {

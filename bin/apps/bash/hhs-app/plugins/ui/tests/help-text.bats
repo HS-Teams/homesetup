@@ -180,8 +180,11 @@ firebase_source = (
     root / "components" / "firebase_config_form" / "index.html"
 ).read_text(encoding="utf-8")
 assert 'revealButton.title = "Reveal"' not in firebase_source
-assert '"Reveal Firebase UID"' in firebase_source
-assert '"Hide Firebase UID"' in firebase_source
+assert 'const protectedFieldNames = new Set(["PROJECT_ID", "UID"]);' in firebase_source
+assert "const isProtectedField = protectedFieldNames.has(name);" in firebase_source
+assert "input.type = isProtectedField ? \"password\" : \"text\";" in firebase_source
+assert 'revealButton.title = `${action} Firebase ${labelText}`;' in firebase_source
+assert '`${action} ${labelText}`' in firebase_source
 
 explorer_source = (
     root / "components" / "ssh_explorer" / "index.html"
