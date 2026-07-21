@@ -15,7 +15,7 @@
 # @param $1 [Req] : The case-insensitive filter to be used when listing.
 function __hhs_history() {
   local filter lc_filter grep_status pad pad_len hist_id hist_cmd hist_label dot_count found=0
-  local columns col_offset=8 histtimeformat="${HISTTIMEFORMAT-}"
+  local columns terminal_columns col_offset=8 histtimeformat="${HISTTIMEFORMAT-}"
 
   if [[ $- != *i* && -f "${HISTFILE:-${HOME}/.bash_history}" ]]; then
     set -o history
@@ -34,8 +34,20 @@ function __hhs_history() {
   fi
 
   echo ''
-  columns="$(($(tput cols) - pad_len - col_offset))"
-  ((columns < 1)) && columns=1
+  terminal_columns="${COLUMNS:-}"
+  if [[ -t 1 ]]; then
+    terminal_columns="$(tput cols 2>/dev/null || true)"
+    if [[ ! "${terminal_columns}" =~ ^[1-9][0-9]*$ ]]; then
+      terminal_columns="${COLUMNS:-}"
+    fi
+  fi
+  if [[ "${terminal_columns}" =~ ^[1-9][0-9]*$ ]]; then
+    columns="$((terminal_columns - pad_len - col_offset))"
+    ((columns < 1)) && columns=1
+  else
+    # Non-terminal consumers such as ssh -T should receive complete commands.
+    columns=0
+  fi
 
   if [[ -n "${filter}" ]]; then
     printf '' | grep -Eiq -- "${filter}"
@@ -52,8 +64,13 @@ function __hhs_history() {
 
     printf '%s' "${WHITE}${hist_label}${NC}"
     printf '%*.*s' 0 "${dot_count}" "${pad}"
-    printf '%s' " ${GREEN} ${HHS_HIGHLIGHT_COLOR}${hist_cmd:0:${columns}}"
-    [[ ${#hist_cmd} -ge ${columns} ]] && printf '%s' "..."
+    printf '%s' " ${GREEN} ${HHS_HIGHLIGHT_COLOR}"
+    if ((columns > 0)); then
+      printf '%s' "${hist_cmd:0:${columns}}"
+      [[ ${#hist_cmd} -ge ${columns} ]] && printf '%s' "..."
+    else
+      printf '%s' "${hist_cmd}"
+    fi
     printf '%s\n' "${NC}"
     found=1
   # Parse \history as raw bytes so malformed or non-UTF-8 entries do not crash awk.

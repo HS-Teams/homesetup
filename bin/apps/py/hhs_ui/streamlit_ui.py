@@ -4278,7 +4278,7 @@ def initialize_feature_session_state() -> None:
         ("monitor_process_filter", "All"),
         ("monitor_process_other_filter", ""),
         ("monitor_process_action_execute_pending", None),
-        ("monitor_log_file", ""),
+        (hhs_ui_constants.MONITOR_LOG_FILE_SELECTED_KEY, ""),
         ("monitor_log_filter", "All"),
         ("monitor_log_other_filter", ""),
         ("monitor_log_level", "ALL_LEVELS"),

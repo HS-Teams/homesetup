@@ -1605,7 +1605,10 @@ def build_tool_tldr_command(tool_name: str) -> str:
 
 def build_hhs_history_command() -> str:
     """Build the Bash command used to run the __hhs_history HomeSetup function."""
+    history_columns = shlex.quote(hhs_ui_constants.COMMAND_COLUMNS)
     return (
+        'export TERM="${TERM:-xterm-256color}"; '
+        f"export COLUMNS={history_columns}; "
         'export HHS_DIR="${HHS_DIR}"; '
         'export HISTSIZE="${HISTSIZE:-2000}"; '
         'export HISTFILESIZE="${HISTFILESIZE:-2000}"; '

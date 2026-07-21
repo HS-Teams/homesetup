@@ -177,6 +177,8 @@ HISTORY_VIEW_LABELS = {
     "STATS": " Stats",
 }
 MONITOR_VIEWS = ("DISK", "MEM", "CPU", "PROCESSES", "LOGS")
+MONITOR_LOG_FILE_SELECTED_KEY = "monitor_log_file_selected"
+MONITOR_LOG_FILE_LEGACY_KEY = "monitor_log_file"
 MONITOR_VIEW_LABELS = {
     "DISK": " Disks",
     "CPU": " Cpu",
@@ -281,6 +283,7 @@ PERSISTED_UI_KEYS = (
     "monitor_disk_directory",
     "monitor_disk_top_n",
     "monitor_log_file",
+    MONITOR_LOG_FILE_SELECTED_KEY,
     "monitor_log_filter",
     "monitor_log_level",
     "monitor_log_other_filter",

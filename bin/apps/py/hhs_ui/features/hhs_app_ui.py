@@ -41,7 +41,6 @@ from hhs_ui.execution.command_catalog import (
     build_hhs_settings_list_command,
     build_hhs_settings_truncate_command,
     build_hhs_setup_apply_command,
-    build_hhs_setup_restore_command,
     build_hhs_setup_settings_command,
     build_hhs_starship_info_command,
     build_hhs_starship_preset_command,
@@ -1030,9 +1029,9 @@ def sync_hhs_setup_form_state(settings: dict[str, bool]) -> None:
         st.session_state[hhs_setup_setting_key(setting_name)] = enabled
 
 
-def apply_pending_hhs_setup_form_revert() -> None:
-    """Apply a queued setup form revert before rendering checkbox widgets."""
-    if not st.session_state.pop("_hhs_setup_revert_pending", False):
+def apply_pending_hhs_setup_form_restore() -> None:
+    """Restore loaded setup values before rendering checkbox widgets."""
+    if not st.session_state.pop("_hhs_setup_restore_pending", False):
         return
     original_settings = st.session_state.get("_hhs_setup_original_settings", {})
     if not isinstance(original_settings, dict):
@@ -1064,23 +1063,10 @@ def request_hhs_setup_apply() -> None:
     )
 
 
-def request_hhs_setup_revert() -> None:
-    """Queue reverting the setup form to the loaded settings."""
-    st.session_state["_hhs_setup_revert_pending"] = True
-    save_ui_state()
-
-
 def request_hhs_setup_restore() -> None:
-    """Queue restoring HomeSetup setup defaults."""
-    queue_hhs_setup_action(
-        build_hhs_setup_restore_command(),
-        "Restoring HomeSetup settings",
-        {
-            "operation": "restore",
-            "success_fallback": "HomeSetup settings restored.",
-            "error_fallback": "Unable to restore HomeSetup settings.",
-        },
-    )
+    """Queue restoring the setup form to the originally loaded settings."""
+    st.session_state["_hhs_setup_restore_pending"] = True
+    save_ui_state()
 
 
 def render_hhs_setup_title() -> None:
@@ -1136,35 +1122,26 @@ def render_hhs_setup_panel() -> None:
 
     render_openable_file_pill("Current setup file:", hhs_setup_file_path())
     sync_hhs_setup_form_state(parse_hhs_setup_settings(result.stdout))
-    apply_pending_hhs_setup_form_revert()
+    apply_pending_hhs_setup_form_restore()
     action_running = background_job_is_running(HHS_SETUP_ACTION_JOB)
     render_hhs_setup_settings_table(action_running)
     (
         left_column,
-        ok_column,
-        revert_column,
+        apply_column,
         restore_column,
         right_column,
     ) = st.columns(
-        [1.0, 0.42, 0.42, 0.48, 1.0],
+        [1.0, 0.42, 0.48, 1.0],
         gap="small",
         vertical_alignment="center",
     )
     with left_column:
         st.empty()
-    with ok_column:
-        ok_clicked = st.button(
+    with apply_column:
+        apply_clicked = st.button(
             " Apply",
             key="hhs_setup_apply_button",
             help="Apply selected setup settings",
-            disabled=action_running,
-            width="stretch",
-        )
-    with revert_column:
-        revert_clicked = st.button(
-            " Cancel",
-            key="hhs_setup_cancel_button",
-            help="Discard unsaved setup changes",
             disabled=action_running,
             width="stretch",
         )
@@ -1172,18 +1149,15 @@ def render_hhs_setup_panel() -> None:
         restore_clicked = st.button(
             " Restore",
             key="hhs_setup_restore_button",
-            help="Reload setup settings from disk",
+            help="Restore the originally loaded setup settings",
             disabled=action_running,
             width="stretch",
         )
     with right_column:
         st.empty()
 
-    if ok_clicked:
+    if apply_clicked:
         request_hhs_setup_apply()
-        st.rerun()
-    elif revert_clicked:
-        request_hhs_setup_revert()
         st.rerun()
     elif restore_clicked:
         request_hhs_setup_restore()

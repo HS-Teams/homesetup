@@ -203,7 +203,9 @@ def monitor_log_level_label(level: str) -> str:
 
 def clear_monitor_log_file() -> None:
     """Empty the selected monitor log file and keep it available for logging."""
-    selected_log = str(st.session_state.get("monitor_log_file", "")).strip()
+    selected_log = str(
+        st.session_state.get(hhs_ui_constants.MONITOR_LOG_FILE_SELECTED_KEY, "")
+    ).strip()
     log_path = hhs_log_file_path(selected_log)
     if not selected_log or log_path.name not in hhs_log_files():
         push_floating_status("Unable to clear log file.", "error")

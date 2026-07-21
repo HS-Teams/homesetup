@@ -12,16 +12,8 @@ load test_helper
 load "${HHS_FUNCTIONS_DIR}/hhs-shell-utils.bash"
 load_bats_libs
 
-# @function: Stub terminal width for deterministic truncation checks.
-# shellcheck disable=SC2329
-function tput() {
-  if [[ "$1" == "cols" ]]; then
-    echo '60'
-    return 0
-  fi
-
-  return 1
-}
+# Set an explicit output width for deterministic truncation checks.
+export COLUMNS=60
 
 # @function: Stub the shell history builtin so tests can control the input.
 # shellcheck disable=SC2329
@@ -99,14 +91,7 @@ EOF
 
 # TC - 7
 @test "when-history-command-contains-quotes-and-exclamation-then-it-is-rendered-literally" {
-  function tput() {
-    if [[ "$1" == "cols" ]]; then
-      echo '120'
-      return 0
-    fi
-
-    return 1
-  }
+  COLUMNS=120
 
   # shellcheck disable=SC2329
   function history() {
@@ -165,4 +150,21 @@ EOF
   assert_success
   assert_line --index 0 '-c'
   assert_line --index 1 "-r ${HISTFILE}"
+}
+
+# TC - 10
+@test "when-non-interactive-terminal-width-is-unavailable-then-history-is-not-truncated" {
+  # shellcheck disable=SC2329
+  function tput() {
+    return 1
+  }
+  unset COLUMNS
+
+  run __hhs_history
+
+  assert_success
+  assert_output --partial 'verylongcommand-with-many-arguments --flag value'
+  assert_output --partial 'git status'
+  assert_output --partial 'npm test'
+  refute_output --partial ' g...'
 }

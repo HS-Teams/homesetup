@@ -485,6 +485,12 @@ assert "render_openable_config_path(" not in setup_body
 assert "render_hhs_setup_settings_table(action_running)" in setup_body
 assert "row_selection=True" in setup_table_body
 assert "show_value_column=False" in setup_table_body
+assert '" Cancel"' not in setup_body
+assert "hhs_setup_cancel_button" not in setup_body
+assert '" Restore"' in setup_body
+assert "request_hhs_setup_restore()" in setup_body
+assert "request_hhs_setup_revert" not in source
+assert "build_hhs_setup_restore_command" not in source
 
 settings_table_body = source.split("def render_hhs_settings_table", 1)[1].split(
     "\ndef ", 1
@@ -1097,6 +1103,42 @@ assert session_state["hhs_firebase_uid"] == ""
 assert session_state["hhs_firebase_project_id"] == ""
 assert session_state["hhs_firebase_email"] == ""
 assert session_state["hhs_firebase_database"] == ""
+PY
+  assert_success
+}
+
+@test "when restoring HHS setup then originally loaded settings should be restored" {
+  run python3 - "${hhs_app_ui_file}" <<'PY'
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def hhs_setup_setting_key(")
+end = source.index("def render_hhs_setup_title(", start)
+st = SimpleNamespace(session_state={})
+namespace = {
+    "HHS_SETUP_SETTINGS": ("first_setting", "second_setting"),
+    "build_hhs_setup_apply_command": lambda settings: settings,
+    "json": json,
+    "queue_hhs_setup_action": lambda *args: None,
+    "save_ui_state": lambda: None,
+    "st": st,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+original_settings = {"first_setting": True, "second_setting": False}
+namespace["sync_hhs_setup_form_state"](original_settings)
+st.session_state[namespace["hhs_setup_setting_key"]("first_setting")] = False
+st.session_state[namespace["hhs_setup_setting_key"]("second_setting")] = True
+
+namespace["request_hhs_setup_restore"]()
+assert st.session_state["_hhs_setup_restore_pending"] is True
+namespace["apply_pending_hhs_setup_form_restore"]()
+
+assert namespace["selected_hhs_setup_settings"]() == original_settings
+assert "_hhs_setup_restore_pending" not in st.session_state
 PY
   assert_success
 }

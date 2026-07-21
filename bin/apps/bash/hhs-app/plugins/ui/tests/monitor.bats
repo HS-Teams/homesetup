@@ -194,18 +194,23 @@ PY
   assert_hhs_ui_exports LOG_LEVELS LOG_FILTERS
   assert_file_contains_many "${constants_file}" \
 '"monitor_log_filter"' '"monitor_log_other_filter"' '"monitor_log_level"' '"monitor_log_tail_lines"' \
-    '"monitor_log_tail_lines_default_migrated"'
+    '"monitor_log_tail_lines_default_migrated"' 'MONITOR_LOG_FILE_SELECTED_KEY'
   assert_file_contains_many "${command_catalog_file}" \
 'def colorize_log_output' 'def log_filter_highlight_ranges' 'def filter_log_output' \
     'def normalized_monitor_log_tail_lines'
   assert_file_contains_many "${monitor_runtime_file}" \
 'def selected_monitor_log_level' 'def monitor_log_level_label' \
     'def normalize_monitor_log_tail_lines_state' 'def handle_monitor_log_tail_lines_change' \
-    'def clear_monitor_log_file' 'def toggle_monitor_logs_tail'
+    'def clear_monitor_log_file' 'MONITOR_LOG_FILE_SELECTED_KEY' \
+    'def toggle_monitor_logs_tail'
   assert_file_contains_many "${monitor_ui_file}" \
     'def render_monitor_logs_panel' 'def render_log_controls' \
+    'def selected_monitor_log_file' 'def synchronize_monitor_log_file_widget' \
+    'def save_monitor_log_file_selection' 'key=MONITOR_LOG_FILE_WIDGET_KEY' \
+    'on_change=save_monitor_log_file_selection' \
     'tail_lines,' 'render_log_controls' 'render_table_filter_controls(' \
     'hhs_ui.LOG_FILTERS'
+  assert_file_not_contains "${monitor_ui_file}" 'key="monitor_log_file"'
   assert_file_not_contains "${monitor_ui_file}" 'other_options=("Containing",)'
 
   assert_file_contains "${table_ui_file}" \
@@ -264,6 +269,69 @@ assert "render_view_subtitle(" not in monitor_logs_body
 assert monitor_logs_body.index("render_log_controls)") < monitor_logs_body.index(
     "log_file_path = hhs_log_file_info(selected_log)[0]"
 )
+PY
+  assert_success
+
+  run python3 - "${monitor_ui_file}" <<'PY'
+import ast
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+module = ast.parse(source)
+function_names = {
+    "selected_monitor_log_file",
+    "synchronize_monitor_log_file_widget",
+    "save_monitor_log_file_selection",
+}
+selected_nodes = [
+    node
+    for node in module.body
+    if isinstance(node, ast.FunctionDef) and node.name in function_names
+]
+saved_states = []
+persisted_state = {"monitor_log_file": "streamlit-ui.log"}
+session_state = {
+    "monitor_log_file_selected": "askai.log",
+    "monitor_log_file_widget": "askai.log",
+}
+
+
+def save_state():
+    snapshot = dict(session_state)
+    saved_states.append(snapshot)
+    persisted_state["monitor_log_file_selected"] = snapshot[
+        "monitor_log_file_selected"
+    ]
+
+
+namespace = {
+    "MONITOR_LOG_FILE_WIDGET_KEY": "monitor_log_file_widget",
+    "hhs_ui_constants": SimpleNamespace(
+        MONITOR_LOG_FILE_LEGACY_KEY="monitor_log_file",
+        MONITOR_LOG_FILE_SELECTED_KEY="monitor_log_file_selected",
+    ),
+    "hhs_log_files": lambda: ["askai.log", "streamlit-ui.log"],
+    "load_ui_state": lambda: dict(persisted_state),
+    "save_ui_state": save_state,
+    "st": SimpleNamespace(session_state=session_state),
+}
+exec(compile(ast.Module(body=selected_nodes, type_ignores=[]), "<monitor-ui>", "exec"), namespace)
+
+log_files = ["askai.log", "streamlit-ui.log"]
+assert namespace["synchronize_monitor_log_file_widget"](log_files) == "streamlit-ui.log"
+assert session_state["monitor_log_file_selected"] == "streamlit-ui.log"
+assert "monitor_log_file_widget" not in session_state
+
+session_state["monitor_log_file_widget"] = "askai.log"
+namespace["save_monitor_log_file_selection"]()
+assert session_state["monitor_log_file_selected"] == "askai.log"
+assert saved_states[-1]["monitor_log_file_selected"] == "askai.log"
+
+session_state.pop("monitor_log_file_widget", None)
+assert namespace["synchronize_monitor_log_file_widget"](log_files) == "askai.log"
+assert session_state["monitor_log_file_selected"] == "askai.log"
 PY
   assert_success
 

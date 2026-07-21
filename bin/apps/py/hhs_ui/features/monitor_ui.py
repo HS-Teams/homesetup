@@ -69,7 +69,9 @@ from hhs_ui.widgets.table_ui import (
     render_table_filter_controls,
 )
 from hhs_ui.core.ui_definitions import MONITOR_PROCESS_ACTION_JOB, MONITOR_PROCESS_LIST_JOB
-from hhs_ui.core.ui_state import save_ui_state
+from hhs_ui.core.ui_state import load_ui_state, save_ui_state
+
+MONITOR_LOG_FILE_WIDGET_KEY = "monitor_log_file_widget"
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:
@@ -85,6 +87,51 @@ apply_selected_process_kill = _unconfigured_dependency("apply_selected_process_k
 execute_pending_monitor_process_action = _unconfigured_dependency(
     "execute_pending_monitor_process_action"
 )
+
+
+def selected_monitor_log_file(log_files: list[str]) -> str:
+    """Return a valid session or persisted monitor log file selection."""
+    persisted_state = load_ui_state()
+    candidates = (
+        persisted_state.get(hhs_ui_constants.MONITOR_LOG_FILE_SELECTED_KEY, ""),
+        persisted_state.get(hhs_ui_constants.MONITOR_LOG_FILE_LEGACY_KEY, ""),
+        st.session_state.get(hhs_ui_constants.MONITOR_LOG_FILE_SELECTED_KEY, ""),
+        st.session_state.get(hhs_ui_constants.MONITOR_LOG_FILE_LEGACY_KEY, ""),
+    )
+    for candidate in candidates:
+        selected_log = str(candidate).strip()
+        if selected_log in log_files:
+            st.session_state[hhs_ui_constants.MONITOR_LOG_FILE_SELECTED_KEY] = (
+                selected_log
+            )
+            return selected_log
+    selected_log = log_files[0] if log_files else ""
+    st.session_state[hhs_ui_constants.MONITOR_LOG_FILE_SELECTED_KEY] = selected_log
+    return selected_log
+
+
+def synchronize_monitor_log_file_widget(
+    log_files: list[str],
+) -> str:
+    """Discard transient widget state that conflicts with durable selection."""
+    selected_log = selected_monitor_log_file(log_files)
+    if st.session_state.get(MONITOR_LOG_FILE_WIDGET_KEY) != selected_log:
+        st.session_state.pop(MONITOR_LOG_FILE_WIDGET_KEY, None)
+    return selected_log
+
+
+def save_monitor_log_file_selection() -> None:
+    """Copy the log selectbox value into durable UI state."""
+    selected_log = str(
+        st.session_state.get(MONITOR_LOG_FILE_WIDGET_KEY, "")
+    ).strip()
+    if selected_log in hhs_log_files():
+        st.session_state[hhs_ui_constants.MONITOR_LOG_FILE_SELECTED_KEY] = (
+            selected_log
+        )
+    save_ui_state()
+
+
 filter_process_rows = _unconfigured_dependency("filter_process_rows")
 process_monitor_chart_rows = _unconfigured_dependency("process_monitor_chart_rows")
 render_openable_file_pill = _unconfigured_dependency("render_openable_file_pill")
@@ -446,9 +493,7 @@ def render_monitor_logs_panel() -> None:
     if not log_files:
         st.caption(f"No .log files found in {hhs_log_dir()}.")
         return
-    selected_log = st.session_state.get("monitor_log_file", "")
-    if selected_log not in log_files:
-        st.session_state["monitor_log_file"] = log_files[0]
+    selected_log = synchronize_monitor_log_file_widget(log_files)
     if selected_monitor_log_level() != st.session_state.get("monitor_log_level"):
         st.session_state["monitor_log_level"] = selected_monitor_log_level()
     normalize_monitor_log_tail_lines_state()
@@ -496,14 +541,17 @@ def render_monitor_logs_panel() -> None:
                 selected_log_value = st.selectbox(
                     "File:",
                     options=log_files,
-                    key="monitor_log_file",
+                    index=log_files.index(selected_log),
+                    key=MONITOR_LOG_FILE_WIDGET_KEY,
                     label_visibility="collapsed",
                     help=(
                         "Select a HomeSetup log file from the configured log directory. "
                         "The viewer reads this file without modifying it."
                     ),
-                    on_change=save_ui_state,
+                    on_change=save_monitor_log_file_selection,
                 )
+                if selected_log_value not in log_files:
+                    selected_log_value = selected_log
             with level_label_col:
                 st.markdown(
                     '<span class="hhs-inline-form-label">Level:</span>',

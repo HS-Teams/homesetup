@@ -295,6 +295,7 @@ PY
   run python3 - "${table_ui_file}" "${ui_file}" "${command_catalog_file}" <<'PY'
 import sys
 import re
+import shlex
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -449,6 +450,21 @@ assert '["Name", "Value"]' in alias_body
 history_command_body = command_source.split("def build_hhs_history_command()", 1)[1].split("\ndef ", 1)[0]
 assert "HISTFILE" in history_command_body
 assert "__hhs_history" in history_command_body
+builder_start = command_source.index("def build_hhs_history_command(")
+builder_end = command_source.index("\ndef ", builder_start)
+builder_namespace = {
+    "hhs_ui_constants": SimpleNamespace(COMMAND_COLUMNS="10000"),
+    "shlex": shlex,
+}
+exec(
+    "from __future__ import annotations\n"
+    + command_source[builder_start:builder_end],
+    builder_namespace,
+)
+history_command = builder_namespace["build_hhs_history_command"]()
+assert 'export TERM="${TERM:-xterm-256color}"' in history_command
+assert "export COLUMNS=10000" in history_command
+assert history_command.index("export COLUMNS=10000") < history_command.index("source ")
 PY
   assert_success
 }
