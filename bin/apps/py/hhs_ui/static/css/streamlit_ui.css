@@ -1750,19 +1750,13 @@ div[class*="st-key-monitor_process_kill_button_"] button {
   word-break: normal;
 }
 
-[data-testid="stDialog"][data-baseweb="modal"] {
-  background: var(--hhs-theme-background-color) !important;
+[data-testid="stDialog"] {
   isolation: isolate;
   z-index: var(--hhs-modal-scrim-z-index) !important;
 }
 
-[data-testid="stDialog"][data-baseweb="modal"] > div {
-  background: var(--hhs-theme-background-color) !important;
-  min-height: 100dvh !important;
-}
-
-[data-testid="stDialog"][data-baseweb="modal"] [role="dialog"],
-div[role="dialog"] {
+[data-testid="stDialog"] [role="dialog"],
+[role="dialog"] {
   background: var(--hhs-panel) !important;
   border: 1px solid var(--hhs-theme-border-color) !important;
   border-radius: 0.5rem !important;
@@ -1773,62 +1767,66 @@ div[role="dialog"] {
   z-index: var(--hhs-modal-z-index) !important;
 }
 
-body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-sidebar-clock,
-body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-sidebar-title,
-body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-floating-status,
-body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-app-footer,
-body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-footer-cache-clear-panel,
-body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-footer-alerts-panel,
-body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-footer-terminal-ai-panel,
-body:has(div[role="dialog"]) .hhs-sidebar-clock,
-body:has(div[role="dialog"]) .hhs-sidebar-title,
-body:has(div[role="dialog"]) .hhs-floating-status,
-body:has(div[role="dialog"]) .hhs-app-footer,
-body:has(div[role="dialog"]) .hhs-footer-cache-clear-panel,
-body:has(div[role="dialog"]) .hhs-footer-alerts-panel,
-body:has(div[role="dialog"]) .hhs-footer-terminal-ai-panel {
+body:has([data-testid="stDialog"]) .hhs-sidebar-clock,
+body:has([data-testid="stDialog"]) .hhs-sidebar-title,
+body:has([data-testid="stDialog"]) .hhs-floating-status,
+body:has([data-testid="stDialog"]) .hhs-app-footer,
+body:has([data-testid="stDialog"]) .hhs-footer-cache-clear-panel,
+body:has([data-testid="stDialog"]) .hhs-footer-alerts-panel,
+body:has([data-testid="stDialog"]) .hhs-footer-terminal-ai-panel,
+body:has([role="dialog"]) .hhs-sidebar-clock,
+body:has([role="dialog"]) .hhs-sidebar-title,
+body:has([role="dialog"]) .hhs-floating-status,
+body:has([role="dialog"]) .hhs-app-footer,
+body:has([role="dialog"]) .hhs-footer-cache-clear-panel,
+body:has([role="dialog"]) .hhs-footer-alerts-panel,
+body:has([role="dialog"]) .hhs-footer-terminal-ai-panel {
   z-index: calc(var(--hhs-modal-scrim-z-index) - 1) !important;
 }
 
-body:has(div[role="dialog"]) #hhs-command-overlay {
+body:has([role="dialog"]) #hhs-command-overlay {
   z-index: var(--hhs-command-overlay-z-index) !important;
 }
 
-div[role="dialog"] button[aria-label="Close"] {
+[role="dialog"] button[aria-label="Close"] {
   border: 1px solid var(--hhs-theme-border-color) !important;
   border-radius: 4px !important;
   color: var(--hhs-theme-text-color) !important;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output) {
+[data-testid="stDialog"]:has(.hhs-shell-version-output) > div,
+[role="dialog"]:has(.hhs-shell-version-output) {
   box-sizing: border-box;
-  max-height: 88dvh;
-  max-width: 92vw;
-  overflow: auto;
-  width: max-content;
+  max-width: calc(100vw - 2rem) !important;
+  width: min(64rem, calc(100vw - 2rem)) !important;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stVerticalBlock"]:has(.hhs-shell-version-output) {
+[role="dialog"]:has(.hhs-shell-version-output) {
+  max-height: 88dvh;
+  overflow: hidden;
+}
+
+[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stVerticalBlock"]:has(.hhs-shell-version-output) {
   max-width: 100%;
   width: 100%;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stHorizontalBlock"]:has(.st-key-footer_shell_version_dialog_close_button) {
+[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stHorizontalBlock"]:has(.st-key-footer_shell_version_dialog_close_button) {
   display: flex;
   justify-content: center;
   margin-top: 1rem;
 }
 
-div[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.st-key-footer_shell_version_dialog_close_button) {
+[role="dialog"]:has(.hhs-shell-version-output) [data-testid="stColumn"]:has(.st-key-footer_shell_version_dialog_close_button) {
   flex: 0 0 120px !important;
   width: 120px !important;
 }
 
 .hhs-shell-version-output {
   max-height: calc(88dvh - 8rem);
-  max-width: calc(92vw - 4rem);
+  max-width: 100%;
   min-width: 0;
-  width: fit-content;
+  width: 100%;
 }
 
 .hhs-footer-alerts-panel .hhs-footer-alerts-list {

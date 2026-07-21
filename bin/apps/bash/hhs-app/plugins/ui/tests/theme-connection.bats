@@ -700,11 +700,14 @@ assert "width: 100%" in terminal_ai_panel_button_block
 assert ".hhs-footer-cache-clear-option:hover" in base_css
 assert ".hhs-footer-cache-clear-submit:hover" in base_css
 assert ".hhs-footer-terminal-ai-panel button:hover" in base_css
-assert 'div[role="dialog"]:has(.hhs-shell-version-output)' in base_css
+assert '[role="dialog"]:has(.hhs-shell-version-output)' in base_css
+assert 'div[role="dialog"]:has(.hhs-shell-version-output)' not in base_css
+assert '[data-testid="stDialog"]:has(.hhs-shell-version-output) > div' in base_css
 assert ".hhs-shell-version-output" in base_css
 assert "max-height: 88dvh" in base_css
-assert "max-width: 92vw" in base_css
-assert "width: max-content" in base_css
+assert "max-width: calc(100vw - 2rem) !important" in base_css
+assert "width: min(64rem, calc(100vw - 2rem)) !important" in base_css
+assert "overflow: hidden" in base_css
 assert '[data-testid="stHorizontalBlock"]:has(.st-key-footer_shell_version_dialog_close_button)' in base_css
 assert "justify-content: center" in base_css
 assert "margin-top: 1rem" in base_css
@@ -712,7 +715,7 @@ assert '[data-testid="stColumn"]:has(.st-key-footer_shell_version_dialog_close_b
 assert "flex: 0 0 120px !important" in base_css
 assert "width: 120px !important" in base_css
 assert "max-height: calc(88dvh - 8rem)" in base_css
-assert "max-width: calc(92vw - 4rem)" in base_css
+assert "max-width: 100%" in base_css
 assert ".hhs-footer-working-dir-value" in base_css
 assert "color: var(--hhs-secondary)" in base_css
 assert "text-decoration: underline !important" in base_css
@@ -774,6 +777,23 @@ assert ui_source.count("hhs-view-heading hhs-view-heading--with-tabs") >= 6
 assert ui_source.count("hhs-view-heading hhs-view-heading--direct-content") >= 2
 assert "def render_view_subtitle" in table_ui_source
 assert '<h3 class="hhs-view-subtitle">' in table_ui_source
+service_theme_body = table_ui_source.split("def service_table_theme", 1)[1].split("\ndef ", 1)[0]
+service_name_style_body = table_ui_source.split("def service_name_cell_style", 1)[1].split("\ndef ", 1)[0]
+service_value_style_body = table_ui_source.split("def service_value_cell_style", 1)[1].split("\ndef ", 1)[0]
+styled_service_rows_body = table_ui_source.split("def styled_service_rows", 1)[1].split("\ndef ", 1)[0]
+assert '"hhs-theme-link-color"' in service_theme_body
+assert '"hhs-success"' in service_theme_body
+assert '"hhs-danger"' in service_theme_body
+assert '"hhs-theme-text-color"' in service_theme_body
+assert "background-color" not in service_name_style_body
+assert "background-color" not in service_value_style_body
+assert "#21222c" not in service_name_style_body
+assert "#21222c" not in service_value_style_body
+assert "theme_colors = service_table_theme()" in styled_service_rows_body
+assert 'color=theme_colors["name"]' in styled_service_rows_body
+assert 'success_color=theme_colors["success"]' in styled_service_rows_body
+assert 'danger_color=theme_colors["danger"]' in styled_service_rows_body
+assert 'text_color=theme_colors["text"]' in styled_service_rows_body
 assert ".hhs-view-subtitle" in base_css
 assert ".hhs-view-subtitle-link" in base_css
 assert ".hhs-view-subtitle-link:link" in base_css
@@ -932,15 +952,15 @@ assert "opacity: 1 !important" in base_css
 assert "--hhs-modal-scrim-z-index: 1000001" in base_css
 assert "--hhs-modal-z-index: 1000002" in base_css
 assert "--hhs-command-overlay-z-index: 1000010" in base_css
-assert '[data-testid="stDialog"][data-baseweb="modal"]' in base_css
-assert '[data-testid="stDialog"][data-baseweb="modal"] > div' in base_css
-assert '[data-testid="stDialog"][data-baseweb="modal"] [role="dialog"]' in base_css
-assert "min-height: 100dvh !important" in base_css
-assert 'body:has(div[role="dialog"]) .hhs-app-footer' in base_css
-assert 'body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-app-footer' in base_css
-assert 'body:has(div[role="dialog"]) .hhs-footer-terminal-ai-panel' in base_css
-assert 'body:has([data-testid="stDialog"][data-baseweb="modal"]) .hhs-footer-terminal-ai-panel' in base_css
-assert 'body:has(div[role="dialog"]) .hhs-sidebar-clock' in base_css
+assert '[data-testid="stDialog"] {' in base_css
+assert '[data-testid="stDialog"] [role="dialog"]' in base_css
+assert '[data-baseweb="modal"]' not in base_css
+assert '[data-testid="stDialog"] > div' not in base_css
+assert 'body:has([role="dialog"]) .hhs-app-footer' in base_css
+assert 'body:has([data-testid="stDialog"]) .hhs-app-footer' in base_css
+assert 'body:has([role="dialog"]) .hhs-footer-terminal-ai-panel' in base_css
+assert 'body:has([data-testid="stDialog"]) .hhs-footer-terminal-ai-panel' in base_css
+assert 'body:has([role="dialog"]) .hhs-sidebar-clock' in base_css
 assert "z-index: calc(var(--hhs-modal-scrim-z-index) - 1) !important" in base_css
 assert "z-index: var(--hhs-modal-z-index) !important" in base_css
 assert "z-index: var(--hhs-command-overlay-z-index)" in base_css
@@ -1013,4 +1033,81 @@ PY
   assert_success
 
   assert_file_not_contains "${css_file}" '<style>'
+}
+
+@test "when styling service rows then active theme colors should be used without overriding table backgrounds" {
+  run python3 - "${table_ui_file}" <<'PY'
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+service_start = source.index("def service_table_theme()")
+service_end = source.index("def themed_markdown_table_data(")
+resolver_start = source.index("def resolve_css_custom_property(")
+resolver_end = source.index("def resolve_css_value(")
+selected_themes = []
+theme_properties = {
+    "hhs-theme-link-color": "#0369a1",
+    "hhs-success": "var(--hhs-light-success)",
+    "hhs-light-success": "#15803d",
+    "hhs-danger": "#dc2626",
+    "hhs-theme-text-color": "#111827",
+}
+namespace = {
+    "hhs_ui": SimpleNamespace(THEME_SELECTED_KEY="selected_theme"),
+    "st": SimpleNamespace(session_state={"selected_theme": "daylight"}),
+    "theme_custom_properties": lambda selected: (
+        selected_themes.append(selected) or theme_properties
+    ),
+}
+exec(
+    "from __future__ import annotations\n"
+    + source[resolver_start:resolver_end],
+    namespace,
+)
+exec(
+    "from __future__ import annotations\n" + source[service_start:service_end],
+    namespace,
+)
+
+colors = namespace["service_table_theme"]()
+assert selected_themes == ["daylight"]
+assert colors == {
+    "name": "#0369a1",
+    "success": "#15803d",
+    "danger": "#dc2626",
+    "text": "#111827",
+}
+
+name_style = namespace["service_name_cell_style"]("atuin", colors["name"])
+up_style = namespace["service_value_cell_style"](
+    "↑ Up",
+    colors["success"],
+    colors["danger"],
+    colors["text"],
+)
+down_style = namespace["service_value_cell_style"](
+    "↓ Down",
+    colors["success"],
+    colors["danger"],
+    colors["text"],
+)
+unknown_style = namespace["service_value_cell_style"](
+    "Unknown",
+    colors["success"],
+    colors["danger"],
+    colors["text"],
+)
+
+assert name_style == "color: #0369a1; font-weight: 800;"
+assert up_style == "font-weight: 800; color: #15803d;"
+assert down_style == "font-weight: 800; color: #dc2626;"
+assert unknown_style == "font-weight: 800; color: #111827;"
+assert all(
+    "background" not in style
+    for style in (name_style, up_style, down_style, unknown_style)
+)
+PY
+  assert_success
 }

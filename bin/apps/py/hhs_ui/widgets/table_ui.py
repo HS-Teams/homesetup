@@ -1254,35 +1254,75 @@ def render_read_only_rows(
     )
 
 
-def service_name_cell_style(_: object) -> str:
-    """Return the dataframe cell style for service names."""
-    return (
-        "background-color: #21222c;"
-        "border-radius: 3px;"
-        "color: #8be9fd;"
-        "font-weight: 800;"
+def service_table_theme() -> dict[str, str]:
+    """Return resolved active-theme colors for service table cells."""
+    theme_properties = theme_custom_properties(
+        st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
     )
+    return {
+        "name": resolve_css_custom_property(
+            theme_properties,
+            "hhs-theme-link-color",
+            "#8be9fd",
+        ),
+        "success": resolve_css_custom_property(
+            theme_properties,
+            "hhs-success",
+            "#50fa7b",
+        ),
+        "danger": resolve_css_custom_property(
+            theme_properties,
+            "hhs-danger",
+            "#ff5555",
+        ),
+        "text": resolve_css_custom_property(
+            theme_properties,
+            "hhs-theme-text-color",
+            "#f8f8f2",
+        ),
+    }
 
 
-def service_value_cell_style(value: object) -> str:
+def service_name_cell_style(_: object, color: str = "#8be9fd") -> str:
+    """Return the dataframe cell style for service names."""
+    return f"color: {color}; font-weight: 800;"
+
+
+def service_value_cell_style(
+    value: object,
+    success_color: str = "#50fa7b",
+    danger_color: str = "#ff5555",
+    text_color: str = "#f8f8f2",
+) -> str:
     """Return the dataframe cell style for service status values."""
     value_text = str(value).lower()
-    base_style = "background-color: #21222c; border-radius: 3px; font-weight: 800;"
+    base_style = "font-weight: 800;"
     if "up" in value_text:
-        return f"{base_style} color: #50fa7b;"
+        return f"{base_style} color: {success_color};"
     if "down" in value_text:
-        return f"{base_style} color: #ff5555;"
-    return f"{base_style} color: #f8f8f2;"
+        return f"{base_style} color: {danger_color};"
+    return f"{base_style} color: {text_color};"
 
 
 def styled_service_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Styler:
     """Return service rows with styled Name and Value cells."""
     dataframe = pd.DataFrame(rows)
     styler = dataframe.style
+    theme_colors = service_table_theme()
     if "Name" in dataframe:
-        styler = styler.map(service_name_cell_style, subset=["Name"])
+        styler = styler.map(
+            service_name_cell_style,
+            color=theme_colors["name"],
+            subset=["Name"],
+        )
     if "Value" in dataframe:
-        styler = styler.map(service_value_cell_style, subset=["Value"])
+        styler = styler.map(
+            service_value_cell_style,
+            success_color=theme_colors["success"],
+            danger_color=theme_colors["danger"],
+            text_color=theme_colors["text"],
+            subset=["Value"],
+        )
     return styler
 
 
