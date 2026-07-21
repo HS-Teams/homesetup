@@ -43,6 +43,7 @@ from hhs_ui.execution.command_runtime import (
     background_job_result,
     background_job_state,
     render_background_job_status,
+    run_bash_command,
     start_background_bash_command,
 )
 from hhs_ui.widgets.dialog_ui import pop_dialog
@@ -70,6 +71,7 @@ from hhs_ui.core.ui_state import save_ui_state
 SSH_EXPLORER_LOCAL_PICKER_KEY = "_hhs_ssh_explorer_local_picker_value"
 SSH_EXPLORER_REMOTE_PICKER_KEY = "_hhs_ssh_explorer_remote_picker_value"
 SSH_EXPLORER_COMPONENT_KEY = "ssh_explorer_component"
+SSH_EXPLORER_OVERWRITE_MARKER = "__HHS_OVERWRITE__"
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:
@@ -667,6 +669,13 @@ def ssh_explorer_remote_spec(host: str, path: str) -> str:
     return f"{shlex.quote(host)}:{shlex.quote(path)}"
 
 
+def ssh_explorer_path_name(panel: str, path: str) -> str:
+    """Return the basename used for a local or remote explorer path."""
+    if panel == "remote":
+        return posixpath.basename(path.rstrip("/")) or path
+    return Path(path).name or path
+
+
 def shell_array_assignment(name: str, values: list[str]) -> str:
     """Return a Bash array assignment for quoted string values."""
     quoted_values = " ".join(shlex.quote(value) for value in values if value)
@@ -699,6 +708,75 @@ def build_scp_to_local_command(
         f"scp -r {ssh_config_option()} -o ControlPath={safe_control_path} -- "
         f"{remote_specs} {shlex.quote(local_dir)}"
     )
+
+
+def build_remote_transfer_overwrite_check_command(
+    local_paths: list[str],
+    remote_dir: str,
+) -> str:
+    """Build a remote shell command that prints destination names already present."""
+    target_names = [ssh_explorer_path_name("local", path) for path in local_paths]
+    return textwrap.dedent(f"""
+        {remote_explorer_target_assignment(remote_dir)}
+        {shell_array_assignment("names", target_names)}
+        for name in "${{names[@]}}"; do
+          [ -n "${{name}}" ] || continue
+          destination="${{target%/}}/${{name}}"
+          [ -e "${{destination}}" ] || [ -L "${{destination}}" ] || continue
+          printf '{SSH_EXPLORER_OVERWRITE_MARKER}\\t%s\\n' "${{name}}"
+        done
+        """).strip()
+
+
+def parse_ssh_explorer_overwrite_names(output: str) -> list[str]:
+    """Parse overwrite target names from an explorer overwrite check command."""
+    names = []
+    for line in strip_ansi(output).splitlines():
+        if line.startswith(f"{SSH_EXPLORER_OVERWRITE_MARKER}\t"):
+            name = line.split("\t", 1)[1].strip()
+            if name:
+                names.append(name)
+    return list(dict.fromkeys(names))
+
+
+def local_transfer_overwrite_names(remote_paths: list[str], local_dir: str) -> list[str]:
+    """Return copied remote names that would overwrite local destination entries."""
+    destination_dir = local_explorer_directory(local_dir)
+    overwrite_names = []
+    for remote_path in remote_paths:
+        name = ssh_explorer_path_name("remote", str(remote_path))
+        if not name:
+            continue
+        destination = destination_dir / name
+        if destination.exists() or destination.is_symlink():
+            overwrite_names.append(name)
+    return list(dict.fromkeys(overwrite_names))
+
+
+def remote_transfer_overwrite_names(
+    local_paths: list[str],
+    remote_dir: str,
+) -> list[str] | None:
+    """Return copied local names that would overwrite remote destination entries."""
+    result = run_bash_command(
+        build_remote_transfer_overwrite_check_command(local_paths, remote_dir),
+        "Checking remote overwrite targets",
+        use_cache=False,
+        timeout_seconds=hhs_ui.UI_COMMAND_DEFAULT_TIMEOUT_SECONDS,
+        cache_tag="ssh_files",
+        show_overlay=False,
+    )
+    if result.returncode != 0:
+        push_floating_status(
+            strip_ansi(
+                result.stderr
+                or result.stdout
+                or "Unable to check remote overwrite targets."
+            ),
+            "error",
+        )
+        return None
+    return parse_ssh_explorer_overwrite_names(result.stdout)
 
 
 def build_recoverable_delete_command(paths: list[str]) -> str:
@@ -794,6 +872,18 @@ def copy_local_selection_to_remote(local_paths: list[str], remote_dir: str) -> N
     if not host:
         push_floating_status("Connect to SSH before copying files.", "warn")
         return
+    overwrite_names = remote_transfer_overwrite_names(local_paths, remote_dir)
+    if overwrite_names is None:
+        return
+    if overwrite_names:
+        request_ssh_explorer_overwrite_confirmation(
+            "local_to_remote",
+            local_paths,
+            "",
+            remote_dir,
+            overwrite_names,
+        )
+        return
     start_ssh_explorer_transfer(
         build_scp_to_remote_command(local_paths, remote_dir, host),
         "Copying local file(s)/folder(s) to remote",
@@ -809,6 +899,16 @@ def copy_remote_selection_to_local(remote_paths: list[str], local_dir: str) -> N
     if not host:
         push_floating_status("Connect to SSH before copying files.", "warn")
         return
+    overwrite_names = local_transfer_overwrite_names(remote_paths, local_dir)
+    if overwrite_names:
+        request_ssh_explorer_overwrite_confirmation(
+            "remote_to_local",
+            remote_paths,
+            local_dir,
+            "",
+            overwrite_names,
+        )
+        return
     start_ssh_explorer_transfer(
         build_scp_to_local_command(remote_paths, local_dir, host),
         "Copying remote file(s)/folder(s) to local",
@@ -817,9 +917,7 @@ def copy_remote_selection_to_local(remote_paths: list[str], local_dir: str) -> N
 
 def ssh_explorer_delete_name(panel: str, path: str) -> str:
     """Return a display name for one SSH explorer delete target."""
-    if panel == "remote":
-        return posixpath.basename(path.rstrip("/")) or path
-    return Path(path).name or path
+    return ssh_explorer_path_name(panel, path)
 
 
 def ssh_explorer_delete_message(panel: str, paths: list[str]) -> str:
@@ -829,6 +927,94 @@ def ssh_explorer_delete_message(panel: str, paths: list[str]) -> str:
     ]
     target_names = ", ".join(names) if names else "selected item(s)"
     return f"Are you sure you want to delete {target_names}?"
+
+
+def ssh_explorer_overwrite_message(names: list[str]) -> str:
+    """Return the confirmation message for explorer overwrite targets."""
+    clean_names = [str(name).strip() for name in names if str(name).strip()]
+    target_names = ", ".join(clean_names) if clean_names else "selected item(s)"
+    return f"Are you sure you want to overwrite {target_names}?"
+
+
+def request_ssh_explorer_overwrite_confirmation(
+    direction: str,
+    paths: list[str],
+    local_dir: str,
+    remote_dir: str,
+    overwrite_names: list[str],
+) -> None:
+    """Show the SSH explorer overwrite confirmation dialog."""
+    if direction not in {"local_to_remote", "remote_to_local"} or not paths:
+        push_floating_status("Select files or folders before copying.", "warn")
+        return
+    clean_names = [str(name).strip() for name in overwrite_names if str(name).strip()]
+    if not clean_names:
+        push_floating_status("No overwrite targets were found.", "warn")
+        return
+    st.session_state["ssh_explorer_overwrite_pending"] = {
+        "direction": direction,
+        "paths": paths,
+        "local_dir": local_dir,
+        "remote_dir": remote_dir,
+        "overwrite_names": clean_names,
+    }
+
+
+def cancel_ssh_explorer_overwrite_confirmation() -> None:
+    """Hide the SSH explorer overwrite confirmation dialog."""
+    st.session_state["ssh_explorer_overwrite_pending"] = None
+
+
+def confirm_ssh_explorer_overwrite() -> None:
+    """Start the pending SSH explorer transfer after overwrite confirmation."""
+    pending = st.session_state.get("ssh_explorer_overwrite_pending")
+    st.session_state["ssh_explorer_overwrite_pending"] = None
+    if not isinstance(pending, dict):
+        return
+    direction = str(pending.get("direction", "")).strip()
+    paths_value = pending.get("paths", [])
+    paths = paths_value if isinstance(paths_value, list) else []
+    clean_paths = [str(path) for path in paths if str(path).strip()]
+    if direction not in {"local_to_remote", "remote_to_local"} or not clean_paths:
+        push_floating_status("Select files or folders before copying.", "warn")
+        return
+    host = connected_ssh_host()
+    if not host:
+        push_floating_status("Connect to SSH before copying files.", "warn")
+        return
+    if direction == "local_to_remote":
+        remote_dir = str(pending.get("remote_dir", "")).strip()
+        remote_dir = remote_dir or ssh_explorer_remote_default_path()
+        start_ssh_explorer_transfer(
+            build_scp_to_remote_command(clean_paths, remote_dir, host),
+            "Copying local file(s)/folder(s) to remote",
+        )
+    else:
+        local_dir = str(pending.get("local_dir", "")).strip()
+        local_dir = str(local_explorer_directory(local_dir))
+        start_ssh_explorer_transfer(
+            build_scp_to_local_command(clean_paths, local_dir, host),
+            "Copying remote file(s)/folder(s) to local",
+        )
+    save_ui_state()
+
+
+def render_ssh_explorer_overwrite_dialog() -> bool:
+    """Render the SSH explorer overwrite confirmation dialog when pending."""
+    pending = st.session_state.get("ssh_explorer_overwrite_pending")
+    if not isinstance(pending, dict):
+        return False
+    names_value = pending.get("overwrite_names", [])
+    names = names_value if isinstance(names_value, list) else []
+    return pop_dialog(
+        title="Confirm overwrite",
+        message=ssh_explorer_overwrite_message([str(name) for name in names]),
+        confirm_key="ssh_explorer_confirm_overwrite_button",
+        cancel_key="ssh_explorer_cancel_overwrite_button",
+        on_confirm=confirm_ssh_explorer_overwrite,
+        on_cancel=cancel_ssh_explorer_overwrite_confirmation,
+        confirm_label="Overwrite",
+    )
 
 
 def request_ssh_explorer_delete_confirmation(
@@ -1169,7 +1355,8 @@ def render_ssh_files_panel() -> None:
     complete_ssh_explorer_transfer()
     execute_pending_ssh_explorer_action()
     execute_pending_ssh_explorer_delete()
-    render_ssh_explorer_delete_dialog()
+    if not render_ssh_explorer_overwrite_dialog():
+        render_ssh_explorer_delete_dialog()
     st.session_state.setdefault(
         "ssh_explorer_local_path", ssh_explorer_local_default_path()
     )

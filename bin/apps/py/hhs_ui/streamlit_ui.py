@@ -203,6 +203,7 @@ from hhs_ui.features.search_ui import (
 )
 from hhs_ui.features.ssh_explorer_ui import (
     build_scp_to_local_command,
+    complete_ssh_explorer_transfer,
     execute_pending_ssh_explorer_action,
     execute_pending_ssh_explorer_delete,
     open_remote_explorer_path,
@@ -3549,6 +3550,7 @@ def complete_background_action_jobs() -> None:
     execute_pending_docker_action()
     execute_pending_service_action()
     execute_pending_monitor_process_action()
+    complete_ssh_explorer_transfer()
     execute_pending_ssh_explorer_action()
     execute_pending_ssh_explorer_delete()
     execute_pending_search_open_action()
@@ -4352,6 +4354,7 @@ def initialize_core_session_state() -> None:
         ("ssh_connection_error", ""),
         ("ssh_connection_dialog_title", ""),
         ("ssh_explorer_delete_pending", None),
+        ("ssh_explorer_overwrite_pending", None),
         (hhs_ui.SSH_RECONNECT_HOST_KEY, ""),
     ):
         st.session_state.setdefault(state_key, default_value)

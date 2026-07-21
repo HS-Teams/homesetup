@@ -235,6 +235,11 @@ PY
     'def refresh_ssh_explorer_paths' 'def set_remote_footer_working_directory' \
     'def build_recoverable_delete_command' 'def request_ssh_explorer_delete_confirmation' \
     'def render_ssh_explorer_delete_dialog' 'def create_ssh_explorer_folder' \
+    'def request_ssh_explorer_overwrite_confirmation' \
+    'def render_ssh_explorer_overwrite_dialog' \
+    'def build_remote_transfer_overwrite_check_command' \
+    'def parse_ssh_explorer_overwrite_names' 'def local_transfer_overwrite_names' \
+    'def remote_transfer_overwrite_names' 'def ssh_explorer_path_name' \
     'def ssh_explorer_component_theme' \
     'def build_remote_explorer_listing_command' 'def remote_explorer_target_assignment' \
     'def build_remote_explorer_create_folder_command' 'def parse_remote_explorer_created_dir' \
@@ -247,10 +252,14 @@ PY
     'hhs_ui.SSH_TUNNEL_FILTERS' '"ssh_tunnel_filter"' '"ssh_tunnel_other_filter"' \
     'filter_ssh_tunnel_rows(rows, tunnel_filter, other_filter)' \
     'render_ssh_files_panel()' \
+    'def complete_ssh_explorer_transfer' 'complete_ssh_explorer_transfer' \
     'render_ssh_explorer_component(' 'def handle_ssh_explorer_component_change' \
     'on_change=handle_ssh_explorer_component_change' \
     'if action == "create_folder"' 'if action == "refresh"' 'refresh_ssh_explorer_paths(' \
+    'if action == "copy_to_remote"' 'if action == "copy_to_local"' \
+    'if not render_ssh_explorer_overwrite_dialog():' \
     'if action == "delete"' 'request_ssh_explorer_delete_confirmation(' \
+    'confirm_label="Overwrite"' 'title="Confirm overwrite"' \
     'key=SSH_EXPLORER_COMPONENT_KEY' 'localRows=local_rows' 'localLoading=local_loading' \
     'remoteRows=remote_rows or \[\]' 'remoteLoading=remote_loading' 'loading=explorer_loading' \
     'explorer_loading = local_loading or remote_loading' 'tableHeight=table_height(hhs_ui.ENV_TABLE_HEIGHT)' \
@@ -259,6 +268,20 @@ PY
     'component_height = table_height(hhs_ui.ENV_TABLE_HEIGHT)' 'height=component_height'
   assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/core/ui_definitions.py" \
 'SSH_FILE_TRANSFER_JOB = "ssh_file_transfer"'
+  assert_file_contains "${ui_file}" 'complete_ssh_explorer_transfer()'
+  assert_file_contains "${ui_file}" '("ssh_explorer_overwrite_pending", None)'
+  assert_file_contains "${dialog_ui_file}" 'st.session_state["ssh_explorer_overwrite_pending"] = None'
+  run python3 - <<'PY'
+from pathlib import Path
+
+source = Path("bin/apps/py/hhs_ui/streamlit_ui.py").read_text(encoding="utf-8")
+global_actions_body = source.split("def complete_background_action_jobs", 1)[1].split("\ndef ", 1)[0]
+transfer_index = global_actions_body.index("complete_ssh_explorer_transfer()")
+action_index = global_actions_body.index("execute_pending_ssh_explorer_action()")
+delete_index = global_actions_body.index("execute_pending_ssh_explorer_delete()")
+assert transfer_index < action_index < delete_index
+PY
+  assert_success
   assert_file_contains_many "${ui_file}" \
 'view_segmented_control_widget_key(state_key)' \
     '("ssh_tunnel_filter", "All")'
@@ -417,6 +440,7 @@ namespace = {
     "posixpath": posixpath,
     "re": re,
     "shlex": shlex,
+    "SSH_EXPLORER_OVERWRITE_MARKER": "__HHS_OVERWRITE__",
     "ssh_control_path": lambda host: f"/tmp/{host}.sock",
     "ssh_config_option": lambda: '-F "${HOME}/.ssh/config"',
     "ssh_config_file": lambda: Path.home() / ".ssh" / "config",
@@ -726,6 +750,9 @@ multi_to_remote = namespace["build_scp_to_remote_command"](
 multi_to_local = namespace["build_scp_to_local_command"](
     ["/remote/file-one.txt", "/remote/file-two.txt"], "/local dir", "host.example"
 )
+overwrite_check = namespace["build_remote_transfer_overwrite_check_command"](
+    ["/local/file one.txt", "/local/file two.txt"], "/remote dir"
+)
 assert "scp -r" in to_remote
 assert "-F \"${HOME}/.ssh/config\"" in to_remote
 assert "-o ControlPath=" in to_remote
@@ -736,6 +763,18 @@ assert "'/local dir'" in to_local
 assert "'/local/file one.txt' '/local/file two.txt'" in multi_to_remote
 assert "host.example:/remote/file-one.txt" in multi_to_local
 assert "host.example:/remote/file-two.txt" in multi_to_local
+assert "__HHS_OVERWRITE__" in overwrite_check
+assert "names=('file one.txt' 'file two.txt')" in overwrite_check
+assert 'destination="${target%/}/${name}"' in overwrite_check
+assert namespace["parse_ssh_explorer_overwrite_names"](
+    "__HHS_OVERWRITE__\told.txt\n__HHS_OVERWRITE__\told.txt\n"
+) == ["old.txt"]
+with tempfile.TemporaryDirectory() as tmp_dir:
+    local_dir = Path(tmp_dir)
+    (local_dir / "report.txt").write_text("old", encoding="utf-8")
+    assert namespace["local_transfer_overwrite_names"](
+        ["/remote/report.txt", "/remote/new.txt"], str(local_dir)
+    ) == ["report.txt"]
 PY
   assert_success
 

@@ -43,6 +43,7 @@ def close_all_dialogs() -> None:
     st.session_state["ai_clear_chat_pending"] = False
     st.session_state["home_tool_action_execute_pending"] = None
     st.session_state["ssh_explorer_delete_pending"] = None
+    st.session_state["ssh_explorer_overwrite_pending"] = None
     st.session_state["ssh_connection_dialog_title"] = ""
     st.session_state["footer_shell_version_dialog_title"] = ""
     st.session_state.pop("home_tool_action_operation", None)
