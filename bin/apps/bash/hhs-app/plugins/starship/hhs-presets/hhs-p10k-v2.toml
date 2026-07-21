@@ -1,0 +1,288 @@
+# ~/.config/hhs/.starship.toml
+# Credits to: HomeSetup team
+# Preset: hhs-p10k-v2.toml
+
+# Purpose: HomeSetup's default starship configuration file.
+# Created: Aug 26, 2018
+#  Author: <B>H</B>ugo <B>S</B>aporetti <B>J</B>unior
+#  Mailto: taius.hhs@gmail.com
+#    Site: https://github.com/yorevs/homesetup
+#
+# See a the full starship reference at:
+# https://starship.rs/config/#prompt
+
+# Powerlevel10k-inspired Starship preset
+# Requires a Nerd Font for icons and Powerline separators.
+
+"$schema" = "https://starship.rs/config-schema.json"
+
+add_newline = true
+command_timeout = 1000
+scan_timeout = 50
+palette = "p10k"
+
+format = """\
+[](fg:os_bg)\
+$os\
+$username\
+[](fg:os_bg bg:dir_bg)\
+$directory\
+[](fg:dir_bg bg:git_bg)\
+$git_branch\
+$git_status\
+[](fg:git_bg bg:lang_bg)\
+$nodejs\
+$python\
+$rust\
+$golang\
+$java\
+$php\
+$lua\
+$docker_context\
+[](fg:lang_bg bg:context_bg)\
+$kubernetes\
+$aws\
+$gcloud\
+$azure\
+[](fg:context_bg bg:status_bg)\
+$status\
+$cmd_duration\
+[](fg:status_bg)\
+$line_break\
+$character"""
+
+right_format = """$jobs$battery$time"""
+
+[palettes.p10k]
+os_bg = "#2E3440"
+dir_bg = "#5E81AC"
+git_bg = "#A3BE8C"
+lang_bg = "#B48EAD"
+context_bg = "#D08770"
+status_bg = "#BF616A"
+text_dark = "#2E3440"
+text_light = "#ECEFF4"
+muted = "#7F849C"
+success = "#A3BE8C"
+warning = "#EBCB8B"
+error = "#BF616A"
+
+[os]
+disabled = false
+style = "bg:os_bg fg:text_light bold"
+format = "[$symbol ]($style)"
+
+[os.symbols]
+Alpine = ""
+Amazon = ""
+Android = ""
+Arch = ""
+CentOS = ""
+Debian = ""
+Fedora = ""
+FreeBSD = ""
+Linux = ""
+Macos = ""
+Manjaro = ""
+Mint = ""
+NixOS = ""
+OpenBSD = ""
+openSUSE = ""
+Raspbian = ""
+Redhat = ""
+RedHatEnterprise = ""
+RockyLinux = ""
+Ubuntu = ""
+Unknown = ""
+Windows = "󰍲"
+
+[username]
+show_always = true
+style_user = "bg:os_bg fg:text_light bold"
+style_root = "bg:os_bg fg:error bold"
+format = "[$user ]($style)"
+
+[hostname]
+ssh_only = true
+style = "bg:os_bg fg:warning bold"
+format = "[@$hostname ]($style)"
+trim_at = "."
+
+[directory]
+style = "bg:dir_bg fg:text_light bold"
+format = "[   $path ]($style)"
+truncation_length = 3
+truncate_to_repo = false
+truncation_symbol = "…/"
+read_only = " "
+read_only_style = "bg:dir_bg fg:warning"
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = " "
+"Pictures" = " "
+"Developer" = "󰲋 "
+"Projects" = "󰲋 "
+
+[git_branch]
+symbol = " "
+style = "bg:git_bg fg:text_dark bold"
+format = "[ $symbol$branch ]($style)"
+truncation_length = 28
+truncation_symbol = "…"
+
+[git_status]
+style = "bg:git_bg fg:text_dark bold"
+format = "[($all_status$ahead_behind )]($style)"
+conflicted = "=${count}"
+ahead = "⇡${count}"
+behind = "⇣${count}"
+diverged = "⇕⇡${ahead_count}⇣${behind_count}"
+untracked = "?${count}"
+stashed = "*${count}"
+modified = "!${count}"
+staged = "+${count}"
+renamed = "»${count}"
+deleted = "✘${count}"
+
+[git_state]
+style = "bg:git_bg fg:text_dark bold"
+format = "[ $state( $progress_current/$progress_total) ]($style)"
+
+[nodejs]
+symbol = " "
+style = "bg:lang_bg fg:text_light bold"
+format = "[ $symbol($version) ]($style)"
+
+[python]
+symbol = " "
+style = "bg:lang_bg fg:text_light bold"
+format = '[ $symbol${pyenv_prefix}(${version})( \($virtualenv\)) ]($style)'
+
+[rust]
+symbol = " "
+style = "bg:lang_bg fg:text_light bold"
+format = "[ $symbol($version) ]($style)"
+
+[golang]
+symbol = " "
+style = "bg:lang_bg fg:text_light bold"
+format = "[ $symbol($version) ]($style)"
+
+[java]
+symbol = " "
+style = "bg:lang_bg fg:text_light bold"
+format = "[ $symbol($version) ]($style)"
+
+[php]
+symbol = " "
+style = "bg:lang_bg fg:text_light bold"
+format = "[ $symbol($version) ]($style)"
+
+[lua]
+symbol = " "
+style = "bg:lang_bg fg:text_light bold"
+format = "[ $symbol($version) ]($style)"
+
+[docker_context]
+symbol = " "
+style = "bg:lang_bg fg:text_light bold"
+format = "[ $symbol$context ]($style)"
+only_with_files = true
+
+[kubernetes]
+disabled = false
+symbol = "󱃾 "
+style = "bg:context_bg fg:text_dark bold"
+format = "[ $symbol$context(::$namespace) ]($style)"
+
+[aws]
+symbol = " "
+style = "bg:context_bg fg:text_dark bold"
+format = "[ $symbol($profile)(@$region) ]($style)"
+
+[gcloud]
+symbol = "󱇶 "
+style = "bg:context_bg fg:text_dark bold"
+format = "[ $symbol$account(@$domain)(::$project) ]($style)"
+
+[azure]
+disabled = false
+symbol = "󰠅 "
+style = "bg:context_bg fg:text_dark bold"
+format = "[ $symbol$subscription ]($style)"
+
+[status]
+disabled = false
+symbol = "✘"
+success_symbol = "✔"
+not_executable_symbol = ""
+not_found_symbol = ""
+sigint_symbol = "󰚌"
+signal_symbol = "󱐋"
+style = "bg:status_bg fg:text_light bold"
+format = "[ $symbol$status ]($style)"
+map_symbol = true
+pipestatus = true
+pipestatus_separator = "|"
+
+[cmd_duration]
+min_time = 2000
+show_milliseconds = false
+style = "bg:status_bg fg:text_light bold"
+format = "[  $duration ]($style)"
+
+[character]
+success_symbol = "[❯](bold success)"
+error_symbol = "[❯](bold error)"
+vimcmd_symbol = "[❮](bold success)"
+vimcmd_replace_one_symbol = "[❮](bold purple)"
+vimcmd_replace_symbol = "[❮](bold purple)"
+vimcmd_visual_symbol = "[❮](bold warning)"
+
+[jobs]
+symbol = " "
+style = "bold muted"
+format = "[$symbol$number]($style) "
+number_threshold = 1
+symbol_threshold = 1
+
+[battery]
+disabled = false
+full_symbol = "󰁹 "
+charging_symbol = "󰂄 "
+discharging_symbol = "󰂃 "
+unknown_symbol = "󰂑 "
+empty_symbol = "󰂎 "
+format = "[$symbol$percentage]($style) "
+
+[[battery.display]]
+threshold = 20
+style = "bold error"
+
+[[battery.display]]
+threshold = 50
+style = "bold warning"
+
+[time]
+disabled = false
+time_format = "%H:%M"
+style = "bold muted"
+format = "[ $time]($style)"
+
+[line_break]
+disabled = false
+
+# Keep noisy modules out of the prompt unless explicitly enabled above.
+[package]
+disabled = true
+
+[memory_usage]
+disabled = true
+
+[localip]
+disabled = true
+
+[shell]
+disabled = true
