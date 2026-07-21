@@ -1392,7 +1392,6 @@ div[class*="st-key-"][class*="_markdown_table"]:has(
   z-index: 2;
 }
 
-.st-key-hhs_starship_save_config_button button,
 .st-key-hhs_setup_apply_button button,
 .st-key-hhs_setup_cancel_button button,
 .st-key-hhs_setup_restore_button button,
@@ -1417,7 +1416,6 @@ div[class*="st-key-"][class*="_markdown_table"]:has(
 .st-key-hhs_setup_restore_button,
 .st-key-hhs_settings_delete_button,
 .st-key-hhs_settings_truncate_button,
-.st-key-hhs_starship_save_config_button,
 .st-key-hhs_firebase_alias_upload_button,
 .st-key-hhs_firebase_alias_download_button {
   max-width: var(--hhs-theme-hhs-action-button-width);
