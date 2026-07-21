@@ -15,11 +15,12 @@
 PLUGIN_NAME="starship"
 
 # Current hhs starship version
-VERSION="1.0.1"
+VERSION="1.1.0"
 
 # Namespace cleanup
 UNSETS=(
-  help version cleanup execute add_hhs_preset
+  help version cleanup execute add_hhs_presets
+  current_starship_preset record_starship_preset
 )
 
 # All Starship presets
@@ -56,7 +57,7 @@ usage: ${APP_NAME} ${PLUGIN_NAME} [command] [options]
     commands:
       edit                       : Edit your starship configuration file (default command).
       restore                    : Restore HomeSetup defaults.
-      preset <preset_name>       : Configure your starship to a preset.
+      preset <-q | preset_name>       : Configure of query your current starship to a preset.
 
     presets:
       no-runtime-versions        : Hide language runtime versions.
@@ -107,7 +108,7 @@ function cleanup() {
 # @purpose: HHS plugin required function
 function execute() {
 
-  local preset_val mselect_file title preset
+  local preset_val mselect_file title preset query_status
 
   [[ -z "$1" || "$1" == "-h" || "$1" == "--help" ]] && usage 0
   [[ "$1" == "-v" || "$1" == "--version" ]] && version
@@ -125,8 +126,19 @@ function execute() {
         quit 1 "Unable to restore HomeSetup starship preset"
       fi
     elif list_contains "${*}" "preset"; then
-      add_hhs_presets
       preset_val="$2"
+      if [[ "${preset_val}" == "-q" ]]; then
+        preset_val="$(current_starship_preset)"
+        query_status=$?
+        if [[ ${query_status} -eq 1 ]]; then
+          quit 1 "Unable to read starship configuration file: ${STARSHIP_CONFIG}"
+        elif [[ ${query_status} -eq 2 ]]; then
+          quit 1 "Starship preset information not found in: ${STARSHIP_CONFIG}"
+        fi
+        printf '%s\n' "${preset_val}"
+        quit 0
+      fi
+      add_hhs_presets
       [[ -n "${preset_val}" && "${2}" == hhs-* ]] && preset_val="${preset_val//.toml}.toml"
       if [[ -z ${preset_val} ]]; then
         mselect_file=$(mktemp)
@@ -136,16 +148,19 @@ function execute() {
         fi
       fi
       if [[ -n "${preset_val}" ]] && ! list_contains "${STARSHIP_PRESETS[*]}" "${preset_val}"; then
-        __hhs_errcho "${PLUGIN_NAME}" "Starship preset not found: \033[9m'${preset_val}'\033[m!\n${STARSHIP_PRESETS[*]}"
+        __hhs_errcho "${PLUGIN_NAME}" \
+          "Starship preset not found: \033[9m'${preset_val}'\033[m!\n${STARSHIP_PRESETS[*]}"
         echo -e "${YELLOW}${TIP_ICON} Tip: Please choose one valid Starship preset: ${BLUE}"
         for preset in "${STARSHIP_PRESETS[@]}"; do echo "  |-${preset}" | nl; done
         quit 1
       fi
       if [[ -n "${preset_val}" ]]; then
         echo -e "${GREEN}Setting starship preset \"${preset_val}\"...${NC}"
-        if [[ "${preset_val}" == *'hhs-'* ]] && \cp "${HHS_STARSHIP_PRESETS_DIR}/${preset_val}" "${STARSHIP_CONFIG}"; then
+        if [[ "${preset_val}" == *'hhs-'* ]] \
+          && \cp "${HHS_STARSHIP_PRESETS_DIR}/${preset_val}" "${STARSHIP_CONFIG}"; then
           quit 0 "${GREEN}Your starship prompt changed to HomeSetup preset: ${preset_val} !${NC}"
-        elif bash -c "starship preset \"${preset_val}\" -o ${STARSHIP_CONFIG}" &> /dev/null; then
+        elif starship preset "${preset_val}" -o "${STARSHIP_CONFIG}" &> /dev/null \
+          && record_starship_preset "${preset_val}"; then
           quit 0 "${GREEN}Your starship prompt changed to preset: ${preset_val} !${NC}"
         else
           quit 1 "Unable to set starship preset: ${preset_val} "
@@ -159,6 +174,43 @@ function execute() {
     echo -e "${ORANGE}Starship is not installed. You can install it by:"
     echo -e "${CYAN}$ curl -sS https://starship.rs/install.sh${NC}"
   fi
+}
+
+
+# @purpose: Print the current preset recorded in the Starship configuration file.
+function current_starship_preset() {
+  local preset_name
+
+  [[ -r "${STARSHIP_CONFIG:-}" ]] || return 1
+  preset_name="$(
+    awk '/^# Preset:[[:space:]]*/ {
+      sub(/^# Preset:[[:space:]]*/, "")
+      print
+      exit
+    }' "${STARSHIP_CONFIG}"
+  )"
+  if [[ -z "${preset_name}" ]]; then
+    preset_name="$(
+      awk '/^# Profile:[[:space:]]*/ {
+        sub(/^# Profile:[[:space:]]*/, "")
+        print
+        exit
+      }' "${STARSHIP_CONFIG}"
+    )"
+    [[ "${preset_name}" == hhs-* && "${preset_name}" != *.toml ]] \
+      && preset_name="${preset_name}.toml"
+  fi
+  [[ -n "${preset_name}" ]] || return 2
+  printf '%s\n' "${preset_name}"
+}
+
+
+# @purpose: Record a generated preset in the Starship configuration file.
+function record_starship_preset() {
+  local preset_name="$1"
+
+  [[ -n "${preset_name}" && -f "${STARSHIP_CONFIG:-}" ]] || return 1
+  printf '\n# Preset: %s\n' "${preset_name}" >> "${STARSHIP_CONFIG}"
 }
 
 
@@ -178,7 +230,9 @@ add_hhs_presets() {
 
   local hhs_presets
 
-  IFS=$'\n' read -r -d '' -a hhs_presets < <(find "${HHS_STARSHIP_PRESETS_DIR}" -type f -name "hhs-*.toml" -exec basename {} \;)
+  IFS=$'\n' read -r -d '' -a hhs_presets < <(
+    find "${HHS_STARSHIP_PRESETS_DIR}" -type f -name "hhs-*.toml" -exec basename {} \;
+  )
   IFS="${OLDIFS}"
   STARSHIP_PRESETS+=("${hhs_presets[@]}")
 }

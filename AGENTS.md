@@ -99,3 +99,8 @@ When reporting the fix, include:
 - confidence level
 - final fix
 - remaining uncertainty, if any
+
+
+## IMPORTANT SAFETY NOTES:
+
+- Never use rm, git reset, ... or other destructive commands without asking first.

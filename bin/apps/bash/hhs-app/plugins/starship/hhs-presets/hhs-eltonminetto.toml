@@ -1,6 +1,6 @@
 # ~/.config/hhs/.starship.toml
 # Credits to: https://eltonminetto.dev/en/post/2023-05-16-improving-terminal/
-# Profile: hhs-eltonminetto
+# Preset: hhs-eltonminetto.toml
 
 [aws]
 disabled = true

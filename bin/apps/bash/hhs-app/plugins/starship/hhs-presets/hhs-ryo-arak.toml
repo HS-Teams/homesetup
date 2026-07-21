@@ -1,6 +1,6 @@
 # ~/.config/hhs/.starship.toml
 # Credits to: https://gist.github.com/ryo-ARAKI/48a11585299f9032fa4bda60c9bba593
-# Profile: hhs-ryo-arak
+# Preset: hhs-ryo-arak.toml
 
 [battery]
 full_symbol = "🔋"

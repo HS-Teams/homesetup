@@ -1,6 +1,6 @@
 # ~/.config/hhs/.starship.toml
 # Credits to: https://github.com/theRubberDuckiee/dev-environment-files/blob/main/starship.toml
-# Profile: hhs-p10k
+# Preset: hhs-p10k.toml
 
 format = """\
 [](bg:#030B16 fg:#7DF9AA)\
