@@ -299,6 +299,7 @@ from hhs_ui.core.theme_assets import (
     render_styles,
     validated_theme_name,
 )
+from hhs_ui.core.theme_catalog import theme_option_label
 from hhs_ui.core.ui_state import (
     load_ui_state,
     persisted_theme_name,
@@ -727,6 +728,7 @@ def render_sidebar() -> None:
         selected_theme = st.selectbox(
             "Theme",
             options=theme_options,
+            format_func=theme_option_label,
             key=hhs_ui.THEME_SELECTED_KEY,
             placeholder="",
             disabled=False,

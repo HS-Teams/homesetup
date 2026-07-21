@@ -13,8 +13,8 @@ import streamlit as st
 
 import hhs_ui
 import hhs_ui.core.constants as hhs_ui_constants
-from hhs_ui.widgets.dialog_ui import close_all_dialogs
 from hhs_ui.core.process_resources import process_resource_registry
+from hhs_ui.core.theme_catalog import theme_option_from_path, theme_option_label
 from hhs_ui.core.ui_definitions import (
     COMMAND_PRELOADER_BUS,
     COMMAND_PRELOADER_EVENT_BUS_REGISTRY_KEY,
@@ -23,6 +23,7 @@ from hhs_ui.core.ui_definitions import (
     COMMAND_PRELOADER_START_EVENT,
     COMMAND_PRELOADER_SUBSCRIBER_MARKER,
 )
+from hhs_ui.widgets.dialog_ui import close_all_dialogs
 
 
 def _unconfigured_dependency(name: str) -> Callable[..., object]:
@@ -741,7 +742,11 @@ def render_theme_reload_overlay() -> None:
         or st.session_state.get(hhs_ui.THEME_SELECTED_KEY)
         or ""
     )
-    safe_theme_name = theme_name.strip() or hhs_ui.APP_THEME_CSS_FILE.stem
+    default_theme = theme_option_from_path(
+        hhs_ui.APP_THEME_CSS_FILE,
+        hhs_ui.APP_THEMES_DIR,
+    )
+    safe_theme_name = theme_option_label(theme_name or default_theme)
     st.session_state["theme_reload_pending"] = False
     render_preloader(f"Loading theme {safe_theme_name}", transient=False)
     render_script_html(
@@ -787,5 +792,3 @@ def set_overlay(
         return
 
     clear_preloader()
-
-

@@ -22,19 +22,19 @@ load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
 @test "when styling HomeSetup UI then selected-item and footer styling should be configured" {
-  run grep -q -- '--hhs-selected-item-label: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  run grep -q -- '--hhs-selected-item-label: var(--hhs-theme-text-color)' "${dark_themes_dir}/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-selected-item-value: var(--hhs-success)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  run grep -q -- '--hhs-selected-item-value: var(--hhs-success)' "${dark_themes_dir}/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-theme-primary-color: var(' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/pastel-powerline.css"
+  run grep -q -- '--hhs-theme-primary-color: var(' "${dark_themes_dir}/pastel-powerline.css"
   assert_failure
 
-  run grep -q -- '--hhs-theme-link-color: var(' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/pastel-powerline.css"
+  run grep -q -- '--hhs-theme-link-color: var(' "${dark_themes_dir}/pastel-powerline.css"
   assert_failure
 
-  run python3 - "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/pastel-powerline.css" "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/jetpack.css" <<'PY'
+  run python3 - "${dark_themes_dir}/pastel-powerline.css" "${dark_themes_dir}/jetpack.css" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -75,11 +75,11 @@ cache_runtime_source = Path("bin/apps/py/hhs_ui/execution/cache_runtime.py").rea
 status_source = Path("bin/apps/py/hhs_ui/widgets/status_ui.py").read_text()
 table_ui_source = Path("bin/apps/py/hhs_ui/widgets/table_ui.py").read_text()
 base_css = Path("bin/apps/py/hhs_ui/static/css/streamlit_ui.css").read_text()
-dracula_css = Path("bin/apps/py/hhs_ui/static/themes/dracula.css").read_text()
-homesetup_css = Path("bin/apps/py/hhs_ui/static/themes/homesetup.css").read_text()
-jetpack_css = Path("bin/apps/py/hhs_ui/static/themes/jetpack.css").read_text()
-pastel_powerline_css = Path("bin/apps/py/hhs_ui/static/themes/pastel-powerline.css").read_text()
-tokyo_night_css = Path("bin/apps/py/hhs_ui/static/themes/tokyo-night.css").read_text()
+dracula_css = Path("bin/apps/py/hhs_ui/static/themes/dark/dracula.css").read_text()
+homesetup_css = Path("bin/apps/py/hhs_ui/static/themes/dark/homesetup.css").read_text()
+jetpack_css = Path("bin/apps/py/hhs_ui/static/themes/dark/jetpack.css").read_text()
+pastel_powerline_css = Path("bin/apps/py/hhs_ui/static/themes/dark/pastel-powerline.css").read_text()
+tokyo_night_css = Path("bin/apps/py/hhs_ui/static/themes/dark/tokyo-night.css").read_text()
 
 assert 'class="hhs-footer-logo"' in ui_source
 assert 'class="hhs-footer-logo-link"' in ui_source

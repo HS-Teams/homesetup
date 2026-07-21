@@ -404,7 +404,7 @@ PY
   assert_file_contains_many "${css_file}" \
 'max-height: var(--hhs-ttyd-max-height, 760px)' 'background: var(--hhs-terminal-background-color, #000000)' \
     'height: calc(100% - 20px)' 'width: calc(100% - 20px)'
-  for theme_file in "${HHS_REPO_DIR}"/bin/apps/py/hhs_ui/static/themes/*.css; do
+  for theme_file in "${dark_themes_dir}"/*.css; do
     run grep -q -- '--hhs-terminal-background-color: #000000' "${theme_file}"
     assert_success
 

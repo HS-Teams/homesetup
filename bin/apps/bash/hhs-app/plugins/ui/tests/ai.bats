@@ -569,7 +569,7 @@ PY
 
   assert_file_contains_many "${ai_ui_file}" \
 'status == "Downloaded"' 'color: #4da3ff'
-  run grep -q -- '--hhs-model-accent: #4da3ff' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  run grep -q -- '--hhs-model-accent: #4da3ff' "${dark_themes_dir}/dracula.css"
   assert_success
 
   run python3 - "${ai_ui_file}" <<'PY'

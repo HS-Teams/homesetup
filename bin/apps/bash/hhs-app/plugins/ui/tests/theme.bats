@@ -42,10 +42,10 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
   assert_file_contains "${css_file}" 'overflow-x: hidden'
 
-  run grep -q -- '--hhs-theme-background-color: #282a36' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  run grep -q -- '--hhs-theme-background-color: #282a36' "${dark_themes_dir}/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-background: var(--hhs-theme-background-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  run grep -q -- '--hhs-background: var(--hhs-theme-background-color)' "${dark_themes_dir}/dracula.css"
   assert_success
 
   assert_file_contains_many "${theme_assets_file}" \
@@ -143,13 +143,13 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_contains_many "${css_file}" \
 '.st-key-ssh_connect_button button' '.st-key-ssh_disconnect_button button' 'background: #16a34a' \
     'background: #dc2626' 'color: #ffffff' 'min-height: 2.55rem'
-  run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-text-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  run grep -q -- '--hhs-markdown-table-header: var(--hhs-theme-text-color)' "${dark_themes_dir}/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-markdown-table-value: var(--hhs-theme-primary-color)' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  run grep -q -- '--hhs-markdown-table-value: var(--hhs-theme-primary-color)' "${dark_themes_dir}/dracula.css"
   assert_success
 
-  run grep -q -- '--hhs-theme-text-color-accent:' "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css"
+  run grep -q -- '--hhs-theme-text-color-accent:' "${dark_themes_dir}/dracula.css"
   assert_success
 
   assert_file_contains_many "${css_file}" \
@@ -164,6 +164,82 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_file_contains_many "${css_file}" \
 'color: var(--hhs-selected-item-label)' 'color: var(--hhs-selected-item-value)'
 
+}
+
+@test "when organizing UI themes then dark and light variants should stay normalized" {
+  run python3 - <<'PY'
+import re
+from pathlib import Path
+
+themes_dir = Path("bin/apps/py/hhs_ui/static/themes")
+dark_dir = themes_dir / "dark"
+light_dir = themes_dir / "light"
+dark_files = sorted(theme_file.name for theme_file in dark_dir.glob("*.css"))
+light_files = sorted(theme_file.name for theme_file in light_dir.glob("*.css"))
+
+assert not list(themes_dir.glob("*.css"))
+assert dark_files == light_files == [
+    "dracula.css",
+    "homesetup.css",
+    "jetpack.css",
+    "pastel-powerline.css",
+    "tokyo-night.css",
+]
+
+
+def stylesheet_structure(theme_file: Path) -> list[tuple[str, tuple[str, ...]]]:
+    """Return selectors and declaration names in source order."""
+    structure = []
+    for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", theme_file.read_text()):
+        selector_source = re.sub(r"/\*.*?\*/", "", match.group(1), flags=re.S)
+        selector = " ".join(selector_source.split())
+        declarations = tuple(
+            line.split(":", 1)[0].strip()
+            for line in match.group(2).splitlines()
+            if ":" in line and not line.lstrip().startswith("/*")
+        )
+        structure.append((selector, declarations))
+    return structure
+
+
+def shared_theme_tokens(theme_file: Path) -> tuple[str, ...]:
+    """Return standard theme tokens without palette-specific primitives."""
+    root_declarations = stylesheet_structure(theme_file)[0][1]
+    return tuple(
+        declaration
+        for declaration in root_declarations
+        if not declaration.startswith(("--hhs-jetpack-", "--hhs-powerline-"))
+    )
+
+
+def shared_selector_order(theme_file: Path) -> tuple[str, ...]:
+    """Return standard selectors without palette-specific primitives."""
+    return tuple(
+        selector
+        for selector, _declarations in stylesheet_structure(theme_file)[1:]
+        if not selector.startswith((".hhs-jetpack", ".hhs-powerline"))
+    )
+
+
+reference_theme = dark_dir / dark_files[0]
+reference_tokens = shared_theme_tokens(reference_theme)
+reference_selectors = shared_selector_order(reference_theme)
+for theme_name in dark_files:
+    dark_file = dark_dir / theme_name
+    light_file = light_dir / theme_name
+    dark_source = dark_file.read_text()
+    light_source = light_file.read_text()
+    assert "--hhs-theme-base: dark;" in dark_source
+    assert "--hhs-theme-base: light;" in light_source
+    assert " dark " in dark_source.split("/*", 1)[1].split("*/", 1)[0]
+    assert " light " in light_source.split("/*", 1)[1].split("*/", 1)[0]
+    assert stylesheet_structure(dark_file) == stylesheet_structure(light_file)
+    assert shared_theme_tokens(dark_file) == reference_tokens
+    assert shared_theme_tokens(light_file) == reference_tokens
+    assert shared_selector_order(dark_file) == reference_selectors
+    assert shared_selector_order(light_file) == reference_selectors
+PY
+  assert_success
 }
 
 @test "when selecting a UI theme then the selected theme should persist and restore" {
@@ -199,12 +275,16 @@ spec = importlib.util.spec_from_file_location("streamlit_ui_under_test", app_dir
 ui = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ui)
 import hhs_ui.core.theme_assets as theme_assets
+from hhs_ui.core.theme_catalog import theme_option_label
 
 with tempfile.TemporaryDirectory() as tmpdir:
     tmp_path = Path(tmpdir)
     themes_dir = tmp_path / "themes"
-    themes_dir.mkdir()
-    (themes_dir / "dracula.css").write_text("""
+    dark_themes_dir = themes_dir / "dark"
+    light_themes_dir = themes_dir / "light"
+    dark_themes_dir.mkdir(parents=True)
+    light_themes_dir.mkdir()
+    (dark_themes_dir / "dracula.css").write_text("""
 :root {
   --hhs-theme-base: dark;
   --hhs-theme-background-color: #282a36;
@@ -215,7 +295,18 @@ with tempfile.TemporaryDirectory() as tmpdir:
 }
 dracula-css
 """, encoding="utf-8")
-    (themes_dir / "homesetup.css").write_text("""
+    (light_themes_dir / "dracula.css").write_text("""
+:root {
+  --hhs-theme-base: light;
+  --hhs-theme-background-color: #f8f8f2;
+  --hhs-theme-primary-color: #6c3fc5;
+  --hhs-theme-text-color: #282a36;
+  --hhs-theme-code-background-color: #eeeef2;
+  --hhs-theme-show-widget-border: true;
+}
+dracula-light-css
+""", encoding="utf-8")
+    (dark_themes_dir / "homesetup.css").write_text("""
 :root {
   --hhs-theme-base: dark;
   --hhs-theme-background-color: #07111f;
@@ -226,7 +317,7 @@ dracula-css
 }
 homesetup-css
 """, encoding="utf-8")
-    (themes_dir / "tokyo-night.css").write_text("""
+    (dark_themes_dir / "tokyo-night.css").write_text("""
 :root {
   --hhs-theme-base: dark;
   --hhs-theme-background-color: #1a1b26;
@@ -237,13 +328,25 @@ homesetup-css
 }
 tokyo-night-css
 """, encoding="utf-8")
-    ui.hhs_ui.APP_THEME_CSS_FILE = themes_dir / "dracula.css"
+    ui.hhs_ui.APP_THEMES_DIR = themes_dir
+    ui.hhs_ui.APP_THEME_CSS_FILE = dark_themes_dir / "dracula.css"
     ui.hhs_ui.UI_STATE_FILE = tmp_path / "hhs-dir" / "streamlit-ui-state.json"
-    ui.hhs_ui_constants.APP_THEME_CSS_FILE = themes_dir / "dracula.css"
+    ui.hhs_ui_constants.APP_THEMES_DIR = themes_dir
+    ui.hhs_ui_constants.APP_THEME_CSS_FILE = dark_themes_dir / "dracula.css"
     ui.hhs_ui_constants.UI_STATE_FILE = tmp_path / "hhs-dir" / "streamlit-ui-state.json"
 
+    assert theme_assets.available_theme_options() == (
+        "dark/dracula",
+        "light/dracula",
+        "dark/homesetup",
+        "dark/tokyo-night",
+    )
+    assert theme_option_label("dark/dracula") == "Dracula (Dark)"
+    assert theme_option_label("light/dracula") == "Dracula (Light)"
+    assert theme_option_label("dark/homesetup") == "HomeSetup (Dark)"
+
     ui.persist_theme_selection("tokyo-night")
-    assert json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))["theme_selected"] == "tokyo-night"
+    assert json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))["theme_selected"] == "dark/tokyo-night"
 
     streamlit.session_state.clear()
     streamlit.session_state["active_view"] = "Home"
@@ -259,7 +362,7 @@ tokyo-night-css
     streamlit.session_state["path_value_overrides"] = {"/bin": "/tmp/bin"}
     ui.save_ui_state()
     saved_state = json.loads(ui.hhs_ui.UI_STATE_FILE.read_text(encoding="utf-8"))
-    assert saved_state["theme_selected"] == "tokyo-night"
+    assert saved_state["theme_selected"] == "dark/tokyo-night"
     assert saved_state[ui.hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] is True
     assert saved_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] == "TERMINAL"
     assert saved_state[ui.hhs_ui.DOCUMENT_PREVIOUS_VIEW_KEY] == "Home"
@@ -273,7 +376,7 @@ tokyo-night-css
 
     streamlit.session_state.clear()
     ui.restore_ui_state()
-    assert streamlit.session_state["theme_selected"] == "tokyo-night"
+    assert streamlit.session_state["theme_selected"] == "dark/tokyo-night"
     assert streamlit.session_state[ui.hhs_ui.DOCUMENT_VIEW_ACTIVE_KEY] is True
     assert streamlit.session_state[ui.hhs_ui.DOCUMENT_SELECTED_KEY] == "TERMINAL"
     assert streamlit.session_state[ui.hhs_ui.SSH_RECONNECT_HOST_KEY] == "homeserver"
@@ -297,11 +400,16 @@ tokyo-night-css
     assert homesetup_options["theme.backgroundColor"] == "#07111f"
     assert homesetup_options["theme.codeBackgroundColor"] == "#0b1628"
 
+    assert theme_assets.validated_theme_name("dracula-light") == "light/dracula"
+    light_options = theme_assets.theme_config_options("dracula-light")
+    assert light_options["theme.base"] == "light"
+    assert light_options["theme.backgroundColor"] == "#f8f8f2"
+
     app_state_file = tmp_path / "streamlit-ui-state.json"
     app_state_file.write_text('{"theme_selected": "dracula"}', encoding="utf-8")
     streamlit.session_state.clear()
     ui.restore_ui_state()
-    assert streamlit.session_state["theme_selected"] == "tokyo-night"
+    assert streamlit.session_state["theme_selected"] == "dark/tokyo-night"
 PY
   assert_success
 }

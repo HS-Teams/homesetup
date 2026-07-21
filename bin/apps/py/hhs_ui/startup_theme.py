@@ -9,6 +9,19 @@ import re
 import sys
 from pathlib import Path
 
+if __package__:
+    from .core.theme_catalog import (
+        discover_theme_options,
+        normalize_theme_option,
+        resolve_theme_file,
+    )
+else:
+    from core.theme_catalog import (
+        discover_theme_options,
+        normalize_theme_option,
+        resolve_theme_file,
+    )
+
 APP_DIR = Path(__file__).resolve().parent
 HHS_HOME = Path(os.environ.get("HHS_HOME", str(APP_DIR.parents[3]))).expanduser()
 HHS_DIR = Path(os.environ.get("HHS_DIR", str(APP_DIR))).expanduser()
@@ -16,7 +29,8 @@ HHS_CACHE_DIR = Path(os.environ.get("HHS_CACHE_DIR", str(HHS_DIR / "cache"))).ex
 UI_STATE_FILE = HHS_CACHE_DIR / "streamlit-ui-state.json"
 LEGACY_UI_STATE_FILE = HHS_CACHE_DIR / ".streamlit-ui-state"
 THEMES_DIR = HHS_HOME / "bin/apps/py/hhs_ui/static/themes"
-DEFAULT_THEME_NAME = "dracula"
+DEFAULT_THEME_NAME = "dark/dracula"
+DEFAULT_THEME_FILE = THEMES_DIR / f"{DEFAULT_THEME_NAME}.css"
 THEME_SELECTED_KEY = "theme_selected"
 
 THEME_OPTION_TOKENS = (
@@ -50,16 +64,19 @@ def load_ui_state() -> dict[str, object]:
 def available_theme_names() -> set[str]:
     """Return selectable theme names available to the HomeSetup UI."""
     try:
-        return {theme_file.stem for theme_file in THEMES_DIR.glob("*.css")}
+        return set(discover_theme_options(THEMES_DIR))
     except OSError:
         return set()
 
 
 def selected_theme_name() -> str:
     """Return the persisted theme name or the default theme name."""
-    selected_theme = str(load_ui_state().get(THEME_SELECTED_KEY, "")).strip()
-    theme_names = available_theme_names()
-    if selected_theme in theme_names:
+    theme_names = tuple(sorted(available_theme_names()))
+    selected_theme = normalize_theme_option(
+        load_ui_state().get(THEME_SELECTED_KEY, ""),
+        theme_names,
+    )
+    if selected_theme:
         return selected_theme
     if DEFAULT_THEME_NAME in theme_names:
         return DEFAULT_THEME_NAME
@@ -104,7 +121,7 @@ def valid_theme_option_value(option_name: str, value: str) -> bool:
 
 def theme_config_options(theme_name: str) -> dict[str, str]:
     """Return Streamlit theme config options for a selected HomeSetup theme."""
-    theme_file = THEMES_DIR / f"{theme_name}.css"
+    theme_file = resolve_theme_file(theme_name, THEMES_DIR, DEFAULT_THEME_FILE)
     try:
         properties = css_custom_properties(theme_file.read_text(encoding="utf-8"))
     except OSError:

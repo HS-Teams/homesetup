@@ -1,48 +1,57 @@
 :root {
-  --hhs-theme-base: light;
-  --hhs-theme-primary-color: #34548a;
-  --hhs-theme-background-color: #e6e7ed;
-  --hhs-theme-secondary-background-color: #d5d6db;
-  --hhs-theme-text-color: #343b58;
-  --hhs-theme-link-color: #0f4b6e;
-  --hhs-theme-border-color: #9699a3;
-  --hhs-theme-heading-border-color: var(--hhs-theme-border-color);
-  --hhs-theme-dataframe-border-color: #9699a3;
-  --hhs-theme-dataframe-header-background-color: #d5d6db;
-  --hhs-theme-code-background-color: #dfe0e5;
-  --hhs-terminal-background-color: #f7f7f9;
-  --hhs-theme-text-color-accent: var(--hhs-success);
+  --hhs-theme-base: dark;
+
+  /* Starship Pastel Powerline dark palette */
+  --hhs-powerline-os: #9a348e;
+  --hhs-powerline-directory: #da627d;
+  --hhs-powerline-git: #fca17d;
+  --hhs-powerline-runtime: #86bbd8;
+  --hhs-powerline-docker: #06969a;
+  --hhs-powerline-time: #33658a;
+
+  --hhs-theme-primary-color: #9a348e;
+  --hhs-theme-background-color: #14111f;
+  --hhs-theme-secondary-background-color: #21182c;
+  --hhs-theme-text-color: #fff7fb;
+  --hhs-theme-link-color: #86bbd8;
+  --hhs-theme-border-color: rgba(252, 161, 125, 0.48);
+  --hhs-theme-heading-border-color: rgba(252, 161, 125, 0.3);
+  --hhs-theme-dataframe-border-color: rgba(252, 161, 125, 0.48);
+  --hhs-theme-dataframe-header-background-color: #21182c;
+  --hhs-theme-code-background-color: #191426;
+  --hhs-terminal-background-color: #000000;
+  --hhs-theme-text-color-accent: #fca17d;
   --hhs-theme-base-radius: 0.4rem;
   --hhs-theme-button-radius: 0.25rem;
-  --hhs-theme-footer-status-info-color: #0f4b6e;
-  --hhs-theme-footer-status-warn-color: #8f5e15;
-  --hhs-theme-footer-status-error-color: #8c4351;
+  --hhs-theme-footer-status-info-color: #86bbd8;
+  --hhs-theme-footer-status-warn-color: #fca17d;
+  --hhs-theme-footer-status-error-color: #da627d;
   --hhs-theme-footer-status-text-size: 1.176rem;
   --hhs-theme-footer-glyph-button: 1.5rem;
   --hhs-theme-hhs-action-button-width: 140px;
-  --hhs-theme-input-placeholder-color: #6c6e75;
+  --hhs-theme-input-placeholder-color: #686e7a;
   --hhs-theme-file-link-color: var(--hhs-theme-link-color);
   --hhs-theme-show-widget-border: true;
   --hhs-theme-show-sidebar-border: true;
 
   --hhs-background: var(--hhs-theme-background-color);
   --hhs-current-line: var(--hhs-theme-secondary-background-color);
-  --hhs-selection: rgba(52, 84, 138, 0.2);
+  --hhs-selection: var(--hhs-powerline-directory);
   --hhs-foreground: var(--hhs-theme-text-color);
   --hhs-comment: var(--hhs-theme-border-color);
   --hhs-secondary: var(--hhs-theme-link-color);
-  --hhs-success: #33635c;
-  --hhs-chart-accent: #965027;
-  --hhs-highlight: #5a4a78;
+  --hhs-success: var(--hhs-powerline-docker);
+  --hhs-chart-accent: var(--hhs-powerline-git);
+  --hhs-highlight: var(--hhs-powerline-directory);
   --hhs-primary: var(--hhs-theme-primary-color);
-  --hhs-danger: #8c4351;
-  --hhs-warning: #8f5e15;
+  --hhs-danger: #e65f73;
+  --hhs-warning: var(--hhs-powerline-git);
   --hhs-panel: var(--hhs-theme-code-background-color);
-  --hhs-model-accent: #34548a;
-  --hhs-markdown-table-header: var(--hhs-theme-primary-color);
+  --hhs-model-accent: var(--hhs-powerline-os);
+  --hhs-markdown-table-header: var(--hhs-theme-text-color);
   --hhs-markdown-table-value: var(--hhs-theme-text-color-accent);
   --hhs-selected-item-label: var(--hhs-theme-text-color);
-  --hhs-selected-item-value: var(--hhs-success);
+  --hhs-selected-item-value: var(--hhs-powerline-git);
   --hhs-bar-chart-color: var(--hhs-chart-accent);
 }
 
@@ -58,20 +67,21 @@ body,
 
 [data-testid="stSidebar"] {
   background: var(--hhs-panel) !important;
-  border-right: 1px solid var(--hhs-comment);
+  border-right: 1px solid rgba(154, 52, 142, 0.54);
 }
 
 [data-testid="stVerticalBlockBorderWrapper"] {
-  background: var(--hhs-current-line);
+  background: rgba(33, 24, 44, 0.82);
+  border: 1px solid rgba(252, 161, 125, 0.22);
 }
 
 .hhs-sidebar-clock {
-  color: var(--hhs-secondary);
+  color: var(--hhs-powerline-runtime);
 }
 
 .st-key-active_view [role="radiogroup"],
 .st-key-active_view_widget [role="radiogroup"] {
-  border-bottom: 1px solid var(--hhs-comment);
+  border-bottom: 1px solid rgba(252, 161, 125, 0.28);
 }
 
 .st-key-active_view [role="radiogroup"] label,
@@ -83,18 +93,18 @@ body,
 
 .st-key-active_view [role="radiogroup"] label:hover,
 .st-key-active_view_widget [role="radiogroup"] label:hover {
-  color: var(--hhs-secondary);
+  color: var(--hhs-powerline-git);
 }
 
 .st-key-active_view [role="radiogroup"] label:has(input:checked),
 .st-key-active_view_widget [role="radiogroup"] label:has(input:checked) {
-  border-bottom-color: var(--hhs-primary);
-  color: var(--hhs-primary);
+  border-bottom-color: var(--hhs-powerline-directory);
+  color: var(--hhs-powerline-directory);
 }
 
 .st-key-active_view [role="radiogroup"] label:has(input:checked) p,
 .st-key-active_view_widget [role="radiogroup"] label:has(input:checked) p {
-  color: var(--hhs-primary);
+  color: var(--hhs-powerline-directory);
 }
 
 .stButtonGroup [data-baseweb="button-group"] button[aria-checked="true"],
@@ -122,18 +132,18 @@ body,
 
 .hhs-ai-chat-meta,
 .hhs-ai-settings-current-model {
-  color: #6c6e75;
+  color: var(--hhs-powerline-runtime);
 }
 
 .hhs-ai-settings-current-model span,
 .hhs-ai-chat-meta span {
-  background: var(--hhs-current-line);
+  background: rgba(154, 52, 142, 0.22);
 }
 
 .hhs-ai-settings-current-model strong,
 .hhs-ai-chat-meta .hhs-ai-chat-model,
 .hhs-ai-assistant-text {
-  color: var(--hhs-success);
+  color: var(--hhs-powerline-docker);
 }
 
 .st-key-ai_confirm_clear_button button,
@@ -145,30 +155,33 @@ body,
 div[class*="st-key-ai_select_model_button_"] button,
 div[class*="st-key-ai_delete_model_button_"] button,
 div[class*="st-key-monitor_process_kill_button_"] button {
-  background: var(--hhs-current-line);
-  border: 0;
-  color: var(--hhs-secondary);
+  background: var(--hhs-powerline-os);
+  border-color: var(--hhs-powerline-os);
+  color: #fff7fb;
 }
 
 .hhs-ai-chat-meta strong,
 .hhs-ai-user-text {
-  color: var(--hhs-secondary);
+  color: var(--hhs-powerline-runtime);
 }
 
 .hhs-ai-system-text {
-  color: var(--hhs-chart-accent);
+  color: var(--hhs-powerline-git);
 }
 
 [data-testid="stChatMessage"]:has(.hhs-ai-user-text) {
-  background: rgba(15, 75, 110, 0.1);
+  background: rgba(134, 187, 216, 0.16);
+  border-left: 4px solid var(--hhs-powerline-runtime);
 }
 
 [data-testid="stChatMessage"]:has(.hhs-ai-assistant-text) {
-  background: rgba(51, 99, 92, 0.1);
+  background: rgba(6, 150, 154, 0.16);
+  border-left: 4px solid var(--hhs-powerline-docker);
 }
 
 [data-testid="stChatMessage"]:has(.hhs-ai-system-text) {
-  background: rgba(150, 80, 39, 0.1);
+  background: rgba(252, 161, 125, 0.16);
+  border-left: 4px solid var(--hhs-powerline-git);
 }
 
 .hhs-sysinfo-output {
@@ -178,21 +191,21 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 
 .hhs-terminal-panel {
   background: var(--hhs-terminal-background-color);
-  border: 1px solid var(--hhs-comment);
+  border: 1px solid rgba(252, 161, 125, 0.3);
   color: var(--hhs-foreground);
 }
 
 .hhs-log-file-title,
 .hhs-log-file-title code {
-  color: var(--hhs-success);
+  color: var(--hhs-powerline-docker);
 }
 
 .hhs-log-file-title code {
-  background: var(--hhs-panel);
+  background: rgba(154, 52, 142, 0.22);
 }
 
 .hhs-log-info {
-  color: var(--hhs-success);
+  color: var(--hhs-powerline-docker);
 }
 
 .hhs-log-debug {
@@ -200,7 +213,7 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 }
 
 .hhs-log-warn {
-  color: var(--hhs-warning);
+  color: var(--hhs-powerline-git);
 }
 
 .hhs-log-error {
@@ -208,19 +221,19 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 }
 
 .hhs-log-thread {
-  color: var(--hhs-primary);
+  color: var(--hhs-powerline-os);
 }
 
 .hhs-log-fqdn {
-  color: var(--hhs-secondary);
+  color: var(--hhs-powerline-runtime);
 }
 
 .hhs-log-date {
-  color: #8c4351;
+  color: var(--hhs-powerline-directory);
 }
 
 .hhs-log-uri {
-  color: var(--hhs-model-accent);
+  color: var(--hhs-powerline-os);
 }
 
 div[class*="st-key-alias_selected_value_"] textarea,
@@ -230,41 +243,93 @@ div[class*="st-key-env_selected_value_"] textarea,
 div[class*="st-key-history_command_selected_value_"] textarea,
 div[class*="st-key-history_directory_selected_value_"] textarea,
 div[class*="st-key-service_selected_value_"] textarea {
-  background: var(--hhs-panel) !important;
-  border-color: var(--hhs-danger) !important;
+  background: rgba(25, 20, 38, 0.72) !important;
+  border-color: var(--hhs-powerline-directory) !important;
   color: var(--hhs-foreground) !important;
 }
 
 .hhs-tab-loader {
-  background: rgba(230, 231, 237, 0.84);
+  background: rgba(20, 17, 31, 0.82);
 }
 
 .hhs-tab-loader-panel {
-  background: #f7f7f9;
-  border: 1px solid var(--hhs-comment);
-  box-shadow: 0 20px 45px rgba(52, 59, 88, 0.16);
-  color: var(--hhs-foreground);
+  background: #fff7fb;
+  border: 1px solid rgba(154, 52, 142, 0.38);
+  box-shadow: 0 20px 45px rgba(20, 17, 31, 0.28);
+  color: #191426;
 }
 
 .hhs-tab-loader-spinner {
-  border: 3px solid var(--hhs-current-line);
-  border-top-color: var(--hhs-primary);
+  border: 3px solid rgba(154, 52, 142, 0.22);
+  border-top-color: var(--hhs-powerline-os);
 }
 
 .hhs-tab-loader-elapsed {
-  color: #6c6e75;
+  color: var(--hhs-powerline-time);
 }
 
 .hhs-app-footer {
   background: var(--hhs-panel);
-  border-top: 1px solid var(--hhs-comment);
+  border-top: 1px solid rgba(252, 161, 125, 0.28);
   color: var(--hhs-foreground);
 }
 
 .hhs-footer-glyph {
-  color: var(--hhs-primary);
+  color: var(--hhs-powerline-directory);
 }
 
 .hhs-footer-remote-status {
   color: var(--hhs-warning);
+}
+
+/* Optional Pastel Powerline primitives for custom badges/segments */
+.hhs-powerline {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border-radius: var(--hhs-theme-button-radius);
+  color: #fff7fb;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.hhs-powerline-segment {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: 0 0.72rem;
+}
+
+.hhs-powerline-os {
+  background: var(--hhs-powerline-os);
+}
+
+.hhs-powerline-directory {
+  background: var(--hhs-powerline-directory);
+}
+
+.hhs-powerline-git {
+  background: var(--hhs-powerline-git);
+  color: #191426;
+}
+
+.hhs-powerline-runtime {
+  background: var(--hhs-powerline-runtime);
+  color: #191426;
+}
+
+.hhs-powerline-docker {
+  background: var(--hhs-powerline-docker);
+}
+
+.hhs-powerline-time {
+  background: var(--hhs-powerline-time);
+}
+
+.hhs-powerline-chevron {
+  width: 0;
+  height: 0;
+  border-top: 0.875rem solid transparent;
+  border-bottom: 0.875rem solid transparent;
+  border-left: 0.7rem solid currentColor;
 }

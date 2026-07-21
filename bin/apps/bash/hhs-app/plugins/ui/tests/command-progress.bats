@@ -307,5 +307,5 @@ PY
 
   assert_file_contains_many "${css_file}" \
 'height: 0 !important' 'position: fixed'
-  assert_file_contains "${HHS_REPO_DIR}/bin/apps/py/hhs_ui/static/themes/dracula.css" 'background: var(--hhs-background)'
+  assert_file_contains "${dark_themes_dir}/dracula.css" 'background: var(--hhs-background)'
 }

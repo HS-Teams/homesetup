@@ -8,12 +8,13 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.165"
+VERSION = "0.1.166"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parents[1]
 APP_STATIC_DIR = APP_DIR / "static"
 APP_CSS_FILE = APP_STATIC_DIR / "css/streamlit_ui.css"
-APP_THEME_CSS_FILE = APP_STATIC_DIR / "themes/dracula.css"
+APP_THEMES_DIR = APP_STATIC_DIR / "themes"
+APP_THEME_CSS_FILE = APP_THEMES_DIR / "dark/dracula.css"
 SSH_EXPLORER_COMPONENT_DIR = APP_DIR / "components/ssh_explorer"
 FIREBASE_CONFIG_COMPONENT_DIR = APP_DIR / "components/firebase_config_form"
 FIREBASE_ALIASES_COMPONENT_DIR = APP_DIR / "components/firebase_aliases_table"

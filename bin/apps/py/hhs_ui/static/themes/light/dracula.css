@@ -1,5 +1,7 @@
 :root {
   --hhs-theme-base: light;
+
+  /* Dracula light theme palette */
   --hhs-theme-primary-color: #6c3fc5;
   --hhs-theme-background-color: #f8f8f2;
   --hhs-theme-secondary-background-color: #e9e9ee;
@@ -111,9 +113,12 @@ body,
   fill: currentColor !important;
 }
 
-.hhs-view-heading h2,
-.hhs-inline-form-label {
+.hhs-view-heading h2 {
   background: none;
+  color: var(--hhs-foreground);
+}
+
+.hhs-inline-form-label {
   color: var(--hhs-foreground);
 }
 

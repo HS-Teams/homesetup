@@ -13,6 +13,12 @@ import streamlit as st
 from streamlit import config as st_config
 
 from . import constants as hhs_ui_constants
+from .theme_catalog import (
+    default_theme_option,
+    discover_theme_options,
+    normalize_theme_option,
+    resolve_theme_file,
+)
 
 
 def file_mtime_token(file_path: Path) -> float:
@@ -73,42 +79,35 @@ def load_app_css() -> str:
 
 
 def available_theme_options() -> tuple[str, ...]:
-    """Return all selectable theme names from the themes folder."""
-    return tuple(
-        sorted(
-            theme.stem
-            for theme in hhs_ui_constants.APP_THEME_CSS_FILE.parent.glob("*.css")
-        )
-    )
+    """Return all selectable dark and light theme options."""
+    return discover_theme_options(hhs_ui_constants.APP_THEMES_DIR)
 
 
 def default_theme_name(theme_options: tuple[str, ...] | None = None) -> str:
     """Return the default selectable HomeSetup UI theme name."""
     options = theme_options if theme_options is not None else available_theme_options()
-    if hhs_ui_constants.APP_THEME_CSS_FILE.stem in options:
-        return hhs_ui_constants.APP_THEME_CSS_FILE.stem
-    return options[0] if options else ""
+    return default_theme_option(
+        hhs_ui_constants.APP_THEME_CSS_FILE,
+        hhs_ui_constants.APP_THEMES_DIR,
+        options,
+    )
 
 
 def validated_theme_name(
     theme_name: object, theme_options: tuple[str, ...] | None = None
 ) -> str:
-    """Return a valid selectable theme name or an empty string."""
-    selected_theme = str(theme_name or "").strip()
+    """Return a canonical selectable theme name or an empty string."""
     options = theme_options if theme_options is not None else available_theme_options()
-    return selected_theme if selected_theme in options else ""
+    return normalize_theme_option(theme_name, options)
 
 
 def theme_css_file(theme_name: object) -> Path:
     """Return the stylesheet path for a selectable UI theme."""
-    theme_options = available_theme_options()
-    selected_theme = validated_theme_name(theme_name, theme_options)
-    if not selected_theme:
-        selected_theme = default_theme_name(theme_options)
-    theme_file = hhs_ui_constants.APP_THEME_CSS_FILE.with_name(f"{selected_theme}.css")
-    if not theme_file.is_file():
-        return hhs_ui_constants.APP_THEME_CSS_FILE
-    return theme_file
+    return resolve_theme_file(
+        theme_name,
+        hhs_ui_constants.APP_THEMES_DIR,
+        hhs_ui_constants.APP_THEME_CSS_FILE,
+    )
 
 
 def css_custom_properties(css_source: str) -> dict[str, str]:

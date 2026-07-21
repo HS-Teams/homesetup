@@ -229,6 +229,22 @@ PY
 
   run bash --noprofile --norc -c '
     export HHS_HOME="${1}"
+    export HHS_DIR="${2}/light-hhs"
+    export HHS_CACHE_DIR="${HHS_DIR}/cache"
+    export HHS_LOG_DIR="${2}/light-log"
+    mkdir -p "${HHS_DIR}/cache" "${HHS_LOG_DIR}"
+    printf "%s\n" "{\"theme_selected\":\"homesetup-light\"}" > "${HHS_DIR}/cache/streamlit-ui-state.json"
+    source "${3}"
+    streamlit_theme_args
+  ' -- "${HHS_REPO_DIR}" "${BATS_TEST_TMPDIR}" "${ui_plugin_file}"
+  assert_success
+  assert_output --partial '--theme.base'
+  assert_output --partial 'light'
+  assert_output --partial '--theme.backgroundColor'
+  assert_output --partial '#ffffff'
+
+  run bash --noprofile --norc -c '
+    export HHS_HOME="${1}"
     export HHS_DIR="${2}/fallback-hhs"
     export HHS_CACHE_DIR="${HHS_DIR}/cache"
     export HHS_LOG_DIR="${2}/fallback-log"

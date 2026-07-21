@@ -1,45 +1,48 @@
 :root {
-  --hhs-theme-base: dark;
-  --hhs-theme-primary-color: #bd93f9;
-  --hhs-theme-background-color: #282a36;
-  --hhs-theme-secondary-background-color: #44475a;
-  --hhs-theme-text-color: #f8f8f2;
-  --hhs-theme-link-color: #8be9fd;
-  --hhs-theme-border-color: #6272a4;
+  --hhs-theme-base: light;
+
+  /* Tokyo Night light theme palette */
+  --hhs-theme-primary-color: #34548a;
+  --hhs-theme-background-color: #e6e7ed;
+  --hhs-theme-secondary-background-color: #d5d6db;
+  --hhs-theme-text-color: #343b58;
+  --hhs-theme-link-color: #0f4b6e;
+  --hhs-theme-border-color: #9699a3;
   --hhs-theme-heading-border-color: var(--hhs-theme-border-color);
-  --hhs-theme-dataframe-border-color: #6272a4;
-  --hhs-theme-dataframe-header-background-color: #44475a;
-  --hhs-theme-code-background-color: #21222c;
-  --hhs-terminal-background-color: #000000;
-  --hhs-theme-text-color-accent: var(--hhs-theme-primary-color);
+  --hhs-theme-dataframe-border-color: #9699a3;
+  --hhs-theme-dataframe-header-background-color: #d5d6db;
+  --hhs-theme-code-background-color: #dfe0e5;
+  --hhs-terminal-background-color: #f7f7f9;
+  --hhs-theme-text-color-accent: var(--hhs-success);
   --hhs-theme-base-radius: 0.4rem;
   --hhs-theme-button-radius: 0.25rem;
-  --hhs-theme-footer-status-info-color: #8be9fd;
-  --hhs-theme-footer-status-warn-color: #f1fa8c;
-  --hhs-theme-footer-status-error-color: #ff5555;
+  --hhs-theme-footer-status-info-color: #0f4b6e;
+  --hhs-theme-footer-status-warn-color: #8f5e15;
+  --hhs-theme-footer-status-error-color: #8c4351;
   --hhs-theme-footer-status-text-size: 1.176rem;
   --hhs-theme-footer-glyph-button: 1.5rem;
   --hhs-theme-hhs-action-button-width: 140px;
-  --hhs-theme-input-placeholder-color: #686e7a;
+  --hhs-theme-input-placeholder-color: #6c6e75;
   --hhs-theme-file-link-color: var(--hhs-theme-link-color);
   --hhs-theme-show-widget-border: true;
   --hhs-theme-show-sidebar-border: true;
+
   --hhs-background: var(--hhs-theme-background-color);
   --hhs-current-line: var(--hhs-theme-secondary-background-color);
-  --hhs-selection: var(--hhs-theme-secondary-background-color);
+  --hhs-selection: rgba(52, 84, 138, 0.2);
   --hhs-foreground: var(--hhs-theme-text-color);
   --hhs-comment: var(--hhs-theme-border-color);
   --hhs-secondary: var(--hhs-theme-link-color);
-  --hhs-success: #50fa7b;
-  --hhs-chart-accent: #ffb86c;
-  --hhs-highlight: #ff79c6;
+  --hhs-success: #33635c;
+  --hhs-chart-accent: #965027;
+  --hhs-highlight: #5a4a78;
   --hhs-primary: var(--hhs-theme-primary-color);
-  --hhs-danger: #ff5555;
-  --hhs-warning: #f1fa8c;
+  --hhs-danger: #8c4351;
+  --hhs-warning: #8f5e15;
   --hhs-panel: var(--hhs-theme-code-background-color);
-  --hhs-model-accent: #4da3ff;
-  --hhs-markdown-table-header: var(--hhs-theme-text-color);
-  --hhs-markdown-table-value: var(--hhs-theme-primary-color);
+  --hhs-model-accent: #34548a;
+  --hhs-markdown-table-header: var(--hhs-theme-primary-color);
+  --hhs-markdown-table-value: var(--hhs-theme-text-color-accent);
   --hhs-selected-item-label: var(--hhs-theme-text-color);
   --hhs-selected-item-value: var(--hhs-success);
   --hhs-bar-chart-color: var(--hhs-chart-accent);
@@ -121,7 +124,7 @@ body,
 
 .hhs-ai-chat-meta,
 .hhs-ai-settings-current-model {
-  color: var(--hhs-comment);
+  color: #6c6e75;
 }
 
 .hhs-ai-settings-current-model span,
@@ -159,15 +162,15 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 }
 
 [data-testid="stChatMessage"]:has(.hhs-ai-user-text) {
-  background: rgba(139, 233, 253, 0.16);
+  background: rgba(15, 75, 110, 0.1);
 }
 
 [data-testid="stChatMessage"]:has(.hhs-ai-assistant-text) {
-  background: rgba(80, 250, 123, 0.14);
+  background: rgba(51, 99, 92, 0.1);
 }
 
 [data-testid="stChatMessage"]:has(.hhs-ai-system-text) {
-  background: rgba(255, 184, 108, 0.16);
+  background: rgba(150, 80, 39, 0.1);
 }
 
 .hhs-sysinfo-output {
@@ -191,7 +194,7 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 }
 
 .hhs-log-info {
-  color: #5f8700;
+  color: var(--hhs-success);
 }
 
 .hhs-log-debug {
@@ -199,27 +202,27 @@ div[class*="st-key-monitor_process_kill_button_"] button {
 }
 
 .hhs-log-warn {
-  color: #af8700;
+  color: var(--hhs-warning);
 }
 
 .hhs-log-error {
-  color: #af0000;
+  color: var(--hhs-danger);
 }
 
 .hhs-log-thread {
-  color: #5f5faf;
+  color: var(--hhs-primary);
 }
 
 .hhs-log-fqdn {
-  color: #00afaf;
+  color: var(--hhs-secondary);
 }
 
 .hhs-log-date {
-  color: #af005f;
+  color: #8c4351;
 }
 
 .hhs-log-uri {
-  color: #0087ff;
+  color: var(--hhs-model-accent);
 }
 
 div[class*="st-key-alias_selected_value_"] textarea,
@@ -235,13 +238,13 @@ div[class*="st-key-service_selected_value_"] textarea {
 }
 
 .hhs-tab-loader {
-  background: var(--hhs-background);
+  background: rgba(230, 231, 237, 0.84);
 }
 
 .hhs-tab-loader-panel {
-  background: var(--hhs-panel);
+  background: #f7f7f9;
   border: 1px solid var(--hhs-comment);
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 20px 45px rgba(52, 59, 88, 0.16);
   color: var(--hhs-foreground);
 }
 
@@ -251,12 +254,12 @@ div[class*="st-key-service_selected_value_"] textarea {
 }
 
 .hhs-tab-loader-elapsed {
-  color: var(--hhs-comment);
+  color: #6c6e75;
 }
 
 .hhs-app-footer {
   background: var(--hhs-panel);
-  border-top: 2px solid var(--hhs-comment);
+  border-top: 1px solid var(--hhs-comment);
   color: var(--hhs-foreground);
 }
 
