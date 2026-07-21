@@ -75,6 +75,20 @@ setup() {
   assert_output "hhs-modern.toml"
 }
 
+@test "when querying an unmarked native preset then its generated config should identify it" {
+  function starship() {
+    local output_file="$4"
+
+    printf 'preset = "%s"\n' "$2" > "${output_file}"
+  }
+  starship preset tokyo-night -o "${STARSHIP_CONFIG}"
+
+  run current_starship_preset
+
+  assert_success
+  assert_output "tokyo-night"
+}
+
 @test "when querying an unmarked configuration then the query should fail" {
   printf '%s\n' 'add_newline = true' > "${STARSHIP_CONFIG}"
 

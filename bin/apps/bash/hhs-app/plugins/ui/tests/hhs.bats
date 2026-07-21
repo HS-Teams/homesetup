@@ -584,6 +584,11 @@ assert "height=450" in source
 
 starship_controls_body = source.split("def render_hhs_starship_controls", 1)[1].split("\ndef ", 1)[0]
 assert "display_path_value(" not in starship_controls_body
+assert (
+    'current_preset = str(starship_info.get("current_preset", "")).strip()'
+    in starship_controls_body
+)
+assert "normalize_hhs_starship_preset_state(presets, current_preset)" in starship_controls_body
 assert 'with st.container(key="hhs_starship_controls"):' in starship_controls_body
 assert 'with st.expander("Configurations", expanded=True):' in starship_controls_body
 expander_index = starship_controls_body.index(
@@ -859,6 +864,7 @@ namespace = {
     "STARSHIP_CACHE_OUTPUT_MARKER": "__HHS_STARSHIP_CACHE__",
     "STARSHIP_CONFIG_OUTPUT_MARKER": "__HHS_STARSHIP_CONFIG__",
     "STARSHIP_HHS_DIR_OUTPUT_MARKER": "__HHS_STARSHIP_HHS_DIR__",
+    "STARSHIP_CURRENT_PRESET_OUTPUT_MARKER": "__HHS_STARSHIP_CURRENT_PRESET__",
     "STARSHIP_PRESETS_OUTPUT_MARKER": "__HHS_STARSHIP_PRESETS__",
     "STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER": "__HHS_STARSHIP_CONFIG_CONTENT__",
     "STARSHIP_END_OUTPUT_MARKER": "__HHS_STARSHIP_END__",
@@ -968,6 +974,8 @@ HHS_DIR	/home/user/.config/hhs
 HOME	/home/user
 HHS_HOME	/home/user/HomeSetup
 STARSHIP_CONFIG	/home/user/.config/starship.toml
+__HHS_STARSHIP_CURRENT_PRESET__
+hhs-starship.toml
 __HHS_STARSHIP_PRESETS__
 hhs-starship.toml
 __HHS_STARSHIP_CONFIG_CONTENT__
@@ -976,6 +984,34 @@ __HHS_STARSHIP_END__
 """
 starship_info = namespace["parse_hhs_starship_info"](starship_output)
 assert starship_info["environment"]["STARSHIP_CONFIG"] == "/home/user/.config/starship.toml"
+assert starship_info["current_preset"] == "hhs-starship.toml"
+
+starship_state = {}
+normalize_namespace = {
+    "st": type("FakeStreamlit", (), {"session_state": starship_state})(),
+    "hhs_ui_constants": type(
+        "FakeConstants",
+        (),
+        {"HHS_STARSHIP_CURRENT_PRESET_KEY": "hhs_starship_current_preset"},
+    )(),
+}
+normalize_start = source.index("def normalize_hhs_starship_preset_state(")
+normalize_end = source.index("def render_hhs_starship_controls(", normalize_start)
+exec(
+    "from __future__ import annotations\n" + source[normalize_start:normalize_end],
+    normalize_namespace,
+)
+normalize_preset_state = normalize_namespace["normalize_hhs_starship_preset_state"]
+available_presets = ["hhs-modern.toml", "pastel-powerline", "tokyo-night"]
+normalize_preset_state(available_presets, "hhs-modern.toml")
+assert starship_state["hhs_starship_preset"] == "hhs-modern.toml"
+assert starship_state["hhs_starship_current_preset"] == "hhs-modern.toml"
+starship_state["hhs_starship_preset"] = "tokyo-night"
+normalize_preset_state(available_presets, "hhs-modern.toml")
+assert starship_state["hhs_starship_preset"] == "tokyo-night"
+normalize_preset_state(available_presets, "pastel-powerline")
+assert starship_state["hhs_starship_preset"] == "pastel-powerline"
+assert starship_state["hhs_starship_current_preset"] == "pastel-powerline"
 
 output = """__HHS_FIREBASE_CONFIG_FILE__
 /home/user/.config/hhs/firebase.properties

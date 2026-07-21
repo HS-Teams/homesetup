@@ -33,6 +33,7 @@ from hhs_ui.core.ui_definitions import (
     STARSHIP_CACHE_OUTPUT_MARKER,
     STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER,
     STARSHIP_CONFIG_OUTPUT_MARKER,
+    STARSHIP_CURRENT_PRESET_OUTPUT_MARKER,
     STARSHIP_END_OUTPUT_MARKER,
     STARSHIP_HHS_DIR_OUTPUT_MARKER,
     STARSHIP_PRESETS_OUTPUT_MARKER,
@@ -1195,6 +1196,8 @@ def build_hhs_starship_info_command() -> str:
         + f'printf "%s\\n" "{HHS_CONFIG_ENV_OUTPUT_MARKER}"; '
         + 'printf "HHS_DIR\\t%s\\nHOME\\t%s\\nHHS_HOME\\t%s\\nSTARSHIP_CONFIG\\t%s\\n" '
         + '"${HHS_DIR}" "${HOME:-}" "${HHS_HOME}" "${STARSHIP_CONFIG}"; '
+        + f'printf "%s\\n" "{STARSHIP_CURRENT_PRESET_OUTPUT_MARKER}"; '
+        + "current_starship_preset 2>/dev/null || true; "
         + f'printf "%s\\n" "{STARSHIP_PRESETS_OUTPUT_MARKER}"; '
         + 'printf "%s\\n" "${STARSHIP_PRESETS[@]}" | awk \'NF && !seen[$0]++\' | sort; '
         + f'printf "%s\\n" "{STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER}"; '
@@ -2306,6 +2309,7 @@ def parse_hhs_starship_info(output: str) -> dict[str, object]:
         STARSHIP_CONFIG_OUTPUT_MARKER,
         STARSHIP_HHS_DIR_OUTPUT_MARKER,
         HHS_CONFIG_ENV_OUTPUT_MARKER,
+        STARSHIP_CURRENT_PRESET_OUTPUT_MARKER,
         STARSHIP_PRESETS_OUTPUT_MARKER,
         STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER,
         STARSHIP_END_OUTPUT_MARKER,
@@ -2333,6 +2337,7 @@ def parse_hhs_starship_info(output: str) -> dict[str, object]:
         for preset in "".join(sections[STARSHIP_PRESETS_OUTPUT_MARKER]).splitlines()
         if preset.strip()
     ]
+    current_preset = "".join(sections[STARSHIP_CURRENT_PRESET_OUTPUT_MARKER]).strip()
     config_content = "".join(sections[STARSHIP_CONFIG_CONTENT_OUTPUT_MARKER])
     return {
         "cache": cache_path,
@@ -2340,6 +2345,7 @@ def parse_hhs_starship_info(output: str) -> dict[str, object]:
         "hhs_dir": hhs_dir,
         "environment": environment,
         "presets": presets,
+        "current_preset": current_preset,
         "content": config_content.rstrip("\n"),
     }
 

@@ -1595,17 +1595,28 @@ def render_hhs_starship_title() -> None:
     )
 
 
-def normalize_hhs_starship_preset_state(presets: list[str]) -> None:
-    """Keep the selected Starship preset inside the available preset list."""
+def normalize_hhs_starship_preset_state(
+    presets: list[str], current_preset: str
+) -> None:
+    """Select the active preset while preserving an unapplied valid selection."""
+    active_preset = current_preset if current_preset in presets else ""
+    previous_active_preset = str(
+        st.session_state.get(hhs_ui_constants.HHS_STARSHIP_CURRENT_PRESET_KEY, "")
+    ).strip()
     selected_preset = str(st.session_state.get("hhs_starship_preset", "")).strip()
+    if active_preset != previous_active_preset:
+        st.session_state[hhs_ui_constants.HHS_STARSHIP_CURRENT_PRESET_KEY] = (
+            active_preset
+        )
+        if active_preset:
+            st.session_state["hhs_starship_preset"] = active_preset
+            return
+
     if selected_preset in presets:
         return
 
-    current_preset = str(
-        st.session_state.get(hhs_ui_constants.HHS_STARSHIP_CURRENT_PRESET_KEY, "")
-    ).strip()
-    if current_preset in presets:
-        st.session_state["hhs_starship_preset"] = current_preset
+    if active_preset:
+        st.session_state["hhs_starship_preset"] = active_preset
     elif presets:
         st.session_state["hhs_starship_preset"] = presets[0]
     else:
@@ -1623,7 +1634,8 @@ def render_hhs_starship_controls(
         for preset in starship_info.get("presets", [])
         if str(preset).strip()
     ]
-    normalize_hhs_starship_preset_state(presets)
+    current_preset = str(starship_info.get("current_preset", "")).strip()
+    normalize_hhs_starship_preset_state(presets, current_preset)
     preset_options = presets or [""]
     editing = bool(st.session_state.get("hhs_starship_config_editing"))
     edit_button_key = (

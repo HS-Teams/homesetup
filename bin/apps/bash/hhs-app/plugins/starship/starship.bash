@@ -15,12 +15,12 @@
 PLUGIN_NAME="starship"
 
 # Current hhs starship version
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 # Namespace cleanup
 UNSETS=(
   help version cleanup execute add_hhs_presets
-  current_starship_preset record_starship_preset
+  current_starship_preset identify_native_starship_preset record_starship_preset
 )
 
 # All Starship presets
@@ -200,8 +200,28 @@ function current_starship_preset() {
     [[ "${preset_name}" == hhs-* && "${preset_name}" != *.toml ]] \
       && preset_name="${preset_name}.toml"
   fi
+  [[ -n "${preset_name}" ]] || preset_name="$(identify_native_starship_preset)"
   [[ -n "${preset_name}" ]] || return 2
   printf '%s\n' "${preset_name}"
+}
+
+
+# @purpose: Identify an unmarked native preset by comparing generated configuration files.
+function identify_native_starship_preset() {
+  local candidate_file preset_name
+
+  candidate_file="$(mktemp "${TMPDIR:-/tmp}/hhs-starship-preset.XXXXXX")" || return 2
+  for preset_name in "${STARSHIP_PRESETS[@]}"; do
+    [[ "${preset_name}" == hhs-* ]] && continue
+    if starship preset "${preset_name}" -o "${candidate_file}" &> /dev/null \
+      && cmp -s "${STARSHIP_CONFIG}" "${candidate_file}"; then
+      \rm -f "${candidate_file}"
+      printf '%s\n' "${preset_name}"
+      return 0
+    fi
+  done
+  \rm -f "${candidate_file}"
+  return 2
 }
 
 
