@@ -781,19 +781,33 @@ service_theme_body = table_ui_source.split("def service_table_theme", 1)[1].spli
 service_name_style_body = table_ui_source.split("def service_name_cell_style", 1)[1].split("\ndef ", 1)[0]
 service_value_style_body = table_ui_source.split("def service_value_cell_style", 1)[1].split("\ndef ", 1)[0]
 styled_service_rows_body = table_ui_source.split("def styled_service_rows", 1)[1].split("\ndef ", 1)[0]
+docker_status_theme_body = table_ui_source.split("def docker_status_table_theme", 1)[1].split("\ndef ", 1)[0]
+docker_status_style_body = table_ui_source.split("def docker_status_cell_style", 1)[1].split("\ndef ", 1)[0]
+styled_docker_rows_body = table_ui_source.split("def styled_docker_container_rows", 1)[1].split("\ndef ", 1)[0]
 assert '"hhs-theme-link-color"' in service_theme_body
 assert '"hhs-success"' in service_theme_body
 assert '"hhs-danger"' in service_theme_body
 assert '"hhs-theme-text-color"' in service_theme_body
+assert '"hhs-success"' in docker_status_theme_body
+assert '"hhs-warning"' in docker_status_theme_body
+assert '"hhs-danger"' in docker_status_theme_body
+assert '"hhs-theme-text-color"' in docker_status_theme_body
 assert "background-color" not in service_name_style_body
 assert "background-color" not in service_value_style_body
+assert "background-color" not in docker_status_style_body
 assert "#21222c" not in service_name_style_body
 assert "#21222c" not in service_value_style_body
+assert "#21222c" not in docker_status_style_body
 assert "theme_colors = service_table_theme()" in styled_service_rows_body
 assert 'color=theme_colors["name"]' in styled_service_rows_body
 assert 'success_color=theme_colors["success"]' in styled_service_rows_body
 assert 'danger_color=theme_colors["danger"]' in styled_service_rows_body
 assert 'text_color=theme_colors["text"]' in styled_service_rows_body
+assert "theme_colors = docker_status_table_theme()" in styled_docker_rows_body
+assert 'success_color=theme_colors["success"]' in styled_docker_rows_body
+assert 'warning_color=theme_colors["warning"]' in styled_docker_rows_body
+assert 'danger_color=theme_colors["danger"]' in styled_docker_rows_body
+assert 'text_color=theme_colors["text"]' in styled_docker_rows_body
 assert ".hhs-view-subtitle" in base_css
 assert ".hhs-view-subtitle-link" in base_css
 assert ".hhs-view-subtitle-link:link" in base_css
@@ -1037,6 +1051,7 @@ PY
 
 @test "when styling service rows then active theme colors should be used without overriding table backgrounds" {
   run python3 - "${table_ui_file}" <<'PY'
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -1051,12 +1066,15 @@ theme_properties = {
     "hhs-theme-link-color": "#0369a1",
     "hhs-success": "var(--hhs-light-success)",
     "hhs-light-success": "#15803d",
+    "hhs-warning": "var(--hhs-light-warning)",
+    "hhs-light-warning": "#a16207",
     "hhs-danger": "#dc2626",
     "hhs-theme-text-color": "#111827",
 }
 namespace = {
     "hhs_ui": SimpleNamespace(THEME_SELECTED_KEY="selected_theme"),
     "st": SimpleNamespace(session_state={"selected_theme": "daylight"}),
+    "re": re,
     "theme_custom_properties": lambda selected: (
         selected_themes.append(selected) or theme_properties
     ),
@@ -1076,6 +1094,14 @@ assert selected_themes == ["daylight"]
 assert colors == {
     "name": "#0369a1",
     "success": "#15803d",
+    "danger": "#dc2626",
+    "text": "#111827",
+}
+docker_colors = namespace["docker_status_table_theme"]()
+assert selected_themes == ["daylight", "daylight"]
+assert docker_colors == {
+    "success": "#15803d",
+    "warning": "#a16207",
     "danger": "#dc2626",
     "text": "#111827",
 }
@@ -1099,14 +1125,64 @@ unknown_style = namespace["service_value_cell_style"](
     colors["danger"],
     colors["text"],
 )
+docker_healthy_style = namespace["docker_status_cell_style"](
+    "Up 3 days (healthy)",
+    docker_colors["success"],
+    docker_colors["warning"],
+    docker_colors["danger"],
+    docker_colors["text"],
+)
+docker_starting_style = namespace["docker_status_cell_style"](
+    "Up 3 seconds (health: starting)",
+    docker_colors["success"],
+    docker_colors["warning"],
+    docker_colors["danger"],
+    docker_colors["text"],
+)
+docker_unhealthy_style = namespace["docker_status_cell_style"](
+    "Up 3 days (unhealthy)",
+    docker_colors["success"],
+    docker_colors["warning"],
+    docker_colors["danger"],
+    docker_colors["text"],
+)
+docker_up_other_style = namespace["docker_status_cell_style"](
+    "Up 2 weeks",
+    docker_colors["success"],
+    docker_colors["warning"],
+    docker_colors["danger"],
+    docker_colors["text"],
+)
+docker_down_style = namespace["docker_status_cell_style"](
+    "Exited (0) 2 hours ago",
+    docker_colors["success"],
+    docker_colors["warning"],
+    docker_colors["danger"],
+    docker_colors["text"],
+)
 
 assert name_style == "color: #0369a1; font-weight: 800;"
 assert up_style == "font-weight: 800; color: #15803d;"
 assert down_style == "font-weight: 800; color: #dc2626;"
 assert unknown_style == "font-weight: 800; color: #111827;"
+assert docker_healthy_style == "font-weight: 800; color: #15803d;"
+assert docker_starting_style == "font-weight: 800; color: #a16207;"
+assert docker_unhealthy_style == "font-weight: 800; color: #a16207;"
+assert docker_up_other_style == "font-weight: 800; color: #a16207;"
+assert docker_down_style == "font-weight: 800; color: #dc2626;"
 assert all(
     "background" not in style
-    for style in (name_style, up_style, down_style, unknown_style)
+    for style in (
+        name_style,
+        up_style,
+        down_style,
+        unknown_style,
+        docker_healthy_style,
+        docker_starting_style,
+        docker_unhealthy_style,
+        docker_up_other_style,
+        docker_down_style,
+    )
 )
 PY
   assert_success

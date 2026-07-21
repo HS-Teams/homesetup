@@ -1532,16 +1532,42 @@ def build_docker_agent_check_command() -> str:
     return "docker ps -q >/dev/null 2>&1"
 
 
-def build_docker_container_action_command(operation: str, container_id: str) -> str:
-    """Build the Bash command used to run an action against a Docker container."""
+def docker_action_targets(
+    targets: str | list[str] | tuple[str, ...],
+) -> tuple[str, ...]:
+    """Return normalized Docker target IDs for a single or batch action."""
+    if isinstance(targets, str):
+        candidates = (targets,)
+    else:
+        candidates = tuple(str(target) for target in targets)
+    return tuple(target.strip() for target in candidates if target.strip())
+
+
+def quoted_docker_action_targets(
+    targets: str | list[str] | tuple[str, ...],
+) -> str:
+    """Return Docker target IDs as a shell-quoted argument string."""
+    clean_targets = docker_action_targets(targets)
+    if not clean_targets:
+        raise ValueError("Docker actions require at least one target ID")
+    return " ".join(shlex.quote(target) for target in clean_targets)
+
+
+def build_docker_container_action_command(
+    operation: str,
+    container_ids: str | list[str] | tuple[str, ...],
+) -> str:
+    """Build the Bash command used to run an action against Docker containers."""
     if operation not in {"start", "stop", "rm"}:
         raise ValueError(f"Unsupported Docker container operation: {operation}")
-    return f"docker {operation} {shlex.quote(container_id)}"
+    return f"docker {operation} {quoted_docker_action_targets(container_ids)}"
 
 
-def build_docker_image_delete_command(image_id: str) -> str:
-    """Build the Bash command used to remove a Docker image."""
-    return f"docker image rm -f {shlex.quote(image_id)}"
+def build_docker_image_delete_command(
+    image_ids: str | list[str] | tuple[str, ...],
+) -> str:
+    """Build the Bash command used to remove Docker images."""
+    return f"docker image rm -f {quoted_docker_action_targets(image_ids)}"
 
 
 def _build_hhs_hspm_command_prefix() -> str:

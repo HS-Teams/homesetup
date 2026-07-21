@@ -38,7 +38,8 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'selected_actions=visible_selected_actions' 'help="Cancel edit"' \
     'def cancel_selected_item_edit' 'reset_selection: Callable\[\[\], None\] | None = None' \
     'args=(editing_key, edit_key, reset_selection)' 'def execute_selected_table_action' \
-    'callback(\*callback_args)'
+    'callback(\*callback_args)' 'multi_selection: bool = False' \
+    '"multi-row" if multi_selection else "single-row"' 'def selected_table_items'
 
   run python3 - <<'PY'
 import ast

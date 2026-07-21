@@ -551,6 +551,19 @@ def remember_table_selection(key: str | None, selection_state: object) -> None:
     snapshots[str(key)] = table_selection_rows(selection_state)
 
 
+def selected_table_items(
+    rows: list[dict[str, str]],
+    key: str | None,
+) -> list[tuple[int, dict[str, str]]]:
+    """Return valid selected row indexes and values for the last rendered table key."""
+    if key is None:
+        return []
+    selected_indexes = table_selection_snapshots().get(str(key), ())
+    return [
+        (index, rows[index]) for index in selected_indexes if 0 <= index < len(rows)
+    ]
+
+
 def scroll_to_table_selection_content(anchor_key: str) -> None:
     """Scroll the browser viewport to the bottom of a selected table row component."""
     selector = f'div[class*="st-key-{anchor_key}"]'
@@ -609,6 +622,7 @@ def render_table(
     selected_action_buttons: list[dict[str, object]] | None = None,
     action_buttons: list[dict[str, object]] | None = None,
     action_column_weights: list[float] | None = None,
+    multi_selection: bool = False,
     on_select: Callable[[], None] | str = "rerun",
     column_config: dict[str, object] | None = None,
     translate_paths: bool = True,
@@ -634,7 +648,9 @@ def render_table(
         dataframe_args["width"] = "stretch"
     if checkbox:
         dataframe_args["on_select"] = on_select
-        dataframe_args["selection_mode"] = "single-row"
+        dataframe_args["selection_mode"] = (
+            "multi-row" if multi_selection else "single-row"
+        )
 
     selection = st.dataframe(rendered_data, **dataframe_args)
     if checkbox:
@@ -642,8 +658,10 @@ def render_table(
     if not checkbox:
         return None, None
 
-    selected_rows = selection.selection.rows if selection else []
-    if not selected_rows or selected_rows[0] >= len(rows):
+    selected_rows = [
+        index for index in table_selection_rows(selection) if 0 <= index < len(rows)
+    ]
+    if not selected_rows:
         if empty_hint:
             with st.container(key=table_component_key(key, "table_empty_hint")):
                 st.caption(empty_hint)
@@ -1322,6 +1340,74 @@ def styled_service_rows(rows: list[dict[str, str]]) -> pd.io.formats.style.Style
             danger_color=theme_colors["danger"],
             text_color=theme_colors["text"],
             subset=["Value"],
+        )
+    return styler
+
+
+def docker_status_table_theme() -> dict[str, str]:
+    """Return resolved active-theme colors for Docker status table cells."""
+    theme_properties = theme_custom_properties(
+        st.session_state.get(hhs_ui.THEME_SELECTED_KEY, "")
+    )
+    return {
+        "success": resolve_css_custom_property(
+            theme_properties,
+            "hhs-success",
+            "#50fa7b",
+        ),
+        "warning": resolve_css_custom_property(
+            theme_properties,
+            "hhs-warning",
+            "#f1fa8c",
+        ),
+        "danger": resolve_css_custom_property(
+            theme_properties,
+            "hhs-danger",
+            "#ff5555",
+        ),
+        "text": resolve_css_custom_property(
+            theme_properties,
+            "hhs-theme-text-color",
+            "#f8f8f2",
+        ),
+    }
+
+
+def docker_status_cell_style(
+    value: object,
+    success_color: str = "#50fa7b",
+    warning_color: str = "#f1fa8c",
+    danger_color: str = "#ff5555",
+    text_color: str = "#f8f8f2",
+) -> str:
+    """Return the dataframe cell style for Docker container status values."""
+    value_text = str(value).strip().lower()
+    base_style = "font-weight: 800;"
+    if value_text.startswith("up"):
+        if re.search(r"\bhealthy\b", value_text) and "unhealthy" not in value_text:
+            return f"{base_style} color: {success_color};"
+        return f"{base_style} color: {warning_color};"
+    if any(status in value_text for status in ("down", "exited", "dead", "created")):
+        return f"{base_style} color: {danger_color};"
+    return f"{base_style} color: {text_color};"
+
+
+def styled_docker_container_rows(
+    rows: list[dict[str, str]],
+    headers: list[str],
+) -> pd.io.formats.style.Styler:
+    """Return Docker container rows with styled STATUS cells."""
+    dataframe = pd.DataFrame(rows, columns=headers)
+    styler = dataframe.style
+    theme_colors = docker_status_table_theme()
+    if "STATUS" in dataframe:
+        styler = styler.map(
+            docker_status_cell_style,
+            success_color=theme_colors["success"],
+            warning_color=theme_colors["warning"],
+            danger_color=theme_colors["danger"],
+            text_color=theme_colors["text"],
+            subset=["STATUS"],
         )
     return styler
 

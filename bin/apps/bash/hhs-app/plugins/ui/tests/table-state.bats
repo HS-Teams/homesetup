@@ -72,9 +72,18 @@ assert namespace["table_selection_widget_key"](
 ) is True
 assert namespace["table_selection_widget_key"]("unrelated") is False
 assert namespace["table_selection_rows"]({"selection": {"rows": [2]}}) == (2,)
+assert namespace["table_selection_rows"]({"selection": {"rows": [2, 3]}}) == (2, 3)
 assert namespace["table_selection_rerun_in_progress"]() is True
 namespace["remember_table_selection"]("env_vars_table_0", {"selection": {"rows": [2]}})
 assert namespace["table_selection_rerun_in_progress"]() is False
+sample_rows = [{"Name": "zero"}, {"Name": "one"}]
+namespace["remember_table_selection"](
+    "env_vars_table_0",
+    {"selection": {"rows": [0, 4]}},
+)
+assert namespace["selected_table_items"](sample_rows, "env_vars_table_0") == [
+    (0, sample_rows[0])
+]
 
 snapshot_start = cache_runtime_source.index("def command_result_snapshots()")
 snapshot_end = cache_runtime_source.index("def cache_set(")

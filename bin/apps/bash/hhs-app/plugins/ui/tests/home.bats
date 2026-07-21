@@ -37,9 +37,13 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 'with st.expander("All Containers", expanded=True)' \
     'with st.expander("Available Images", expanded=True)' 'def render_docker_command_table' \
     'render_docker_container_table(containers_result)' \
-    'render_docker_image_table(images_result)' 'docker_container_table_key(),' \
-    'docker_image_table_key(),' '"label": "Start"' '"label": "Stop"' \
-    '"label": "Remove"' '"label": "Delete"'
+    'render_docker_image_table(images_result)' 'table_key = docker_container_table_key()' \
+    'table_key = docker_image_table_key()' '"label": "Start"' '"label": "Stop"' \
+    '"label": "Remove"' '"label": "Delete"' 'multi_selection=True' \
+    'def render_docker_selected_actions' 'def docker_selected_container_ids' \
+    'def docker_selected_image_ids' 'Select one or more rows to interact' \
+    'styled_docker_container_rows(rows, headers)' \
+    'if "STATUS" in headers'
   run grep -F -q '["CONTAINER ID", "IMAGE", "NAMES", "STATUS", "CREATED AT"]' "${ui_file}"
   assert_success
 
@@ -47,15 +51,55 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
   assert_success
 
   assert_file_contains_many "${ui_file}" \
-'"disabled": lambda row, _index: docker_container_is_up(row)' \
-    '"disabled": lambda row, _index: not docker_container_is_up(row)' \
+'all_selected_running = bool(selected_rows) and all(' \
+    'all_selected_stopped = bool(selected_rows) and all(' \
+    'docker_container_is_up(row) for row in selected_rows' \
+    'not docker_container_is_up(row) for row in selected_rows' \
+    '"args": ("start", container_ids)' '"args": ("stop", container_ids)' \
+    '"args": ("rm", container_ids)' '"args": (image_ids,)' \
     'build_docker_container_action_command' 'build_docker_image_delete_command'
   assert_file_contains_many "${command_catalog_file}" \
-'def docker_container_is_up' 'docker image rm -f' 'docker ps -a --format' 'docker images --format'
+'def docker_action_targets' 'def quoted_docker_action_targets' \
+    'def docker_container_is_up' 'docker image rm -f' 'docker ps -a --format' \
+    'docker images --format'
   run grep -F -q '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}' "${command_catalog_file}"
   assert_success
 
   assert_file_contains "${command_catalog_file}" 'return "docker ps -q >/dev/null 2>&1"'
+
+  run python3 - "${command_catalog_file}" <<'PY'
+import shlex
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def docker_action_targets(")
+end = source.index("def _build_hhs_hspm_command_prefix", start)
+namespace = {"shlex": shlex}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+assert namespace["docker_action_targets"]((" one ", "", "two")) == ("one", "two")
+assert namespace["build_docker_container_action_command"](
+    "stop",
+    ("abc123", "container with spaces"),
+) == "docker stop abc123 'container with spaces'"
+assert namespace["build_docker_image_delete_command"](
+    ("img123", "image with spaces"),
+) == "docker image rm -f img123 'image with spaces'"
+try:
+    namespace["build_docker_container_action_command"]("restart", "abc123")
+except ValueError as error:
+    assert "Unsupported Docker container operation" in str(error)
+else:
+    raise AssertionError("unsupported Docker operations must fail")
+try:
+    namespace["build_docker_image_delete_command"](())
+except ValueError as error:
+    assert "require at least one target ID" in str(error)
+else:
+    raise AssertionError("empty Docker targets must fail")
+PY
+  assert_success
 
   run python3 - <<'PY'
 from pathlib import Path

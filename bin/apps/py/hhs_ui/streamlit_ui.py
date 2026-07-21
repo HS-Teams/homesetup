@@ -50,6 +50,7 @@ from hhs_ui.execution.command_catalog import (
     updater_output_has_updates,
     format_hhs_sysinfo_markdown,
     docker_cli_table_rows,
+    docker_action_targets,
     docker_container_is_up,
     build_hhs_envs_command,
     build_hhs_env_action_command,
@@ -281,9 +282,12 @@ from hhs_ui.widgets.table_ui import (
     render_table,
     render_table_controls_panel,
     render_table_filter_controls,
+    selected_table_items,
+    styled_docker_container_rows,
     styled_service_rows,
     styled_shopt_rows,
     styled_tool_rows,
+    table_component_key,
     table_filter_mapping,
 )
 from hhs_ui.features.ssh_core import (
@@ -1049,7 +1053,8 @@ def render_docker_command_table(
     selected_label: Callable[[dict[str, str], int], str] | None = None,
     action_buttons: list[dict[str, object]] | None = None,
     reset_selection: Callable[[], None] | None = None,
-) -> None:
+    multi_selection: bool = False,
+) -> list[dict[str, str]]:
     """Render a Docker command result using the shared dataframe component."""
     rows = docker_cli_table_rows(result.stdout, omitted_columns=omitted_columns)
     if result.returncode != 0:
@@ -1057,74 +1062,183 @@ def render_docker_command_table(
     render_table(
         rows,
         key=table_key,
-        empty_hint="Select a row to interact" if rows else "",
+        empty_hint=(
+            "Select one or more rows to interact"
+            if rows and multi_selection
+            else "Select a row to interact" if rows else ""
+        ),
         headers=headers,
-        table_data=pd.DataFrame(rows, columns=headers),
-        selected_label=selected_label,
-        action_buttons=action_buttons,
+        table_data=(
+            styled_docker_container_rows(rows, headers)
+            if "STATUS" in headers
+            else pd.DataFrame(rows, columns=headers)
+        ),
+        selected_label=None if multi_selection else selected_label,
+        action_buttons=None if multi_selection else action_buttons,
         reset_selection=reset_selection,
+        multi_selection=multi_selection,
+    )
+    if not multi_selection:
+        return []
+    return [row for _index, row in selected_table_items(rows, table_key)]
+
+
+def docker_selected_summary(
+    rows: list[dict[str, str]],
+    plural_name: str,
+    single_value: Callable[[dict[str, str]], str],
+) -> str:
+    """Return the Docker selection summary for one or many selected rows."""
+    if not rows:
+        return ""
+    if len(rows) == 1:
+        return f"Selected: {single_value(rows[0])}"
+    return f"Selected: {len(rows)} {plural_name}"
+
+
+def render_docker_selected_actions(
+    table_key: str,
+    selected_rows: list[dict[str, str]],
+    summary: str,
+    actions: list[dict[str, object]],
+) -> None:
+    """Render Docker batch actions for the selected rows."""
+    if not selected_rows or not actions:
+        return
+    label, separator, value = summary.partition(":")
+    summary_label = f"{label}:" if separator else summary
+    summary_value = value.strip() if separator else ""
+    with st.container(key=table_component_key(table_key, "table_selected_panel_batch")):
+        st.markdown(
+            (
+                '<span class="hhs-selected-item-line">'
+                f'<span class="hhs-selected-item-label">{html.escape(summary_label)}</span>'
+                f'<span class="hhs-selected-item-value">{html.escape(summary_value)}</span>'
+                "</span>"
+            ),
+            unsafe_allow_html=True,
+        )
+    with st.container(key=table_component_key(table_key, "table_actions_batch")):
+        columns = st.columns([1.0] * len(actions), gap="small")
+        for column, action in zip(columns, actions):
+            label_text = str(action["label"])
+            key_prefix = str(
+                action.get("key_prefix", label_text.lower().replace(" ", "_"))
+            )
+            with column:
+                st.button(
+                    label_text,
+                    disabled=bool(action.get("disabled", False)),
+                    help=action.get("help"),
+                    key=f"{key_prefix}_batch",
+                    on_click=action.get("on_click"),
+                    args=tuple(action.get("args", ())),
+                    width=str(action.get("width", "stretch")),
+                )
+
+
+def docker_selected_container_ids(rows: list[dict[str, str]]) -> tuple[str, ...]:
+    """Return selected Docker container IDs."""
+    return tuple(
+        container_id
+        for container_id in (row.get("CONTAINER ID", "").strip() for row in rows)
+        if container_id
+    )
+
+
+def docker_selected_image_ids(rows: list[dict[str, str]]) -> tuple[str, ...]:
+    """Return selected Docker image IDs."""
+    return tuple(
+        image_id
+        for image_id in (row.get("IMAGE ID", "").strip() for row in rows)
+        if image_id
     )
 
 
 def render_docker_container_table(result: subprocess.CompletedProcess[str]) -> None:
-    """Render Docker containers with selected-row container actions."""
-    render_docker_command_table(
+    """Render Docker containers with selected-container actions."""
+    table_key = docker_container_table_key()
+    selected_rows = render_docker_command_table(
         result,
-        docker_container_table_key(),
+        table_key,
         ["CONTAINER ID", "IMAGE", "NAMES", "STATUS", "CREATED AT"],
         omitted_columns=("COMMAND", "PORTS"),
-        selected_label=lambda row, _index: (
-            f"Selected: {row.get('NAMES') or row.get('CONTAINER ID', '')}"
+        reset_selection=reset_docker_container_table_selection,
+        multi_selection=True,
+    )
+    container_ids = docker_selected_container_ids(selected_rows)
+    all_selected_running = bool(selected_rows) and all(
+        docker_container_is_up(row) for row in selected_rows
+    )
+    all_selected_stopped = bool(selected_rows) and all(
+        not docker_container_is_up(row) for row in selected_rows
+    )
+    render_docker_selected_actions(
+        table_key,
+        selected_rows,
+        docker_selected_summary(
+            selected_rows,
+            "containers",
+            lambda row: row.get("NAMES") or row.get("CONTAINER ID", ""),
         ),
-        action_buttons=[
+        [
             {
                 "label": "Start",
                 "key_prefix": "docker_container_start_button",
-                "help": "Start the selected container",
+                "help": "Start all selected stopped containers",
                 "on_click": apply_docker_container_action,
-                "args": lambda row, _index: ("start", row.get("CONTAINER ID", "")),
-                "disabled": lambda row, _index: docker_container_is_up(row),
+                "args": ("start", container_ids),
+                "disabled": not container_ids or not all_selected_stopped,
             },
             {
                 "label": "Stop",
                 "key_prefix": "docker_container_stop_button",
-                "help": "Stop the selected container",
+                "help": "Stop all selected running containers",
                 "on_click": apply_docker_container_action,
-                "args": lambda row, _index: ("stop", row.get("CONTAINER ID", "")),
-                "disabled": lambda row, _index: not docker_container_is_up(row),
+                "args": ("stop", container_ids),
+                "disabled": not container_ids or not all_selected_running,
             },
             {
                 "label": "Remove",
                 "key_prefix": "docker_container_remove_button",
-                "help": "Remove the selected container",
+                "help": "Remove all selected stopped containers",
                 "on_click": apply_docker_container_action,
-                "args": lambda row, _index: ("rm", row.get("CONTAINER ID", "")),
-                "disabled": lambda row, _index: docker_container_is_up(row),
+                "args": ("rm", container_ids),
+                "disabled": not container_ids or not all_selected_stopped,
             },
         ],
-        reset_selection=reset_docker_container_table_selection,
     )
 
 
 def render_docker_image_table(result: subprocess.CompletedProcess[str]) -> None:
-    """Render Docker images with a selected-row image delete action."""
-    render_docker_command_table(
+    """Render Docker images with selected-image delete actions."""
+    table_key = docker_image_table_key()
+    selected_rows = render_docker_command_table(
         result,
-        docker_image_table_key(),
+        table_key,
         ["IMAGE ID", "REPOSITORY", "TAG", "SIZE", "CREATED AT"],
-        selected_label=lambda row, _index: (
-            f"Selected: {row.get('REPOSITORY', '')}:{row.get('TAG', '')}"
+        reset_selection=reset_docker_image_table_selection,
+        multi_selection=True,
+    )
+    image_ids = docker_selected_image_ids(selected_rows)
+    render_docker_selected_actions(
+        table_key,
+        selected_rows,
+        docker_selected_summary(
+            selected_rows,
+            "images",
+            lambda row: f"{row.get('REPOSITORY', '')}:{row.get('TAG', '')}",
         ),
-        action_buttons=[
+        [
             {
                 "label": "Delete",
                 "key_prefix": "docker_image_delete_button",
-                "help": "Delete the selected image",
+                "help": "Delete all selected images",
                 "on_click": apply_docker_image_action,
-                "args": lambda row, _index: (row.get("IMAGE ID", ""),),
+                "args": (image_ids,),
+                "disabled": not image_ids,
             },
         ],
-        reset_selection=reset_docker_image_table_selection,
     )
 
 
@@ -2701,43 +2815,62 @@ def execute_pending_docker_action() -> None:
     complete_docker_action_job()
 
 
-def apply_docker_container_action(operation: str, container_id: str) -> None:
-    """Run a Docker container action from the selected container table row."""
-    clean_container_id = container_id.strip()
-    if not clean_container_id:
+def docker_target_summary(
+    singular_name: str,
+    targets: tuple[str, ...],
+) -> str:
+    """Return a concise human-readable Docker action target summary."""
+    if len(targets) == 1:
+        return targets[0]
+    return f"{len(targets)} {singular_name}s"
+
+
+def apply_docker_container_action(
+    operation: str,
+    container_ids: str | list[str] | tuple[str, ...],
+) -> None:
+    """Run a Docker container action from the selected container table rows."""
+    clean_container_ids = docker_action_targets(container_ids)
+    if not clean_container_ids:
         return
+    target_summary = docker_target_summary("container", clean_container_ids)
     queue_docker_action(
-        build_docker_container_action_command(operation, clean_container_id),
+        build_docker_container_action_command(operation, clean_container_ids),
         f"Running docker {operation}",
         20,
         {
             "action_type": "container",
             "operation": operation,
-            "container_id": clean_container_id,
-            "started_message": f"Docker container {operation} started: {clean_container_id}",
-            "success_fallback": (
-                f"Docker container {operation} completed: {clean_container_id}"
+            "container_ids": clean_container_ids,
+            "started_message": (
+                f"Docker container {operation} started: {target_summary}"
             ),
-            "error_fallback": f"Docker container {operation} failed: {clean_container_id}",
+            "success_fallback": (
+                f"Docker container {operation} completed: {target_summary}"
+            ),
+            "error_fallback": (
+                f"Docker container {operation} failed: {target_summary}"
+            ),
         },
     )
 
 
-def apply_docker_image_action(image_id: str) -> None:
-    """Delete a Docker image from the selected image table row."""
-    clean_image_id = image_id.strip()
-    if not clean_image_id:
+def apply_docker_image_action(image_ids: str | list[str] | tuple[str, ...]) -> None:
+    """Delete Docker images from the selected image table rows."""
+    clean_image_ids = docker_action_targets(image_ids)
+    if not clean_image_ids:
         return
+    target_summary = docker_target_summary("image", clean_image_ids)
     queue_docker_action(
-        build_docker_image_delete_command(clean_image_id),
+        build_docker_image_delete_command(clean_image_ids),
         "Deleting Docker image",
         30,
         {
             "action_type": "image",
-            "image_id": clean_image_id,
-            "started_message": f"Docker image deletion started: {clean_image_id}",
-            "success_fallback": f"Docker image deleted: {clean_image_id}",
-            "error_fallback": f"Docker image deletion failed: {clean_image_id}",
+            "image_ids": clean_image_ids,
+            "started_message": f"Docker image deletion started: {target_summary}",
+            "success_fallback": f"Docker image deleted: {target_summary}",
+            "error_fallback": f"Docker image deletion failed: {target_summary}",
         },
     )
 
