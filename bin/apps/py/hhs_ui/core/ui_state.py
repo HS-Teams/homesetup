@@ -26,22 +26,11 @@ def is_persistable_ui_value(value: object) -> bool:
     """Return whether a Streamlit session value is safe for JSON UI persistence."""
     if isinstance(value, (str, bool, int, float)):
         return True
-    if isinstance(value, list):
-        return all(
-            isinstance(item, (str, bool, int, float))
-            or (
-                isinstance(item, dict)
-                and all(
-                    isinstance(key, str)
-                    and isinstance(dict_value, (str, bool, int, float))
-                    for key, dict_value in item.items()
-                )
-            )
-            for item in value
-        )
+    if isinstance(value, (list, tuple)):
+        return all(is_persistable_ui_value(item) for item in value)
     if isinstance(value, dict):
         return all(
-            isinstance(key, str) and isinstance(item, (str, bool, int, float))
+            isinstance(key, str) and is_persistable_ui_value(item)
             for key, item in value.items()
         )
     return False

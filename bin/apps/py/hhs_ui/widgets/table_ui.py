@@ -484,6 +484,8 @@ def table_selection_key_prefixes() -> tuple[str, ...]:
         hhs_ui.DIR_TABLE_KEY,
         hhs_ui.DOCKER_CONTAINER_TABLE_KEY,
         hhs_ui.DOCKER_IMAGE_TABLE_KEY,
+        hhs_ui.DOCKER_NETWORK_TABLE_KEY,
+        hhs_ui.DOCKER_VOLUME_TABLE_KEY,
         hhs_ui.ENV_TABLE_KEY,
         hhs_ui.HISTORY_COMMAND_TABLE_KEY,
         hhs_ui.HISTORY_DIRECTORY_TABLE_KEY,
@@ -519,6 +521,24 @@ def table_selection_rows(selection_state: object) -> tuple[int, ...]:
     return tuple(int(row) for row in rows)
 
 
+def valid_table_selection_indexes(
+    selection_rows: object,
+    row_count: int,
+) -> list[int]:
+    """Return valid selected row indexes for a table with the given row count."""
+    indexes: list[int] = []
+    if not isinstance(selection_rows, (list, tuple, set)):
+        return indexes
+    for index in selection_rows:
+        try:
+            row_index = int(index)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= row_index < row_count:
+            indexes.append(row_index)
+    return indexes
+
+
 def table_selection_snapshots() -> dict[str, tuple[int, ...]]:
     """Return remembered dataframe selections keyed by Streamlit widget key."""
     snapshots = st.session_state.setdefault(
@@ -548,7 +568,29 @@ def remember_table_selection(key: str | None, selection_state: object) -> None:
     if key is None:
         return
     snapshots = table_selection_snapshots()
-    snapshots[str(key)] = table_selection_rows(selection_state)
+    selected_rows = table_selection_rows(selection_state)
+    if tuple(snapshots.get(str(key), ())) == selected_rows:
+        return
+    snapshots[str(key)] = selected_rows
+    save_ui_state()
+
+
+def table_selection_default(key: str | None, row_count: int) -> dict[str, object] | None:
+    """Return a Streamlit dataframe selection default from remembered table state."""
+    if key is None:
+        return None
+    selected_indexes = valid_table_selection_indexes(
+        table_selection_rows(st.session_state.get(key)),
+        row_count,
+    )
+    if not selected_indexes:
+        selected_indexes = valid_table_selection_indexes(
+            table_selection_snapshots().get(str(key)),
+            row_count,
+        )
+    if not selected_indexes:
+        return None
+    return {"selection": {"rows": selected_indexes}}
 
 
 def selected_table_items(
@@ -558,10 +600,11 @@ def selected_table_items(
     """Return valid selected row indexes and values for the last rendered table key."""
     if key is None:
         return []
-    selected_indexes = table_selection_snapshots().get(str(key), ())
-    return [
-        (index, rows[index]) for index in selected_indexes if 0 <= index < len(rows)
-    ]
+    selected_indexes = valid_table_selection_indexes(
+        table_selection_snapshots().get(str(key)),
+        len(rows),
+    )
+    return [(index, rows[index]) for index in selected_indexes]
 
 
 def scroll_to_table_selection_content(anchor_key: str) -> None:
@@ -651,6 +694,9 @@ def render_table(
         dataframe_args["selection_mode"] = (
             "multi-row" if multi_selection else "single-row"
         )
+        selection_default = table_selection_default(key, len(rows))
+        if selection_default is not None:
+            dataframe_args["selection_default"] = selection_default
 
     selection = st.dataframe(rendered_data, **dataframe_args)
     if checkbox:
@@ -658,9 +704,10 @@ def render_table(
     if not checkbox:
         return None, None
 
-    selected_rows = [
-        index for index in table_selection_rows(selection) if 0 <= index < len(rows)
-    ]
+    selected_rows = valid_table_selection_indexes(
+        table_selection_rows(selection),
+        len(rows),
+    )
     if not selected_rows:
         if empty_hint:
             with st.container(key=table_component_key(key, "table_empty_hint")):
@@ -1392,11 +1439,30 @@ def docker_status_cell_style(
     return f"{base_style} color: {text_color};"
 
 
-def styled_docker_container_rows(
+def docker_in_use_cell_style(
+    value: object,
+    success_color: str = "#50fa7b",
+    warning_color: str = "#f1fa8c",
+    danger_color: str = "#ff5555",
+    text_color: str = "#f8f8f2",
+) -> str:
+    """Return the dataframe cell style for Docker resource usage values."""
+    value_text = str(value).strip().lower()
+    base_style = "font-weight: 800;"
+    if value_text.startswith("yes"):
+        return f"{base_style} color: {success_color};"
+    if value_text == "built-in":
+        return f"{base_style} color: {warning_color};"
+    if value_text == "no":
+        return f"{base_style} color: {danger_color};"
+    return f"{base_style} color: {text_color};"
+
+
+def styled_docker_rows(
     rows: list[dict[str, str]],
     headers: list[str],
 ) -> pd.io.formats.style.Styler:
-    """Return Docker container rows with styled STATUS cells."""
+    """Return Docker rows with styled status and resource usage cells."""
     dataframe = pd.DataFrame(rows, columns=headers)
     styler = dataframe.style
     theme_colors = docker_status_table_theme()
@@ -1408,6 +1474,15 @@ def styled_docker_container_rows(
             danger_color=theme_colors["danger"],
             text_color=theme_colors["text"],
             subset=["STATUS"],
+        )
+    if "In-Use" in dataframe:
+        styler = styler.map(
+            docker_in_use_cell_style,
+            success_color=theme_colors["success"],
+            warning_color=theme_colors["warning"],
+            danger_color=theme_colors["danger"],
+            text_color=theme_colors["text"],
+            subset=["In-Use"],
         )
     return styler
 

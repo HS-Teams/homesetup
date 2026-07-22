@@ -780,6 +780,24 @@ remote_rows = namespace["docker_cli_table_rows"](
     remote_output, omitted_columns=("COMMAND", "PORTS")
 )
 assert remote_rows[0]["NAMES"] == "homeselect-webapp"
+formatted_container_sample = (
+    "CONTAINER ID\tIMAGE\tCOMMAND\tCREATED AT\tSTATUS\tPORTS\tNAMES\n"
+    "a1b2c3d4e5f6\tyorevs/homeselect:ui-0.0.7.6\t\"/docker-entrypoint\"\t"
+    "2026-07-21 16:24:54 -0300 -03\tUp 3 minutes\t127.0.0.1:8888->80/tcp\t"
+    "homeselect-webapp\n"
+)
+formatted_container_rows = namespace["docker_cli_table_rows"](
+    formatted_container_sample, omitted_columns=("COMMAND", "PORTS")
+)
+assert formatted_container_rows == [
+    {
+        "CONTAINER ID": "a1b2c3d4e5f6",
+        "IMAGE": "yorevs/homeselect:ui-0.0.7.6",
+        "CREATED AT": "2026-07-21 16:24:54",
+        "STATUS": "Up 3 minutes",
+        "NAMES": "homeselect-webapp",
+    }
+]
 image_sample = (
     "REPOSITORY            TAG          IMAGE ID       CREATED       SIZE\n"
     "yorevs/homeselect     api-0.0.7.6  a1b2c3d4e5f6   2 days ago    314MB\n"
@@ -811,9 +829,50 @@ assert formatted_image_rows == [
         "TAG": "ui-0.0.7.6",
         "IMAGE ID": "f6b43e69bb9b",
         "SIZE": "203MB",
-        "CREATED AT": "2026-06-19 00:21:26 -0300 -03",
+        "CREATED AT": "2026-06-19 00:21:26",
     }
 ]
+volume_sample = (
+    "DRIVER\tVOLUME NAME\n"
+    "local\tpostgres-data\n"
+)
+volume_rows = namespace["docker_cli_table_rows"](
+    "[bash] HomeSetup is starting...\n" + volume_sample
+)
+assert volume_rows == [
+    {
+        "DRIVER": "local",
+        "VOLUME NAME": "postgres-data",
+    }
+]
+network_sample = (
+    "NETWORK ID\tNAME\tDRIVER\tSCOPE\n"
+    "a1b2c3d4e5f6\tapp-network\tbridge\tlocal\n"
+)
+network_rows = namespace["docker_cli_table_rows"](
+    "[Linux-ubuntu/bash] Welcome root to HomeSetup v1.9.18\n" + network_sample
+)
+assert network_rows == [
+    {
+        "NETWORK ID": "a1b2c3d4e5f6",
+        "NAME": "app-network",
+        "DRIVER": "bridge",
+        "SCOPE": "local",
+    }
+]
+usage_sample = (
+    "NAMES\tMOUNTS\tNETWORKS\n"
+    "api\tapi-data,/host/path\tapp-net,metrics-net\n"
+    "worker\tapi-data\tapp-net\n"
+)
+assert namespace["docker_container_resource_usage"](usage_sample, "MOUNTS") == {
+    "api-data": ("api", "worker"),
+    "/host/path": ("api",),
+}
+assert namespace["docker_container_resource_usage"](usage_sample, "NETWORKS") == {
+    "app-net": ("api", "worker"),
+    "metrics-net": ("api",),
+}
 assert namespace["docker_cli_table_rows"]("") == []
 PY
   assert_success

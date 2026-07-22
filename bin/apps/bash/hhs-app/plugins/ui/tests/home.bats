@@ -21,7 +21,7 @@ load "${HHS_REPO_DIR}/tests/test_helper"
 load_bats_libs
 load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers.bash"
 
-@test "when rendering Home Docker then command-backed container and image tables should be wired" {
+@test "when rendering Home Docker then command-backed resource tables should be wired" {
   assert_file_contains "${constants_file}" 'HOME_VIEWS = ("System", "Docker", "Tools", "SHOPTS")'
   assert_file_contains_many "${ui_file}" \
 'def home_view_label' 'format_func=home_view_label' 'elif home_view == "Docker"' \
@@ -35,20 +35,45 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
 
   assert_file_contains_many "${ui_file}" \
 'with st.expander("All Containers", expanded=True)' \
-    'with st.expander("Available Images", expanded=True)' 'def render_docker_command_table' \
+    'with st.expander("Available Images", expanded=True)' \
+    'with st.expander("Available Volumes", expanded=False)' \
+    'with st.expander("Available Networks", expanded=False)' \
+    'render_persisted_expander_state_script(' \
+    '"hhs.home.docker.volumes.expanded"' \
+    '"hhs.home.docker.networks.expanded"' \
+    'default_expanded=False' \
+    'def render_docker_command_table' \
     'render_docker_container_table(containers_result)' \
-    'render_docker_image_table(images_result)' 'table_key = docker_container_table_key()' \
-    'table_key = docker_image_table_key()' '"label": "Start"' '"label": "Stop"' \
+    'render_docker_image_table(images_result)' \
+    'render_docker_volume_table(volumes_result, volume_usage)' \
+    'render_docker_network_table(networks_result, network_usage)' \
+    'table_key = docker_container_table_key()' \
+    'table_key = docker_image_table_key()' 'table_key = docker_volume_table_key()' \
+    'table_key = docker_network_table_key()' '"label": "Start"' '"label": "Stop"' \
     '"label": "Remove"' '"label": "Delete"' 'multi_selection=True' \
     'def render_docker_selected_actions' 'def docker_selected_container_ids' \
-    'def docker_selected_image_ids' 'Select one or more rows to interact' \
-    'styled_docker_container_rows(rows, headers)' \
+    'def docker_selected_image_ids' 'def docker_selected_volume_names' \
+    'def docker_selected_prunable_network_ids' 'def docker_resource_usage_label' \
+    'def docker_rows_with_usage' 'def docker_network_rows_with_usage' \
+    'def docker_selected_resources_are_unused' \
+    'def docker_selected_networks_have_active_usage' \
+    'Select one or more rows to interact' \
+    'styled_docker_rows(rows, headers)' \
     'if "STATUS" in headers'
   run grep -F -q '["CONTAINER ID", "IMAGE", "NAMES", "STATUS", "CREATED AT"]' "${ui_file}"
   assert_success
 
   run grep -F -q '["IMAGE ID", "REPOSITORY", "TAG", "SIZE", "CREATED AT"]' "${ui_file}"
   assert_success
+
+  run grep -F -q '["VOLUME NAME", "DRIVER", "In-Use"]' "${ui_file}"
+  assert_success
+
+  run grep -F -q '["NETWORK ID", "NAME", "DRIVER", "SCOPE", "In-Use"]' "${ui_file}"
+  assert_success
+
+  run grep -F -c '"label": "Prune"' "${ui_file}"
+  assert_output "2"
 
   assert_file_contains_many "${ui_file}" \
 'all_selected_running = bool(selected_rows) and all(' \
@@ -57,11 +82,15 @@ load "${HHS_REPO_DIR}/bin/apps/bash/hhs-app/plugins/ui/tests/hhs-ui-test-helpers
     'not docker_container_is_up(row) for row in selected_rows' \
     '"args": ("start", container_ids)' '"args": ("stop", container_ids)' \
     '"args": ("rm", container_ids)' '"args": (image_ids,)' \
-    'build_docker_container_action_command' 'build_docker_image_delete_command'
+    '"args": (volume_names,)' '"args": (network_ids,)' \
+    'build_docker_container_action_command' 'build_docker_image_delete_command' \
+    'build_docker_volume_remove_command' 'build_docker_network_remove_command'
   assert_file_contains_many "${command_catalog_file}" \
-'def docker_action_targets' 'def quoted_docker_action_targets' \
+    'def docker_action_targets' 'def quoted_docker_action_targets' \
+    'def docker_container_resource_usage' 'def build_docker_resource_usage_command' \
     'def docker_container_is_up' 'docker image rm -f' 'docker ps -a --format' \
-    'docker images --format'
+    'docker images --format' 'docker volume ls --format' 'docker network ls --format' \
+    'docker ps -a --no-trunc --format' 'docker volume rm' 'docker network rm'
   run grep -F -q '{{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}' "${command_catalog_file}"
   assert_success
 
@@ -86,6 +115,12 @@ assert namespace["build_docker_container_action_command"](
 assert namespace["build_docker_image_delete_command"](
     ("img123", "image with spaces"),
 ) == "docker image rm -f img123 'image with spaces'"
+assert namespace["build_docker_volume_remove_command"](
+    ("volume-one", "volume with spaces"),
+) == "docker volume rm volume-one 'volume with spaces'"
+assert namespace["build_docker_network_remove_command"](
+    ("network123", "network with spaces"),
+) == "docker network rm network123 'network with spaces'"
 try:
     namespace["build_docker_container_action_command"]("restart", "abc123")
 except ValueError as error:
@@ -98,6 +133,64 @@ except ValueError as error:
     assert "require at least one target ID" in str(error)
 else:
     raise AssertionError("empty Docker targets must fail")
+PY
+  assert_success
+
+  run python3 - "${ui_file}" <<'PY'
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def docker_selected_prunable_network_ids(")
+end = source.index("def render_docker_container_table(", start)
+namespace = {
+    "hhs_ui": SimpleNamespace(
+        DOCKER_BUILT_IN_NETWORK_NAMES=frozenset({"bridge", "host", "none"})
+    )
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+
+usage = {"app-data": ("api", "worker")}
+rows = namespace["docker_rows_with_usage"](
+    [
+        {"VOLUME NAME": "app-data", "DRIVER": "local"},
+        {"VOLUME NAME": "unused-data", "DRIVER": "local"},
+    ],
+    "VOLUME NAME",
+    usage,
+)
+assert rows[0]["In-Use"] == "Yes: api, worker"
+assert rows[1]["In-Use"] == "No"
+assert namespace["docker_selected_resources_are_unused"]([rows[1]]) is True
+assert namespace["docker_selected_resources_are_unused"](rows) is False
+
+network_rows = namespace["docker_network_rows_with_usage"](
+    [
+        {"NETWORK ID": "bridge-id", "NAME": "bridge"},
+        {"NETWORK ID": "host-id", "NAME": "host"},
+        {"NETWORK ID": "none-id", "NAME": "none"},
+        {"NETWORK ID": "app-id", "NAME": "app-net"},
+        {"NETWORK ID": "unused-id", "NAME": "unused-net"},
+    ],
+    {"app-net": ("api",)},
+)
+assert [row["In-Use"] for row in network_rows] == [
+    "Built-In",
+    "Built-In",
+    "Built-In",
+    "Yes: api",
+    "No",
+]
+assert namespace["docker_selected_prunable_network_ids"](network_rows) == (
+    "unused-id",
+)
+assert namespace["docker_selected_networks_have_active_usage"](
+    network_rows
+) is True
+assert namespace["docker_selected_networks_have_active_usage"](
+    [*network_rows[:3], network_rows[4]]
+) is False
 PY
   assert_success
 
@@ -119,9 +212,14 @@ PY
 
   assert_file_contains_many "${constants_file}" \
 'DOCKER_CONTAINER_TABLE_KEY = "docker_container_table"' \
-    'DOCKER_IMAGE_TABLE_KEY = "docker_image_table"'
+    'DOCKER_IMAGE_TABLE_KEY = "docker_image_table"' \
+    'DOCKER_VOLUME_TABLE_KEY = "docker_volume_table"' \
+    'DOCKER_NETWORK_TABLE_KEY = "docker_network_table"' \
+    'DOCKER_BUILT_IN_NETWORK_NAMES = frozenset({"bridge", "host", "none"})'
   assert_file_contains_many "${ui_file}" \
-'hhs_ui.DOCKER_CONTAINER_TABLE_KEY' 'hhs_ui.DOCKER_IMAGE_TABLE_KEY'
+'hhs_ui.DOCKER_CONTAINER_TABLE_KEY' 'hhs_ui.DOCKER_IMAGE_TABLE_KEY' \
+    'hhs_ui.DOCKER_VOLUME_TABLE_KEY' 'hhs_ui.DOCKER_NETWORK_TABLE_KEY' \
+    'def docker_resource_table_key' 'def reset_docker_resource_table_selection'
 }
 
 @test "when rendering Home tools and shell options then filters and actions should be wired" {

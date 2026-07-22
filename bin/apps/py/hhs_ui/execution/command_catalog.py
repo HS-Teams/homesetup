@@ -736,7 +736,13 @@ def docker_cli_table_output(output: str) -> str:
             if "\t" in line
             else re.split(r"\s{2,}", line.strip())
         )
-        if headers and headers[0] in {"CONTAINER ID", "REPOSITORY"}:
+        if headers and headers[0] in {
+            "CONTAINER ID",
+            "DRIVER",
+            "NAMES",
+            "NETWORK ID",
+            "REPOSITORY",
+        }:
             return "\n".join(lines[index:])
     return ""
 
@@ -763,6 +769,22 @@ def filter_markdown_table_columns(
     )
 
 
+def normalize_docker_created_at(value: str) -> str:
+    """Return Docker's absolute creation timestamp without timezone suffixes."""
+    match = re.match(
+        r"^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+[+-]\d{4}(?:\s+\S+)?$",
+        value.strip(),
+    )
+    return match.group(1) if match else value
+
+
+def normalize_docker_table_cell(header: str, value: str) -> str:
+    """Return one Docker table cell normalized for display."""
+    if header == "CREATED AT":
+        return normalize_docker_created_at(value)
+    return value
+
+
 def docker_cli_table_rows(
     output: str, omitted_columns: tuple[str, ...] = ()
 ) -> list[dict[str, str]]:
@@ -771,11 +793,38 @@ def docker_cli_table_rows(
     headers, rows = filter_markdown_table_columns(headers, rows, omitted_columns)
     return [
         {
-            header: row[index] if index < len(row) else ""
+            header: normalize_docker_table_cell(
+                header, row[index] if index < len(row) else ""
+            )
             for index, header in enumerate(headers)
         }
         for row in rows
     ]
+
+
+def docker_container_resource_usage(
+    output: str, resource_column: str
+) -> dict[str, tuple[str, ...]]:
+    """Return Docker resource names mapped to containers that reference them."""
+    container_names_by_resource: dict[str, list[str]] = {}
+    for row in docker_cli_table_rows(output):
+        container_name = row.get("NAMES", "").strip()
+        if not container_name:
+            continue
+        resource_names = (
+            resource_name.strip()
+            for resource_name in row.get(resource_column, "").split(",")
+        )
+        for resource_name in resource_names:
+            if not resource_name:
+                continue
+            container_names = container_names_by_resource.setdefault(resource_name, [])
+            if container_name not in container_names:
+                container_names.append(container_name)
+    return {
+        resource_name: tuple(container_names)
+        for resource_name, container_names in container_names_by_resource.items()
+    }
 
 
 def docker_container_is_up(row: dict[str, str]) -> bool:
@@ -1527,6 +1576,27 @@ def build_docker_images_command() -> str:
     )
 
 
+def build_docker_volumes_command() -> str:
+    """Build the Bash command used to list Docker volumes."""
+    return "docker volume ls --format 'table {{.Driver}}\t{{.Name}}'"
+
+
+def build_docker_networks_command() -> str:
+    """Build the Bash command used to list Docker networks."""
+    return (
+        "docker network ls --format "
+        "'table {{.ID}}\t{{.Name}}\t{{.Driver}}\t{{.Scope}}'"
+    )
+
+
+def build_docker_resource_usage_command() -> str:
+    """Build the Bash command used to list container resource references."""
+    return (
+        "docker ps -a --no-trunc --format "
+        "'table {{.Names}}\t{{.Mounts}}\t{{.Networks}}'"
+    )
+
+
 def build_docker_agent_check_command() -> str:
     """Build the Bash command used to check whether Docker is running."""
     return "docker ps -q >/dev/null 2>&1"
@@ -1568,6 +1638,20 @@ def build_docker_image_delete_command(
 ) -> str:
     """Build the Bash command used to remove Docker images."""
     return f"docker image rm -f {quoted_docker_action_targets(image_ids)}"
+
+
+def build_docker_volume_remove_command(
+    volume_names: str | list[str] | tuple[str, ...],
+) -> str:
+    """Build the Bash command used to remove selected Docker volumes."""
+    return f"docker volume rm {quoted_docker_action_targets(volume_names)}"
+
+
+def build_docker_network_remove_command(
+    network_ids: str | list[str] | tuple[str, ...],
+) -> str:
+    """Build the Bash command used to remove selected Docker networks."""
+    return f"docker network rm {quoted_docker_action_targets(network_ids)}"
 
 
 def _build_hhs_hspm_command_prefix() -> str:

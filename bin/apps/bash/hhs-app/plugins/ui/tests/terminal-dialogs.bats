@@ -44,10 +44,13 @@ dialog_source = Path(sys.argv[1]).read_text()
 ssh_runtime_source = Path(sys.argv[2]).read_text()
 callback_body = dialog_source.split("def handle_dialog_button_click", 1)[1].split("\ndef ", 1)[0]
 dismiss_body = ssh_runtime_source.split("def dismiss_streamlit_dialog", 1)[1].split("\ndef ", 1)[0]
+browser_dismiss_body = dialog_source.split("def render_pending_streamlit_dialog_dismiss", 1)[1].split("\ndef ", 1)[0]
 assert "render_script_html(" not in callback_body
 assert "st.html(" not in callback_body
 assert "render_script_html(" not in dismiss_body
 assert "st.html(" not in dismiss_body
+assert "(() => {" in browser_dismiss_body
+assert browser_dismiss_body.index("(() => {") < browser_dismiss_body.index("const doc =")
 PY
   assert_success
 
@@ -207,13 +210,18 @@ PY
     "def terminal_ai_request_endpoint_url" '"/terminal-ai-request"' "handle_terminal_ai_request"
   assert_file_contains_many "${footer_ui_file}" \
 "contextDelayMs = 700" "requestTerminalContext(true)" "requestTerminalContext(false)" \
-    "waitForTerminalContextEvent(contextDelayMs)"
+    "if (!menu || !menu.open) {{" "waitForTerminalContextEvent(contextDelayMs)"
   assert_file_contains "${terminal_ui_file}" "parentWindow.__hhsTtydEventUrl"
   assert_file_not_contains "${terminal_ui_file}" 'def wait_for_ttyd_terminal_context_event'
 
   assert_file_contains_many "${terminal_ui_file}" \
-"term.getSelection()" "lastSelectedContent" "cacheSelection" "rememberSelection" "term.onSelectionChange" \
-    "__hhsTtydSelectionChangeDisposable" "selectionchange" "visibleBuffer"
+"term.getSelection()" "const terminalContext=()=>{" "const selected=selectionContent();" \
+    "mode:'selection'" "visibleBuffer"
+  assert_file_not_contains_many "${terminal_ui_file}" \
+"lastSelectedContent" "cacheSelection" "rememberSelection" "term.onSelectionChange" \
+    "__hhsTtydSelectionChangeDisposable" "selectionchange" \
+    "window.addEventListener('mouseup'" "window.addEventListener('keyup'" \
+    "window.addEventListener('touchend'"
   assert_file_not_contains "${terminal_ui_file}" 'def pop_ttyd_terminal_context_event'
 
   assert_file_contains_many "${terminal_ui_file}" \

@@ -438,6 +438,8 @@ def clear_host_scoped_session_state() -> None:
         hhs_ui.DIR_TABLE_KEY,
         hhs_ui.DOCKER_CONTAINER_TABLE_KEY,
         hhs_ui.DOCKER_IMAGE_TABLE_KEY,
+        hhs_ui.DOCKER_NETWORK_TABLE_KEY,
+        hhs_ui.DOCKER_VOLUME_TABLE_KEY,
         hhs_ui.ENV_TABLE_KEY,
         hhs_ui.HISTORY_COMMAND_TABLE_KEY,
         hhs_ui.HISTORY_DIRECTORY_TABLE_KEY,

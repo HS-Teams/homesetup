@@ -48,6 +48,8 @@ namespace = {
         DIR_TABLE_KEY="dir_vars_table",
         DOCKER_CONTAINER_TABLE_KEY="docker_container_table",
         DOCKER_IMAGE_TABLE_KEY="docker_image_table",
+        DOCKER_NETWORK_TABLE_KEY="docker_network_table",
+        DOCKER_VOLUME_TABLE_KEY="docker_volume_table",
         ENV_TABLE_KEY="env_vars_table",
         HISTORY_COMMAND_TABLE_KEY="history_command_vars_table",
         HISTORY_DIRECTORY_TABLE_KEY="history_directory_vars_table",
@@ -63,10 +65,13 @@ namespace = {
         TABLE_SELECTION_SNAPSHOT_KEY="_hhs_table_selection_snapshots",
     ),
     "st": SimpleNamespace(session_state=session_state),
+    "save_ui_state": lambda: session_state.setdefault("_save_ui_state_called", True),
 }
 exec("from __future__ import annotations\n" + table_source[start:end], namespace)
 
 assert namespace["table_selection_widget_key"]("env_vars_table_0") is True
+assert namespace["table_selection_widget_key"]("docker_volume_table_0") is True
+assert namespace["table_selection_widget_key"]("docker_network_table_0") is True
 assert namespace["table_selection_widget_key"](
     "hhs_reset_targets_markdown_table_editor_v4_row_selection"
 ) is True
@@ -84,6 +89,13 @@ namespace["remember_table_selection"](
 assert namespace["selected_table_items"](sample_rows, "env_vars_table_0") == [
     (0, sample_rows[0])
 ]
+session_state["docker_volume_table_0"] = {"selection": {"rows": [1]}}
+assert namespace["table_selection_default"]("docker_volume_table_0", 2) == {
+    "selection": {"rows": [1]}
+}
+assert namespace["table_selection_default"]("docker_container_table_0", 2) == {
+    "selection": {"rows": [1]}
+}
 
 snapshot_start = cache_runtime_source.index("def command_result_snapshots()")
 snapshot_end = cache_runtime_source.index("def cache_set(")
@@ -239,18 +251,28 @@ for node in constants_tree.body:
     except (ValueError, TypeError):
         continue
 
+def constant_string_value(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Name):
+        value = constants.get(node.id)
+        if isinstance(value, str):
+            return value
+    return None
+
 with tempfile.TemporaryDirectory() as tmp_dir:
     cache_dir = Path(tmp_dir)
     state_file = cache_dir / "streamlit-ui-state.json"
     cache_file = cache_dir / "streamlit-ui-cache.json"
     persisted_keys = tuple(
-        value.value
+        key
         for node in constants_tree.body
         if isinstance(node, ast.Assign)
         and isinstance(node.targets[0], ast.Name)
         and node.targets[0].id == "PERSISTED_UI_KEYS"
         for value in node.value.elts
-        if isinstance(value, ast.Constant) and isinstance(value.value, str)
+        for key in (constant_string_value(value),)
+        if key is not None
     )
     state_constants = SimpleNamespace(
         HHS_CACHE_DIR=cache_dir,
@@ -264,7 +286,17 @@ with tempfile.TemporaryDirectory() as tmp_dir:
         "lru_cache": lru_cache,
         "Path": Path,
         "hhs_ui_constants": state_constants,
-        "st": SimpleNamespace(session_state={"active_view": "Home"}),
+        "st": SimpleNamespace(
+            session_state={
+                "active_view": "Home",
+                "_hhs_table_selection_snapshots": {
+                    "docker_network_table_0": (0, 2),
+                    "docker_volume_table_0": (1,),
+                },
+                "docker_network_table_0": {"selection": {"rows": [0, 2]}},
+                "docker_volume_table_0": {"selection": {"rows": [1]}},
+            }
+        ),
         "validated_theme_name": lambda value: value if isinstance(value, str) else "",
     }
     load_functions(
@@ -285,6 +317,15 @@ with tempfile.TemporaryDirectory() as tmp_dir:
         state_namespace,
     )
 
+    assert state_namespace["is_persisted_ui_key"]("_hhs_table_selection_snapshots")
+    assert state_namespace["is_persisted_ui_key"]("docker_volume_table_0")
+    assert state_namespace["is_persisted_ui_key"]("docker_network_table_0")
+    assert state_namespace["is_persistable_ui_value"](
+        {"selection": {"rows": [1]}}
+    )
+    assert state_namespace["is_persistable_ui_value"](
+        {"docker_volume_table_0": (1,)}
+    )
     state_file.write_text(
         json.dumps(
             {
@@ -297,7 +338,13 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     )
     state_namespace["save_ui_state"]()
     assert json.loads(state_file.read_text(encoding="utf-8")) == {
-        "active_view": "Home"
+        "_hhs_table_selection_snapshots": {
+            "docker_network_table_0": [0, 2],
+            "docker_volume_table_0": [1],
+        },
+        "active_view": "Home",
+        "docker_network_table_0": {"selection": {"rows": [0, 2]}},
+        "docker_volume_table_0": {"selection": {"rows": [1]}},
     }
 
     now = time.time()

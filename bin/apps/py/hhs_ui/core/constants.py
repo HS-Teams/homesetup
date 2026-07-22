@@ -314,6 +314,7 @@ PERSISTED_UI_KEYS = (
     "ssh_tunnel_other_filter",
     "ssh_view",
     "theme_selected",
+    TABLE_SELECTION_SNAPSHOT_KEY,
     "updater_last_check_output",
     "updater_update_available",
 )
@@ -321,6 +322,10 @@ PERSISTED_UI_KEY_PREFIXES = (
     "alias_selected_value_",
     "cmd_selected_value_",
     "dir_selected_value_",
+    "docker_container_table_",
+    "docker_image_table_",
+    "docker_network_table_",
+    "docker_volume_table_",
     "env_selected_value_",
 )
 ANSI_ESCAPE_PATTERN = re.compile(
@@ -411,6 +416,11 @@ DOCKER_CONTAINER_TABLE_KEY = "docker_container_table"
 DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY = "docker_container_table_reset_counter"
 DOCKER_IMAGE_TABLE_KEY = "docker_image_table"
 DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY = "docker_image_table_reset_counter"
+DOCKER_VOLUME_TABLE_KEY = "docker_volume_table"
+DOCKER_VOLUME_TABLE_RESET_COUNTER_KEY = "docker_volume_table_reset_counter"
+DOCKER_NETWORK_TABLE_KEY = "docker_network_table"
+DOCKER_NETWORK_TABLE_RESET_COUNTER_KEY = "docker_network_table_reset_counter"
+DOCKER_BUILT_IN_NETWORK_NAMES = frozenset({"bridge", "host", "none"})
 HOME_TOOLS_TABLE_KEY = "home_tools_table"
 HOME_TOOLS_TABLE_RESET_COUNTER_KEY = "home_tools_table_reset_counter"
 HHS_HSPM_CATALOG_TABLE_RESET_COUNTER_KEY = "hhs_hspm_catalog_table_reset_counter"

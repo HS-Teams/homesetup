@@ -239,6 +239,7 @@ assert 'setTerminalContextPreview(terminalEvent.content || "")' in ui_source
 assert 'window.setTimeout(refreshTerminalContextPreview, 80)' in ui_source
 assert 'window.setTimeout(refreshTerminalContextPreview, 220)' in ui_source
 assert 'trigger?.addEventListener("pointerdown"' in ui_source
+assert 'if (!menu || !menu.open) {{' in ui_source
 assert 'requestTerminalContext(false)' in ui_source
 assert 'menu.removeAttribute("open")' in ui_source
 assert 'const submitted = submitTerminalCommand(command)' in ui_source
@@ -783,7 +784,8 @@ service_value_style_body = table_ui_source.split("def service_value_cell_style",
 styled_service_rows_body = table_ui_source.split("def styled_service_rows", 1)[1].split("\ndef ", 1)[0]
 docker_status_theme_body = table_ui_source.split("def docker_status_table_theme", 1)[1].split("\ndef ", 1)[0]
 docker_status_style_body = table_ui_source.split("def docker_status_cell_style", 1)[1].split("\ndef ", 1)[0]
-styled_docker_rows_body = table_ui_source.split("def styled_docker_container_rows", 1)[1].split("\ndef ", 1)[0]
+docker_in_use_style_body = table_ui_source.split("def docker_in_use_cell_style", 1)[1].split("\ndef ", 1)[0]
+styled_docker_rows_body = table_ui_source.split("def styled_docker_rows", 1)[1].split("\ndef ", 1)[0]
 assert '"hhs-theme-link-color"' in service_theme_body
 assert '"hhs-success"' in service_theme_body
 assert '"hhs-danger"' in service_theme_body
@@ -795,6 +797,8 @@ assert '"hhs-theme-text-color"' in docker_status_theme_body
 assert "background-color" not in service_name_style_body
 assert "background-color" not in service_value_style_body
 assert "background-color" not in docker_status_style_body
+assert "background-color" not in docker_in_use_style_body
+assert 'value_text == "built-in"' in docker_in_use_style_body
 assert "#21222c" not in service_name_style_body
 assert "#21222c" not in service_value_style_body
 assert "#21222c" not in docker_status_style_body
@@ -808,6 +812,7 @@ assert 'success_color=theme_colors["success"]' in styled_docker_rows_body
 assert 'warning_color=theme_colors["warning"]' in styled_docker_rows_body
 assert 'danger_color=theme_colors["danger"]' in styled_docker_rows_body
 assert 'text_color=theme_colors["text"]' in styled_docker_rows_body
+assert 'subset=["In-Use"]' in styled_docker_rows_body
 assert ".hhs-view-subtitle" in base_css
 assert ".hhs-view-subtitle-link" in base_css
 assert ".hhs-view-subtitle-link:link" in base_css
@@ -1160,6 +1165,27 @@ docker_down_style = namespace["docker_status_cell_style"](
     docker_colors["danger"],
     docker_colors["text"],
 )
+docker_in_use_style = namespace["docker_in_use_cell_style"](
+    "Yes: api, worker",
+    docker_colors["success"],
+    docker_colors["warning"],
+    docker_colors["danger"],
+    docker_colors["text"],
+)
+docker_built_in_style = namespace["docker_in_use_cell_style"](
+    "Built-In",
+    docker_colors["success"],
+    docker_colors["warning"],
+    docker_colors["danger"],
+    docker_colors["text"],
+)
+docker_not_in_use_style = namespace["docker_in_use_cell_style"](
+    "No",
+    docker_colors["success"],
+    docker_colors["warning"],
+    docker_colors["danger"],
+    docker_colors["text"],
+)
 
 assert name_style == "color: #0369a1; font-weight: 800;"
 assert up_style == "font-weight: 800; color: #15803d;"
@@ -1170,6 +1196,9 @@ assert docker_starting_style == "font-weight: 800; color: #a16207;"
 assert docker_unhealthy_style == "font-weight: 800; color: #a16207;"
 assert docker_up_other_style == "font-weight: 800; color: #a16207;"
 assert docker_down_style == "font-weight: 800; color: #dc2626;"
+assert docker_in_use_style == "font-weight: 800; color: #15803d;"
+assert docker_built_in_style == "font-weight: 800; color: #a16207;"
+assert docker_not_in_use_style == "font-weight: 800; color: #dc2626;"
 assert all(
     "background" not in style
     for style in (
@@ -1182,6 +1211,9 @@ assert all(
         docker_unhealthy_style,
         docker_up_other_style,
         docker_down_style,
+        docker_in_use_style,
+        docker_built_in_style,
+        docker_not_in_use_style,
     )
 )
 PY

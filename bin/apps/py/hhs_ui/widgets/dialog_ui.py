@@ -86,18 +86,20 @@ def render_pending_streamlit_dialog_dismiss() -> None:
         return
     render_script_html("""
         <script>
-          const doc = window.parent.document;
-          const dialog = doc.querySelector('[data-testid="stDialog"], [role="dialog"]');
-          const close_button = dialog?.querySelector('button[aria-label="Close"]');
-          if (close_button) {
-            close_button.click();
-          } else {
-            doc.dispatchEvent(new KeyboardEvent("keydown", {
-              bubbles: true,
-              cancelable: true,
-              key: "Escape"
-            }));
-          }
+          (() => {
+            const doc = window.parent.document;
+            const dialog = doc.querySelector('[data-testid="stDialog"], [role="dialog"]');
+            const close_button = dialog?.querySelector('button[aria-label="Close"]');
+            if (close_button) {
+              close_button.click();
+            } else {
+              doc.dispatchEvent(new KeyboardEvent("keydown", {
+                bubbles: true,
+                cancelable: true,
+                key: "Escape"
+              }));
+            }
+          })();
         </script>
         """)
 

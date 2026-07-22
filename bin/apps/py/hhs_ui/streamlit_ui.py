@@ -50,6 +50,7 @@ from hhs_ui.execution.command_catalog import (
     updater_output_has_updates,
     format_hhs_sysinfo_markdown,
     docker_cli_table_rows,
+    docker_container_resource_usage,
     docker_action_targets,
     docker_container_is_up,
     build_hhs_envs_command,
@@ -61,9 +62,14 @@ from hhs_ui.execution.command_catalog import (
     build_hhs_shopt_action_command,
     build_docker_ps_command,
     build_docker_images_command,
+    build_docker_volumes_command,
+    build_docker_networks_command,
+    build_docker_resource_usage_command,
     build_docker_agent_check_command,
     build_docker_container_action_command,
     build_docker_image_delete_command,
+    build_docker_volume_remove_command,
+    build_docker_network_remove_command,
     build_hhs_hspm_command,
     build_tool_tldr_command,
     build_hhs_history_command,
@@ -284,7 +290,7 @@ from hhs_ui.widgets.table_ui import (
     render_table_controls_panel,
     render_table_filter_controls,
     selected_table_items,
-    styled_docker_container_rows,
+    styled_docker_rows,
     styled_service_rows,
     styled_shopt_rows,
     styled_tool_rows,
@@ -974,7 +980,7 @@ def render_home_system_panel() -> None:
 
 
 def render_home_docker_panel() -> None:
-    """Render Docker container and image listings on the Home view."""
+    """Render Docker resource listings on the Home view."""
     execute_pending_docker_action()
     render_background_job_status(DOCKER_ACTION_JOB)
     agent_result = render_cached_command_result(
@@ -1011,11 +1017,71 @@ def render_home_docker_panel() -> None:
     )
     if images_result is None:
         return
+    volumes_result = render_cached_command_result(
+        build_docker_volumes_command(),
+        "Loading Docker volumes",
+        "docker",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        10,
+        "Unable to load Docker volumes.",
+    )
+    if volumes_result is None:
+        return
+    networks_result = render_cached_command_result(
+        build_docker_networks_command(),
+        "Loading Docker networks",
+        "docker",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        10,
+        "Unable to load Docker networks.",
+    )
+    if networks_result is None:
+        return
+    usage_result = render_cached_command_result(
+        build_docker_resource_usage_command(),
+        "Loading Docker resource usage",
+        "docker",
+        hhs_ui.UI_CACHE_REALTIME_TTL_SECONDS,
+        10,
+        "Unable to load Docker resource usage.",
+    )
+    if usage_result is None:
+        return
+    if usage_result.returncode != 0:
+        return
+    volume_usage = docker_container_resource_usage(usage_result.stdout, "MOUNTS")
+    network_usage = docker_container_resource_usage(usage_result.stdout, "NETWORKS")
     with st.container(key="home_docker_panel"):
         with st.expander("All Containers", expanded=True):
-            render_docker_container_table(containers_result)
+            with st.container(key="docker_containers_expander_state"):
+                render_docker_container_table(containers_result)
+        render_persisted_expander_state_script(
+            ".st-key-docker_containers_expander_state",
+            "hhs.home.docker.containers.expanded",
+        )
         with st.expander("Available Images", expanded=True):
-            render_docker_image_table(images_result)
+            with st.container(key="docker_images_expander_state"):
+                render_docker_image_table(images_result)
+        render_persisted_expander_state_script(
+            ".st-key-docker_images_expander_state",
+            "hhs.home.docker.images.expanded",
+        )
+        with st.expander("Available Volumes", expanded=False):
+            with st.container(key="docker_volumes_expander_state"):
+                render_docker_volume_table(volumes_result, volume_usage)
+        render_persisted_expander_state_script(
+            ".st-key-docker_volumes_expander_state",
+            "hhs.home.docker.volumes.expanded",
+            default_expanded=False,
+        )
+        with st.expander("Available Networks", expanded=False):
+            with st.container(key="docker_networks_expander_state"):
+                render_docker_network_table(networks_result, network_usage)
+        render_persisted_expander_state_script(
+            ".st-key-docker_networks_expander_state",
+            "hhs.home.docker.networks.expanded",
+            default_expanded=False,
+        )
 
 
 def docker_agent_is_running() -> bool:
@@ -1055,11 +1121,14 @@ def render_docker_command_table(
     action_buttons: list[dict[str, object]] | None = None,
     reset_selection: Callable[[], None] | None = None,
     multi_selection: bool = False,
+    row_transform: Callable[[list[dict[str, str]]], list[dict[str, str]]] | None = None,
 ) -> list[dict[str, str]]:
     """Render a Docker command result using the shared dataframe component."""
     rows = docker_cli_table_rows(result.stdout, omitted_columns=omitted_columns)
     if result.returncode != 0:
         rows = []
+    elif row_transform is not None:
+        rows = row_transform(rows)
     render_table(
         rows,
         key=table_key,
@@ -1070,8 +1139,8 @@ def render_docker_command_table(
         ),
         headers=headers,
         table_data=(
-            styled_docker_container_rows(rows, headers)
-            if "STATUS" in headers
+            styled_docker_rows(rows, headers)
+            if "STATUS" in headers or "In-Use" in headers
             else pd.DataFrame(rows, columns=headers)
         ),
         selected_label=None if multi_selection else selected_label,
@@ -1156,6 +1225,81 @@ def docker_selected_image_ids(rows: list[dict[str, str]]) -> tuple[str, ...]:
     )
 
 
+def docker_selected_volume_names(rows: list[dict[str, str]]) -> tuple[str, ...]:
+    """Return selected Docker volume names."""
+    return tuple(
+        volume_name
+        for volume_name in (row.get("VOLUME NAME", "").strip() for row in rows)
+        if volume_name
+    )
+
+
+def docker_selected_prunable_network_ids(
+    rows: list[dict[str, str]],
+) -> tuple[str, ...]:
+    """Return selected unused custom Docker network IDs."""
+    network_ids = (
+        row.get("NETWORK ID", "").strip() for row in rows if row.get("In-Use") == "No"
+    )
+    return tuple(network_id for network_id in network_ids if network_id)
+
+
+def docker_resource_usage_label(
+    resource_name: str,
+    usage: dict[str, tuple[str, ...]],
+) -> str:
+    """Return a Docker resource usage label with referencing container names."""
+    container_names = usage.get(resource_name, ())
+    return f"Yes: {', '.join(container_names)}" if container_names else "No"
+
+
+def docker_rows_with_usage(
+    rows: list[dict[str, str]],
+    resource_name_column: str,
+    usage: dict[str, tuple[str, ...]],
+) -> list[dict[str, str]]:
+    """Append container usage details to Docker resource rows."""
+    return [
+        {
+            **row,
+            "In-Use": docker_resource_usage_label(
+                row.get(resource_name_column, ""), usage
+            ),
+        }
+        for row in rows
+    ]
+
+
+def docker_network_rows_with_usage(
+    rows: list[dict[str, str]],
+    usage: dict[str, tuple[str, ...]],
+) -> list[dict[str, str]]:
+    """Append container usage or built-in status to Docker network rows."""
+    return [
+        {
+            **row,
+            "In-Use": (
+                "Built-In"
+                if row.get("NAME", "") in hhs_ui.DOCKER_BUILT_IN_NETWORK_NAMES
+                else docker_resource_usage_label(row.get("NAME", ""), usage)
+            ),
+        }
+        for row in rows
+    ]
+
+
+def docker_selected_resources_are_unused(rows: list[dict[str, str]]) -> bool:
+    """Return whether every selected Docker resource is unused."""
+    return bool(rows) and all(row.get("In-Use") == "No" for row in rows)
+
+
+def docker_selected_networks_have_active_usage(
+    rows: list[dict[str, str]],
+) -> bool:
+    """Return whether any selected Docker network is used by a container."""
+    return any(row.get("In-Use", "").startswith("Yes:") for row in rows)
+
+
 def render_docker_container_table(result: subprocess.CompletedProcess[str]) -> None:
     """Render Docker containers with selected-container actions."""
     table_key = docker_container_table_key()
@@ -1238,6 +1382,82 @@ def render_docker_image_table(result: subprocess.CompletedProcess[str]) -> None:
                 "on_click": apply_docker_image_action,
                 "args": (image_ids,),
                 "disabled": not image_ids,
+            },
+        ],
+    )
+
+
+def render_docker_volume_table(
+    result: subprocess.CompletedProcess[str],
+    usage: dict[str, tuple[str, ...]],
+) -> None:
+    """Render Docker volumes with selected-volume prune actions."""
+    table_key = docker_volume_table_key()
+    selected_rows = render_docker_command_table(
+        result,
+        table_key,
+        ["VOLUME NAME", "DRIVER", "In-Use"],
+        reset_selection=reset_docker_volume_table_selection,
+        multi_selection=True,
+        row_transform=lambda rows: docker_rows_with_usage(rows, "VOLUME NAME", usage),
+    )
+    volume_names = docker_selected_volume_names(selected_rows)
+    selected_are_unused = docker_selected_resources_are_unused(selected_rows)
+    render_docker_selected_actions(
+        table_key,
+        selected_rows,
+        docker_selected_summary(
+            selected_rows,
+            "volumes",
+            lambda row: row.get("VOLUME NAME", ""),
+        ),
+        [
+            {
+                "label": "Prune",
+                "key_prefix": "docker_volume_prune_button",
+                "help": "Prune all selected unused volumes",
+                "on_click": apply_docker_volume_action,
+                "args": (volume_names,),
+                "disabled": not volume_names or not selected_are_unused,
+            },
+        ],
+    )
+
+
+def render_docker_network_table(
+    result: subprocess.CompletedProcess[str],
+    usage: dict[str, tuple[str, ...]],
+) -> None:
+    """Render Docker networks with selected-network prune actions."""
+    table_key = docker_network_table_key()
+    selected_rows = render_docker_command_table(
+        result,
+        table_key,
+        ["NETWORK ID", "NAME", "DRIVER", "SCOPE", "In-Use"],
+        reset_selection=reset_docker_network_table_selection,
+        multi_selection=True,
+        row_transform=lambda rows: docker_network_rows_with_usage(rows, usage),
+    )
+    network_ids = docker_selected_prunable_network_ids(selected_rows)
+    selected_have_active_usage = docker_selected_networks_have_active_usage(
+        selected_rows
+    )
+    render_docker_selected_actions(
+        table_key,
+        selected_rows,
+        docker_selected_summary(
+            selected_rows,
+            "networks",
+            lambda row: row.get("NAME") or row.get("NETWORK ID", ""),
+        ),
+        [
+            {
+                "label": "Prune",
+                "key_prefix": "docker_network_prune_button",
+                "help": "Prune selected unused networks; built-in networks are skipped",
+                "on_click": apply_docker_network_action,
+                "args": (network_ids,),
+                "disabled": not network_ids or selected_have_active_usage,
             },
         ],
     )
@@ -1996,50 +2216,111 @@ def process_monitor_chart_rows(
     return rows[: max(1, int(limit))]
 
 
-def docker_container_table_key() -> str:
-    """Return the Docker container dataframe key for the current selection generation."""
-    reset_counter = st.session_state.setdefault(
-        hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY, 0
-    )
+def docker_resource_table_key(table_key: str, reset_counter_key: str) -> str:
+    """Return a Docker dataframe key for the current selection generation."""
+    reset_counter = st.session_state.setdefault(reset_counter_key, 0)
     if not isinstance(reset_counter, int):
         reset_counter = 0
-        st.session_state[hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY] = (
-            reset_counter
-        )
-    return f"{hhs_ui.DOCKER_CONTAINER_TABLE_KEY}_{reset_counter}"
+        st.session_state[reset_counter_key] = reset_counter
+    return f"{table_key}_{reset_counter}"
+
+
+def docker_resource_selection_state_key(key: object, table_key: str) -> bool:
+    """Return whether a session key belongs to one Docker resource dataframe."""
+    key_text = str(key)
+    if key_text == table_key:
+        return True
+    prefix = f"{table_key}_"
+    return key_text.startswith(prefix) and key_text[len(prefix) :].isdigit()
+
+
+def clear_docker_resource_table_selection_state(table_key: str) -> None:
+    """Clear remembered selection state for one Docker resource dataframe."""
+    snapshots = st.session_state.get(hhs_ui_constants.TABLE_SELECTION_SNAPSHOT_KEY)
+    if isinstance(snapshots, dict):
+        for snapshot_key in tuple(snapshots):
+            if docker_resource_selection_state_key(snapshot_key, table_key):
+                snapshots.pop(snapshot_key, None)
+    for state_key in tuple(st.session_state):
+        if docker_resource_selection_state_key(state_key, table_key):
+            st.session_state.pop(state_key, None)
+
+
+def reset_docker_resource_table_selection(
+    table_key: str,
+    reset_counter_key: str,
+) -> None:
+    """Reset a Docker dataframe selection for the next rerun."""
+    clear_docker_resource_table_selection_state(table_key)
+    reset_counter = st.session_state.setdefault(reset_counter_key, 0)
+    if not isinstance(reset_counter, int):
+        reset_counter = 0
+    st.session_state[reset_counter_key] = reset_counter + 1
+    save_ui_state()
+
+
+def docker_container_table_key() -> str:
+    """Return the Docker container dataframe key."""
+    return docker_resource_table_key(
+        hhs_ui.DOCKER_CONTAINER_TABLE_KEY,
+        hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY,
+    )
 
 
 def reset_docker_container_table_selection() -> None:
-    """Reset the Docker container dataframe selection for the next rerun."""
-    reset_counter = st.session_state.setdefault(
-        hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY, 0
-    )
-    if not isinstance(reset_counter, int):
-        reset_counter = 0
-    st.session_state[hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY] = (
-        reset_counter + 1
+    """Reset the Docker container dataframe selection."""
+    reset_docker_resource_table_selection(
+        hhs_ui.DOCKER_CONTAINER_TABLE_KEY,
+        hhs_ui.DOCKER_CONTAINER_TABLE_RESET_COUNTER_KEY,
     )
 
 
 def docker_image_table_key() -> str:
-    """Return the Docker image dataframe key for the current selection generation."""
-    reset_counter = st.session_state.setdefault(
-        hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY, 0
+    """Return the Docker image dataframe key."""
+    return docker_resource_table_key(
+        hhs_ui.DOCKER_IMAGE_TABLE_KEY,
+        hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY,
     )
-    if not isinstance(reset_counter, int):
-        reset_counter = 0
-        st.session_state[hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY] = reset_counter
-    return f"{hhs_ui.DOCKER_IMAGE_TABLE_KEY}_{reset_counter}"
 
 
 def reset_docker_image_table_selection() -> None:
-    """Reset the Docker image dataframe selection for the next rerun."""
-    reset_counter = st.session_state.setdefault(
-        hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY, 0
+    """Reset the Docker image dataframe selection."""
+    reset_docker_resource_table_selection(
+        hhs_ui.DOCKER_IMAGE_TABLE_KEY,
+        hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY,
     )
-    if not isinstance(reset_counter, int):
-        reset_counter = 0
-    st.session_state[hhs_ui.DOCKER_IMAGE_TABLE_RESET_COUNTER_KEY] = reset_counter + 1
+
+
+def docker_volume_table_key() -> str:
+    """Return the Docker volume dataframe key."""
+    return docker_resource_table_key(
+        hhs_ui.DOCKER_VOLUME_TABLE_KEY,
+        hhs_ui.DOCKER_VOLUME_TABLE_RESET_COUNTER_KEY,
+    )
+
+
+def reset_docker_volume_table_selection() -> None:
+    """Reset the Docker volume dataframe selection."""
+    reset_docker_resource_table_selection(
+        hhs_ui.DOCKER_VOLUME_TABLE_KEY,
+        hhs_ui.DOCKER_VOLUME_TABLE_RESET_COUNTER_KEY,
+    )
+
+
+def docker_network_table_key() -> str:
+    """Return the Docker network dataframe key."""
+    return docker_resource_table_key(
+        hhs_ui.DOCKER_NETWORK_TABLE_KEY,
+        hhs_ui.DOCKER_NETWORK_TABLE_RESET_COUNTER_KEY,
+    )
+
+
+def reset_docker_network_table_selection() -> None:
+    """Reset the Docker network dataframe selection."""
+    reset_docker_resource_table_selection(
+        hhs_ui.DOCKER_NETWORK_TABLE_KEY,
+        hhs_ui.DOCKER_NETWORK_TABLE_RESET_COUNTER_KEY,
+    )
 
 
 def home_tools_table_key() -> str:
@@ -2798,10 +3079,16 @@ def complete_docker_action_job() -> None:
         return
     result, metadata = completed
     cache_delete_tag("docker")
-    if str(metadata.get("action_type", "")).strip() == "image":
-        reset_docker_image_table_selection()
-    else:
-        reset_docker_container_table_selection()
+    reset_selection = {
+        "container": reset_docker_container_table_selection,
+        "image": reset_docker_image_table_selection,
+        "network": reset_docker_network_table_selection,
+        "volume": reset_docker_volume_table_selection,
+    }.get(
+        str(metadata.get("action_type", "")).strip(),
+        reset_docker_container_table_selection,
+    )
+    reset_selection()
     push_config_action_status(
         result,
         str(metadata.get("success_fallback", "Docker action completed.")),
@@ -2872,6 +3159,50 @@ def apply_docker_image_action(image_ids: str | list[str] | tuple[str, ...]) -> N
             "started_message": f"Docker image deletion started: {target_summary}",
             "success_fallback": f"Docker image deleted: {target_summary}",
             "error_fallback": f"Docker image deletion failed: {target_summary}",
+        },
+    )
+
+
+def apply_docker_volume_action(
+    volume_names: str | list[str] | tuple[str, ...],
+) -> None:
+    """Prune selected unused Docker volumes from the volume table rows."""
+    clean_volume_names = docker_action_targets(volume_names)
+    if not clean_volume_names:
+        return
+    target_summary = docker_target_summary("volume", clean_volume_names)
+    queue_docker_action(
+        build_docker_volume_remove_command(clean_volume_names),
+        "Pruning Docker volume",
+        30,
+        {
+            "action_type": "volume",
+            "volume_names": clean_volume_names,
+            "started_message": f"Docker volume pruning started: {target_summary}",
+            "success_fallback": f"Docker volume pruned: {target_summary}",
+            "error_fallback": f"Docker volume pruning failed: {target_summary}",
+        },
+    )
+
+
+def apply_docker_network_action(
+    network_ids: str | list[str] | tuple[str, ...],
+) -> None:
+    """Prune selected unused Docker networks from the network table rows."""
+    clean_network_ids = docker_action_targets(network_ids)
+    if not clean_network_ids:
+        return
+    target_summary = docker_target_summary("network", clean_network_ids)
+    queue_docker_action(
+        build_docker_network_remove_command(clean_network_ids),
+        "Pruning Docker network",
+        30,
+        {
+            "action_type": "network",
+            "network_ids": clean_network_ids,
+            "started_message": f"Docker network pruning started: {target_summary}",
+            "success_fallback": f"Docker network pruned: {target_summary}",
+            "error_fallback": f"Docker network pruning failed: {target_summary}",
         },
     )
 

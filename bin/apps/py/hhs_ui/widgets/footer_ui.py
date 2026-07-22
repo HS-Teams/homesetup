@@ -902,7 +902,9 @@ def render_footer_terminal_ai_menu_script() -> None:
               input.select();
             }};
             trigger?.addEventListener("pointerdown", () => {{
-              requestTerminalContext(true);
+              if (!menu || !menu.open) {{
+                requestTerminalContext(true);
+              }}
             }}, {{ capture: true }});
             if (menu) {{
               menu.addEventListener("toggle", () => {{

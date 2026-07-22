@@ -59,6 +59,7 @@ expected_groups = {
         "process_resources.py",
         "runtime.py",
         "theme_assets.py",
+        "theme_catalog.py",
         "ui_definitions.py",
         "ui_state.py",
     },
