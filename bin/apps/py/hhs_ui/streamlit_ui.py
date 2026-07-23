@@ -221,7 +221,8 @@ from hhs_ui.execution.command_runtime import (
     background_job_is_running,
     background_job_result,
     background_job_state_key,
-    render_background_job_polling_fragment,
+    background_jobs_completion_needs_app_rerun,
+    background_jobs_require_completion_polling,
     render_background_job_status,
     render_background_job_status_if_blocking,
     run_bash_command,
@@ -2166,6 +2167,41 @@ def update_ollama_service_availability_refresh() -> None:
 def render_ollama_service_availability_polling_fragment() -> None:
     """Refresh AI service discovery independently from command job polling."""
     update_ollama_service_availability_refresh()
+
+
+def render_background_job_polling_fragment() -> None:
+    """Mount automatic completion polling only while background jobs need it."""
+    poll_interval = (
+        hhs_ui_constants.BACKGROUND_JOB_COMPLETION_POLL_INTERVAL
+        if background_jobs_require_completion_polling()
+        else None
+    )
+    polling_enabled = poll_interval is not None
+    st.session_state[hhs_ui_constants.BACKGROUND_JOB_POLLING_ENABLED_KEY] = (
+        polling_enabled
+    )
+
+    @st.fragment(run_every=poll_interval)
+    def render_background_job_polling_tick() -> None:
+        """Poll job completion and disable automatic reruns after the last job."""
+        complete_ollama_service_availability_refresh()
+        if not background_jobs_require_completion_polling():
+            if polling_enabled:
+                st.rerun()
+            return
+        if background_jobs_completion_needs_app_rerun():
+            st.rerun()
+
+    render_background_job_polling_tick()
+
+
+def synchronize_background_job_polling() -> None:
+    """Rerun once when jobs changed after the polling fragment was mounted."""
+    polling_enabled = bool(
+        st.session_state.get(hhs_ui_constants.BACKGROUND_JOB_POLLING_ENABLED_KEY)
+    )
+    if background_jobs_require_completion_polling() != polling_enabled:
+        st.rerun()
 
 
 def filter_tool_rows(
@@ -4919,10 +4955,13 @@ def main() -> None:
     update_browser_cleanup_registration()
     render_background_job_polling_fragment()
     if execute_pending_ssh_disconnection():
+        synchronize_background_job_polling()
         return
     if execute_pending_ssh_connection():
+        synchronize_background_job_polling()
         return
     if render_ssh_connection_dialog():
+        synchronize_background_job_polling()
         return
     initialize_ollama_service_availability()
     render_ollama_service_availability_polling_fragment()
@@ -4951,6 +4990,7 @@ def main() -> None:
     render_folder_picker_dialog()
     render_command_preloader_events()
     render_browser_cleanup_script()
+    synchronize_background_job_polling()
 
 
 if __name__ == "__main__":

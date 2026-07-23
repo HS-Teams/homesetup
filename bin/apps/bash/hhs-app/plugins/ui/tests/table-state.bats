@@ -425,12 +425,22 @@ trees = [
     ast.parse(Path(path).read_text(encoding="utf-8"))
     for path in sys.argv[1:]
 ]
+ui_tree = trees[0]
 functions = {
     node.name: node
     for tree in trees
     for node in tree.body
     if isinstance(node, ast.FunctionDef)
 }
+command_runtime_imports = {
+    alias.name
+    for node in ui_tree.body
+    if isinstance(node, ast.ImportFrom)
+    and node.module == "hhs_ui.execution.command_runtime"
+    for alias in node.names
+}
+assert "render_background_job_polling_fragment" not in command_runtime_imports
+assert "synchronize_background_job_polling" not in command_runtime_imports
 
 main_views = functions["main_views"]
 ollama_available = functions["ollama_service_is_available"]
@@ -519,7 +529,26 @@ polling_calls = {
 assert "background_jobs_require_completion_polling" in polling_calls
 assert "background_jobs_completion_needs_app_rerun" in polling_calls
 assert "complete_ollama_service_availability_refresh" in polling_calls
+assert "render_background_job_polling_tick" in polling_calls
 assert "update_ollama_service_availability_refresh" not in polling_calls
+polling_source = ast.get_source_segment(
+    Path(sys.argv[1]).read_text(encoding="utf-8"), polling
+)
+assert "BACKGROUND_JOB_COMPLETION_POLL_INTERVAL" in polling_source
+assert "@st.fragment(run_every=poll_interval)" in polling_source
+
+synchronize_polling = functions["synchronize_background_job_polling"]
+synchronize_calls = {
+    call.func.id
+    for call in ast.walk(synchronize_polling)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+}
+assert "background_jobs_require_completion_polling" in synchronize_calls
+assert "rerun" in {
+    call.func.attr
+    for call in ast.walk(synchronize_polling)
+    if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+}
 
 ollama_polling = functions["render_ollama_service_availability_polling_fragment"]
 ollama_polling_calls = {
@@ -538,8 +567,9 @@ main_calls = {
 assert "initialize_ollama_service_availability" in main_calls
 assert "render_ollama_service_availability_polling_fragment" in main_calls
 assert "render_background_job_polling_fragment" in main_calls
+assert "synchronize_background_job_polling" in main_calls
 assert "render_main_view" in main_calls
-assert "_render_background_job_polling_fragment" not in Path(sys.argv[2]).read_text(
+assert "def render_background_job_polling_fragment" not in Path(sys.argv[2]).read_text(
     encoding="utf-8"
 )
 main_source = ast.get_source_segment(
@@ -548,6 +578,7 @@ main_source = ast.get_source_segment(
 assert main_source.index("render_background_job_polling_fragment()") < main_source.index(
     "execute_pending_ssh_connection()"
 )
+assert main_source.count("synchronize_background_job_polling()") == 4
 
 render_main_view = functions["render_main_view"]
 render_main_view_calls = {
@@ -607,6 +638,101 @@ assert refresh_due() is False
 PY
   assert_success
 }
+
+@test "when background jobs become idle then automatic polling should stop" {
+  run python3 - "${ui_file}" <<'PY'
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.index("def render_background_job_polling_fragment(")
+end = source.index("def filter_tool_rows(", start)
+runtime = {
+    "completion_needs_rerun": False,
+    "polling_required": False,
+    "reruns": 0,
+}
+decorated = {}
+session_state = {}
+
+
+class RerunRequested(Exception):
+    pass
+
+
+def fragment(*, run_every):
+    decorated["run_every"] = run_every
+
+    def decorate(function):
+        decorated["function"] = function
+        return function
+
+    return decorate
+
+
+def rerun():
+    runtime["reruns"] += 1
+    raise RerunRequested
+
+
+namespace = {
+    "st": SimpleNamespace(
+        fragment=fragment,
+        rerun=rerun,
+        session_state=session_state,
+    ),
+    "hhs_ui_constants": SimpleNamespace(
+        BACKGROUND_JOB_COMPLETION_POLL_INTERVAL="2s",
+        BACKGROUND_JOB_POLLING_ENABLED_KEY="_polling_enabled",
+    ),
+    "background_jobs_require_completion_polling": (
+        lambda: runtime["polling_required"]
+    ),
+    "background_jobs_completion_needs_app_rerun": (
+        lambda: runtime["completion_needs_rerun"]
+    ),
+    "complete_ollama_service_availability_refresh": lambda: None,
+}
+exec("from __future__ import annotations\n" + source[start:end], namespace)
+render_polling = namespace["render_background_job_polling_fragment"]
+synchronize_polling = namespace["synchronize_background_job_polling"]
+
+render_polling()
+assert decorated["run_every"] is None
+assert session_state["_polling_enabled"] is False
+assert runtime["reruns"] == 0
+
+runtime["polling_required"] = True
+try:
+    synchronize_polling()
+except RerunRequested:
+    pass
+else:
+    raise AssertionError("starting a job should activate automatic polling")
+assert runtime["reruns"] == 1
+
+render_polling()
+assert decorated["run_every"] == "2s"
+assert session_state["_polling_enabled"] is True
+
+runtime["polling_required"] = False
+try:
+    decorated["function"]()
+except RerunRequested:
+    pass
+else:
+    raise AssertionError("an idle polling tick should disable automatic polling")
+assert runtime["reruns"] == 2
+
+render_polling()
+assert decorated["run_every"] is None
+assert session_state["_polling_enabled"] is False
+assert runtime["reruns"] == 2
+PY
+  assert_success
+}
+
 @test "when a completion rerun is interrupted then polling retries without looping forever" {
   run python3 - "${command_runtime_file}" <<'PY'
 from pathlib import Path

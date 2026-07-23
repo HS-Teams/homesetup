@@ -60,9 +60,6 @@ cache_set = _unconfigured_dependency("cache_set")
 handle_remote_command_result = _unconfigured_dependency("handle_remote_command_result")
 ssh_connection_is_alive = _unconfigured_dependency("ssh_connection_is_alive")
 ui_disposable_files_dir = _unconfigured_dependency("ui_disposable_files_dir")
-complete_ollama_service_availability_refresh = _unconfigured_dependency(
-    "complete_ollama_service_availability_refresh"
-)
 
 
 def configure_command_runtime(
@@ -90,6 +87,9 @@ def configure_command_runtime(
     complete_ollama_service_availability_refresh: Callable[[], None],
 ) -> None:
     """Configure callbacks required by command runtime helpers."""
+    # Retain the callback keyword while Streamlit processes may have the previous
+    # command_runtime module loaded during a script-only hot reload.
+    del complete_ollama_service_availability_refresh
     globals().update(
         {
             "command_remote_host": command_remote_host,
@@ -106,9 +106,6 @@ def configure_command_runtime(
             "handle_remote_command_result": handle_remote_command_result,
             "ssh_connection_is_alive": ssh_connection_is_alive,
             "ui_disposable_files_dir": ui_disposable_files_dir,
-            "complete_ollama_service_availability_refresh": (
-                complete_ollama_service_availability_refresh
-            ),
         }
     )
 
@@ -692,13 +689,3 @@ def render_background_job_status_if_blocking(
     if has_visible_content:
         return
     render_background_job_status(job_name, message)
-
-
-@st.fragment(run_every="2s")
-def render_background_job_polling_fragment() -> None:
-    """Poll job completion without performing unrelated service refreshes."""
-    complete_ollama_service_availability_refresh()
-    if not background_jobs_require_completion_polling():
-        return
-    if background_jobs_completion_needs_app_rerun():
-        st.rerun()

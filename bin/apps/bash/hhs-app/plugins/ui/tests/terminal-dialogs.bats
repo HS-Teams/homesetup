@@ -363,16 +363,21 @@ footer_status_body = footer_source.split("def render_footer_status_fragment", 1)
 footer_status_decorator = footer_source[
     : footer_source.index("def render_footer_status_fragment")
 ].rstrip().splitlines()[-1]
-background_poll_prefix = command_runtime_source[
-    : command_runtime_source.index("def render_background_job_polling_fragment")
+background_poll_prefix = ui_source[
+    : ui_source.index("def render_background_job_polling_fragment")
 ]
 background_poll_decorator = background_poll_prefix.rstrip().splitlines()[-1]
 background_status_decorator = command_runtime_source[
     : command_runtime_source.index("def render_background_job_status")
 ].rstrip().splitlines()[-1]
 assert not footer_status_decorator.startswith('@st.fragment')
-assert background_poll_decorator == '@st.fragment(run_every="2s")'
+assert not background_poll_decorator.startswith("@st.fragment")
 assert background_status_decorator != '@st.fragment(run_every="2s")'
+background_poll_body = ui_source.split(
+    "def render_background_job_polling_fragment", 1
+)[1].split("\ndef synchronize_background_job_polling", 1)[0]
+assert "@st.fragment(run_every=poll_interval)" in background_poll_body
+assert "BACKGROUND_JOB_COMPLETION_POLL_INTERVAL" in background_poll_body
 assert 'execute_due_updater_check()' in footer_status_body
 assert 'drain_footer_status_log_records()' in footer_status_body
 assert 'render_footer()' in footer_status_body
@@ -497,7 +502,8 @@ PY
     'def ssh_host_has_other_cleanup_registration'
   assert_file_contains_many "${ui_file}" \
 'restore_registered_ssh_connection_on_session_start()' \
-    'update_browser_cleanup_registration()' 'render_background_job_polling_fragment()'
+    'update_browser_cleanup_registration()' 'render_background_job_polling_fragment()' \
+    'synchronize_background_job_polling()'
   run python3 - "${ui_file}" <<'PY'
 from pathlib import Path
 import sys
@@ -508,6 +514,7 @@ restore = main.index("restore_registered_ssh_connection_on_session_start()")
 register = main.index("update_browser_cleanup_registration()")
 poll = main.index("render_background_job_polling_fragment()")
 assert restore < register < poll
+assert main.count("synchronize_background_job_polling()") == 4
 PY
   assert_success
 }
