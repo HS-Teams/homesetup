@@ -1025,6 +1025,12 @@ def search_term_options() -> list[str]:
     )
 
 
+def apply_search_term_change() -> None:
+    """Persist a Search term change without submitting a Search."""
+    remember_search_term(st.session_state.get("search_query", ""))
+    save_ui_state()
+
+
 def toggle_search_option(state_key: str) -> None:
     """Toggle one boolean Search option and persist the form state."""
     st.session_state[state_key] = not bool(st.session_state.get(state_key, False))
@@ -1158,7 +1164,7 @@ def render_search_controls() -> None:
                     "term or enter a new one; case, whole-word, and binary-file options "
                     "are controlled below."
                 ),
-                on_change=submit_search_query,
+                on_change=apply_search_term_change,
                 width="stretch",
             )
         with search_column:

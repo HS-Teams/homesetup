@@ -340,6 +340,15 @@ term_cache.clear()
 cache_writes.clear()
 namespace["st"].session_state["search_query"] = "admin"
 assert namespace["search_term_options"]() == ["admin"]
+namespace["st"].session_state["search_result_query"] = "previous result"
+deleted_cache_tags_before_term_change = list(deleted_cache_tags)
+namespace["apply_search_term_change"]()
+assert namespace["st"].session_state["search_query"] == "admin"
+assert namespace["st"].session_state["search_result_query"] == "previous result"
+assert deleted_cache_tags == deleted_cache_tags_before_term_change
+assert term_cache["search_terms:history"]["terms"] == ["admin"]
+term_cache.clear()
+cache_writes.clear()
 assert namespace["remember_search_term"](" saridon ") == "saridon"
 assert term_cache["search_terms:history"]["terms"] == ["saridon"]
 assert cache_writes[-1] == (

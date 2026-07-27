@@ -62,7 +62,7 @@ for fragment in (
     'key="search_query"',
     'placeholder="Search for files, folders, or strings"',
     "accept_new_options=True",
-    "on_change=submit_search_query",
+    "on_change=apply_search_term_change",
     'width="stretch"',
     '"Search directory"',
     "options=search_directory_options()",
@@ -80,6 +80,8 @@ assert body.index('key="search_path_folder_picker_button"') < body.index(
     'key="search_query"'
 )
 assert body.index('key="search_query"') < body.index('key="search_submit_button"')
+assert "on_change=submit_search_query" not in body
+assert "on_click=submit_search_query" in body
 assert "render_search_submit_preloader_script()" not in body
 PY
   assert_success
@@ -158,7 +160,13 @@ assert 'event.key === "Enter"' in body
 assert "!event.ctrlKey" in body
 assert "!event.metaKey" in body
 assert "!event.altKey" in body
-assert "selectPendingSearchTermAddOption(node)" in body
+assert "searchTermCommitOption(node)" in body
+assert "queueSearchSubmitAfterTermCommit(node, value, expectsCommit)" in body
+assert 'doc.querySelectorAll(".st-key-search_submit_button button")' in body
+assert ").find(isVisibleNode) || null" in body
+assert "clickPendingSearchSubmit(false)" in body
+assert "clickPendingSearchSubmit(true)" in body
+assert "if (value)" in body
 assert 'lowerText.startsWith("add:")' in body
 assert "lowerText.includes(lowerValue)" in body
 assert 'doc.querySelectorAll(optionSelectors.join(","))' in body.replace("\\n", "")
@@ -169,6 +177,7 @@ for key in ("a", "e", "b", "f", "d", "h", "k", "u", "w"):
 assert "setCaret(node, 0, state.value.length)" in body
 assert "setCaret(node, state.value.length, state.value.length)" in body
 assert 'replaceRange(node, state.start, state.value.length, "", "deleteContentForward")' in body
+assert 'doc.addEventListener("mousedown", onMouseDown, true)' in body
 assert 'doc.addEventListener("keydown", onKeydown, true)' in body
 assert "render_combobox_vt100_shortcuts_script()" in ui_source
 PY

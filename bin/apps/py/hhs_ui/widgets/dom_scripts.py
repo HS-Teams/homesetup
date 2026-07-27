@@ -24,7 +24,7 @@ def configure_dom_scripts(*, render_script_html: Callable[..., None]) -> None:
 
 
 def render_combobox_vt100_shortcuts_script() -> None:
-    """Attach readline-style keyboard shortcuts to editable combobox inputs."""
+    """Attach Search submission and readline-style shortcuts to combobox inputs."""
     render_script_html(
         """
         <script>
@@ -102,13 +102,24 @@ def render_combobox_vt100_shortcuts_script() -> None:
                 dispatchMouseEvent(option, eventName);
               }
             };
-            const selectPendingSearchTermAddOption = (node) => {
+            const searchTermsInput = () =>
+              Array.from(
+                doc.querySelectorAll(
+                  '.st-key-search_query input[role="combobox"], ' +
+                  ".st-key-search_query input"
+                )
+              ).find(isVisibleNode) || null;
+            const searchSubmitButton = () =>
+              Array.from(
+                doc.querySelectorAll(".st-key-search_submit_button button")
+              ).find(isVisibleNode) || null;
+            const searchTermCommitOption = (node) => {
               if (!isSearchTermsComboboxInput(node)) {
-                return false;
+                return null;
               }
               const value = normalizedText(node.value);
               if (!value) {
-                return false;
+                return null;
               }
               const lowerValue = value.toLowerCase();
               const optionSelectors = [
@@ -116,7 +127,7 @@ def render_combobox_vt100_shortcuts_script() -> None:
                 '[data-baseweb="menu"] li',
                 '[data-baseweb="popover"] li',
               ];
-              const addOption = Array.from(
+              return Array.from(
                 doc.querySelectorAll(optionSelectors.join(","))
               ).find((option) => {
                 if (!isVisibleNode(option)) {
@@ -124,13 +135,67 @@ def render_combobox_vt100_shortcuts_script() -> None:
                 }
                 const text = normalizedText(option.textContent);
                 const lowerText = text.toLowerCase();
-                return lowerText.startsWith("add:") && lowerText.includes(lowerValue);
-              });
-              if (!addOption) {
+                return (
+                  lowerText === lowerValue ||
+                  (lowerText.startsWith("add:") && lowerText.includes(lowerValue))
+                );
+              }) || null;
+            };
+            let pendingSearchSubmit = null;
+            let pendingSearchSubmitObserver = null;
+            let pendingSearchSubmitTimer = null;
+            const clearPendingSearchSubmit = () => {
+              if (pendingSearchSubmitObserver) {
+                pendingSearchSubmitObserver.disconnect();
+                pendingSearchSubmitObserver = null;
+              }
+              if (pendingSearchSubmitTimer) {
+                parentWindow.clearTimeout(pendingSearchSubmitTimer);
+                pendingSearchSubmitTimer = null;
+              }
+              pendingSearchSubmit = null;
+            };
+            const clickPendingSearchSubmit = (allowOriginalInput = false) => {
+              if (!pendingSearchSubmit) {
                 return false;
               }
-              activateComboboxOption(addOption);
+              const currentInput = searchTermsInput();
+              if (
+                !currentInput ||
+                normalizedText(currentInput.value) !== pendingSearchSubmit.value ||
+                (!allowOriginalInput && currentInput === pendingSearchSubmit.input)
+              ) {
+                return false;
+              }
+              const button = searchSubmitButton();
+              if (!button || button.disabled) {
+                return false;
+              }
+              clearPendingSearchSubmit();
+              button.click();
               return true;
+            };
+            const queueSearchSubmitAfterTermCommit = (
+              node,
+              value,
+              expectsCommit
+            ) => {
+              clearPendingSearchSubmit();
+              pendingSearchSubmit = { input: node, value };
+              pendingSearchSubmitObserver = new parentWindow.MutationObserver(() => {
+                parentWindow.requestAnimationFrame(() => {
+                  clickPendingSearchSubmit(false);
+                });
+              });
+              pendingSearchSubmitObserver.observe(doc.body, {
+                childList: true,
+                subtree: true,
+              });
+              pendingSearchSubmitTimer = parentWindow.setTimeout(() => {
+                if (!clickPendingSearchSubmit(true)) {
+                  clearPendingSearchSubmit();
+                }
+              }, expectsCommit ? 750 : 0);
             };
             const selectionState = (node) => {
               const value = String(node.value || "");
@@ -185,14 +250,25 @@ def render_combobox_vt100_shortcuts_script() -> None:
                 !event.ctrlKey &&
                 !event.metaKey &&
                 !event.altKey &&
-                selectPendingSearchTermAddOption(node)
+                isSearchTermsComboboxInput(node)
               ) {
-                event.preventDefault();
-                event.stopPropagation();
-                if (typeof event.stopImmediatePropagation === "function") {
-                  event.stopImmediatePropagation();
+                const value = normalizedText(node.value);
+                if (value) {
+                  const option = searchTermCommitOption(node);
+                  const expectsCommit =
+                    Boolean(option) ||
+                    String(node.getAttribute("aria-expanded")) === "true";
+                  queueSearchSubmitAfterTermCommit(node, value, expectsCommit);
+                  if (option) {
+                    activateComboboxOption(option);
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (typeof event.stopImmediatePropagation === "function") {
+                      event.stopImmediatePropagation();
+                    }
+                  }
+                  return;
                 }
-                return;
               }
               if (!(event.ctrlKey || event.metaKey) || event.altKey) {
                 return;
@@ -272,8 +348,34 @@ def render_combobox_vt100_shortcuts_script() -> None:
                 event.stopImmediatePropagation();
               }
             };
+            const onMouseDown = (event) => {
+              const target = event.target;
+              const button =
+                target && typeof target.closest === "function"
+                  ? target.closest(".st-key-search_submit_button button")
+                  : null;
+              if (!button || button.disabled) {
+                return;
+              }
+              const input = searchTermsInput();
+              const value = normalizedText(input?.value);
+              const option = searchTermCommitOption(input);
+              if (!value || !option) {
+                return;
+              }
+              queueSearchSubmitAfterTermCommit(input, value, true);
+              activateComboboxOption(option);
+              event.preventDefault();
+              event.stopPropagation();
+              if (typeof event.stopImmediatePropagation === "function") {
+                event.stopImmediatePropagation();
+              }
+            };
+            doc.addEventListener("mousedown", onMouseDown, true);
             doc.addEventListener("keydown", onKeydown, true);
             parentWindow.__hhsComboboxVt100Cleanup = () => {
+              clearPendingSearchSubmit();
+              doc.removeEventListener("mousedown", onMouseDown, true);
               doc.removeEventListener("keydown", onKeydown, true);
             };
           })();
