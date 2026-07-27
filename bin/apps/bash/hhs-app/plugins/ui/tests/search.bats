@@ -176,6 +176,7 @@ assert "run_bash_command(" not in render_results_body
 assert "st.error(" not in render_results_body
 assert 'push_floating_status(message or "Search command failed.", "error")' in render_results_body
 assert "start_search_command(command, cache_key, loader_message)" in render_results_body
+assert 'st.rerun(scope="app")' in render_results_body
 assert "render_background_job_status(SEARCH_COMMAND_JOB, loader_message)" in render_results_body
 assert "complete_search_command_result(cache_key)" in render_results_body
 assert "cached_search_command_result(command, cache_key)" in render_results_body
@@ -493,6 +494,31 @@ namespace["cached_search_command_result"] = lambda *_args: None
 statuses.clear()
 namespace["render_search_results"]()
 assert statuses == [("Command timed out after 120 seconds.", "error")]
+
+
+class AppRerunRequested(Exception):
+    pass
+
+
+def rerun_app(*, scope):
+    assert scope == "app"
+    raise AppRerunRequested
+
+
+namespace["st"].rerun = rerun_app
+namespace["complete_search_command_result"] = lambda _cache_key: None
+namespace["cached_search_command_result"] = lambda *_args: None
+namespace["background_job_is_running"] = lambda _job_name: False
+namespace["search_background_job_matches"] = lambda _cache_key: False
+namespace["start_search_command"] = lambda *_args: True
+namespace["SEARCH_COMMAND_JOB"] = "search_command"
+try:
+    namespace["render_search_results"]()
+except AppRerunRequested:
+    pass
+else:
+    raise AssertionError("a new Search job should activate app-level polling")
+
 open_command = namespace["open_file"]("/tmp/search root/report.txt")
 assert 'source "${HHS_HOME}/bin/hhs-functions/bash/hhs-built-ins.bash";' in open_command
 assert "__hhs_open '/tmp/search root/report.txt'" in open_command

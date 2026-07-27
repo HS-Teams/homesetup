@@ -1370,7 +1370,9 @@ def render_search_results() -> None:
         if not background_job_is_running(
             SEARCH_COMMAND_JOB
         ) or not search_background_job_matches(cache_key):
-            start_search_command(command, cache_key, loader_message)
+            if start_search_command(command, cache_key, loader_message):
+                # Search runs in a fragment, so activate the app-level job poller.
+                st.rerun(scope="app")
         render_background_job_status(SEARCH_COMMAND_JOB, loader_message)
         return
     if result.returncode != 0:
