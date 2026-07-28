@@ -3123,11 +3123,11 @@ def parse_hhs_process_list(output: str) -> list[dict[str, str]]:
             continue
         rows.append(
             {
-                "UID": match.group(1),
-                "PID": match.group(2),
-                "PPID": match.group(3),
-                "Command": match.group(4).strip(),
-                "Status": match.group(5).strip().title(),
+                "UID": f"{int(match.group(1)):03d}::{match.group(2)}",
+                "PID": match.group(3),
+                "PPID": match.group(4),
+                "Command": match.group(5).strip(),
+                "Status": match.group(6).strip().title(),
             }
         )
     return rows

@@ -8,7 +8,7 @@ from pathlib import Path
 
 # NOTE: Follow SemVer for this script. Any UI behavior change must bump VERSION,
 # at minimum by incrementing the patch number.
-VERSION = "0.1.169"
+VERSION = "0.1.170"
 DISPLAY_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 APP_DIR = Path(__file__).resolve().parents[1]
 APP_STATIC_DIR = APP_DIR / "static"
@@ -352,7 +352,8 @@ DISK_USAGE_LINE_PATTERN = re.compile(
     r"^\s*\d+:\s+(.+?)\.{2,}\s+([0-9.]+[A-Za-z]*)\s+\|"
 )
 PROCESS_LIST_LINE_PATTERN = re.compile(
-    r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s+(?:\S+\s+)?(active|inactive|ghost) process$",
+    r"^\s*(-?\d+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(.+?)\s+"
+    r"(?:\S+\s+)?(active|inactive|ghost) process$",
     re.IGNORECASE,
 )
 TOP_PROCESS_SORT_KEYS = {

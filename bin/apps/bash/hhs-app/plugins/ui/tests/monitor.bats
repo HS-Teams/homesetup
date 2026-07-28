@@ -39,7 +39,11 @@ import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
 body = source.split("function __hhs_process_list()", 1)[1].split("\n}", 1)[0]
-assert 'read -r uid pid ppid cmd <<<"${next}"' in body
+assert 'ps -axco uid,user' in body
+assert 'ps -axco uid,pid,ppid,comm | grep "${gflags}" "${1:-.}"' in body
+assert 'read -r uid username pid ppid cmd <<<"${next}"' in body
+assert 'local old_ifs="${IFS}"' in body
+assert 'IFS="${old_ifs}"' in body
 assert 'ps -p "${pid}"' not in body
 assert "uid=$(awk" not in body
 assert "pid=$(awk" not in body
@@ -149,7 +153,8 @@ namespace = {
             r"(?:\\033|\\x1b|\\e)(?:\[[0-?]*[ -/]*[@-~]|\][^\\]*(?:\\a|\\033\\|\\x1b\\)|[()][A-Za-z0-9])"
         ),
         PROCESS_LIST_LINE_PATTERN=re.compile(
-            r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s+(?:\S+\s+)?(active|inactive|ghost) process$",
+            r"^\s*(-?\d+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(.+?)\s+"
+            r"(?:\S+\s+)?(active|inactive|ghost) process$",
             re.IGNORECASE,
         ),
     ),
@@ -168,17 +173,23 @@ exec(
     namespace,
 )
 output = """
-  501  1001     1 python                                  ✓ active process
-  501  1002     1 stale-worker                            ✕ ghost process
-  501  1003     1 stopped-worker                          ✕ inactive process
+  501 hjunior  1001     1 python                                  ✓ active process
+    0 root     1002     1 stale-worker                            ✕ ghost process
+   -2 nobody   1003     1 stopped-worker                          ✕ inactive process
 """
 rows = namespace["parse_hhs_process_list"](output)
+assert [row["UID"] for row in rows] == [
+    "501::hjunior",
+    "000::root",
+    "-02::nobody",
+], rows
 assert [row["Status"] for row in rows] == ["Active", "Ghost", "Inactive"], rows
 assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Active")] == ["1001"]
 assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Ghost")] == ["1002"]
 assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Inactive")] == ["1003"]
 assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Other", "stale")] == ["1002"]
 assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Containing", "stale")] == ["1002"]
+assert [row["PID"] for row in namespace["filter_process_rows"](rows, "Containing", "nobody")] == ["1003"]
 assert namespace["filter_process_rows"](rows, "All") == rows
 PY
   assert_success

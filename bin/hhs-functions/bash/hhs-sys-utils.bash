@@ -102,7 +102,8 @@ function __hhs_sysinfo() {
 # @compatible: bash zsh
 function __hhs_process_list() {
 
-  local all_pids=() uid pid ppid cmd force=0 quiet=0 kill_flag=0 pad divider gflags='-E'
+  local all_pids=() uid username pid ppid cmd force=0 quiet=0 kill_flag=0 pad divider gflags='-E'
+  local old_ifs="${IFS}"
 
   if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
     echo "usage: ${FUNCNAME[0]} [options] <process_name>"
@@ -141,19 +142,41 @@ function __hhs_process_list() {
     done
 
     IFS=$'\n'
-    while IFS= read -r line; do all_pids+=("$line"); done < <(ps -axco uid,pid,ppid,comm | grep "${gflags}" "${1:-.}")
-    IFS="${OLDIFS}"
+    while IFS= read -r line; do all_pids+=("$line"); done < <(
+      awk '
+        NR == FNR {
+          if ($1 ~ /^-?[0-9]+$/) {
+            usernames[$1] = $2
+          }
+          next
+        }
+        {
+          username = ($1 in usernames) ? usernames[$1] : $1
+          printf "%s %s", $1, username
+          for (field = 2; field <= NF; field++) {
+            printf " %s", $field
+          }
+          print ""
+        }
+      ' <(ps -axco uid,user) <(
+        ps -axco uid,pid,ppid,comm | grep "${gflags}" "${1:-.}"
+      )
+    )
+    IFS="${old_ifs}"
 
     if [[ ${#all_pids[@]} -gt 0 ]]; then
       pad="$(printf '%0.1s' " "{1..40})"
       divider="$(printf '%0.1s' "-"{1..92})"
       echo ''
-      [[ $quiet -ne 1 ]] && printf "${WHITE}%5s\t%5s\t%5s\t%-40s %s\n" "UID" "PID" "PPID" "COMMAND" "ACTIVE ?"
+      [[ $quiet -ne 1 ]] &&
+        printf "${WHITE}%5s\t%-20s\t%5s\t%5s\t%-40s %s\n" \
+          "UID" "USER" "PID" "PPID" "COMMAND" "ACTIVE ?"
       [[ $quiet -ne 1 ]] && printf "%-154s\n\n" "${divider}"
       for next in "${all_pids[@]}"; do
-        read -r uid pid ppid cmd <<<"${next}"
+        read -r uid username pid ppid cmd <<<"${next}"
         [[ "${#cmd}" -ge 37 ]] && cmd="${cmd:0:37}..."
-        printf "${HHS_HIGHLIGHT_COLOR}%5s\t%5s\t%5s\t%s" "${uid}" "${pid}" "${ppid}" "${cmd}"
+        printf "${HHS_HIGHLIGHT_COLOR}%5s\t%-20s\t%5s\t%5s\t%s" \
+          "${uid}" "${username}" "${pid}" "${ppid}" "${cmd}"
         printf '%*.*s' 0 $((40 - ${#cmd})) "${pad}"
         if [[ -n "${pid}" && $kill_flag -eq 1 ]]; then
           tput sc
