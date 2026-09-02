@@ -15,10 +15,10 @@
 add_newline = true
 
 # Timeout for commands executed by starship (in milliseconds).
-command_timeout = 1000
+command_timeout = 2000
 
 # Timeout for starship to scan files (in milliseconds).
-scan_timeout = 500
+scan_timeout = 1000
 
 # Continuation prompt (PS2).
 continuation_prompt = '… '
@@ -72,13 +72,13 @@ disabled = false
 disabled = true
 
 [custom.hostname_local]
-when = ''' test -z "$SSH_CONNECTION" '''
+when = '[ -z "$SSH_CONNECTION" ]'
 command = "hostname -s"
 format = "[[](white) $output](purple) "
 
 [custom.hostname_ssh]
-when = ''' test -n "$SSH_CONNECTION" '''
-command = "hostname -s | cut -d. -f1"
+when = '[ -n "$SSH_CONNECTION" ]'
+command = "hostname -s"
 format = "[[](white)  $output](purple) "
 
 [directory]
