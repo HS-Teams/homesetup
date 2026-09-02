@@ -93,6 +93,9 @@ else
   # ----------------------------------------------------------------------------
   # Bash History
 
+  # Share history between Bash sessions
+  \shopt -s histappend
+
   # History control ( ignore duplicates and spaces ).
   export HISTCONTROL=${HISTCONTROL:-"ignoreboth:erasedups"}
   # Ignored history commands
@@ -105,8 +108,9 @@ else
   export HISTTIMEFORMAT="[${USER}, %F %T]  "
   # Bash history file.
   export HISTFILE="${HOME}/.bash_history"
-  # Do not share history between concurrent Bash sessions do speedup initialization.
-  unset PROMPT_COMMAND
+
+  # Append current command and reload commands from other sessions
+  PROMPT_COMMAND="history -a; history -n${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 
   # ----------------------------------------------------------------------------
   # HomeSetup variables
