@@ -1,0 +1,38 @@
+." Auto-generated man page. Do not edit manually.
+.TH "__hhs_shopt" "1" "2025-11-20" "HomeSetup" "User Commands"
+.SH NAME
+__hhs_shopt - Display/Set/unset current Shell Options.
+.SH SYNOPSIS
+.nf
+usage: __hhs_shopt [on|off] | [-pqsu] [-o] [optname ...]
+.fi
+.SH DESCRIPTION
+Display/Set/unset current Shell Options.
+.SH ARGUMENTS
+.TP
+$1 (Req)
+Same as shopt, ref: https://ss64.com/bash/shopt.html
+.SH DETAILS
+.nf
+
+    Options:
+      off : Display all unset options.
+      on  : Display all set options.
+      -s  : Enable (set) each optname.
+      -u  : Disable (unset) each optname.
+      -p  : Display a list of all settable options, with an indication of whether or not each is set.
+            The output is displayed in a form that can be reused as input. (-p is the default action).
+      -q  : Suppresses normal output; the return status indicates whether the optname is set or unset.
+            If multiple optname arguments are given with '-q', the return status is zero if all optnames
+            are enabled; non-zero otherwise.
+      -o  : Restricts the values of optname to be those defined for the '-o' option to the set builtin.
+
+  Notes:
+    If no option is provided, then, display all set & unset options.
+.fi
+.SH VERSION
+__hhs_shopt (HomeSetup) 1.9.11
+.SH AUTHOR
+HomeSetup Team
+.SH LICENSE
+MIT <https://opensource.org/licenses/MIT>
