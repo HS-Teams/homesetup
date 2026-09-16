@@ -1,0 +1,3466 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://HS-Teams.github.io/homesetup/docs/USAGE/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>USAGE - HomeSetup</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#homesetup-usage" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="HomeSetup" class="md-header__button md-logo" aria-label="HomeSetup" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            HomeSetup
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              USAGE
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/HS-Teams/homesetup" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    HS-Teams/homesetup
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="HomeSetup" class="md-nav__button md-logo" aria-label="HomeSetup" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64z"/></svg>
+
+    </a>
+    HomeSetup
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/HS-Teams/homesetup" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    HS-Teams/homesetup
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Handbook
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Handbook
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/handbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pages
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_1" id="__nav_2_2_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Applications
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Applications
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/applications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/applications/bash/hhs-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    hhs-app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/applications/bash/check-ip/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check-ip
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/applications/bash/fetch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fetch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_2" id="__nav_2_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Functions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Functions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_2_2" id="__nav_2_2_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_2_2_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Dev Tools
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/dev-tools/docker-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/dev-tools/git-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Git Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/dev-tools/gradle-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gradle Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_2_3" id="__nav_2_2_2_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Standard Tools
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_2_2_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Standard Tools
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/aliases-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliases Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/built-ins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Built-ins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/clitt/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    clitt
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/command-tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/directory-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Directory Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/file-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/network-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/paths-tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Paths Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/profile-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Profile Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/search-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/security-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/shell-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shell Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/system-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/taylor-tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Taylor Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/text-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Text Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/toml-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TOML Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/toolchecks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool Checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Misc
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Misc
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CHANGELOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CHANGELOG
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../COLOR_LS_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Color LS Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../FIREBASE_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Firebase Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../SHOWCASE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Showcase
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-dotfiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in dotfiles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Aliases
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Aliases">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#navigational" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Navigational
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#general" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        General
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#homesetup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HomeSetup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#external-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#os-specific-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OS Specific aliases
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="OS Specific aliases">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#linux" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linux
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#darwin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Darwin
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#handy-terminal-shortcuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Handy Terminal Shortcuts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python aliases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#perl-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Perl aliases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#git-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Git aliases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gradle-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gradle aliases
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#docker-aliases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Docker aliases
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#development-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#standard-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Standard tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dotfiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dotfiles
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#applications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Applications
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Applications">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#built-ins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-ins
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#alias-definitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alias definitions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#homesetup-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HomeSetup Application
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HomeSetup Application">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#hhs-plug-ins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HHS Plug-ins
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hhs-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HHS Functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#auto-completions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auto completions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Auto completions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bash-completions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bash completions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<p><img src="https://iili.io/HvtxC1S.png" width="64" height="64" align="right" /></p>
+<h1 id="homesetup-usage">HomeSetup Usage<a class="headerlink" href="#homesetup-usage" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>The ultimate Terminal experience</p>
+</blockquote>
+<p>HomeSetup offers a comprehensive <a href="handbook/handbook.md">User Handbook</a> that contains detailed documentation on all commands and examples of their usage. Additionally, there will soon be a <em>YouTube video series</em> available that guides you through the installation, usage, configuration, and utilization of all the features and enhancements provided.</p>
+<p>The User Handbook serves as a valuable resource for understanding and making the most of HomeSetup's capabilities, while the accompanying <a href="">YouTube</a> and <a href="https://asciinema.org/~yorevs">asciinema</a> videos provides a visual demonstration of its usage.</p>
+<h2 id="table-of-contents">Table of contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<!-- toc -->
+
+<ul>
+<li><a href="#built-in-dotfiles">1. Built-in dotfiles</a></li>
+<li><a href="#aliases">2. Aliases</a></li>
+<li><a href="#navigational">2.1. Navigational</a></li>
+<li><a href="#general">2.2. General</a></li>
+<li><a href="#homesetup">2.3. HomeSetup</a></li>
+<li><a href="#external-tools">2.4. External tools</a></li>
+<li><a href="#os-specific-aliases">2.5. OS Specific aliases</a><ul>
+<li><a href="#linux">2.5.1. Linux</a></li>
+<li><a href="#darwin">2.5.2. Darwin</a></li>
+</ul>
+</li>
+<li><a href="#handy-terminal-shortcuts">3.6. Handy terminal shortcuts</a></li>
+<li><a href="#python-aliases">3.7. Python aliases</a></li>
+<li><a href="#perl-aliases">3.8. Perl aliases</a></li>
+<li><a href="#git-aliases">3.9. Git aliases</a></li>
+<li><a href="#gradle-aliases">3.10. Gradle aliases</a></li>
+<li><a href="#docker-aliases">3.11. Docker aliases</a></li>
+<li><a href="#functions">3. Functions</a></li>
+<li><a href="#standard-tools">3.1. Standard tools</a></li>
+<li><a href="#development-tools">3.2. Development tools</a></li>
+<li><a href="#applications">4. Applications</a></li>
+<li><a href="#built-ins">4.1. Built-ins</a></li>
+<li><a href="#alias-definitions">5. Alias Definitions</a></li>
+<li><a href="#homesetup-application">6. HomeSetup application</a></li>
+<li><a href="#hhs-plug-ins">6.1. HHS-Plug-ins</a></li>
+<li><a href="#hhs-functions">6.2. HHS-Functions</a></li>
+<li><a href="#auto-completions">7. Auto completions</a></li>
+<li><a href="#bash-completions">7.1. Bash completions</a></li>
+</ul>
+<h2 id="built-in-dotfiles">Built-in dotfiles<a class="headerlink" href="#built-in-dotfiles" title="Permanent link">&para;</a></h2>
+<p>The following dotfiles will be available after installing HomeSetup:</p>
+<table>
+<thead>
+<tr>
+<th>HHS Dotfile</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>~/.bash_aliases</td>
+<td>HomeSetup built-in aliases</td>
+</tr>
+<tr>
+<td>~/.bash_colors</td>
+<td>Terminal color definitions</td>
+</tr>
+<tr>
+<td>~/.bash_commons</td>
+<td>Common HomeSetup functions</td>
+</tr>
+<tr>
+<td>~/.bash_completion</td>
+<td>Bash completion functions</td>
+</tr>
+<tr>
+<td>~/.bash_env</td>
+<td>Environment variables</td>
+</tr>
+<tr>
+<td>~/.bash_functions</td>
+<td>Bash scripting functions</td>
+</tr>
+<tr>
+<td>~/.bash_icons</td>
+<td>Predefined unicode icons</td>
+</tr>
+<tr>
+<td>~/.bash_profile</td>
+<td>Login Bash resources</td>
+</tr>
+<tr>
+<td>~/.bash_prompt</td>
+<td>Enhanced shell prompt</td>
+</tr>
+<tr>
+<td>~/.bashrc</td>
+<td>Login Bash resources</td>
+</tr>
+<tr>
+<td>~/.hhsrc</td>
+<td>HomeSetup resources</td>
+</tr>
+</tbody>
+</table>
+<p>The following directories will be created in your <strong>$HHS_DIR</strong> folder:</p>
+<ul>
+<li><code>$HHS_DIR/backup</code> # Includes all HomeSetup backup files.</li>
+<li><code>$HHS_DIR/bin</code> # Includes all useful scripts provided by the project.</li>
+<li><code>$HHS_DIR/cache</code> # Includes all HomeSetup cache files.</li>
+<li><code>$HHS_DIR/log</code> # Includes all HomeSetup log files.</li>
+</ul>
+<p>If the installation folder already exists, the install script will replace all files, taking care to back up the
+important ones. To override or add customized configurations, you can create a custom file using the following:</p>
+<table>
+<thead>
+<tr>
+<th>Custom Dotfile</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>~/.aliases</td>
+<td>To customize your aliases</td>
+</tr>
+<tr>
+<td>~/.colors</td>
+<td>To customize your colors</td>
+</tr>
+<tr>
+<td>~/.env</td>
+<td>To customize your environment variables</td>
+</tr>
+<tr>
+<td>~/.functions</td>
+<td>To customize your functions</td>
+</tr>
+<tr>
+<td>~/.path</td>
+<td>To customize your paths</td>
+</tr>
+<tr>
+<td>~/.profile</td>
+<td>To customize your profile</td>
+</tr>
+<tr>
+<td>~/.prompt</td>
+<td>To customize your prompt</td>
+</tr>
+<tr>
+<td>~/.homesetup.toml</td>
+<td>HomeSetup initialization file</td>
+</tr>
+<tr>
+<td>~/.starship.toml</td>
+<td>Starship configuration file</td>
+</tr>
+</tbody>
+</table>
+<h2 id="aliases">Aliases<a class="headerlink" href="#aliases" title="Permanent link">&para;</a></h2>
+<p>HomeSetup will provide many useful aliases (shortcuts) to your terminal:</p>
+<h3 id="navigational">Navigational<a class="headerlink" href="#navigational" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Equivalent</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>..</td>
+<td>cd ..</td>
+<td>Change-back to previous directory</td>
+</tr>
+<tr>
+<td>...</td>
+<td>cd ...</td>
+<td>Change-back two previous directories</td>
+</tr>
+<tr>
+<td>....</td>
+<td>cd ....</td>
+<td>Change-back three previous directories</td>
+</tr>
+<tr>
+<td>.....</td>
+<td>cd .....</td>
+<td>Change-back four previous directories</td>
+</tr>
+<tr>
+<td>~</td>
+<td>cd ~</td>
+<td>Change the current directory to HOME dir</td>
+</tr>
+<tr>
+<td>-</td>
+<td>cd -</td>
+<td>Change the current directory to the previous dir</td>
+</tr>
+<tr>
+<td>?</td>
+<td>pwd</td>
+<td>Display the current working dir and remote repository if it applies</td>
+</tr>
+</tbody>
+</table>
+<h3 id="general">General<a class="headerlink" href="#general" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>q</td>
+<td>Shorthand for `exit 0' from terminal</td>
+</tr>
+<tr>
+<td>sudo</td>
+<td>Enable aliases to be sudo’ed</td>
+</tr>
+<tr>
+<td>ls</td>
+<td>Always use color output for <strong>ls</strong></td>
+</tr>
+<tr>
+<td>l</td>
+<td>List <em>all files</em> colorized in long format</td>
+</tr>
+<tr>
+<td>ld</td>
+<td>List <em>all directories</em> colorized in long format</td>
+</tr>
+<tr>
+<td>lf</td>
+<td>List <em>all files</em> colorized in long format</td>
+</tr>
+<tr>
+<td>ll</td>
+<td>List <em>all files</em> colorized in long format, <strong>including dotfiles</strong></td>
+</tr>
+<tr>
+<td>lll</td>
+<td>List <em>all <strong>.dotfiles</strong></em> colorized in long format</td>
+</tr>
+<tr>
+<td>lld</td>
+<td>List <em>all <strong>.dotfolders</strong></em> colorized in long format</td>
+</tr>
+<tr>
+<td>grep</td>
+<td>Always enable colored <strong>grep</strong> output</td>
+</tr>
+<tr>
+<td>fgrep</td>
+<td>Always enable colored <strong>egrep</strong> output</td>
+</tr>
+<tr>
+<td>egrep</td>
+<td>Always enable colored <strong>fgrep</strong> output</td>
+</tr>
+<tr>
+<td>cd</td>
+<td>Built-ins replacement for `cd'</td>
+</tr>
+<tr>
+<td>dirs</td>
+<td>Built-ins replacement for `dirs'</td>
+</tr>
+<tr>
+<td>help</td>
+<td>Built-ins replacement for `help'</td>
+</tr>
+<tr>
+<td>starship</td>
+<td>Starship replacement for `starship' binary</td>
+</tr>
+<tr>
+<td>rm</td>
+<td>By default <strong>rm</strong> will prompt for confirmation and will be verbose</td>
+</tr>
+<tr>
+<td>cp</td>
+<td>By default <strong>cp</strong> will prompt for confirmation and will be verbose</td>
+</tr>
+<tr>
+<td>mv</td>
+<td>By default <strong>mv</strong> will prompt for confirmation and will be verbose</td>
+</tr>
+<tr>
+<td>df</td>
+<td>Make <strong>df</strong> command output pretty and human readable format</td>
+</tr>
+<tr>
+<td>du</td>
+<td>Make <strong>du</strong> command output pretty and human readable format</td>
+</tr>
+<tr>
+<td>psg</td>
+<td>Make <strong>ps</strong> command output pretty and human readable format</td>
+</tr>
+<tr>
+<td>ifs</td>
+<td>Display current value of IFS</td>
+</tr>
+<tr>
+<td>open</td>
+<td>Use the assigned app to open a file</td>
+</tr>
+<tr>
+<td>shopt</td>
+<td>Display/Set/unset current Shell Options</td>
+</tr>
+<tr>
+<td>vi</td>
+<td>Use <strong>vim</strong> instead of <strong>vi</strong> if installed</td>
+</tr>
+<tr>
+<td>more</td>
+<td><strong>more</strong> will interpret escape sequences</td>
+</tr>
+<tr>
+<td>less</td>
+<td><strong>less</strong> will interpret escape sequences</td>
+</tr>
+<tr>
+<td>mount</td>
+<td>Make `mount' command output pretty and human readable format</td>
+</tr>
+<tr>
+<td>week</td>
+<td>Date&amp;Time - Display current <strong>week number</strong></td>
+</tr>
+<tr>
+<td>now</td>
+<td>Date&amp;Time - Display current <strong>date and time</strong></td>
+</tr>
+<tr>
+<td>ts</td>
+<td>Date&amp;Time - Display current <strong>timestamp</strong></td>
+</tr>
+<tr>
+<td>wget</td>
+<td>If <strong>wget</strong> is not available, use <strong>curl</strong> instead</td>
+</tr>
+<tr>
+<td>ps1</td>
+<td>Make <em>PS1</em> prompt active</td>
+</tr>
+<tr>
+<td>ps2</td>
+<td>Make <em>PS2</em> prompt active (continuation prompt)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="homesetup">HomeSetup<a class="headerlink" href="#homesetup" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__hhs_reload</td>
+<td>Alias to reload HomeSetup</td>
+</tr>
+<tr>
+<td>__hhs_clear</td>
+<td>Alias to clear and reset cursor attributes and <strong>IFS</strong></td>
+</tr>
+<tr>
+<td>__hhs_reset</td>
+<td>Alias to clear screen and reset the terminal</td>
+</tr>
+<tr>
+<td>__hhs_hspm</td>
+<td>Shortcut for <code>hhs hspm</code> plug-in</td>
+</tr>
+<tr>
+<td>__hhs_hhu</td>
+<td>Shortcut for <code>hhs updater</code> plug-in</td>
+</tr>
+<tr>
+<td>__hhs_starship</td>
+<td>Shortcut for <code>hhs starship</code> plug-in</td>
+</tr>
+<tr>
+<td>__hhs_setup</td>
+<td>Shortcut for <code>hhs setup</code> plug-in</td>
+</tr>
+<tr>
+<td>__hhs_firebase</td>
+<td>Shortcut for <code>hhs firebase</code> plug-in</td>
+</tr>
+<tr>
+<td>__hhs_settings</td>
+<td>Shortcut for <code>hhs settings</code> plug-in</td>
+</tr>
+<tr>
+<td>__hhs_ask</td>
+<td>Shortcut for <code>hhs ask</code> plug-in</td>
+</tr>
+</tbody>
+</table>
+<h3 id="external-tools">External tools<a class="headerlink" href="#external-tools" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ask</td>
+<td>Shortcut for the HomeSetup AskAI application.</td>
+</tr>
+<tr>
+<td>jenv_set_java_home</td>
+<td>Jenv - Set JAVA_HOME using jenv</td>
+</tr>
+<tr>
+<td>cleanup-db</td>
+<td>Dropbox - Recursively delete Dropbox conflicted files from the current directory</td>
+</tr>
+<tr>
+<td>encode</td>
+<td>Shortcut for base64 encode</td>
+</tr>
+</tbody>
+</table>
+<h3 id="os-specific-aliases">OS Specific aliases<a class="headerlink" href="#os-specific-aliases" title="Permanent link">&para;</a></h3>
+<h4 id="linux">Linux<a class="headerlink" href="#linux" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cpu</td>
+<td>`top' shortcut ordered by CPU %</td>
+</tr>
+<tr>
+<td>mem</td>
+<td>`top' shortcut ordered by MEM %</td>
+</tr>
+<tr>
+<td>ised</td>
+<td>Same as sed -i'' -r</td>
+</tr>
+<tr>
+<td>esed</td>
+<td>Same as sed -r</td>
+</tr>
+<tr>
+<td>decode</td>
+<td>Shortcut for base64 decode</td>
+</tr>
+<tr>
+<td>apt</td>
+<td>Same as apt-get</td>
+</tr>
+</tbody>
+</table>
+<h4 id="darwin">Darwin<a class="headerlink" href="#darwin" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cpu</td>
+<td>`top' shortcut ordered by CPU %</td>
+</tr>
+<tr>
+<td>mem</td>
+<td>`top' shortcut ordered by MEM %</td>
+</tr>
+<tr>
+<td>ised</td>
+<td>Same as sed -i '' -E</td>
+</tr>
+<tr>
+<td>esed</td>
+<td>Same as sed -E</td>
+</tr>
+<tr>
+<td>decode</td>
+<td>Shortcut for <strong>base64</strong> decode</td>
+</tr>
+<tr>
+<td>cleanup-ds</td>
+<td>Delete all <em>.DS_store</em> files recursively</td>
+</tr>
+<tr>
+<td>flush</td>
+<td>Flush Directory Service cache</td>
+</tr>
+<tr>
+<td>cleanup-reg</td>
+<td>Clean up LaunchServices to remove duplicates in the <strong>"Open With"</strong> menu</td>
+</tr>
+<tr>
+<td>show-files</td>
+<td>Show hidden files in Finder</td>
+</tr>
+<tr>
+<td>hide-files</td>
+<td>Hide hidden files in Finder</td>
+</tr>
+<tr>
+<td>show-deskicons</td>
+<td>Show all desktop icons</td>
+</tr>
+<tr>
+<td>hide-deskicons</td>
+<td>Hide all desktop icons</td>
+</tr>
+<tr>
+<td>hd</td>
+<td>Canonical hex dump; some systems have this symlinked</td>
+</tr>
+<tr>
+<td>md5sum</td>
+<td>If <strong>md5sum</strong> is not available, use <strong>md5</strong> instead`</td>
+</tr>
+<tr>
+<td>sha1</td>
+<td>If <strong>sha1</strong> is not available, use <strong>shasum</strong> instead`</td>
+</tr>
+</tbody>
+</table>
+<h3 id="handy-terminal-shortcuts">Handy Terminal Shortcuts<a class="headerlink" href="#handy-terminal-shortcuts" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>show-cursor</td>
+<td>Make terminal cursor visible</td>
+</tr>
+<tr>
+<td>hide-cursor</td>
+<td>Make terminal cursor invisible</td>
+</tr>
+<tr>
+<td>save-cursor-pos</td>
+<td>Save terminal cursor position</td>
+</tr>
+<tr>
+<td>restore-cursor-pos</td>
+<td>Restore terminal cursor position</td>
+</tr>
+<tr>
+<td>enable-line-wrap</td>
+<td>Enable terminal line wrap</td>
+</tr>
+<tr>
+<td>disable-line-wrap</td>
+<td>Disable terminal line wrap</td>
+</tr>
+<tr>
+<td>enable-echo</td>
+<td>Enable terminal echo</td>
+</tr>
+<tr>
+<td>disable-echo</td>
+<td>Disable terminal echo</td>
+</tr>
+<tr>
+<td>reset-cursor-attrs</td>
+<td>Reset all terminal cursor attributes</td>
+</tr>
+<tr>
+<td>save-screen</td>
+<td>Save the current terminal screen</td>
+</tr>
+<tr>
+<td>restore-screen</td>
+<td>Restore the saved terminal screen</td>
+</tr>
+</tbody>
+</table>
+<h3 id="python-aliases">Python aliases<a class="headerlink" href="#python-aliases" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__hhs_urle</td>
+<td>URL-encode strings</td>
+</tr>
+<tr>
+<td>__hhs_urld</td>
+<td>URL-decode strings</td>
+</tr>
+<tr>
+<td>__hhs_uuid</td>
+<td>Generate a random UUID</td>
+</tr>
+<tr>
+<td>__hhs_tcalc</td>
+<td>Evaluate mathematical expressions</td>
+</tr>
+<tr>
+<td>__hhs_clitt</td>
+<td>Shortcut for hspylib-clitt module</td>
+</tr>
+<tr>
+<td>__hhs_vault</td>
+<td>Shortcut for hspylib-vault module</td>
+</tr>
+<tr>
+<td>__hhs_cfman</td>
+<td>Shortcut for hspylib-cfman module</td>
+</tr>
+<tr>
+<td>__hhs_kafman</td>
+<td>Shortcut for hspylib-kafman module</td>
+</tr>
+</tbody>
+</table>
+<h3 id="perl-aliases">Perl aliases<a class="headerlink" href="#perl-aliases" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>clean_escapes</td>
+<td>Remove escape (\EscXX) codes from text</td>
+</tr>
+<tr>
+<td>clipboard</td>
+<td>Copy to clipboard <strong>pbcopy required</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="git-aliases">Git aliases<a class="headerlink" href="#git-aliases" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__hhs_git_status</td>
+<td>Git - Enhancement for <strong>git status</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_fetch</td>
+<td>Git - Shortcut for <strong>git fetch</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_history</td>
+<td>Git - Shortcut for <strong>git log</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_branch</td>
+<td>Git - Shortcut for <strong>git branch</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_diff</td>
+<td>Git - Shortcut for <strong>git diff</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_pull</td>
+<td>Git - Shortcut for <strong>git pull</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_log</td>
+<td>Git - Enhancement for <strong>git log</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_checkout</td>
+<td>Git - Shortcut for git <strong>checkout</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_add</td>
+<td>Git - Shortcut for git <strong>add</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_commit</td>
+<td>Git - Shortcut for git <strong>commit</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_amend</td>
+<td>Git - Shortcut for git <strong>commit amend</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_pull_rebase</td>
+<td>Git - Shortcut for git <strong>pull rebase</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_push</td>
+<td>Git - Shortcut for git <strong>push</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_show</td>
+<td>Git - Enhancement for <strong>git diff-tree</strong></td>
+</tr>
+<tr>
+<td>__hhs_git_difftool</td>
+<td>Git - Enhancement for <strong>git difftool</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="gradle-aliases">Gradle aliases<a class="headerlink" href="#gradle-aliases" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__hhs_gradle_build</td>
+<td>Gradle - Enhancement for <strong>gradle build</strong></td>
+</tr>
+<tr>
+<td>__hhs_gradle_run</td>
+<td>Gradle - Enhancement for <strong>gradle bootRun</strong></td>
+</tr>
+<tr>
+<td>__hhs_gradle_test</td>
+<td>Gradle - Shortcut for <strong>gradle Test</strong></td>
+</tr>
+<tr>
+<td>__hhs_gradle_init</td>
+<td>Gradle - Shortcut for <strong>gradle init</strong></td>
+</tr>
+<tr>
+<td>__hhs_gradle_quiet</td>
+<td>Gradle - Shortcut for <strong>gradle -q</strong></td>
+</tr>
+<tr>
+<td>__hhs_gradle_wrapper</td>
+<td>Gradle - Shortcut for <strong>gradle wrapper</strong></td>
+</tr>
+<tr>
+<td>__hhs_gradle_projects</td>
+<td>Gradle - Displays all available gradle projects</td>
+</tr>
+<tr>
+<td>__hhs_gradle_tasks</td>
+<td>Gradle - Displays all available gradle project tasks</td>
+</tr>
+</tbody>
+</table>
+<h3 id="docker-aliases">Docker aliases<a class="headerlink" href="#docker-aliases" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>ALIAS</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__hhs_docker_images</td>
+<td>Docker - Enhancement for docker images</td>
+</tr>
+<tr>
+<td>__hhs_docker_service</td>
+<td>Docker - Shortcut for docker service</td>
+</tr>
+<tr>
+<td>__hhs_docker_remove</td>
+<td>Docker - Shortcut for docker container rm</td>
+</tr>
+<tr>
+<td>__hhs_docker_remove_image</td>
+<td>Docker - Shortcut for docker rmi</td>
+</tr>
+<tr>
+<td>__hhs_docker_ps</td>
+<td>Docker - Enhancement for docker ps</td>
+</tr>
+<tr>
+<td>__hhs_docker_top</td>
+<td>Docker - Enhancement for docker stats</td>
+</tr>
+<tr>
+<td>__hhs_docker_ls</td>
+<td>Docker - Enhancement for docker container ls</td>
+</tr>
+<tr>
+<td>__hhs_docker_up</td>
+<td>Enhancement for `docker compose up</td>
+</tr>
+<tr>
+<td>__hhs_docker_down</td>
+<td>Shortcut for `docker compose stop</td>
+</tr>
+</tbody>
+</table>
+<h2 id="functions">Functions<a class="headerlink" href="#functions" title="Permanent link">&para;</a></h2>
+<p>HomeSetup provides many functions for the shell. All functions includes a help using the options -h or --help.</p>
+<h3 id="development-tools">Development tools<a class="headerlink" href="#development-tools" title="Permanent link">&para;</a></h3>
+<p>The complete handbook of development tools can be found on <a href="handbook/pages/functions.md#development-tools">functions handbook</a></p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hhs-docker-tools.bash</td>
+<td>__hhs_docker_kill_all</td>
+<td>Stop, remove and remove dangling [active?] volumes of all docker containers.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_docker_count</td>
+<td>Count the number of active docker containers.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_docker_info</td>
+<td>Display information about the container.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_docker_exec</td>
+<td>Run a command or bash in a running container.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_docker_compose_exec</td>
+<td>This is the equivalent of docker exec, but for docker-compose.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_docker_logs</td>
+<td>Fetch the logs of a container.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_docker_remove_volumes</td>
+<td>Remove all docker volumes not referenced by any containers (dangling).</td>
+</tr>
+<tr>
+<td>hhs-git-tools.bash</td>
+<td>__hhs_git_branch_all</td>
+<td>Get the current branch name of all repositories from the base search path.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_git_status_all</td>
+<td>Get the status of current branch of all repositories from the base search path.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_git_branch_previous</td>
+<td>Checkout the previous branch in history (skips branch-to-same-branch changes ).</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_git_show_file_diff</td>
+<td>Display a file diff comparing the version between the first and second commit IDs.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_git_show_file_contents</td>
+<td>Display the contents of a file from specific commit ID.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_git_show_changes</td>
+<td>List all changed files from a commit ID.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_git_pull_all</td>
+<td>Search and pull projects from the specified path using the given repository/branch.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_git_branch_select</td>
+<td>Select and checkout a local or remote branch.</td>
+</tr>
+<tr>
+<td>hhs-gradle-tools.bash</td>
+<td>__hhs_gradle</td>
+<td>Prefer using the wrapper instead of the installed command itself.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="standard-tools">Standard tools<a class="headerlink" href="#standard-tools" title="Permanent link">&para;</a></h3>
+<p>The complete handbook of standard tools can be found on <a href="handbook/pages/functions.md#standard-tools">functions handbook</a></p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hhs-aliases.bash</td>
+<td>__hhs_aliases</td>
+<td>Manipulate custom aliases (add/remove/edit/list).</td>
+</tr>
+<tr>
+<td>hhs-built-ins.bash</td>
+<td>__hhs_help</td>
+<td>Display a help for the given command.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_where_am_i</td>
+<td>Display the current working dir and remote repository if it applies.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_shopt</td>
+<td>Display/Set/unset current Shell Options.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_random</td>
+<td>Generate a random number int the range \&lt;min&gt; \&lt;max&gt; (all limits included).</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_open</td>
+<td>Open a file or URL with the default program.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_edit</td>
+<td>Create and/or open a file using the default editor.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_about</td>
+<td>Display information about the given command.</td>
+</tr>
+<tr>
+<td>hhs-clitt.bash</td>
+<td>__hhs_minput</td>
+<td>Provide a terminal form input with simple validation.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_mchoose</td>
+<td>Choose options from a list using a navigable menu.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_punch</td>
+<td>PUNCH-THE-CLOCK. This is a helper tool to aid with the timesheet.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_mselect</td>
+<td>Select an option from a list using a navigable menu.</td>
+</tr>
+<tr>
+<td>hhs-command.bash</td>
+<td>__hhs_command</td>
+<td>Add/Remove/List/Execute saved bash commands.</td>
+</tr>
+<tr>
+<td>hhs-dirs.bash</td>
+<td>__hhs_list_tree</td>
+<td>List all directories recursively (Nth level depth) as a tree.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_save_dir</td>
+<td>Save one directory path for future __hhs_load.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_change_dir</td>
+<td>Change the current working directory to a specific Folder.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_load_dir</td>
+<td>Change the current working directory to pre-saved entry from __hhs_save.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_godir</td>
+<td>Search and cd into the first match of the specified directory name.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_mkcd</td>
+<td>Create all folders using a slash or dot notation path and immediately change into it.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_changeback_ndirs</td>
+<td>Change back the current working directory by N directories.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_dirs</td>
+<td>Display the list of currently remembered directories.</td>
+</tr>
+<tr>
+<td>hhs-files.bash</td>
+<td>__hhs_ls_sorted</td>
+<td>List files sorted by the specified column.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_del_tree</td>
+<td>Move files recursively to the Trash.</td>
+</tr>
+<tr>
+<td>hhs-network.bash</td>
+<td>__hhs_ip_info</td>
+<td>Retrieve information about the specified IP.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_ip_lookup</td>
+<td>Lookup DNS payload to determine the IP address.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_ip_resolve</td>
+<td>Resolve domain names associated with the specified IP.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_port_check</td>
+<td>Check the state of local port(s).</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_active_ifaces</td>
+<td>Display a list of active network interfaces.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_ip</td>
+<td>Display the associated machine IP of the given kind.</td>
+</tr>
+<tr>
+<td>hhs-paths.bash</td>
+<td>__hhs_paths</td>
+<td>Manage your custom PATH entries.</td>
+</tr>
+<tr>
+<td>hhs-profile-tools.bash</td>
+<td>__hhs_activate_nvm</td>
+<td>Lazy load helper function to initialize NVM for the terminal.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_activate_rvm</td>
+<td>Lazy load helper function to initialize RVM for the terminal.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_activate_jenv</td>
+<td>Lazy load helper function to initialize Jenv for the terminal.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_activate_docker</td>
+<td>Lazy load helper function to initialize Docker-Daemon for the terminal.</td>
+</tr>
+<tr>
+<td>hhs-search.bash</td>
+<td>__hhs_search_file</td>
+<td>Search for files and links to files recursively.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_search_dir</td>
+<td>Search for directories and links to directories recursively.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_search_string</td>
+<td>Search in files for strings matching the specified criteria recursively.</td>
+</tr>
+<tr>
+<td>hhs-security.bash</td>
+<td>__hhs_encrypt_file</td>
+<td>Encrypt file using GPG.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_decrypt_file</td>
+<td>Decrypt a GPG encrypted file.</td>
+</tr>
+<tr>
+<td>hhs-shell-utils.bash</td>
+<td>__hhs_defs</td>
+<td>Display all alias definitions using filters.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_shell_select</td>
+<td>Select a shell from the existing shell list.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_history</td>
+<td>Search for previously issued commands from history using filters.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_hist_stats</td>
+<td>Display statistics about commands in history.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_envs</td>
+<td>Display all environment variables using filters.</td>
+</tr>
+<tr>
+<td>hhs-sys-utils.bash</td>
+<td>__hhs_process_kill</td>
+<td>Kills ALL processes specified by name</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_sysinfo</td>
+<td>Display relevant system information.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_partitions</td>
+<td>Exhibit a Human readable summary about all partitions.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_process_list</td>
+<td>Display a process list matching the process name/expression.</td>
+</tr>
+<tr>
+<td>hhs-taylor.bash</td>
+<td>__hhs_tailor</td>
+<td>Tail a log using customized colors and patterns.</td>
+</tr>
+<tr>
+<td>hhs-text.bash</td>
+<td>__hhs_highlight</td>
+<td>Highlight words from the piped stream.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_json_print</td>
+<td>Pretty print (format) JSON string.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_ascof</td>
+<td>Convert string into it's decimal ASCII presentation.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_utoh</td>
+<td>Convert unicode to hexadecimal.</td>
+</tr>
+<tr>
+<td>hhs-toml.bash</td>
+<td>__hhs_toml_groups</td>
+<td>Print all toml file groups (tables).</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_toml_keys</td>
+<td>Print all toml file group keys (tables).</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_toml_get</td>
+<td>Get the key's value from a toml file.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_toml_set</td>
+<td>Set the key's value from a toml file.</td>
+</tr>
+<tr>
+<td>hhs-toolcheck.bash</td>
+<td>__hhs_toolcheck</td>
+<td>Check whether a tool is installed on the system.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_version</td>
+<td>Check the version of the app using the most common ways.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_tools</td>
+<td>Check whether a list of development tools are installed or not.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="dotfiles">Dotfiles<a class="headerlink" href="#dotfiles" title="Permanent link">&para;</a></h3>
+<p>HomeSetup include some basic helper functions:</p>
+<table>
+<thead>
+<tr>
+<th>Dotfile</th>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>bash_commons.bash</td>
+<td>__hhs_errcho</td>
+<td>Echo a message in red color into stderr.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_is_reachable</td>
+<td>Check whether URL/URI is reachable on the network.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_has</td>
+<td>Check if a command is available on the current shell context.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_log</td>
+<td>Log to HomeSetup log file.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_source</td>
+<td>Read/Execute commands from the filename argument in the current shell context.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_alias</td>
+<td>Check if an alias does not exists and create it, otherwise ignore it.</td>
+</tr>
+<tr>
+<td>bash_prompt.bash</td>
+<td>__hhs_set_win_title</td>
+<td>Set the terminal window title.</td>
+</tr>
+<tr>
+<td></td>
+<td>__hhs_git_prompt</td>
+<td>Check whether inside a git repository or not, and which branch is checked.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="applications">Applications<a class="headerlink" href="#applications" title="Permanent link">&para;</a></h2>
+<p>HomeSetup includes a collection of useful applications that can be accessed directly from the shell. These applications
+are also automatically added to your <strong>$PATH</strong> variable for easy execution.</p>
+<p>For a comprehensive list and detailed information about the development tools available with HomeSetup, please refer
+to the <a href="handbook/pages/applications.md">Applications</a> section in the complete handbook.</p>
+<h3 id="built-ins">Built-ins<a class="headerlink" href="#built-ins" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Application</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>app-commons.bash</td>
+<td>Commonly used bash code functions and variables that you may include it on your bash scripts.</td>
+</tr>
+<tr>
+<td>check-ip.bash</td>
+<td>Validate and check information about a specified IP.</td>
+</tr>
+<tr>
+<td>fetch.bash</td>
+<td>Fetch REST APIs data easily.</td>
+</tr>
+<tr>
+<td>hhs.bash</td>
+<td>HomeSetup application.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="alias-definitions">Alias definitions<a class="headerlink" href="#alias-definitions" title="Permanent link">&para;</a></h2>
+<p>You have the flexibility to customize <strong>most of the HomeSetup aliases</strong> by editing the <code>~/.aliasdef</code> file. When you
+initially install HomeSetup, this file will be automatically generated for you. However, future updates may require
+you to update this file. We always keep a backup of this file, allowing you to preserve your customizations. Please
+note that the backup process needs to be done manually in this case.</p>
+<p>The original content and aliases are defined in the original <a href="../dotfiles/aliasdef">aliasdef</a> file. If you remove your
+<code>~/.aliasdef</code> file, the HomeSetup's original definitions file will be copied to your <strong>$HHS_DIR</strong> folder next time you
+start you terminal.</p>
+<h2 id="homesetup-application">HomeSetup Application<a class="headerlink" href="#homesetup-application" title="Permanent link">&para;</a></h2>
+<p>HomeSetup is more than just a collection of scripts and functions to enhance your terminal experience. It also includes
+an application framework and a variety of <strong>plug-able scripts and functions</strong> that can be seamlessly integrated into it.
+To view a comprehensive list of all available functions and plug-ins, you can simply run the following command in your
+terminal: <code>__hhs list</code>.</p>
+<p>If you want to explore and check all the existing functions within HomeSetup, you can simply run the following command
+in your terminal: <code>__hhs funcs</code>.</p>
+<p>Those commands will provide you with an overview of all the functions and plug-ins that HomeSetup offers, allowing you
+to explore and leverage their capabilities.</p>
+<h3 id="hhs-plug-ins">HHS Plug-ins<a class="headerlink" href="#hhs-plug-ins" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Plug-in</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ask</td>
+<td>Offline Ollama AI chat with context history, model selection, and resets.</td>
+</tr>
+<tr>
+<td>settings</td>
+<td>Terminal settings manager.</td>
+</tr>
+<tr>
+<td>starship</td>
+<td>Starship prompt manager.</td>
+</tr>
+<tr>
+<td>setup</td>
+<td>HomeSetup initialization manager.</td>
+</tr>
+<tr>
+<td>updater</td>
+<td>Update manager for HomeSetup.</td>
+</tr>
+<tr>
+<td>firebase</td>
+<td>Manager for HomeSetup Firebase integration.</td>
+</tr>
+<tr>
+<td>hspm</td>
+<td>Manage your development tools using installation/uninstallation recipes.</td>
+</tr>
+</tbody>
+</table>
+<p>Use the <code>__hhs ask</code> plug-in to chat with a local Ollama model, list available options, or manage history:</p>
+<ul>
+<li><code>__hhs ask --models</code> lists downloaded and available Ollama models.</li>
+<li><code>__hhs ask --select-model &lt;name&gt;</code> updates the preferred model stored in your HomeSetup configuration.</li>
+<li><code>__hhs ask --context</code> shows the current conversation history, and <code>--reset</code> clears it before a new session.</li>
+<li>The plug-in will start (or offer to install) the Ollama service automatically when needed.</li>
+</ul>
+<h3 id="hhs-functions">HHS Functions<a class="headerlink" href="#hhs-functions" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>docsify</td>
+<td>Open the HomeSetup <strong>docsify</strong> web page.</td>
+</tr>
+<tr>
+<td>board</td>
+<td>Open the HomeSetup GitHub project <strong>board</strong> for the current version.</td>
+</tr>
+<tr>
+<td>list</td>
+<td>List all HHS App <strong>Plug-ins</strong> and <strong>Functions</strong>.</td>
+</tr>
+<tr>
+<td>funcs</td>
+<td>Search for all hhs <strong>functions</strong> describing it's containing file name and line number.</td>
+</tr>
+<tr>
+<td>logs</td>
+<td>Retrieve latest HomeSetup load logs.</td>
+</tr>
+<tr>
+<td>man</td>
+<td>Open manual for command.</td>
+</tr>
+<tr>
+<td>reset</td>
+<td>Remove caches, logs and backup files.</td>
+</tr>
+<tr>
+<td>host-name</td>
+<td>Retrieve/Get/Set the current hostname.</td>
+</tr>
+<tr>
+<td>tests</td>
+<td>Execute all HomeSetup <strong>automated tests</strong>.</td>
+</tr>
+<tr>
+<td>color-tests</td>
+<td>Execute all HomeSetup <strong>terminal color tests</strong>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="auto-completions">Auto completions<a class="headerlink" href="#auto-completions" title="Permanent link">&para;</a></h2>
+<p>In addition to the standard bash \&lt;tab&gt; complete feature, HomeSetup introduces an enhanced completion functionality
+accessed through <strong><shift+tab></strong>. This feature allows you to iterate over the available options provided by the
+completion function, providing a more interactive experience.</p>
+<p>By default, HomeSetup <em>does not load the completions</em> during terminal startup to optimize performance. However, if you
+wish to load the completions and utilize this enhanced feature, you can issue the following command in your terminal:
+<code>__hhs_load_completions</code></p>
+<p>Executing this command will load the completions and enable the <shift+tab> complete functionality within HomeSetup.</p>
+<h3 id="bash-completions">Bash completions<a class="headerlink" href="#bash-completions" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hhs-completion.bash</td>
+<td>Bash completion for HomeSetup.</td>
+</tr>
+<tr>
+<td>brew-completion.bash</td>
+<td>Bash completion for Home Brew.</td>
+</tr>
+<tr>
+<td>docker-completion.bash</td>
+<td>Bash completion file for core docker commands.</td>
+</tr>
+<tr>
+<td>docker-compose-completion.bash</td>
+<td>Bash completion for docker-compose commands.</td>
+</tr>
+<tr>
+<td>docker-machine-completion.bash</td>
+<td>Bash completion file for docker-machine commands.</td>
+</tr>
+<tr>
+<td>git-completion.bash</td>
+<td>Bash/zsh completion support for core Git.</td>
+</tr>
+<tr>
+<td>gradle-completion.bash</td>
+<td>Bash and Zsh completion support for Gradle.</td>
+</tr>
+<tr>
+<td>helm-completion.bash</td>
+<td>Bash completion for helm.</td>
+</tr>
+<tr>
+<td>kubectl-completion.bash</td>
+<td>Bash completion for kubectl.</td>
+</tr>
+<tr>
+<td>pcf-completion.bash</td>
+<td>Bash completion for Cloud Foundry CLI.</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.sections", "navigation.instant", "navigation.top", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

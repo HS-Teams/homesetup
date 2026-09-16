@@ -1,0 +1,2633 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://HS-Teams.github.io/homesetup/docs/CHANGELOG/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Changelog - HomeSetup</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="HomeSetup" class="md-header__button md-logo" aria-label="HomeSetup" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            HomeSetup
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/HS-Teams/homesetup" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    HS-Teams/homesetup
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="HomeSetup" class="md-nav__button md-logo" aria-label="HomeSetup" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64z"/></svg>
+
+    </a>
+    HomeSetup
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/HS-Teams/homesetup" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    HS-Teams/homesetup
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Handbook
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Handbook
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/handbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pages
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_1" id="__nav_2_2_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Applications
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Applications
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/applications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/applications/bash/hhs-app/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    hhs-app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/applications/bash/check-ip/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check-ip
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/applications/bash/fetch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fetch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_2" id="__nav_2_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Functions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Functions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_2_2" id="__nav_2_2_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_2_2_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Dev Tools
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/dev-tools/docker-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/dev-tools/git-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Git Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/dev-tools/gradle-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gradle Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_2_3" id="__nav_2_2_2_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Standard Tools
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_2_2_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Standard Tools
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/aliases-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliases Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/built-ins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Built-ins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/clitt/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    clitt
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/command-tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/directory-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Directory Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/file-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/network-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/paths-tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Paths Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/profile-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Profile Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/search-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/security-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/shell-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shell Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/system-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/taylor-tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Taylor Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/text-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Text Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/toml-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TOML Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../handbook/pages/functions/std-tools/toolchecks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool Checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Misc
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Misc
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../CHANGELOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CHANGELOG
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../COLOR_LS_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Color LS Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../FIREBASE_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Firebase Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../SHOWCASE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Showcase
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#191-20251111" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.9.1 - 2025/11/11
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.9.1 - 2025/11/11">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updated
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#181-2024-11-26" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.8.1 - 2024-11-26
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.8.1 - 2024-11-26">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updated_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updated
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#171-2023-12-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.7.1 - 2023-12-28
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.7.1 - 2023-12-28">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updated_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updated
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#161-2023-12-28" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.6.1 - 2023-12-28
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.6.1 - 2023-12-28">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updated_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updated
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#151-2020-01-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5.1 - 2020-01-21
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.5.1 - 2020-01-21">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updated_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updated
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#141-2020-01-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4.1 - 2020-01-21
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.4.1 - 2020-01-21">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updated_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updated
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#131-2020-01-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.3.1 - 2020-01-21
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.3.1 - 2020-01-21">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#updated_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Updated
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#removed_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<p>All notable changes to this project will be documented in this file.</p>
+<p>The format is based on [Keep a Changelog][kac] and this project adheres to [Semantic Versioning][semver].</p>
+<div class="codehilite"><pre><span></span><code><span class="o">[</span><span class="n">kac</span><span class="o">]</span><span class="err">:</span><span class="w"> </span><span class="nl">https</span><span class="p">:</span><span class="o">//</span><span class="n">keepachangelog</span><span class="p">.</span><span class="n">com</span><span class="o">/</span><span class="n">en</span><span class="o">/</span><span class="mf">1.0.0</span><span class="o">/</span>
+<span class="o">[</span><span class="n">semver</span><span class="o">]</span><span class="err">:</span><span class="w"> </span><span class="nl">https</span><span class="p">:</span><span class="o">//</span><span class="n">semver</span><span class="p">.</span><span class="n">org</span><span class="o">/</span>
+
+<span class="err">##</span><span class="w"> </span><span class="n">Unreleased</span>
+
+<span class="err">###</span><span class="w"> </span><span class="n">Added</span>
+
+<span class="err">###</span><span class="w"> </span><span class="n">Fixed</span>
+
+<span class="err">###</span><span class="w"> </span><span class="n">Updated</span>
+
+<span class="err">###</span><span class="w"> </span><span class="n">Removed</span>
+</code></pre></div>
+
+<h2 id="191-20251111">1.9.1 - 2025/11/11<a class="headerlink" href="#191-20251111" title="Permanent link">&para;</a></h2>
+<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Installer CLI options, uninstall cleanup, and dependency validation</li>
+<li>Fetch script header parsing and request formatting</li>
+<li>JSON formatting and version fixture generation</li>
+<li>Updater, environment variables, and venv activation/deactivation behavior</li>
+<li>Listing display, error output, and text formatting in __hhs_errcho and related helpers</li>
+<li>Ownership and permissions in changelog and GitHub Actions</li>
+<li>Homebrew installation formula, dependency resolution, and brew handling across multiple iterations</li>
+<li>Dockerfile builds, multi-distro compatibility (Alpine, Fedora, CentOS, Ubuntu), and image publishing pipeline</li>
+<li>GHA (GitHub Actions) build workflows, docker-deploy, and release jobs</li>
+<li>Version bump workflow and revision tracking during bumpver auto-tagging</li>
+<li>Tests and CI pipeline executions for stability and environment consistency</li>
+</ul>
+<h3 id="updated">Updated<a class="headerlink" href="#updated" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Shell scripts (hhs-dirs, __hhs_errcho, __hhs_utoh, etc.) for cleaner output and bug fixes</li>
+<li>Package manager definitions and dependencies</li>
+<li>Dockerfiles and related assets to reflect latest environment adjustments</li>
+<li>Configuration files for WezTerm, Zsh, NeoVim, and terminal assets</li>
+<li>Documentation, handbook wording, and repository metadata</li>
+<li>Copyright, author info, and contact details</li>
+<li>GitHub Actions to latest versions and improved workflow consistency</li>
+<li>Prompt tools integration and auxiliary shell scripts for modern presets</li>
+<li>Bats tests and internal helpers for improved validation</li>
+<li>Changelog generation scripts for consistent tagging</li>
+</ul>
+<h3 id="removed">Removed<a class="headerlink" href="#removed" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Deprecated Glow integration from required tools list</li>
+<li>Redundant or legacy installer logic</li>
+</ul>
+<h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Complete Bats test coverage for all HHS components (CLI, paths, files, functions, utilities, search, sys, etc.)</li>
+<li>JSON formatting to fetch script and expanded CLI argument parsing</li>
+<li>Venv management, auto-reload of environment, and dependency reloading behavior</li>
+<li>Password generator (__hhs_pwgen) and clipboard enhancements</li>
+<li>New setup and init logs for diagnostics</li>
+<li>Profile activators and tool helpers for TUI/CLI integration</li>
+<li>NeoVim and WezTerm configuration assets</li>
+<li>Docker cleanup and Python package maintenance scripts</li>
+<li>Support for starship prompt, zoxide, and delta integration</li>
+<li>Auto-tag and Gradle publish workflow improvements</li>
+<li>New changelog automation and release versioning</li>
+</ul>
+<h2 id="181-2024-11-26">1.8.1 - 2024-11-26<a class="headerlink" href="#181-2024-11-26" title="Permanent link">&para;</a></h2>
+<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Fixed Installer CLI options, uninstall cleanup, and dependency validation</li>
+<li>Fixed Fetch script header parsing and request formatting</li>
+<li>Fixed JSON formatting and version fixture generation</li>
+<li>Fixed Updater, environment variables, and venv activation/deactivation behavior</li>
+<li>Fixed Listing display, error output, and text formatting in <code>__hhs_errcho</code> and related helpers</li>
+<li>Fixed Ownership and permissions in changelog and GitHub Actions</li>
+<li>Fixed Homebrew installation formula, dependency resolution, and brew handling across multiple iterations</li>
+<li>Fixed Dockerfile builds, multi-distro compatibility (Alpine, Fedora, CentOS, Ubuntu), and image publishing pipeline</li>
+<li>Fixed GHA (GitHub Actions) build workflows, docker-deploy, and release jobs</li>
+<li>Fixed Version bump workflow and revision tracking during bumpver auto-tagging</li>
+<li>Fixed Tests and CI pipeline executions for stability and environment consistency</li>
+</ul>
+<h3 id="updated_1">Updated<a class="headerlink" href="#updated_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Updated Shell scripts (<code>hhs-dirs</code>, <code>__hhs_errcho</code>, <code>__hhs_utoh</code>, etc.) for cleaner output and bug fixes</li>
+<li>Updated Package manager definitions and dependencies</li>
+<li>Updated Dockerfiles and related assets to reflect latest environment adjustments</li>
+<li>Updated Configuration files for WezTerm, Zsh, NeoVim, and terminal assets</li>
+<li>Updated Documentation, handbook wording, and repository metadata</li>
+<li>Updated Copyright, author info, and contact details</li>
+<li>Updated GitHub Actions to latest versions and improved workflow consistency</li>
+<li>Updated Prompt tools integration and auxiliary shell scripts for modern presets</li>
+<li>Updated Bats tests and internal helpers for improved validation</li>
+<li>Updated Changelog generation scripts for consistent tagging</li>
+</ul>
+<h3 id="removed_1">Removed<a class="headerlink" href="#removed_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Removed Deprecated Glow integration from required tools list</li>
+<li>Removed Redundant or legacy installer logic</li>
+</ul>
+<h3 id="added_1">Added<a class="headerlink" href="#added_1" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added Complete Bats test coverage for all HHS components (CLI, paths, files, functions, utilities, search, sys, etc.)</li>
+<li>Added JSON formatting to fetch script and expanded CLI argument parsing</li>
+<li>Added Venv management, auto-reload of environment, and dependency reloading behavior</li>
+<li>Added Password generator (<code>__hhs_pwgen</code>) and clipboard enhancements</li>
+<li>Added New setup and init logs for diagnostics</li>
+<li>Added Profile activators and tool helpers for TUI/CLI integration</li>
+<li>Added NeoVim and WezTerm configuration assets</li>
+<li>Added Docker cleanup and Python package maintenance scripts</li>
+<li>Added Support for starship prompt, zoxide, and delta integration</li>
+<li>Added Auto-tag and Gradle publish workflow improvements</li>
+<li>Added New changelog automation and release versioning</li>
+</ul>
+<h2 id="171-2023-12-28">1.7.1 - 2023-12-28<a class="headerlink" href="#171-2023-12-28" title="Permanent link">&para;</a></h2>
+<h3 id="added_2">Added<a class="headerlink" href="#added_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added python venv</li>
+<li>Added README to hhs AskAi rag docs</li>
+<li>Added new gpt script , the csv xform. Also fixed the failing tests</li>
+<li>Added hhs starship modern</li>
+<li>Added wezterm.lua config for HomeSetup</li>
+<li>Added New git command __hhs_git_retag</li>
+<li>Added __hhs_git_changelog</li>
+<li>Added ble-sh integration</li>
+<li>Added Oh My ZSH starship prompt</li>
+<li>Added README.md section about how to install the Nerd Font</li>
+<li>Added the nerd font installer script</li>
+<li>Added upload assets to release to upload the fonts</li>
+<li>Added zipped fonts for download</li>
+<li>Added the Nerd Font installer</li>
+<li>Added new aliases for nvim and sdiff</li>
+<li>Added Neovim integration</li>
+<li>Added hhs shorts</li>
+<li>Added AI gif</li>
+<li>Added try first gif</li>
+<li>Added HomeSetup asciicast intro</li>
+<li>Added Call to Medieval game GPT</li>
+<li>Added new Gherkin GPT logo</li>
+<li>Added the gherkin GPT</li>
+<li>Added CURPWD for the last changed firectory</li>
+<li>Added the GPT scripts</li>
+<li>Added HomeSetup GPT prompt</li>
+<li>Added gtrash completions</li>
+<li>Added readme cover image</li>
+<li>Added HomeSetup github profile image</li>
+<li>Added some dev docs</li>
+<li>Added hhs sponsor</li>
+<li>Added __hhs_os_info function</li>
+</ul>
+<h3 id="fixed_2">Fixed<a class="headerlink" href="#fixed_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Fixed Key bindings</li>
+<li>Fixed hhs tests functions</li>
+<li>Fixed installation sudo problems</li>
+<li>Fixed bats tests</li>
+<li>Bugfixes and improve hhs app output</li>
+<li>Fixed __hhs_sysinfo</li>
+<li>Fixed the current version</li>
+<li>Fixed installation script and add homesetup.toml update check</li>
+<li>Fixed/Improved GPT scripts.</li>
+<li>Fixed GPT tests/src</li>
+<li>Fixed GitHub pages</li>
+<li>Fixed docker publish</li>
+<li>Fixed the hhs firebase not finding any dotfile</li>
+<li>Fixed AI install</li>
+<li>Fixed MAINTAINER and removed alpine from github actions</li>
+<li>Fixed LC_ALL problem detecting locale and language</li>
+<li>Fixed the installation script askai module</li>
+<li>Fixed AI aliases</li>
+<li>Fixed AskAI integration</li>
+<li>Fixed build by adding the missing required packages</li>
+<li>Bugfixes and gtrash integration</li>
+<li>Fixed brew installation: missing sudo</li>
+<li>Fixed colima hspm recipe</li>
+<li>Fixed save_dir saving non-existing dirs</li>
+<li>Fixed tools due to IFS</li>
+<li>Fixed publish issue: missing python3</li>
+<li>Fixed fzf integration</li>
+<li>Fixed hspm and docker</li>
+</ul>
+<h3 id="updated_2">Updated<a class="headerlink" href="#updated_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Updated iTerm2 profile</li>
+<li>Moved HHS keybindings to a new separate file</li>
+<li>Updated hhs logs</li>
+<li>Updated modern preset</li>
+<li>Improved where_am_i</li>
+<li>Updated hhs modern starship preset</li>
+<li>Improved tests, modern starship and install</li>
+<li>Improved tests, modern starship and install</li>
+<li>Renamed modern starship prompt</li>
+<li>Improved the rromao starship preset</li>
+<li>Updated iTerm2 and Terminal settings</li>
+<li>Improved icons and add iterm2 bg image</li>
+<li>Minor improvements. Updated iterm2 profile</li>
+<li>Moved __hhs_get_macos_codename to __hhs_get_codename (macos and linux)</li>
+<li>Show version for hhs setup</li>
+<li>Filtered the aliases from command hint because they are not available in hhs-app</li>
+<li>Improved rromao prompt with git metrics ext</li>
+<li>Improved hhs hints</li>
+<li>Improved error message from hhs app</li>
+<li>HHS app enhancement. Allow invoking any __hhs command with hhs</li>
+<li>Adjusted the rromao starship prompt: Add git metrics</li>
+<li>Integrated Atuin</li>
+<li>Minor adjustments</li>
+<li>Updated install to always install blesh</li>
+<li>Improved about</li>
+<li>Improved shell select</li>
+<li>Renamed the oh-my-zsh prompt , so hhs starship will find the preset</li>
+<li>Adjusted iTerm2 profile and add bat integration to README</li>
+<li>Improved docsify</li>
+<li>Updater adjustments</li>
+<li>Improved and update more docs</li>
+<li>Improved docker build and push</li>
+<li>Updated the GHA build to include API keys</li>
+<li>Updated the install script to copy rag docs only if AI is enabled</li>
+<li>Improved tests</li>
+<li>Improved homesetup prompts</li>
+<li>Improved docker builds. Preparation for arch builds</li>
+<li>Improved HomeSetup prompt</li>
+<li>Improved GitHub actions</li>
+<li>Improved gradle by adding gw install and fixing check</li>
+<li>Conditional hhs askai plugin</li>
+<li>Improved AI installation</li>
+<li>Improved bats tests</li>
+<li>Improved install script for AskAI</li>
+<li>Improved HomeSetup prompt</li>
+<li>Changed some colorls icons and adjusted locale vars</li>
+<li>Updated usage docs</li>
+<li>Updated Copyright year</li>
+<li>Updated os-info details</li>
+<li>Separated docker-build-and-push workflow</li>
+</ul>
+<h3 id="removed_2">Removed<a class="headerlink" href="#removed_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Removed old and hhs completions</li>
+<li>Removed __hhs_help. It was moved to hhs app: 'hhs help' and re-aliases help to hhs help</li>
+<li>Removed if __hhs_has 'git' and 'python' since they are, now, required tools for HHS</li>
+<li>Removed check-badge from git</li>
+<li>Removed upload asset</li>
+<li>Removed GPTs moving to private project</li>
+</ul>
+<h2 id="161-2023-12-28">1.6.1 - 2023-12-28<a class="headerlink" href="#161-2023-12-28" title="Permanent link">&para;</a></h2>
+<h3 id="added_3">Added<a class="headerlink" href="#added_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added asciicast for hhs introduction</li>
+<li>Added GitHub sponsors link</li>
+<li>Added FZF Integration</li>
+<li>Added key-bindings and adjust auto-completions.</li>
+<li>Added ColorLS Integration</li>
+<li>Added bats as submodule</li>
+<li>Added shell options new function</li>
+<li>Added configurable shell options</li>
+<li>Added hspm catalog</li>
+<li>Added trim function to bash_commons</li>
+<li>Added option to create or not a release on publish</li>
+<li>Added starship prompt as default</li>
+<li>Added hhs setup function</li>
+<li>Added docker build image action</li>
+</ul>
+<h3 id="fixed_3">Fixed<a class="headerlink" href="#fixed_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Fixed docker build for Alpine</li>
+<li>Fixed file permissions</li>
+<li>Fixed __hhs_shopt</li>
+<li>Fixed macos github install</li>
+<li>Fixed dotfiles export default paths</li>
+<li>Fixed Dockerfiles and installation</li>
+<li>Fixed Selectable os from matrix</li>
+<li>Fixed github actions. Add fetch submodules</li>
+<li>Fixed build and starship is now default</li>
+<li>Fixed __hhs_toml*, hhs shopts and hhs setup</li>
+<li>Fixed hhs funcs and defs filtering</li>
+<li>Fixed network and other utils</li>
+<li>Fixed hspm problems</li>
+<li>Fixed centos missing sqlite3 python module</li>
+<li>Fixed/improved hhs funcs, invalidate and caches</li>
+<li>Fixed/improved help and about. Move those functions to built-ins</li>
+<li>Fixed hhs funcs not using correct IFS</li>
+<li>Fixed and improve network tools</li>
+<li>Fixed completions</li>
+<li>Fixed hhs update check running every time</li>
+<li>Fixed nothing to commit by checking status porcelain</li>
+<li>Fixed synchronizing versioning.gradle</li>
+<li>Fixed docker build images job</li>
+<li>Fixed the strategy matrix for containers</li>
+</ul>
+<h3 id="updated_3">Updated<a class="headerlink" href="#updated_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Small improvements and more doc updates</li>
+<li>Small network bugfixes and some doc updates</li>
+<li>Improved git add and help docs</li>
+<li>Updated handbook</li>
+<li>Updated asciicast for hhs introduction</li>
+<li>Updated README.md with fzf docs</li>
+<li>Updated funding with github sponsor page</li>
+<li>Improved README and documentations</li>
+<li>Moved HHS_DIR to ~/.config/hhs</li>
+<li>Moved devel and other stuff into assets</li>
+<li>Moved images folders into assets</li>
+<li>Renamed folder misc to assets</li>
+<li>Customized HomeSetup pages</li>
+<li>Improved motds and shopt</li>
+<li>Replaced sort --unique by sort | uniq to match alpine compatibility</li>
+<li>Improved about to show function code when its  __hhs</li>
+<li>Updated hspm and hhs app</li>
+<li>Updated installation script to install required packages</li>
+<li>Forced python update --break-packages</li>
+<li>Improved hhs tests</li>
+<li>Normalized __hhs_errcho in all functions</li>
+<li>Initialization adjustments</li>
+<li>Starship is now default - toml file</li>
+<li>Finished terminal options</li>
+<li>Small refactorings</li>
+<li>Small bash select fixes</li>
+<li>Preparation for brew as main package manager</li>
+<li>Preparation for HomeSetup upgrade to 1.7</li>
+<li>Rename back bash_completions -&gt; bash_completion</li>
+<li>Updated some hhs docs</li>
+<li>Improved hhs invalidate</li>
+<li>Improved hhs starship plugin</li>
+<li>Moved hhs starship and setup to hhs plugins like</li>
+<li>Improved starship config and prompt</li>
+<li>Changed the starship window title</li>
+<li>Changed directory starship config</li>
+<li>Enhanced history sharing among sessions</li>
+<li>Improved inputrc even more</li>
+<li>Improved inputrc to cycle through history</li>
+<li>Renamed RESET_IFS to OLDIFS</li>
+<li>Workflow adjustments</li>
+<li>Improved the publish workflow</li>
+<li>Updated README.md</li>
+<li>Improved github actions</li>
+<li>Improved the action names</li>
+<li>Renamed version.gradle to versioning.gradle and add no-patch option when publishing</li>
+<li>Updated action adjustments</li>
+<li>Updated README.md with the tests badge</li>
+<li>AUTO updated build &amp; check badges</li>
+<li>Updated install action to commit the check badges</li>
+<li>Updated gradle wrapper to match the same version on Github actions</li>
+</ul>
+<h3 id="removed_3">Removed<a class="headerlink" href="#removed_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Removed tools that are not part of hhs</li>
+<li>Removed bats setup from build workflow</li>
+<li>Unset PROMPT_COMMAND</li>
+<li>Removed .github folder from excluded dirs</li>
+<li>Removed static badge generation and commits</li>
+</ul>
+<h2 id="151-2020-01-21">1.5.1 - 2020-01-21<a class="headerlink" href="#151-2020-01-21" title="Permanent link">&para;</a></h2>
+<h3 id="added_4">Added<a class="headerlink" href="#added_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added Adoptium (java) recipe for Linux</li>
+<li>Added Dockefiles for ubuntu and centos</li>
+<li>Added Github Actions</li>
+<li>Added HS icon to all handbook pages</li>
+<li>Added Publish Workflow</li>
+<li>Added __hhs_hist_stats new command</li>
+<li>Added <em>which</em> to Darwin hspm recipes</li>
+<li>Added applications handbook - part2</li>
+<li>Added badgen.gradle and README update</li>
+<li>Added cleanup option to save_dir</li>
+<li>Added colima recipe for Darwin</li>
+<li>Added default args for ss, sf, sd</li>
+<li>Added details about how to configure the service key</li>
+<li>Added docker recipe for linux</li>
+<li>Added env firebase cert file</li>
+<li>Added fedora to docker and to supported os</li>
+<li>Added gcc to docker agent</li>
+<li>Added gradle, fix bats tests and install.bash</li>
+<li>Added hhs clear function</li>
+<li>Added hhs clear to clear logs , backups and caches</li>
+<li>Added hhs welcome message to the containers</li>
+<li>Added included HEAD to fetch</li>
+<li>Added jenkins recipe for linux - fix - 5</li>
+<li>Added log dir if it does not yet exist</li>
+<li>Added master-unlock to .gitignore</li>
+<li>Added multiple builds</li>
+<li>Added new env about the os package manager</li>
+<li>Added nginx configurations for HomeSetup</li>
+<li>Added pull request template</li>
+<li>Added setman integration</li>
+<li>Added setman-&gt;settings</li>
+<li>Added the ci-pipelines</li>
+<li>Added the docker-agent Dockerfile</li>
+<li>Added updateMinor to the publish action</li>
+</ul>
+<h3 id="fixed_4">Fixed<a class="headerlink" href="#fixed_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Fixed .path not being exported</li>
+<li>Fixed CentOs install since yum does not have python and pip but pip2/3 python2/3</li>
+<li>Fixed Darwin installation scripts</li>
+<li>Fixed Firebase fixes (also from hspylib)</li>
+<li>Fixed Github Actions - 1</li>
+<li>Fixed Give default value for $TEMP</li>
+<li>Fixed HANDBOOK for mchoose and mselect</li>
+<li>Fixed HandBook navigation</li>
+<li>Fixed README docs</li>
+<li>Fixed README links and hhs host-name</li>
+<li>Fixed Readmes and docs</li>
+<li>Fixed Uninstall script</li>
+<li>Fixed __hhs_settings</li>
+<li>Fixed about when the command is not aliased</li>
+<li>Fixed aliases and paths</li>
+<li>Fixed and improve hhs logs</li>
+<li>Fixed bats tests</li>
+<li>Fixed branch mismatch and use new mselect on all functions</li>
+<li>Fixed default firebase config file</li>
+<li>Fixed documentation and hhs app</li>
+<li>Fixed duplicated paths and aa</li>
+<li>Fixed encrypt/decrypt python lib</li>
+<li>Fixed envs name=value separation</li>
+<li>Fixed file_path problem due to pycharm refactoring</li>
+<li>Fixed firebase app</li>
+<li>Fixed firebase setup</li>
+<li>Fixed fonts directory installation</li>
+<li>Fixed installation script</li>
+<li>Fixed git pull all not reading all selected indexes</li>
+<li>Fixed godir when there's only one match</li>
+<li>Fixed gradle publish</li>
+<li>Fixed hhs funcs</li>
+<li>Fixed hhs host-name</li>
+<li>Fixed hhs host-name -&gt; ised problems</li>
+<li>Fixed hspm - 1</li>
+<li>Fixed hspm default recipes and tcalc.py error</li>
+<li>Fixed hspm not to use __hhs_open</li>
+<li>Fixed install links</li>
+<li>Fixed install/uninstall regarding hspylib</li>
+<li>Fixed installation and tailor. Also, use tailor to get hhs logs</li>
+<li>Fixed installation process. Fix an issue that was not updating the hspylib to latest version. New prompt icon</li>
+<li>Fixed installation required tools</li>
+<li>Fixed installation script -&gt; hhs prefix - 1</li>
+<li>Fixed installation script IFS</li>
+<li>Fixed installation script to activate dotfiles</li>
+<li>Fixed installation script to display the user:group</li>
+<li>Fixed missing - , -r in tailor</li>
+<li>Fixed now hspm drop breadcrumb based on my_os_release</li>
+<li>Fixed os release info</li>
+<li>Fixed paths and some other bugs</li>
+<li>Fixed prompt icons</li>
+<li>Fixed prompts</li>
+<li>Fixed publish action</li>
+<li>Fixed publish action -&gt; install bumpver</li>
+<li>Fixed publish gradle and action</li>
+<li>Fixed punch -&gt; tcalc issue</li>
+<li>Fixed python scripts</li>
+<li>Fixed removed debug echos</li>
+<li>Fixed settings by allowing setting name to source</li>
+<li>Fixed some firebase setup problems</li>
+<li>Fixed terminal settings</li>
+<li>Fixed test pipeline stage</li>
+<li>Fixed the firebase without args</li>
+<li>Fixed the publish action message</li>
+<li>Fixed the publish action to allow select tagging and updating major</li>
+<li>Fixed the settings hhs plugin</li>
+<li>Fixed toc bullet</li>
+<li>Fixed uninstallation script</li>
+<li>Fixed various bugs: godir, firebase.py plugin and hspylib</li>
+<li>Fixed welcome message and README with the Terminal font config</li>
+</ul>
+<h3 id="updated_4">Updated<a class="headerlink" href="#updated_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Updated applications handbook.</li>
+<li>Updated Install improvements and hspm improvements due to sudo.</li>
+<li>Updated HomeSetup documents.</li>
+<li>Updated hhsrc load. Improving hhsrc load, logs and compatibility.</li>
+<li>Updated installation of python libs and scripts.</li>
+<li>Updated python script into HSPyLib project.</li>
+<li>Removed python apps docs, add vault and firebase to install/uninstall and alias fix for them.</li>
+<li>Updated replacing .aliasdef for every installation.</li>
+<li>Updated executables hspylib to clitt.</li>
+<li>Updated HS logo.</li>
+<li>Updated bash_prompts.</li>
+<li>Updated documentation and hhs app.</li>
+<li>Updated install script for docker build.</li>
+<li>Updated Dockerfiles for ubuntu, centos and fedora.</li>
+<li>Updated HomeSetup README sync. Pending hhs app handbook.</li>
+</ul>
+<h3 id="removed_4">Removed<a class="headerlink" href="#removed_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Removed firebase.properties and .last_update from being uploaded into Firebase</li>
+<li>Removed .github folder. Moved contents to docs folder</li>
+<li>Removed GREP_COLOR env set</li>
+<li>Removed Jenkins pipelines</li>
+<li>Removed TODO removed. Issue moved to GitHub issues board</li>
+<li>Removed dev stuff from docker-agent</li>
+<li>Removed git hook from installation</li>
+<li>Removed gradle.bat</li>
+<li>Removed old development images</li>
+<li>Removed python apps and plugins (files) using hspylib now</li>
+<li>Removed python apps docs, add vault and firebase to install/uninstall and alias fix for them</li>
+<li>Removed unrelated font</li>
+<li>Removed vault plugin and firebase init</li>
+</ul>
+<h2 id="141-2020-01-21">1.4.1 - 2020-01-21<a class="headerlink" href="#141-2020-01-21" title="Permanent link">&para;</a></h2>
+<h3 id="added_5">Added<a class="headerlink" href="#added_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added New vim recipe.</li>
+<li>Added New function __hhs_minput based on __hhs_mselect.</li>
+<li>Added New compatibility with <strong>semver</strong> from the next release.</li>
+<li>Added New CHANGELOG.md file and handbook.md scratch.</li>
+<li>Added New __hhs_ascof function.</li>
+<li>Added New commit_msg git hook.</li>
+<li>Added Deployer tool scratch.</li>
+<li>Added Linux compatibility.</li>
+<li>Added hhs python library.</li>
+<li>Added a user handbook.</li>
+</ul>
+<h3 id="fixed_5">Fixed<a class="headerlink" href="#fixed_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Fixed __hhs_git_pull_all from failing when the repository was not being tracked on remote.</li>
+<li>Fixed HHS-App updater check when local version was greater than the repository version.</li>
+<li>Fixed for ip-utils.bash and renaming it to check-ip.bash.</li>
+<li>Fixed many IFS problems.</li>
+<li>Fixed python scripts for versions 2.7 and 3.0.</li>
+<li>Fixed install.sh and uninstall.sh scripts.</li>
+<li>Fixed a bug where the outfile was not being picked correctly (__hhs_mselect, __hhs_mchoose and __hhs_minput).</li>
+<li>Fixed installation when git clone was not called before the dotfiles search and font copy.</li>
+<li>Fixed prepared_commit_message git hook</li>
+<li>Fixed __hhs_docker_kill_all stopping at first error.</li>
+<li>Fixed all non-Linux compatible scripts, functions and aliases.</li>
+<li>Fixes various bugfixes and improvements.</li>
+</ul>
+<h3 id="updated_5">Updated<a class="headerlink" href="#updated_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Updated README.md to match latest changes of HomeSetup.</li>
+<li>Updated Improved installation and compatibility.</li>
+<li>Updated Hspm plugin now accepts multiple installs/uninstalls.</li>
+<li>Updated Improved HHS-App. Separating local functions into a separate folder and 'plug-able' files.</li>
+<li>Updated Moved the script git-pull-all.bash into an __hhs<function>.</li>
+<li>Updated Improved __hhs_mselect, __hhs_mchoose and __hhs_minput when reading arrays. Removing SC2206 disable.</li>
+<li>Updated Moved hostname-change to a HHS-App function.</li>
+<li>Updated Moved the file ~/.path into ~/.hhs .</li>
+<li>Updated HHS-App hspm plugin now tries to install using brew if recipe was not found.</li>
+<li>Updated Improved HHS-App firebase plugin configuration.</li>
+<li>Updated Enforcing changelog words to commit messages.</li>
+<li>Updated Prompt style PS1 from $&gt; to $</li>
+<li>Updated auto-completions: reformatting with 2 spaces.</li>
+<li>Updated improved alias documentations. Added a tag @alias to be found later by the deployer tool.</li>
+<li>Updated Improved firebase plugin: it's now python instead of bash.</li>
+</ul>
+<h2 id="131-2020-01-21">1.3.1 - 2020-01-21<a class="headerlink" href="#131-2020-01-21" title="Permanent link">&para;</a></h2>
+<h3 id="added_6">Added<a class="headerlink" href="#added_6" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Added New auto-complete (menu_complete) to <shift-tab> strokes.</li>
+<li>Added Brew bash/zsh as options for __hhs_shell_select.</li>
+<li>Added New function __hhs_mchoose based on __hhs_mselect.</li>
+<li>Added New function __hhs_change_dir to replace the old cd command.</li>
+<li>Added New HHS-App updater plug-in.</li>
+<li>Added New PCF-Completion.</li>
+<li>Added New docker lazy init function.</li>
+<li>Added New vt100 code cheat sheet.</li>
+</ul>
+<h3 id="fixed_6">Fixed<a class="headerlink" href="#fixed_6" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Fixed all references of `ised' without -E not finding anything.</li>
+<li>Fixed __hhs_punch: Various bugfixes.</li>
+<li>Fixed __hhs_search_string: Fix ss with spaces inside search string when hl the string.</li>
+<li>Fixed Install/Uninstall script were not working properly.</li>
+<li>Fixed __hhs_git_branch_select: Fixed the branch change when remote branch was selected.</li>
+<li>Fixed __hhs_mselect: bugfixes and upgrade.</li>
+<li>Fixed Important fixes to __hhs_alias, __hhs_save, __hhs_aliases, __hhs_paths and __hhs_command regarding the result arrays.</li>
+</ul>
+<h3 id="updated_6">Updated<a class="headerlink" href="#updated_6" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Updated Improved __hhs_punch with new balance field and visual.</li>
+<li>Updated Improved HHS-App: Added local and hhs functions.</li>
+<li>Updated Improved function and app helps.</li>
+<li>Updated the HHS welcome message to be a MOTD file.</li>
+<li>Updated Extending __hhs_sysinfo and moving IP aliases into a separate file.</li>
+<li>Updated Rename all hspm recipes to *.recipe.</li>
+<li>Updated Improved taylor to match some patterns correctly and color adjustments.</li>
+</ul>
+<h3 id="removed_5">Removed<a class="headerlink" href="#removed_5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Removed <strong>HHS_MAXDEPTH</strong> from all functions and the env var.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.sections", "navigation.instant", "navigation.top", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
