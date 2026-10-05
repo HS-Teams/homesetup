@@ -127,7 +127,6 @@ echo -e "HomeSetup is starting: $(date)\n" >"${HHS_LOG_FILE}"
 
 # Source the bash common functions. Logs are available below here.
 source "${HHS_HOME}/dotfiles/bash/bash_commons.bash"
-HHS_INITIALIZING=1
 
 # -----------------------------------------------------------------------------------
 # Initialization setup (homesetup.toml).
@@ -262,6 +261,18 @@ if [[ ${HHS_LOAD_SHELL_OPTIONS} -eq 1 ]]; then
   done <"${HHS_SHOPTS_FILE}"
   __hhs_log "INFO" "Shell options are set !"
 fi
+
+# Copy colorls config files if they are missing
+__hhs_has 'colorls' && gem which colorls &>/dev/null && {
+  colorls_dir="$(dirname "$(gem which colorls)")/yaml"
+  if ! compgen -G "${colorls_dir}"/*.yaml &>/dev/null; then
+    __hhs_log "DEBUG" "Copying default ColorLs config files into place!"
+    if ! \cp "${HHS_HOME}/assets/colorls/hhs-preset/"*.yaml \
+      "${colorls_dir}" &>/dev/null; then
+      __hhs_log "ERROR" "Unable to copy default colorls config file into place!"
+    fi
+  fi
+}
 
 # -----------------------------------------------------------------------------------
 # Load dotfiles
@@ -530,7 +541,7 @@ printf -v HHS_INITIALIZATION_DURATION_MESSAGE \
 __hhs_log "INFO" "${HHS_INITIALIZATION_DURATION_MESSAGE}"
 echo '' >>"${HHS_LOG_FILE}"
 
-unset HHS_ALIAS_COMMAND_CATALOG HHS_ALIAS_COMMAND_CATALOG_INITIALIZED HHS_INITIALIZING
+unset HHS_ALIAS_COMMAND_CATALOG HHS_ALIAS_COMMAND_CATALOG_INITIALIZED
 unset HHS_INITIALIZATION_CURRENT_LOG_TIMESTAMP HHS_INITIALIZATION_FINISHED_MILLIS
 unset HHS_INITIALIZATION_LOG_EPOCH_SECOND HHS_INITIALIZATION_LOG_PREFIX
 unset HHS_INITIALIZATION_REMAINDER_MILLIS HHS_INITIALIZATION_STARTED_MILLIS

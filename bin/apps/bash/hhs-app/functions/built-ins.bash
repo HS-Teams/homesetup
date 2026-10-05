@@ -260,10 +260,10 @@ function reset() {
 
   __hhs_has 'colorls' && gem which colorls &>/dev/null && {
     colorls_dir="$(dirname "$(gem which colorls)")/yaml"
-    if compgen -G "${colorls_dir}/*.yaml" &>/dev/null; then
+    if compgen -G "${colorls_dir}"/*.yaml &>/dev/null; then
       all_files+=("${colorls_dir}/*.yaml")
     else
-      all_files+=("${HOME}/.config/colorls/*.yaml")
+      all_files+=("${HOME}/.config/colorls/"*.yaml)
     fi
   }
   __hhs_has 'starship' && all_files+=("${STARSHIP_CONFIG}")
