@@ -1,0 +1,33 @@
+." Auto-generated man page. Do not edit manually.
+.TH "__hhs_change_dir" "1" "2025-11-20" "HomeSetup" "User Commands"
+.SH NAME
+__hhs_change_dir - Change the current working directory to a specific Folder.
+.SH SYNOPSIS
+.nf
+usage: __hhs_change_dir [-L|-P] [dirname]
+.fi
+.SH DESCRIPTION
+Change the current working directory to a specific Folder.
+.SH ARGUMENTS
+.TP
+$1 (Opt)
+[-L|-P] whether to follow (-L) or not (-P) symbolic links.
+.TP
+$2 (Opt)
+The directory to change. If not provided, default DIR is the value of the HOME variable.
+.SH DETAILS
+.nf
+
+    Options:
+      -L    : Follow symbolic links.
+      -P    : Don't follow symbolic links.
+
+  Notes:
+    - dirname: The directory to change. If not provided, default is the user's home directory
+.fi
+.SH VERSION
+__hhs_change_dir (HomeSetup) 1.9.11
+.SH AUTHOR
+HomeSetup Team
+.SH LICENSE
+MIT <https://opensource.org/licenses/MIT>

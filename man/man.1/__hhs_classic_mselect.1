@@ -1,0 +1,40 @@
+." Auto-generated man page. Do not edit manually.
+.TH "__hhs_classic_mselect" "1" "2025-11-20" "HomeSetup" "User Commands"
+.SH NAME
+__hhs_classic_mselect - Select an option from a list using a navigable menu.
+.SH SYNOPSIS
+.nf
+usage: __hhs_classic_mselect <output_file> <title> <items...>
+.fi
+.SH DESCRIPTION
+Select an option from a list using a navigable menu.
+.SH ARGUMENTS
+.TP
+$1 (Req)
+The response file.
+.TP
+$3 (Req)
+The array of items.
+.SH DETAILS
+.nf
+
+    Arguments:
+      output_file : The output file where the result will be stored.
+            title : The text to be displayed before rendering the items.
+            items : The items to be displayed for selecting.
+
+    Examples:
+      Select a number from 1 to 100:
+        => __hhs_classic_mselect /tmp/out.txt {1..100} && cat /tmp/out.txt
+
+  Notes:
+    - If only one option is available, mselect will select it and return.
+    - A temporary file is suggested to used with this command: $ mktemp.
+    - The outfile must not exist or it be an empty file.
+.fi
+.SH VERSION
+__hhs_classic_mselect (HomeSetup) 1.9.11
+.SH AUTHOR
+HomeSetup Team
+.SH LICENSE
+MIT <https://opensource.org/licenses/MIT>

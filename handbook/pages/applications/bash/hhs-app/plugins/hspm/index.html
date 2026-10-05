@@ -1,0 +1,2169 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://HS-Teams.github.io/homesetup/handbook/pages/applications/bash/hhs-app/plugins/hspm/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../../../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Hspm - HomeSetup</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../../../../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../../../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#homesetup-developer-handbook" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../../../../../.." title="HomeSetup" class="md-header__button md-logo" aria-label="HomeSetup" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            HomeSetup
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Hspm
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/HS-Teams/homesetup" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    HS-Teams/homesetup
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../../../../../.." title="HomeSetup" class="md-nav__button md-logo" aria-label="HomeSetup" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64z"/></svg>
+
+    </a>
+    HomeSetup
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/HS-Teams/homesetup" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    HS-Teams/homesetup
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Handbook
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Handbook
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../handbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pages
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_1" id="__nav_2_2_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Applications
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Applications
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    hhs-app
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../check-ip/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check-ip
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../fetch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    fetch
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_2" id="__nav_2_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Functions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_2_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Functions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_2_2" id="__nav_2_2_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_2_2_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Dev Tools
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/dev-tools/docker-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/dev-tools/git-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Git Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/dev-tools/gradle-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gradle Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2_2_3" id="__nav_2_2_2_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Standard Tools
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_2_2_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Standard Tools
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/aliases-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aliases Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/built-ins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Built-ins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/clitt/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    clitt
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/command-tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/directory-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Directory Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/file-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/network-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Network Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/paths-tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Paths Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/profile-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Profile Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/search-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/security-related/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Related
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/shell-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shell Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/system-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    System Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/taylor-tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Taylor Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/text-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Text Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/toml-utilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TOML Utilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../functions/std-tools/toolchecks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool Checks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Misc
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Misc
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../../CHANGELOG/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CHANGELOG
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../../COLOR_LS_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Color LS Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../../FIREBASE_SETUP/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Firebase Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../../SHOWCASE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Showcase
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../../../../USAGE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hspm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HSPM
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="HSPM">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#help" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "help"
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="&#34;help&#34;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Returns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "list"
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="&#34;list&#34;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#returns_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Returns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "install"
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="&#34;install&#34;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#returns_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Returns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#uninstall" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "uninstall"
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="&#34;uninstall&#34;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#returns_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Returns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recover" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "recover"
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="&#34;recover&#34;">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#purpose_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Purpose
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#returns_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Returns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#parameters_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<p><img src="https://iili.io/HvtxC1S.png" width="64" height="64" align="right" /></p>
+<h1 id="homesetup-developer-handbook">HomeSetup Developer Handbook<a class="headerlink" href="#homesetup-developer-handbook" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>Applications handbook</p>
+</blockquote>
+<h2 id="table-of-contents">Table of contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<!-- toc -->
+
+<ul>
+<li><a href="../../../../">Bash Applications</a></li>
+<li><a href="../../../check-ip/#check-ip">Check-IP</a></li>
+<li><a href="../../../fetch/#fetch">Fetch</a></li>
+<li><a href="../../#homesetup-application">HHS-App</a><ul>
+<li><a href="../../#functions">Functions</a></li>
+<li><a href="../../functions/built-ins/">Built-Ins</a></li>
+<li><a href="../../functions/misc/">Misc</a></li>
+<li><a href="../../functions/tests/">Tests</a></li>
+<li><a href="../../functions/web/">Web</a></li>
+<li><a href="../../#plug-ins">Plugins</a></li>
+<li><a href="../ask/">Ask</a></li>
+<li><a href="../firebase/">Firebase</a></li>
+<li><a href="./">HSPM</a></li>
+<li><a href="../services/">Services</a></li>
+<li><a href="../settings/">Settings</a></li>
+<li><a href="../setup/">Setup</a></li>
+<li><a href="../starship/">Starship</a></li>
+<li><a href="../taius/">Taius</a></li>
+<li><a href="../ui/">UI</a></li>
+<li><a href="../updater/">Updater</a></li>
+</ul>
+</li>
+</ul>
+<!-- tocstop -->
+
+<h2 id="hspm">HSPM<a class="headerlink" href="#hspm" title="Permanent link">&para;</a></h2>
+<h3 id="help">"help"<a class="headerlink" href="#help" title="Permanent link">&para;</a></h3>
+<h4 id="purpose"><strong>Purpose</strong><a class="headerlink" href="#purpose" title="Permanent link">&para;</a></h4>
+<p>Display HHS-HSPM help message.</p>
+<h4 id="returns"><strong>Returns</strong><a class="headerlink" href="#returns" title="Permanent link">&para;</a></h4>
+<p><strong>0</strong> if the command was successfully executed; <strong>non-zero</strong> otherwise.</p>
+<h4 id="parameters"><strong>Parameters</strong><a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h4>
+<p>N/A</p>
+<h4 id="examples"><strong>Examples</strong><a class="headerlink" href="#examples" title="Permanent link">&para;</a></h4>
+<p><code>__hhs hspm help</code></p>
+<p><strong>Output</strong></p>
+<div class="highlight"><pre><span></span><code>usage:<span class="w"> </span>hspm<span class="w"> </span><span class="o">[</span>option<span class="o">]</span><span class="w"> </span><span class="o">{</span>install,uninstall,list,recover<span class="o">}</span>
+
+<span class="w"> </span>_<span class="w">   </span>_<span class="w"> </span>____<span class="w">  </span>____<span class="w">  </span>__<span class="w">  </span>__
+<span class="p">|</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>/<span class="w"> </span>___<span class="o">||</span><span class="w">  </span>_<span class="w"> </span><span class="se">\|</span><span class="w">  </span><span class="se">\/</span><span class="w">  </span><span class="p">|</span>
+<span class="p">|</span><span class="w"> </span><span class="p">|</span>_<span class="p">|</span><span class="w"> </span><span class="se">\_</span>__<span class="w"> </span><span class="se">\|</span><span class="w"> </span><span class="p">|</span>_<span class="o">)</span><span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="p">|</span><span class="se">\/</span><span class="p">|</span><span class="w"> </span><span class="p">|</span>
+<span class="p">|</span><span class="w">  </span>_<span class="w">  </span><span class="p">|</span>___<span class="o">)</span><span class="w"> </span><span class="p">|</span><span class="w">  </span>__/<span class="p">|</span><span class="w"> </span><span class="p">|</span><span class="w">  </span><span class="p">|</span><span class="w"> </span><span class="p">|</span>
+<span class="p">|</span>_<span class="p">|</span><span class="w"> </span><span class="p">|</span>_<span class="p">|</span>____/<span class="p">|</span>_<span class="p">|</span><span class="w">   </span><span class="p">|</span>_<span class="p">|</span><span class="w">  </span><span class="p">|</span>_<span class="p">|</span>
+
+<span class="w">  </span>HomeSetup<span class="w"> </span>package<span class="w"> </span>manager
+
+<span class="w">    </span>options:
+<span class="w">      </span>-v<span class="w">  </span><span class="p">|</span><span class="w">   </span>--version<span class="w">     </span>:<span class="w"> </span>Display<span class="w"> </span>current<span class="w"> </span>program<span class="w"> </span>version.
+<span class="w">      </span>-h<span class="w">  </span><span class="p">|</span><span class="w">      </span>--help<span class="w">     </span>:<span class="w"> </span>Display<span class="w"> </span>this<span class="w"> </span><span class="nb">help</span><span class="w"> </span>message.
+
+<span class="w">    </span>arguments:
+<span class="w">      </span>list<span class="w">                  </span>:<span class="w"> </span>List<span class="w"> </span>all<span class="w"> </span>available,<span class="w"> </span>OS<span class="w"> </span>based,<span class="w"> </span>installation<span class="w"> </span>recipes.
+<span class="w">      </span>install<span class="w">   </span>&lt;package&gt;<span class="w">   </span>:<span class="w"> </span>Install<span class="w"> </span>packages<span class="w"> </span>using<span class="w"> </span>a<span class="w"> </span>matching<span class="w"> </span>installation<span class="w"> </span>recipe.
+<span class="w">      </span>uninstall<span class="w"> </span>&lt;package&gt;<span class="w">   </span>:<span class="w"> </span>Uninstall<span class="w"> </span>the<span class="w"> </span>package<span class="w"> </span>using<span class="w"> </span>a<span class="w"> </span>matching<span class="w"> </span>uninstallation<span class="w"> </span>recipe.
+<span class="w">      </span>recover<span class="w"> </span><span class="o">[</span>-i,-t,-e<span class="o">]</span><span class="w">    </span>:<span class="w"> </span>Install<span class="w"> </span>or<span class="w"> </span>list<span class="w"> </span>all<span class="w"> </span>packages<span class="w"> </span>previously<span class="w"> </span>installed<span class="w"> </span>by<span class="w"> </span>hspm.<span class="w"> </span>If<span class="w"> </span>-i<span class="w"> </span>is<span class="w"> </span>provided,<span class="w"> </span><span class="k">then</span><span class="w"> </span>hspm
+<span class="w">                              </span>will<span class="w"> </span>attempt<span class="w"> </span>to<span class="w"> </span>install<span class="w"> </span>all<span class="w"> </span>packages,<span class="w"> </span>otherwise<span class="w"> </span>the<span class="w"> </span>list<span class="w"> </span>is<span class="w"> </span>displayed.<span class="w"> </span>If<span class="w"> </span>-t<span class="w"> </span>is<span class="w"> </span>provided
+<span class="w">                              </span>hspm<span class="w"> </span>will<span class="w"> </span>check<span class="w"> </span><span class="si">${</span><span class="nv">HHS_DEV_TOOLS</span><span class="si">}</span><span class="w"> </span>instead<span class="w"> </span>of<span class="w"> </span>previously<span class="w"> </span>installed<span class="w"> </span>packages.<span class="w"> </span>If<span class="w"> </span>-e<span class="w"> </span>is
+<span class="w">                              </span>provided,<span class="w"> </span><span class="k">then</span><span class="w"> </span>the<span class="w"> </span>default<span class="w"> </span>editor<span class="w"> </span>will<span class="w"> </span>open<span class="w"> </span>the<span class="w"> </span>recovery<span class="w"> </span>file.
+</code></pre></div>
+<hr />
+<h3 id="list">"list"<a class="headerlink" href="#list" title="Permanent link">&para;</a></h3>
+<h4 id="purpose_1"><strong>Purpose</strong><a class="headerlink" href="#purpose_1" title="Permanent link">&para;</a></h4>
+<p>List all available, OS based, installation recipes.</p>
+<h4 id="returns_1"><strong>Returns</strong><a class="headerlink" href="#returns_1" title="Permanent link">&para;</a></h4>
+<p><strong>0</strong> if the command was successfully executed; <strong>non-zero</strong> otherwise.</p>
+<h4 id="parameters_1"><strong>Parameters</strong><a class="headerlink" href="#parameters_1" title="Permanent link">&para;</a></h4>
+<ul>
+<li>N/A</li>
+</ul>
+<h4 id="examples_1"><strong>Examples</strong><a class="headerlink" href="#examples_1" title="Permanent link">&para;</a></h4>
+<p><code>__hhs hspm execute list</code></p>
+<p><strong>Output</strong></p>
+<div class="highlight"><pre><span></span><code>Listing<span class="w"> </span>all<span class="w"> </span>available<span class="w"> </span>hspm<span class="w"> </span><span class="s1">'Darwin'</span><span class="w"> </span>packages<span class="w"> </span>...
+
+<span class="w">  </span><span class="m">0</span><span class="w"> </span>-<span class="w"> </span>ant<span class="w"> </span>.................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Our<span class="w"> </span>mission<span class="w"> </span>is<span class="w"> </span>to<span class="w"> </span>drive<span class="w"> </span>processes<span class="w"> </span>described<span class="w"> </span><span class="k">in</span><span class="w"> </span>build<span class="w"> </span>files<span class="w"> </span>as<span class="w"> </span>targets<span class="w"> </span>and<span class="w"> </span>extension<span class="w"> </span>points<span class="w"> </span>dependent<span class="w"> </span>upon<span class="w"> </span>each<span class="w"> </span>other.
+<span class="w">  </span><span class="m">1</span><span class="w"> </span>-<span class="w"> </span>bats<span class="w"> </span>................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Bats<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>TAP-compliant<span class="w"> </span>testing<span class="w"> </span>framework<span class="w"> </span><span class="k">for</span><span class="w"> </span>Bash.
+<span class="w">  </span><span class="m">2</span><span class="w"> </span>+<span class="w"> </span>colima<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Container<span class="w"> </span>runtimes<span class="w"> </span>on<span class="w"> </span>macOS<span class="w"> </span><span class="o">(</span>and<span class="w"> </span>Linux<span class="o">)</span><span class="w"> </span>with<span class="w"> </span>minimal<span class="w"> </span>setup.
+<span class="w">  </span><span class="m">3</span><span class="w"> </span>-<span class="w"> </span>dialog<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Dialog<span class="w"> </span>allows<span class="w"> </span>creating<span class="w"> </span>text-based<span class="w"> </span>color<span class="w"> </span>dialog<span class="w"> </span>boxes<span class="w"> </span>from<span class="w"> </span>any<span class="w"> </span>shell<span class="w"> </span>script<span class="w"> </span>language.
+<span class="w">  </span><span class="m">4</span><span class="w"> </span>-<span class="w"> </span>direnv<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Shell<span class="w"> </span>extension<span class="w"> </span>that<span class="w"> </span>enabled<span class="w"> </span>loading<span class="w"> </span>and<span class="w"> </span>unloading<span class="w"> </span>of<span class="w"> </span>environment<span class="w"> </span>variables<span class="w"> </span>depending<span class="w"> </span>on<span class="w"> </span>the<span class="w"> </span>current<span class="w"> </span>directory.
+<span class="w">  </span><span class="m">5</span><span class="w"> </span>-<span class="w"> </span>docker<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Docker<span class="w"> </span>makes<span class="w"> </span>container<span class="w"> </span>capabilities<span class="w"> </span>approachable<span class="w"> </span>and<span class="w"> </span>easy<span class="w"> </span>to<span class="w"> </span>use.
+<span class="w">  </span><span class="m">6</span><span class="w"> </span>-<span class="w"> </span>doxygen<span class="w"> </span>.............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Generate<span class="w"> </span>documentation<span class="w"> </span>from<span class="w"> </span><span class="nb">source</span><span class="w"> </span>code.
+<span class="w">  </span><span class="m">7</span><span class="w"> </span>-<span class="w"> </span>eslint<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Linter<span class="w"> </span>tool<span class="w"> </span><span class="k">for</span><span class="w"> </span>identifying<span class="w"> </span>and<span class="w"> </span>reporting<span class="w"> </span>on<span class="w"> </span>patterns<span class="w"> </span><span class="k">in</span><span class="w"> </span>JavaScript.
+<span class="w">  </span><span class="m">8</span><span class="w"> </span>-<span class="w"> </span>figlet<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>FIGlet<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>program<span class="w"> </span><span class="k">for</span><span class="w"> </span>making<span class="w"> </span>large<span class="w"> </span>letters<span class="w"> </span>out<span class="w"> </span>of<span class="w"> </span>ordinary<span class="w"> </span>text.
+<span class="w">  </span><span class="m">9</span><span class="w"> </span>-<span class="w"> </span>go<span class="w"> </span>..................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Go<span class="w"> </span>is<span class="w"> </span>an<span class="w"> </span>open<span class="w"> </span><span class="nb">source</span><span class="w"> </span>programming<span class="w"> </span>language<span class="w"> </span>that<span class="w"> </span>makes<span class="w"> </span>it<span class="w"> </span>easy<span class="w"> </span>to<span class="w"> </span>build<span class="w"> </span>simple,<span class="w"> </span>reliable,<span class="w"> </span>and<span class="w"> </span>efficient<span class="w"> </span>software.
+<span class="w"> </span><span class="m">10</span><span class="w"> </span>-<span class="w"> </span>gpg<span class="w"> </span>.................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Compute<span class="w"> </span>SHA<span class="w"> </span>message<span class="w"> </span>digests.
+<span class="w"> </span><span class="m">11</span><span class="w"> </span>-<span class="w"> </span>gradle<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Gradle<span class="w"> </span>helps<span class="w"> </span>teams<span class="w"> </span>build,<span class="w"> </span>automate<span class="w"> </span>and<span class="w"> </span>deliver<span class="w"> </span>better<span class="w"> </span>software,<span class="w"> </span>faster.
+<span class="w"> </span><span class="m">12</span><span class="w"> </span>-<span class="w"> </span>groovy<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>A<span class="w"> </span>multi-faceted<span class="w"> </span>language<span class="w"> </span><span class="k">for</span><span class="w"> </span>the<span class="w"> </span>Java<span class="w"> </span>platform.
+<span class="w"> </span><span class="m">13</span><span class="w"> </span>-<span class="w"> </span>htop<span class="w"> </span>................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>An<span class="w"> </span>interactive<span class="w"> </span>process<span class="w"> </span>viewer<span class="w"> </span><span class="k">for</span><span class="w"> </span>Unix.
+<span class="w"> </span><span class="m">14</span><span class="w"> </span>-<span class="w"> </span>jenkins<span class="w"> </span>.............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>An<span class="w"> </span>open<span class="w"> </span><span class="nb">source</span><span class="w"> </span>automation<span class="w"> </span>server<span class="w"> </span>which<span class="w"> </span>enables<span class="w"> </span>developers<span class="w"> </span>to<span class="w"> </span>reliably<span class="w"> </span>build,<span class="w"> </span>test,<span class="w"> </span>and<span class="w"> </span>deploy<span class="w"> </span>their<span class="w"> </span>software.
+<span class="w"> </span><span class="m">15</span><span class="w"> </span>+<span class="w"> </span>jenv<span class="w"> </span>................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Is<span class="w"> </span>a<span class="w"> </span><span class="nb">command</span><span class="w"> </span>line<span class="w"> </span>tool<span class="w"> </span>to<span class="w"> </span><span class="nb">help</span><span class="w"> </span>you<span class="w"> </span>forget<span class="w"> </span>how<span class="w"> </span>to<span class="w"> </span><span class="nb">set</span><span class="w"> </span>the<span class="w"> </span>JAVA_HOME<span class="w"> </span>environment<span class="w"> </span>variable.
+<span class="w"> </span><span class="m">16</span><span class="w"> </span>-<span class="w"> </span>jq<span class="w"> </span>..................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Jq<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>lightweight<span class="w"> </span>and<span class="w"> </span>flexible<span class="w"> </span>command-line<span class="w"> </span>JSON<span class="w"> </span>processor.
+<span class="w"> </span><span class="m">17</span><span class="w"> </span>-<span class="w"> </span>mvn<span class="w"> </span>.................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Maven<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>software<span class="w"> </span>project<span class="w"> </span>management<span class="w"> </span>and<span class="w"> </span>comprehension<span class="w"> </span>tool.
+<span class="w"> </span><span class="m">18</span><span class="w"> </span>+<span class="w"> </span>node<span class="w"> </span>................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Node.js®<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>JavaScript<span class="w"> </span>runtime<span class="w"> </span>built<span class="w"> </span>on<span class="w"> </span>Chromes<span class="w"> </span>V8<span class="w"> </span>JavaScript<span class="w"> </span>engine.
+<span class="w"> </span><span class="m">19</span><span class="w"> </span>+<span class="w"> </span>nvm<span class="w"> </span>.................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Simple<span class="w"> </span>bash<span class="w"> </span>script<span class="w"> </span>to<span class="w"> </span>manage<span class="w"> </span>multiple<span class="w"> </span>active<span class="w"> </span>node.js<span class="w"> </span>versions.
+<span class="w"> </span><span class="m">20</span><span class="w"> </span>-<span class="w"> </span>pbcopy<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Allows<span class="w"> </span>copying<span class="w"> </span>the<span class="w"> </span>output<span class="w"> </span>of<span class="w"> </span>a<span class="w"> </span><span class="nb">command</span><span class="w"> </span>right<span class="w"> </span>into<span class="w"> </span>your<span class="w"> </span>clipboard.
+<span class="w"> </span><span class="m">21</span><span class="w"> </span>-<span class="w"> </span>pcregrep<span class="w"> </span>............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Searches<span class="w"> </span>files<span class="w"> </span><span class="k">for</span><span class="w"> </span>character<span class="w"> </span>patterns,<span class="w"> </span>but<span class="w"> </span>it<span class="w"> </span>uses<span class="w"> </span>the<span class="w"> </span>PCRE<span class="w"> </span>regular<span class="w"> </span>expression<span class="w"> </span>library.
+<span class="w"> </span><span class="m">22</span><span class="w"> </span>-<span class="w"> </span>perl<span class="w"> </span>................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Perl<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>highly<span class="w"> </span>capable,<span class="w"> </span>feature-rich<span class="w"> </span>programming<span class="w"> </span>language<span class="w"> </span>with<span class="w"> </span>over<span class="w"> </span><span class="m">30</span><span class="w"> </span>years<span class="w"> </span>of<span class="w"> </span>development.
+<span class="w"> </span><span class="m">23</span><span class="w"> </span>-<span class="w"> </span>pylint<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Pylint<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>static<span class="w"> </span>code<span class="w"> </span>analyser<span class="w"> </span><span class="k">for</span><span class="w"> </span>Python<span class="w"> </span><span class="m">2</span><span class="w"> </span>or<span class="w"> </span><span class="m">3</span>.
+<span class="w"> </span><span class="m">24</span><span class="w"> </span>-<span class="w"> </span>python<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Python<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>programming<span class="w"> </span>language<span class="w"> </span>that<span class="w"> </span>lets<span class="w"> </span>you<span class="w"> </span>work<span class="w"> </span>quickly<span class="w"> </span>and<span class="w"> </span>integrate<span class="w"> </span>systems<span class="w"> </span>more<span class="w"> </span>effectively.
+<span class="w"> </span><span class="m">25</span><span class="w"> </span>+<span class="w"> </span>qt<span class="w"> </span>..................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Qt<span class="w"> </span><span class="p">|</span><span class="w"> </span>Cross-platform<span class="w"> </span>software<span class="w"> </span>development<span class="w"> </span><span class="k">for</span><span class="w"> </span>embedded<span class="w"> </span><span class="p">&amp;</span><span class="w"> </span>desktop.
+<span class="w"> </span><span class="m">26</span><span class="w"> </span>+<span class="w"> </span>rvm<span class="w"> </span>.................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Ruby<span class="w"> </span>environment<span class="w"> </span><span class="o">(</span>Version<span class="o">)</span><span class="w"> </span>Manager<span class="w"> </span><span class="o">(</span>RVM<span class="o">)</span>.
+<span class="w"> </span><span class="m">27</span><span class="w"> </span>-<span class="w"> </span>shellcheck<span class="w"> </span>..........<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Is<span class="w"> </span>an<span class="w"> </span>open<span class="w"> </span><span class="nb">source</span><span class="w"> </span>static<span class="w"> </span>analysis<span class="w"> </span>tool<span class="w"> </span>that<span class="w"> </span>automatically<span class="w"> </span>finds<span class="w"> </span>bugs<span class="w"> </span><span class="k">in</span><span class="w"> </span>your<span class="w"> </span>shell<span class="w"> </span>scripts.
+<span class="w"> </span><span class="m">28</span><span class="w"> </span>-<span class="w"> </span>shfmt<span class="w"> </span>...............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Auto-formatter<span class="w"> </span><span class="k">for</span><span class="w"> </span>shellscript<span class="w"> </span><span class="nb">source</span><span class="w"> </span>code.
+<span class="w"> </span><span class="m">29</span><span class="w"> </span>-<span class="w"> </span>sqlite3<span class="w"> </span>.............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>SQLite<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>C-language<span class="w"> </span>library<span class="w"> </span>that<span class="w"> </span>implements<span class="w"> </span>a<span class="w"> </span>small,<span class="w"> </span>fast,<span class="w"> </span>self-contained,<span class="w"> </span>high-reliability,<span class="w"> </span>full-featured,<span class="w"> </span>SQL<span class="w"> </span>database<span class="w"> </span>engine.
+<span class="w"> </span><span class="m">30</span><span class="w"> </span>-<span class="w"> </span>svn<span class="w"> </span>.................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Subversion<span class="w"> </span>is<span class="w"> </span>an<span class="w"> </span>open<span class="w"> </span><span class="nb">source</span><span class="w"> </span>version<span class="w"> </span>control<span class="w"> </span>system.
+<span class="w"> </span><span class="m">31</span><span class="w"> </span>-<span class="w"> </span>telnet<span class="w"> </span>..............<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Provide<span class="w"> </span>a<span class="w"> </span>bidirectional<span class="w"> </span>interactive<span class="w"> </span>text-oriented<span class="w"> </span>communication<span class="w"> </span>facility<span class="w"> </span>using<span class="w"> </span>a<span class="w"> </span>virtual<span class="w"> </span>terminal.
+<span class="w"> </span><span class="m">32</span><span class="w"> </span>-<span class="w"> </span>tree<span class="w"> </span>................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Tree<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>recursive<span class="w"> </span>directory<span class="w"> </span>listing<span class="w"> </span>program<span class="w"> </span>that<span class="w"> </span>produces<span class="w"> </span>a<span class="w"> </span>depth-indented<span class="w"> </span>listing<span class="w"> </span>of<span class="w"> </span>files.
+<span class="w"> </span><span class="m">33</span><span class="w"> </span>-<span class="w"> </span>vim<span class="w"> </span>.................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Vim<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span>highly<span class="w"> </span>configurable<span class="w"> </span>text<span class="w"> </span>editor<span class="w"> </span><span class="k">for</span><span class="w"> </span>efficiently<span class="w"> </span>creating<span class="w"> </span>and<span class="w"> </span>changing<span class="w"> </span>any<span class="w"> </span>kind<span class="w"> </span>of<span class="w"> </span>text.
+<span class="w"> </span><span class="m">34</span><span class="w"> </span>+<span class="w"> </span>vue<span class="w"> </span>.................<span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span>Vue<span class="w"> </span>is<span class="w"> </span>an<span class="w"> </span>approachable,<span class="w"> </span>performant<span class="w"> </span>and<span class="w"> </span>versatile<span class="w"> </span>framework<span class="w"> </span><span class="k">for</span><span class="w"> </span>building<span class="w"> </span>web<span class="w"> </span>user<span class="w"> </span>interfaces.
+
+Found<span class="w"> </span><span class="o">(</span><span class="m">9</span><span class="o">)</span><span class="w"> </span>custom<span class="w"> </span>recipes.
+Packages<span class="w"> </span>enlisted<span class="w"> </span>with<span class="w"> </span><span class="s1">'+'</span><span class="w"> </span>have<span class="w"> </span>a<span class="w"> </span>custom<span class="w"> </span>installation<span class="w"> </span>recipe
+</code></pre></div>
+<hr />
+<h3 id="install">"install"<a class="headerlink" href="#install" title="Permanent link">&para;</a></h3>
+<h4 id="purpose_2"><strong>Purpose</strong><a class="headerlink" href="#purpose_2" title="Permanent link">&para;</a></h4>
+<p>Install packages using a matching installation recipe.</p>
+<h4 id="returns_2"><strong>Returns</strong><a class="headerlink" href="#returns_2" title="Permanent link">&para;</a></h4>
+<p><strong>0</strong> if the command was successfully executed; <strong>non-zero</strong> otherwise.</p>
+<h4 id="parameters_2"><strong>Parameters</strong><a class="headerlink" href="#parameters_2" title="Permanent link">&para;</a></h4>
+<ul>
+<li>N/A</li>
+</ul>
+<h4 id="examples_2"><strong>Examples</strong><a class="headerlink" href="#examples_2" title="Permanent link">&para;</a></h4>
+<p><code>__hhs hspm execute install figlet</code></p>
+<p><strong>Output</strong></p>
+<div class="highlight"><pre><span></span><code>Using<span class="w"> </span><span class="o">[</span>brew<span class="o">]</span><span class="w"> </span>default<span class="w"> </span>installation<span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="s2">"figlet"</span>!
+Installing<span class="w"> </span><span class="s2">"figlet"</span>,<span class="w"> </span>please<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>...
+Installation<span class="w"> </span><span class="nv">successful</span><span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span><span class="s2">"figlet"</span>
+</code></pre></div>
+<hr />
+<h3 id="uninstall">"uninstall"<a class="headerlink" href="#uninstall" title="Permanent link">&para;</a></h3>
+<h4 id="purpose_3"><strong>Purpose</strong><a class="headerlink" href="#purpose_3" title="Permanent link">&para;</a></h4>
+<p>Uninstall the package using a matching uninstallation recipe.</p>
+<h4 id="returns_3"><strong>Returns</strong><a class="headerlink" href="#returns_3" title="Permanent link">&para;</a></h4>
+<p><strong>0</strong> if the command was successfully executed; <strong>non-zero</strong> otherwise.</p>
+<h4 id="parameters_3"><strong>Parameters</strong><a class="headerlink" href="#parameters_3" title="Permanent link">&para;</a></h4>
+<ul>
+<li>N/A</li>
+</ul>
+<h4 id="examples_3"><strong>Examples</strong><a class="headerlink" href="#examples_3" title="Permanent link">&para;</a></h4>
+<p><code>__hhs hspm execute uninstall figlet</code></p>
+<p><strong>Output</strong></p>
+<div class="highlight"><pre><span></span><code>Using<span class="w"> </span><span class="o">[</span>brew<span class="o">]</span><span class="w"> </span>default<span class="w"> </span>uninstallation<span class="w"> </span>recipe<span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="s2">"figlet"</span>!
+Uninstalling<span class="w"> </span><span class="s2">"figlet"</span>,<span class="w"> </span>please<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>...
+Uninstallation<span class="w"> </span><span class="nv">successful</span><span class="w"> </span><span class="o">=</span>&gt;<span class="w"> </span><span class="s2">"figlet"</span>
+</code></pre></div>
+<hr />
+<h3 id="recover">"recover"<a class="headerlink" href="#recover" title="Permanent link">&para;</a></h3>
+<h4 id="purpose_4"><strong>Purpose</strong><a class="headerlink" href="#purpose_4" title="Permanent link">&para;</a></h4>
+<p>Install or list all packages previously installed by hspm.</p>
+<h4 id="returns_4"><strong>Returns</strong><a class="headerlink" href="#returns_4" title="Permanent link">&para;</a></h4>
+<p><strong>0</strong> if the command was successfully executed; <strong>non-zero</strong> otherwise.</p>
+<h4 id="parameters_4"><strong>Parameters</strong><a class="headerlink" href="#parameters_4" title="Permanent link">&para;</a></h4>
+<ul>
+<li>N/A</li>
+</ul>
+<h4 id="examples_4"><strong>Examples</strong><a class="headerlink" href="#examples_4" title="Permanent link">&para;</a></h4>
+<p><code>__hhs hspm execute recover</code></p>
+<p><strong>Output</strong></p>
+<div class="highlight"><pre><span></span><code>Listing<span class="w"> </span>recovered<span class="w"> </span><span class="o">[</span>Darwin/macOS<span class="o">]</span><span class="w"> </span>packages<span class="w"> </span>...
+
+<span class="w">  </span><span class="m">0</span><span class="w"> </span>-<span class="w"> </span>figlet<span class="w"> </span>........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">1</span><span class="w"> </span>-<span class="w"> </span>eza<span class="w"> </span>...........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">2</span><span class="w"> </span>-<span class="w"> </span>tree<span class="w"> </span>..........................<span class="w"> </span>INSTALLED
+...
+...
+</code></pre></div>
+<p><code>__hhs hspm execute recover -t -i</code></p>
+<p><strong>Output</strong></p>
+<div class="highlight"><pre><span></span><code>Listing<span class="w"> </span>development<span class="w"> </span>tools<span class="w"> </span>...
+
+<span class="w">  </span><span class="m">0</span><span class="w"> </span>-<span class="w"> </span>base64<span class="w"> </span>........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">1</span><span class="w"> </span>-<span class="w"> </span>brew<span class="w"> </span>..........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">2</span><span class="w"> </span>-<span class="w"> </span>colima<span class="w"> </span>........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">3</span><span class="w"> </span>-<span class="w"> </span>direnv<span class="w"> </span>........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">4</span><span class="w"> </span>-<span class="w"> </span>docker<span class="w"> </span>........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">5</span><span class="w"> </span>-<span class="w"> </span>eslint<span class="w"> </span>........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">6</span><span class="w"> </span>-<span class="w"> </span>eza<span class="w"> </span>...........................<span class="w"> </span>NOT<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">7</span><span class="w"> </span>-<span class="w"> </span>gcc<span class="w"> </span>...........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">8</span><span class="w"> </span>-<span class="w"> </span>git<span class="w"> </span>...........................<span class="w"> </span>INSTALLED
+<span class="w">  </span><span class="m">9</span><span class="w"> </span>-<span class="w"> </span>go<span class="w"> </span>............................<span class="w"> </span>NOT<span class="w"> </span>INSTALLED
+...
+...
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../../../../../..", "features": ["navigation.expand", "navigation.sections", "navigation.instant", "navigation.top", "content.code.copy"], "search": "../../../../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../../../../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
