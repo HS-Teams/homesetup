@@ -939,14 +939,14 @@ usage: $APP_NAME [OPTIONS] <args>
     pip_version="$(${VENV_PIP3} -V | \cut -d ' ' -f1,2)"
     echo -e "\n${python3_str} ${WHITE}Using ${YELLOW}${python_version}${WHITE} and ${YELLOW}P${pip_version:1} ${WHITE}from ${BLUE}\"${VIRTUAL_ENV}\" ${NC}"
     echo -e "\n${python3_str} ${WHITE}Installing HSPyLib packages... \n"
-    pkgs=$(mktemp)
-    printf "%s\n" "${PYTHON_MODULES[@]}" >"${pkgs}"
     printf "${python3_str} ${WHITE}Module: ${YELLOW}%s${NC}\n" "${PYTHON_MODULES[@]}"
     if
-      ${VENV_PIP3} install --upgrade --break-system-packages --ignore-installed -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1 ||
-        ${VENV_PIP3} install --upgrade --ignore-installed -r "${pkgs}" >>"${INSTALL_LOG}" 2>&1
+      ${VENV_PIP3} install --upgrade -c "${INSTALL_DIR}/assets/python-constraints.txt" \
+        "${PYTHON_MODULES[@]}" >>"${INSTALL_LOG}" 2>&1
     then
-      rm -f "$(mktemp)"
+      if ! ${VENV_PIP3} check >>"${INSTALL_LOG}" 2>&1; then
+        quit 2 "${RED}FAILED${NC} Incompatible Python dependencies! See ${INSTALL_LOG}"
+      fi
       echo "Installed HSPyLib python modules:" >>"${INSTALL_LOG}"
       ${VENV_PIP3} freeze | grep hspylib >>"${INSTALL_LOG}"
       echo -e "\n${python3_str} Installed ${BLUE}HSPyLib${NC} python modules:"

@@ -1,0 +1,15 @@
+# Compatible versions validated with hspylib-vault 0.9.137 on Python 3.11.
+# Constraints apply only when a package is required; optional packages are not installed here.
+protobuf==6.33.6
+langchain-core==1.6.10
+packaging==25.0
+weasel==0.4.3
+opentelemetry-api==1.36.0
+confection==0.1.5
+starlette==0.50.0
+torch==2.8.0
+torchaudio==2.8.0
+numpy==2.2.6
+filelock==3.32.7
+rembg==2.0.69
+importlib-metadata==8.7.1
