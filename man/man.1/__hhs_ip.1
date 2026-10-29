@@ -1,0 +1,36 @@
+." Auto-generated man page. Do not edit manually.
+.TH "__hhs_ip" "1" "2025-11-20" "HomeSetup" "User Commands"
+.SH NAME
+__hhs_ip - Display the associated machine IP of the given kind.
+.SH SYNOPSIS
+.nf
+usage: __hhs_ip [kind]
+.fi
+.SH DESCRIPTION
+Display the associated machine IP of the given kind.
+.SH ARGUMENTS
+.TP
+$1 (Opt)
+The kind of IP to get.
+.SH DETAILS
+.nf
+
+    Arguments:
+      type : The kind of IP to get. One of [all|local|external|gateway|vpn]
+
+    Types:
+           all : Get all network IPv4
+         local : Get your local network IPv4
+      external : Get your external network IPv4
+       gateway : Get the gateway IPv4
+           vpn : Get your IPv4 assigned by your VPN server
+
+  Notes:
+    - If no kind is specified, all assigned IPv4s will be retrieved
+.fi
+.SH VERSION
+__hhs_ip (HomeSetup) 1.9.11
+.SH AUTHOR
+HomeSetup Team
+.SH LICENSE
+MIT <https://opensource.org/licenses/MIT>
