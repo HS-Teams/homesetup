@@ -1,0 +1,48 @@
+." Auto-generated man page. Do not edit manually.
+.TH "__hhs_search_string" "1" "2025-11-20" "HomeSetup" "User Commands"
+.SH NAME
+__hhs_search_string - Search in files for strings matching the specified criteria recursively.
+.SH SYNOPSIS
+.nf
+usage: __hhs_search_string <search_path> [options] <regex/string> [file_globs]
+.fi
+.SH DESCRIPTION
+Search in files for strings matching the specified criteria recursively.
+.SH ARGUMENTS
+.TP
+$1 (Req)
+Search options.
+.TP
+$2 (Req)
+The base search path.
+.TP
+$3 (Req)
+The searching string.
+.TP
+$4 (Req)
+The GLOB expression of the file search.
+.TP
+$5 (Opt)
+Whether to replace the findings.
+.TP
+$6 (Con)
+Required if $4 is provided. This is the replacement string.
+.SH DETAILS
+.nf
+
+    Options:
+      -i | --ignore-case            : Makes the search case INSENSITIVE.
+      -w | --words                  : Makes the search to use the STRING words instead of a REGEX.
+      -r | --replace <replacement>  : Makes the search to REPLACE all occurrences by the replacement string.
+      -b | --binary                 : Includes BINARY files in the search.
+
+  Notes:
+    - <file_globs...>: Comma separated file globs. E.g: "*.txt,*.md,*.rtf"
+    - If <file_globs> is not specified, it will assume "*.*"
+.fi
+.SH VERSION
+__hhs_search_string (HomeSetup) 1.9.11
+.SH AUTHOR
+HomeSetup Team
+.SH LICENSE
+MIT <https://opensource.org/licenses/MIT>
