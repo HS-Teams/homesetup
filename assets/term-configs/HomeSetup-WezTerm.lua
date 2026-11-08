@@ -37,8 +37,8 @@ config.harfbuzz_features = { "calt=1", "clig=1", "liga=1" }
 config.font_size = 16.0
 config.font_dirs = { os.getenv("HOME") .. "/Library/Fonts" }
 config.font = wezterm.font_with_fallback({
-  "MesloLGS Nerd Font Mono",
   "DroidSansMono Nerd Font",
+  "MesloLGS Nerd Font Mono",
 })
 config.line_height = 1.2
 
