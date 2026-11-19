@@ -383,7 +383,7 @@ function ingest_context() {
     echo '```'
   } > "${tmp}" || quit 2 "Unable to prepare ingested context"
 
-  mv "${tmp}" "${HHS_OLLAMA_HISTORY_FILE}" || quit 2 "Unable to set ollama context"
+  \mv "${tmp}" "${HHS_OLLAMA_HISTORY_FILE}" || quit 2 "Unable to set ollama context"
   quit 0 "${GREEN}✨ Ollama context ingested from ${file_path}${NC}"
 }
 
@@ -411,8 +411,8 @@ function ensure_context_header() {
     cat "${tmp}.body"
   } > "${tmp}" || quit 2 "Unable to update ollama history file"
 
-  mv "${tmp}" "${HHS_OLLAMA_HISTORY_FILE}" || quit 2 "Unable to replace ollama history file"
-  rm -f "${tmp}.body"
+  \mv "${tmp}" "${HHS_OLLAMA_HISTORY_FILE}" || quit 2 "Unable to replace ollama history file"
+  \rm -f "${tmp}.body"
 }
 
 # @purpose: Show available ollama models (local and for download)
@@ -519,31 +519,41 @@ function remove_ollama_model() {
 
 # @purpose: Get context window size for the selected ollama model
 function get_context_window() {
-  ctx="$(
-    awk -F'|' -v p="${OLLAMA_MODEL}" '
-    $0 ~ p {
-      col=$6
-      gsub(/[[:space:]]/, "", col)
-      sub(/[A-Za-z]+$/, "", col)
-      print col
+  local model_name
+  model_name="$(normalize_ollama_model_name "${OLLAMA_MODEL}")"
+
+  awk -F'|' -v model="${model_name}" '
+    {
+      gsub(/[[:space:]`]/, "", $2)
+      if (tolower($2) != tolower(model)) next
+
+      gsub(/[[:space:]]/, "", $6)
+      if ($6 !~ /^[1-9][0-9]*[KM]?$/) exit
+      window = $6 + 0
+      if ($6 ~ /M$/) window *= 1024
+      budget = int(window * 7 / 10)
+      if (budget > 0) printf "%d:%d\n", window, budget
       exit
-    }' <<<"$(< "${HHS_HOME}"/bin/apps/bash/hhs-app/plugins/ask/ollama-models.md)"
-  )"
-  printf "%d:%d" "${ctx}" "$(printf "%s" "(${ctx} * 0.7)/1" | bc)"
+    }
+    END { if (budget <= 0) exit 1 }
+  ' "${HHS_HOME}/bin/apps/bash/hhs-app/plugins/ask/ollama-models.md"
 }
 
 # Ensure history file size limit fits within context window
 function ensure_context_size() {
   local size kb_size="${1}"
 
+  [[ "${kb_size}" =~ ^[1-9][0-9]*$ ]] || return 2
   HHS_OLLAMA_MAX_HIST_FILE_SIZE=$((kb_size * 1024))
   if [[ -s "${HHS_OLLAMA_HISTORY_FILE}" ]]; then
     size=$(stat -c %s "${HHS_OLLAMA_HISTORY_FILE}" 2>/dev/null || wc -c < "${HHS_OLLAMA_HISTORY_FILE}")
     if [[ "${size}" -gt "${HHS_OLLAMA_MAX_HIST_FILE_SIZE}" ]]; then
-      tail -c "${HHS_OLLAMA_MAX_HIST_FILE_SIZE}" "${HHS_OLLAMA_HISTORY_FILE}" > "${HHS_OLLAMA_HISTORY_FILE}.tmp"
-      mv "${HHS_OLLAMA_HISTORY_FILE}.tmp" "${HHS_OLLAMA_HISTORY_FILE}"
+      tail -c "${HHS_OLLAMA_MAX_HIST_FILE_SIZE}" "${HHS_OLLAMA_HISTORY_FILE}" \
+        > "${HHS_OLLAMA_HISTORY_FILE}.tmp" || return 2
+      \mv "${HHS_OLLAMA_HISTORY_FILE}.tmp" "${HHS_OLLAMA_HISTORY_FILE}" || return 2
     fi
   fi
+  return 0
 }
 
 # @purpose: HHS plugin required function
@@ -561,7 +571,7 @@ function execute() {
     -i|--ingest)
       shift
       load_ollama_model
-      ctx_window=$(get_context_window)
+      ctx_window=$(get_context_window) || quit 2 "Unknown or invalid context window for Ollama model: ${OLLAMA_MODEL}"
       kb_size=${ctx_window#*:}
       ingest_context "$1"
       ;;
@@ -575,10 +585,10 @@ function execute() {
 
   load_ollama_model
   load_ollama_context
-  ctx_window=$(get_context_window)
+  ctx_window=$(get_context_window) || quit 2 "Unknown or invalid context window for Ollama model: ${OLLAMA_MODEL}"
   ctx=${ctx_window%%:*}
   kb_size=${ctx_window#*:}
-  ensure_context_size "${kb_size}"
+  ensure_context_size "${kb_size}" || quit 2 "Unable to limit Ollama history size"
   load_ollama_prompt
 
   ensure_ollama

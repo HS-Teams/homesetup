@@ -429,6 +429,7 @@
 | `minimax-m3:cloud` | minimax-m3 | Cloud | - | 512K | Text, Image, Vision, Tools, Thinking | MiniMax M3: Coding & Agentic Frontier. 1M context window. Native Multimodality. |
 | `ministral-3:14b` | ministral-3 | 13.9B | 9.1GB | 256K | Text, Image, Vision, Tools | The Ministral 3 family is designed for edge deployment, capable of running on a wide range of hardware. |
 | `ministral-3:3b` | ministral-3 | 3.85B | 3.0GB | 256K | Text, Image, Vision, Tools | The Ministral 3 family is designed for edge deployment, capable of running on a wide range of hardware. |
+| `ministral-3:3b-instruct-2512-q4_K_M` | ministral-3 | 3.85B | 3.0GB | 256K | Text, Image, Vision, Tools | Ministral 3 3B Instruct with Q4_K_M quantization. |
 | `ministral-3:8b` | ministral-3 | 8.92B | 6.0GB | 256K | Text, Image, Vision, Tools | The Ministral 3 family is designed for edge deployment, capable of running on a wide range of hardware. |
 | `ministral-3:latest` | ministral-3 | 8.92B | 6.0GB | 256K | Text, Image, Vision, Tools | The Ministral 3 family is designed for edge deployment, capable of running on a wide range of hardware. |
 | `mistral-large-3:675b-cloud` | mistral-large-3 | Cloud | - | 256K | Text, Image, Vision, Tools | A general-purpose multimodal mixture-of-experts model for production-grade tasks and enterprise workloads. |
