@@ -1,0 +1,31 @@
+." Auto-generated man page. Do not edit manually.
+.TH "__hhs_save_dir" "1" "2025-11-20" "HomeSetup" "User Commands"
+.SH NAME
+__hhs_save_dir - Save one directory path for future __hhs_load.
+.SH SYNOPSIS
+.nf
+usage: __hhs_save_dir -e | [-r] <dir_alias> | <path> <dir_alias>
+.fi
+.SH DESCRIPTION
+Save one directory path for future __hhs_load.
+.SH ARGUMENTS
+.TP
+$1 (Con)
+The directory path to save or the alias to be removed.
+.TP
+$2 (Con)
+The alias to name the saved path.
+.SH DETAILS
+.nf
+
+Options:
+    -e : Edit the saved dirs file.
+    -r : Remove saved dir.
+    -c : Cleanup directory paths that does not exist.
+.fi
+.SH VERSION
+__hhs_save_dir (HomeSetup) 1.9.11
+.SH AUTHOR
+HomeSetup Team
+.SH LICENSE
+MIT <https://opensource.org/licenses/MIT>

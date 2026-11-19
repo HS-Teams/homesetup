@@ -1,0 +1,35 @@
+." Auto-generated man page. Do not edit manually.
+.TH "__hhs_aliases" "1" "2025-11-20" "HomeSetup" "User Commands"
+.SH NAME
+__hhs_aliases - Manipulate custom aliases (add/remove/edit/list).
+.SH SYNOPSIS
+.nf
+usage: __hhs_aliases <alias> <alias_expr>
+.fi
+.SH DESCRIPTION
+Manipulate custom aliases (add/remove/edit/list).
+.SH ARGUMENTS
+.TP
+$1 (Req)
+The alias name.
+.TP
+$2 (Opt)
+The alias expression.
+.SH DETAILS
+.nf
+
+    Options:
+      -l | --list    : List all custom aliases.
+      -e | --edit    : Open the aliases file for editing.
+      -r | --remove  : Remove an alias.
+
+  Notes:
+    - List all aliases    : When [alias_expr] is NOT provided. If [alias] is provided, filter results using it.
+    - Add/Set an alias    : When both [alias] and [alias_expr] are provided.
+.fi
+.SH VERSION
+__hhs_aliases (HomeSetup) 1.9.11
+.SH AUTHOR
+HomeSetup Team
+.SH LICENSE
+MIT <https://opensource.org/licenses/MIT>

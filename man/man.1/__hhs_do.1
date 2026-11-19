@@ -1,0 +1,37 @@
+." Auto-generated man page. Do not edit manually.
+.TH "__hhs_do" "1" "2026-03-26" "HomeSetup" "User Commands"
+.SH NAME
+__hhs_do - Execute a shell command sequence N times, continuing through failures.
+.SH SYNOPSIS
+.nf
+usage: __hhs_do <N> <command; command; ...>
+.fi
+.SH DESCRIPTION
+Execute a shell command sequence N times. Each semicolon-delimited command is executed in order, even if a previous command in the same iteration fails.
+.SH ARGUMENTS
+.TP
+$1 (Req)
+Number of times to repeat the command sequence.
+.TP
+$2..$N (Req)
+Shell commands separated by semicolons.
+.SH DETAILS
+.nf
+
+    Arguments:
+      <N>        : Number of times to repeat the command sequence.
+      <command>  : One or more shell commands separated by semicolons.
+
+    Result:
+      Non-zero return codes are recorded, but later commands in the sequence still run.
+
+    Examples:
+      __hhs_do 10 'pk -f Global; sleep 1; echo -n "."'
+      __hhs_do 3 'echo one; echo two'
+.fi
+.SH VERSION
+__hhs_do (HomeSetup) 1.9.11
+.SH AUTHOR
+HomeSetup Team
+.SH LICENSE
+MIT <https://opensource.org/licenses/MIT>
